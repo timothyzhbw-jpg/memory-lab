@@ -166,7 +166,8 @@ def github_sync(
             typer.echo("warning: unauthenticated GitHub access (public repos only, 60 requests/hour)", err=True)
         if save_capture is not None:
             typer.echo("warning: saved capture contains raw and possibly private GitHub content", err=True)
-        client = github_fetch.Client(github_fetch.urllib_transport(), token, max_wait=max_wait)
+        client = github_fetch.Client(github_fetch.urllib_transport(), token, max_wait=max_wait,
+                                     progress=github_fetch.FetchProgress())
         summary = run_sync(dataset, repo, client, full=full, since=_as_of(since), issues=issue or [],
                            save_capture=save_capture, dry_run=dry_run)
     except (github_fetch.GitHubError, ValueError, OSError) as exc:

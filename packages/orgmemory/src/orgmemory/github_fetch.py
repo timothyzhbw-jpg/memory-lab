@@ -9,12 +9,13 @@ import http.client
 import json
 import os
 import re
+import sys
 import time
 import urllib.request
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, TextIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
 
@@ -150,14 +151,49 @@ def _next_url(link: str, repo: str, repo_id: int, path: str) -> str:
     raise GitHubError(f"GET {path}: refusing a Link next URL outside {API}/repos/{repo}/")
 
 
+class FetchProgress:
+    """Throttled stderr output from counts and times only; no API text is interpolated.
+
+    The monotonic clock is independent of Client's wall clock used for rate-limit resets.
+    Short runs stay quiet. Call update at request boundaries and after each fully fetched item.
+    """
+
+    def __init__(self, *, clock: Callable[[], float] = time.monotonic, stream: TextIO | None = None):
+        self.clock = clock
+        self.stream = sys.stderr if stream is None else stream
+        self.last = clock()
+        self.items = 0
+
+    def update(self, requests: int, remaining: str | None, *, items: int | None = None) -> None:
+        if items is not None:
+            self.items = items
+        now = self.clock()
+        if now - self.last < 5:
+            return
+        self.last = now
+        # Treat the header as a numeric counter, never as terminal text. Bound its size too.
+        quota = str(int(remaining)) if remaining and re.fullmatch(r"[0-9]{1,20}", remaining) else "unknown"
+        print(f"fetching: {self.items} issues/PRs, {requests} requests, {quota} remaining",
+              file=self.stream, flush=True)
+
+    def rate_limit(self, seconds: float, until: float) -> None:
+        try:
+            timestamp = _iso(datetime.fromtimestamp(until, timezone.utc))
+        except (OverflowError, OSError, ValueError):
+            timestamp = "unknown"  # A numeric reset may be outside the platform's date range.
+        print(f"rate limit: sleeping {seconds:g} s, until {timestamp}", file=self.stream, flush=True)
+
+
 class Client:
     """Serial GET client following GitHub's rate-limit rules, with injected sleep and clock."""
 
     def __init__(self, transport: Transport, token: str | None, *, max_wait: float = 3600,
-                 sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time):
+                 sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time,
+                 progress: FetchProgress | None = None):
         if token is not None and not PRINTABLE.fullmatch(token):
             raise GitHubError("the GitHub token contains characters that cannot be sent in an HTTP header")
         self.transport, self.token, self.max_wait, self.sleep, self.clock = transport, token, max_wait, sleep, clock
+        self.progress = progress
         self.requests = 0
         self.first_date: datetime | None = None
         self.remaining: str | None = None
@@ -174,6 +210,8 @@ class Client:
     def _wait(self, seconds: float, path: str) -> None:
         if seconds > self.max_wait:
             raise Stopped(f"GET {path}: rate limited for {seconds:.0f} s, more than --max-wait {self.max_wait:.0f} s")
+        if self.progress is not None:
+            self.progress.rate_limit(seconds, self.clock() + seconds)
         self.sleep(seconds)
 
     def _note(self, headers: dict[str, str]) -> None:
@@ -220,6 +258,8 @@ class Client:
                             or any(self.token in value for value in headers.values()):
                         raise GitHubError("GitHub response reflected the credential; refused", status)
                 self._note(headers)
+            if self.progress is not None:
+                self.progress.update(self.requests, self.remaining)
             if status is None or status >= 500:
                 if attempt < 3:
                     self.sleep(2 ** attempt)
@@ -374,6 +414,8 @@ def fetch(client: Client, repo: str, *, since: datetime | None, issues: list[int
                 skipped.append({"number": n, "reason": f"timeline {exc.status}"})
                 continue
             items.append({"number": n, "issue": issue, "timeline": timeline})
+            if client.progress is not None:
+                client.progress.update(client.requests, client.remaining, items=len(items))
     except Stopped as exc:
         complete, client.stopped = False, str(exc)
     return {"github_capture": 1, "repo": repo, "repo_id": repo_id,
