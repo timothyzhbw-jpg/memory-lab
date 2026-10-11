@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import date
 from enum import Enum
 from pathlib import Path
@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from . import jev, llm
 from .audit import ATTENTION, audit
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
+from .htmlreport import diff_to_html, to_html
 from .memory import parse_memory
 from .report import to_markdown
 from .rollback import rollback_patch
@@ -26,6 +27,13 @@ app = typer.Typer(no_args_is_help=True, add_completion=False,
 class Format(str, Enum):
     markdown = "markdown"
     json = "json"
+
+
+class ReportFormat(str, Enum):
+    """`audit` and `diff` also render one self-contained HTML file."""
+    markdown = "markdown"
+    json = "json"
+    html = "html"
 
 
 class VerifierChoice(str, Enum):
@@ -72,6 +80,12 @@ def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "re
     typer.echo(f"wrote {output}", err=True)
 
 
+def _render(fmt: ReportFormat, report, markdown: Callable[..., str], html: Callable[..., str]) -> str:
+    if fmt is ReportFormat.json:
+        return report.model_dump_json(indent=2) + "\n"
+    return html(report) if fmt is ReportFormat.html else markdown(report)
+
+
 # Options shared by `audit` and `diff`.
 MEMORY_ARG = typer.Argument(..., exists=True, dir_okay=False, help="MEMORY.md to audit")
 EVIDENCE = typer.Option(None, "--evidence", "-e", help="Directory of evidence files")
@@ -81,6 +95,9 @@ EXCLUDE = typer.Option(
          "repeatable")
 REVIEWS = typer.Option(None, "--reviews", "-r", exists=True, dir_okay=False, help="JSONL of human-confirmed assertions")
 FORMAT = typer.Option(Format.markdown, "--format", "-f")
+REPORT_FORMAT = typer.Option(
+    ReportFormat.markdown, "--format", "-f",
+    help="markdown, json, or html (one self-contained page: inline CSS, no scripts, nothing loaded)")
 OUTPUT = typer.Option(None, "--output", "-o", help="Write the report here instead of stdout")
 AS_OF = typer.Option(None, help="Reference date YYYY-MM-DD for staleness (default: today)")
 STALE_DAYS = typer.Option(180, help="Dated claims older than this are flagged possibly_stale")
@@ -104,7 +121,7 @@ def audit_command(
     evidence: Optional[Path] = EVIDENCE,
     exclude: Optional[list[str]] = EXCLUDE,
     reviews: Optional[Path] = REVIEWS,
-    fmt: Format = FORMAT,
+    fmt: ReportFormat = REPORT_FORMAT,
     output: Optional[Path] = OUTPUT,
     as_of: Optional[str] = AS_OF,
     stale_days: int = STALE_DAYS,
@@ -125,7 +142,7 @@ def audit_command(
                        **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
-    text = to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n"
+    text = _render(fmt, report, to_markdown, to_html)
     if output:
         _write(output, text.encode("utf-8"), (Path(memory).resolve().parent / p for p in report.files_read))
     else:
@@ -143,7 +160,7 @@ def diff_command(
     evidence: Optional[Path] = EVIDENCE,
     exclude: Optional[list[str]] = EXCLUDE,
     reviews: Optional[Path] = REVIEWS,
-    fmt: Format = FORMAT,
+    fmt: ReportFormat = REPORT_FORMAT,
     output: Optional[Path] = OUTPUT,
     as_of: Optional[str] = AS_OF,
     stale_days: int = STALE_DAYS,
@@ -166,7 +183,7 @@ def diff_command(
                              **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
-    text = diff_to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n"
+    text = _render(fmt, report, diff_to_markdown, diff_to_html)
     if output:
         root = Path(memory).resolve().parent
         _write(output, text.encode("utf-8"), (root / p for p in report.base.files + report.head.files))
