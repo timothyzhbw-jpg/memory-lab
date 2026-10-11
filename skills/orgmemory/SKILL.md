@@ -40,7 +40,7 @@ Use this when the user asks what happened since a point in time, or in a given w
 1. Validate first, as above.
 2. Run `orgmemory changes <dataset> --from <ISO time with timezone> --to <ISO time with timezone>`. The period holds the events after `--from`, up to and including `--to`. An event at exactly `--from` is not in it, so for "since Monday" pass the last second of Sunday, for example `--from 2026-10-04T23:59:59Z`. Ask for the timezone if the user's times have none. Use `--format json` when you need to process the changes.
 3. Report per subject: the status before and after, then each `decision` with who decided, their role, when and the quoted evidence. Then pending approvals and reconsiderations opened or resolved, new risks, dependencies and conflicts, and each `unauthorized_attempt`. Say what the log shows, not why people acted.
-4. A subject is missing from the report when nothing changed in the period. Comments are never listed. As with the audit, do not append events or edit `policy.json` because of what the report shows.
+4. List a subject when something changed, and also when it had no events before the period. In that second case the status before is `no events`, and the change list may be empty (a new subject whose only events are comments). Omit a subject that already had events when nothing changed. Comment events are never change items. As with the audit, do not append events or edit `policy.json` because of what the report shows.
 
 ## Recording new events
 
