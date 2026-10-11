@@ -24,8 +24,12 @@ from orgmemory.audit import audit as org_audit  # noqa: E402
 from orgmemory.replay import Dataset  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
+GIT_TOOLS = {"memfalsify_diff", "memfalsify_history", "memfalsify_rollback"}
 TOOLS = {"memfalsify_claims", "memfalsify_audit", "orgmemory_validate", "orgmemory_replay", "orgmemory_explain",
-         "orgmemory_audit"}
+         "orgmemory_audit"} | GIT_TOOLS
+# The arguments each tool needs besides its path, for tests that vary only the path.
+REQUIRED = {"orgmemory_explain": {"subject": "Feature A"}, "memfalsify_diff": {"base": "HEAD"},
+            "memfalsify_rollback": {"claim": "m-00000000", "to": "HEAD"}}
 MEMORY, EVIDENCE, REVIEWS, DATASET = "memfalsify/MEMORY.md", "memfalsify/evidence", "memfalsify/reviews.jsonl", "feature-a"
 SECRET = "outside-the-root secret: do not read"
 
@@ -548,6 +552,257 @@ def test_no_tool_writes_anything(root):
     assert snapshot(root.parent) == before
 
 
+# --- memory in git ---------------------------------------------------------------------------
+
+requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+GIT_MEMORY = "notes/MEMORY.md"
+GIT_BASE = """# Memory
+
+## Infra
+
+- The cache uses Redis.
+- The main database runs PostgreSQL 15.
+
+## Process
+
+- We use squash merges for pull requests.
+- Feature B ships in Q3.
+"""
+GIT_HEAD = GIT_BASE.replace("PostgreSQL 15", "PostgreSQL 16").replace("squash", "rebase").replace(
+    "Feature B ships in Q3.", "The public API rate limit is 100 requests per minute.")
+GIT_EVIDENCE = {"evidence/api.md": "The public API rate limit is 60 requests per minute.\n",
+                "evidence/db.md": "The main database runs PostgreSQL 16.\n"}
+HOSTILE_SUBJECT = "tidy memory \x1b[2J‮ ### FORGED"
+
+
+@pytest.fixture
+def git_root(git_repo):
+    """A server root that is a git work tree: two commits of the memory, the head version uncommitted."""
+    git_repo.commit("first memory", {GIT_MEMORY: GIT_BASE, **GIT_EVIDENCE})
+    git_repo.commit(HOSTILE_SUBJECT, {GIT_MEMORY: GIT_BASE + "- Deploys need a ticket.\n"})
+    git_repo.write({GIT_MEMORY: GIT_HEAD})
+    return git_repo
+
+
+def _memfalsify(*args: str) -> str:
+    """`memfalsify ARGS` in process, from the current directory; stdout only."""
+    from typer.testing import CliRunner
+    from memfalsify.cli import app as memfalsify_app
+
+    result = CliRunner().invoke(memfalsify_app, list(args))
+    assert result.exit_code == 0, result.output
+    return result.stdout
+
+
+@requires_git
+@requires_confinement
+def test_git_tools_match_the_cli(git_root, monkeypatch):
+    from memfalsify.memory import claim_id
+
+    root = git_root.root
+    monkeypatch.chdir(root)  # the CLI runs from the server root, with the same relative paths
+    before = snapshot(root.parent)
+    rebase = claim_id("We use rebase merges for pull requests.")
+    diff_args = {"memory_file": GIT_MEMORY, "base": "HEAD~1", "evidence_dir": "evidence", "as_of": "2026-10-10"}
+    diff, diff_json, committed, history, history_json, patch, same = session(
+        create_server(root),
+        ("memfalsify_diff", diff_args),
+        ("memfalsify_diff", {**diff_args, "format": "json"}),
+        ("memfalsify_diff", {**diff_args, "head": "HEAD", "exclude": ["db.md"]}),
+        ("memfalsify_history", {"memory_file": GIT_MEMORY}),
+        ("memfalsify_history", {"memory_file": GIT_MEMORY, "max_commits": 1, "format": "json"}),
+        ("memfalsify_rollback", {"memory_file": GIT_MEMORY, "claim": rebase, "to": "HEAD~1"}),
+        ("memfalsify_rollback", {"memory_file": GIT_MEMORY, "claim": claim_id("The cache uses Redis."),
+                                 "to": "HEAD"}),
+    )
+    cli_diff = ["diff", GIT_MEMORY, "--base", "HEAD~1", "--evidence", "evidence", "--as-of", "2026-10-10"]
+    _same_as_cli(_memfalsify(*cli_diff), ok(diff))
+    _same_as_cli(_memfalsify(*cli_diff, "--format", "json"), ok(diff_json))
+    _same_as_cli(_memfalsify(*cli_diff, "--head", "HEAD", "--exclude", "db.md"), ok(committed))
+    _same_as_cli(_memfalsify("history", GIT_MEMORY), ok(history))
+    _same_as_cli(_memfalsify("history", GIT_MEMORY, "--max-commits", "1", "--format", "json"), ok(history_json))
+    assert ok(patch) == _memfalsify("rollback", GIT_MEMORY, "--claim", rebase, "--to", "HEAD~1")
+
+    report = json.loads(ok(diff_json))
+    assert report["summary"] == {"added": 1, "changed": 2, "removed": 1, "unchanged": 1}
+    assert (report["memory_file"], report["audit"]["memory_file"]) == (GIT_MEMORY, GIT_MEMORY)
+    assert report["audit"]["evidence_root"] == "evidence" and str(root) not in ok(diff) + ok(diff_json)
+    assert json.loads(ok(history_json))["commits_scanned"] == 1
+    assert "\x1b" not in ok(history) and "‮" not in ok(history) and "\n### FORGED" not in ok(history)
+    assert ok(patch).startswith("# MemFalsify rollback patch") and "+- We use squash merges" in ok(patch)
+    assert "reads the same" in ok(same) and "nothing to roll back" in ok(same)
+    assert snapshot(root.parent) == before  # nothing written, the patch included
+
+
+@requires_git
+@requires_confinement
+def test_git_tool_errors_are_clear_and_contained(git_root, tmp_path):
+    root = git_root.root
+    (root / "plain").mkdir()
+    server = create_server(root)
+    cases = [
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="-x"), "invalid revision '-x'"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="--output=/tmp/x"), "must not start with '-'"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="HEAD", head="no-such-branch"), "is not a commit"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="HEAD\x1b"), "control characters"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base=""), "invalid revision"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="HEAD", exclude=["*.md"]), "requires evidence_dir"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="HEAD~1", evidence_dir="evidence", exclude=["*"]),
+         "no evidence passages are left after exclude"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY, base="HEAD", reviews_file=GIT_MEMORY),
+         "requires evidence_dir"),
+        ("memfalsify_diff", dict(memory_file=GIT_MEMORY), "invalid arguments; check: base"),
+        ("memfalsify_history", dict(memory_file=GIT_MEMORY, max_commits=0), "invalid arguments; check: max_commits"),
+        ("memfalsify_rollback", dict(memory_file=GIT_MEMORY, claim="cache", to="HEAD"), "a claim ID looks like"),
+        ("memfalsify_rollback", dict(memory_file=GIT_MEMORY, claim="m-00000000", to="HEAD"),
+         "is not a claim of the memory"),
+        ("memfalsify_rollback", dict(memory_file=GIT_MEMORY, claim="m-00000000", to="-c"), "invalid revision"),
+        ("memfalsify_audit", dict(memory_file=GIT_MEMORY, exclude=["*.md"]), "requires evidence_dir"),
+    ]
+    results = session(server, *[(name, arguments) for name, arguments, _ in cases])
+    for (name, arguments, expected), result in zip(cases, results):
+        message = error(result)
+        assert expected in message, (name, arguments, message)
+        assert str(root) not in message and str(tmp_path) not in message
+
+
+@requires_git
+@requires_confinement
+def test_git_tools_refuse_a_memory_outside_any_repository(tmp_path, monkeypatch):
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    root = tmp_path / "plain"
+    root.mkdir()
+    (root / "MEMORY.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
+    for name in GIT_TOOLS:
+        message = error(call(create_server(root), name, memory_file="MEMORY.md", **REQUIRED.get(name, {})))
+        # git's own diagnostics (which can name directories outside the root) are not passed on.
+        assert message.endswith(": MEMORY.md is not inside a git work tree"), message
+
+
+def _repository(git_repo, path: Path, *init: str):
+    """A repository at ``path``, created with ``git init INIT`` in the git_repo fixture's environment."""
+    from conftest import GitRepo
+
+    path.mkdir(parents=True, exist_ok=True)
+    created = GitRepo(path, git_repo.hooks)
+    created.git("init", "-q", *init)
+    created.git("config", "--local", "user.name", "Outside Author")
+    created.git("config", "--local", "user.email", "outside@example.com")
+    return created
+
+
+def _git_escapes(git_repo, tmp_path) -> dict[str, Path]:
+    """Server roots whose memory is in a git repository that would make git read outside the root."""
+    roots = {}
+    # 1. A .git file pointing at a git directory outside the root.
+    separate = _repository(git_repo, tmp_path / "separate" / "root",
+                                   "--separate-git-dir", str(tmp_path / "separate" / "outside.git"))
+    separate.commit("secret", {"MEMORY.md": f"- {SECRET}.\n"})
+    separate.write({"MEMORY.md": "- Local claim.\n"})  # the secret is now only in the outside git directory
+    roots["separate git dir"] = separate.root
+    # 2. A worktree inside the root of a repository outside it.
+    main = _repository(git_repo, tmp_path / "worktree" / "main")
+    main.commit("secret", {"MEMORY.md": f"- {SECRET}.\n"})
+    main.git("worktree", "add", "-q", str(tmp_path / "worktree" / "root" / "wt"))
+    (tmp_path / "worktree" / "root" / "wt" / "MEMORY.md").write_text("- Local claim.\n", encoding="utf-8")
+    roots["worktree of an outside repository"] = tmp_path / "worktree" / "root" / "wt"
+    # 3. A root inside a larger repository (the work tree's top level is outside the root).
+    roots["subdirectory of a repository"] = main.root / "sub"
+    (main.root / "sub").mkdir()
+    (main.root / "sub" / "MEMORY.md").write_text("- Local claim.\n", encoding="utf-8")
+    # 4. Objects borrowed from an outside repository.
+    borrower = _repository(git_repo, tmp_path / "alternates" / "root")
+    borrower.commit("memory", {"MEMORY.md": "- Local claim.\n"})
+    (borrower.root / ".git" / "objects" / "info" / "alternates").write_text(
+        str(main.root / ".git" / "objects") + "\n", encoding="utf-8")
+    roots["alternates"] = borrower.root
+    # 5. The object store, or something in it, is a symlink.
+    for name, target in [("objects symlink", "objects"), ("symlink in objects", "objects/pack/outside")]:
+        linked = _repository(git_repo, tmp_path / name / "root")
+        linked.commit("memory", {"MEMORY.md": "- Local claim.\n"})
+        store = linked.root / ".git" / "objects"
+        if target == "objects":
+            shutil.move(str(store), str(tmp_path / name / "objects"))
+            store.symlink_to(tmp_path / name / "objects", target_is_directory=True)
+        else:
+            (linked.root / ".git" / target).symlink_to(main.root / ".git" / "objects", target_is_directory=True)
+        roots[name] = linked.root
+    return roots
+
+
+@requires_git
+@requires_confinement
+def test_git_tools_refuse_repositories_that_leave_the_root(git_repo, tmp_path):
+    roots = _git_escapes(git_repo, tmp_path)
+    expected = {"alternates": "alternates", "symlink in objects": "contains symlinks"}
+    for case, root in roots.items():
+        memory = "MEMORY.md"
+        before = snapshot(tmp_path)
+        server = create_server(root)
+        for name in GIT_TOOLS:
+            message = error(call(server, name, memory_file=memory, **REQUIRED.get(name, {})))
+            assert expected.get(case, "not inside the server root") in message, (case, name, message)
+            assert SECRET not in message and str(tmp_path) not in message, (case, name, message)
+        # Files in the root are still readable by the other tools.
+        assert "Local claim" in ok(call(server, "memfalsify_claims", memory_file=memory))
+        assert snapshot(tmp_path) == before
+
+
+@requires_git
+@requires_confinement
+def test_git_location_variables_cannot_redirect_the_server(git_root, git_repo, tmp_path, monkeypatch):
+    outside = _repository(git_repo, tmp_path / "elsewhere")
+    outside.commit("secret", {GIT_MEMORY: f"- {SECRET}.\n"})
+    monkeypatch.setenv("GIT_DIR", str(outside.root / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(outside.root))
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(outside.root / ".git" / "objects"))
+    history = ok(call(create_server(git_root.root), "memfalsify_history", memory_file=GIT_MEMORY))
+    assert SECRET not in history and "first memory" in history
+
+
+@requires_git
+@requires_confinement
+def test_git_tools_accept_a_worktree_inside_the_root(git_root):
+    git_root.commit("head memory")
+    git_root.git("worktree", "add", "-q", str(git_root.root / "wt"), "HEAD~1")
+    report = json.loads(ok(call(create_server(git_root.root), "memfalsify_diff", memory_file="wt/" + GIT_MEMORY,
+                                base="main", format="json")))
+    assert report["summary"]["changed"] == 2 and report["memory_file"] == "wt/" + GIT_MEMORY
+
+
+@pytest.mark.parametrize("verifier", ["llm", "jev", "dual", "cascade"])
+@requires_git
+@requires_confinement
+def test_diff_model_verifiers_follow_the_flag(git_root, monkeypatch, verifier):
+    built = []
+
+    class Offline(LexicalVerifier):
+        name = "stand-in"
+
+    def fake_build(choice, llm_model, jev_model, accept_at=0.8):
+        built.append(choice.value)
+        return Offline()
+
+    monkeypatch.setattr(memlab_server, "build_verifier", fake_build)
+    arguments = dict(memory_file=GIT_MEMORY, base="HEAD~1", evidence_dir="evidence", verifier=verifier)
+    message = error(call(create_server(git_root.root), "memfalsify_diff", **arguments))
+    assert f"verifier {verifier!r} is disabled" in message and built == []
+    report = json.loads(ok(call(create_server(git_root.root, allow_model_verifiers=True), "memfalsify_diff",
+                                format="json", **arguments)))
+    assert built == [verifier] and report["audit"]["verifier"] == "stand-in"
+
+
+@requires_confinement
+def test_audit_exclude_matches_the_cli(root):
+    patterns = ["media/*", "notes/**"]
+    report = json.loads(ok(call(create_server(root), "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE,
+                                exclude=patterns, as_of="2026-10-10", format="json")))
+    direct = audit(root / MEMORY, root / EVIDENCE, as_of=date(2026, 10, 10), exclude=patterns)
+    assert report["excluded"] == patterns and report["summary"] == direct.summary
+    assert not any(e["span"]["path"].startswith(("media/", "notes/"))
+                   for f in report["findings"] for e in f["evidence"])
+
+
 # Windows asyncio creates a loopback socketpair even for stdio, which the
 # no-network fixture rejects. These tests also require the POSIX-only server.
 # --- the real server over stdio ----------------------------------------------------------------
@@ -572,7 +827,9 @@ def test_stdio_round_trip(root, tmp_path, allow_models):
 
     info, tools, result = anyio.run(main)
     assert info.name == "memlab" and {t.name for t in tools} == TOOLS, log.read_text()
-    assert {t.name: t.annotations.open_world_hint for t in tools}["memfalsify_audit"] is allow_models
+    open_world = {t.name: t.annotations.open_world_hint for t in tools}
+    assert open_world["memfalsify_audit"] is open_world["memfalsify_diff"] is allow_models
+    assert not any(open_world[name] for name in TOOLS - {"memfalsify_audit", "memfalsify_diff"})
     assert "ev-wed-reject" in ok(result)
 
 
@@ -613,7 +870,7 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
     for tool in sorted(TOOLS):
         cases.append((tool, {}, "invalid arguments"))
         field = "memory_file" if tool.startswith("memfalsify") else "dataset"
-        base = {"subject": "Feature A"} if tool == "orgmemory_explain" else {}
+        base = REQUIRED.get(tool, {})
         for value in [None, 17, [], {"path": outside}]:
             cases.append((tool, {**base, field: value}, "invalid arguments"))
         for value in ["", "   ", "missing", "nul\x00path"]:
