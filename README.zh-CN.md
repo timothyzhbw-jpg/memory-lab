@@ -92,7 +92,7 @@ cd examples/memfalsify-media
 memfalsify audit MEMORY.md --evidence evidence --reviews reviews.jsonl --as-of 2026-10-10
 ```
 
-旁车文件要记录媒体文件的 SHA-256（转写稿里写一个 `NOTE source_sha256: <hex>` 块，OCR JSON 里写 `"source_sha256"` 字段）。媒体文件在场时，两者必须一致，否则旁车文件会作为“过期”（stale）或“未绑定”跳过；媒体文件不在时，旁车文件照常使用，报告会注明没有核对绑定。引用依然逐字精确：每条引用都是旁车文件字节中、位于同一个字幕条目或同一行内的一段区间，像其他证据文件一样计算哈希。格式不对的旁车文件会带着原因列为跳过。[示例报告](examples/memfalsify-media/report.md)里，站会转写稿反驳了记忆中的限流数值，白板 OCR 的一行与“已批准”相矛盾，而一份根据录像旧导出版本做的复盘转写稿被判为过期并跳过。格式、命名规则和局限见 [docs/multimodal.md](docs/multimodal.md)（英文）；暂不支持 hOCR。
+旁车文件要记录媒体文件的 SHA-256（转写稿里写一个 `NOTE source_sha256: <hex>` 块，OCR JSON 里写 `"source_sha256"` 字段）。媒体文件在场时，两者必须一致，否则旁车文件会作为“过期”（stale）或“未绑定”跳过；媒体文件不在时，旁车文件照常使用，报告会注明没有核对绑定。媒体文件名必须与目录项逐字一致，包括大小写（`Clip.mp4.vtt` 不会描述 `clip.mp4`），因此 macOS、Windows 和 Linux 的结果相同。引用依然逐字精确：每条引用都是旁车文件字节中、位于同一个字幕条目或同一行内的一段区间，像其他证据文件一样计算哈希。格式不对的旁车文件会带着原因列为跳过。[示例报告](examples/memfalsify-media/report.md)里，站会转写稿反驳了记忆中的限流数值，白板 OCR 的一行与“已批准”相矛盾，而一份根据录像旧导出版本做的复盘转写稿被判为过期并跳过。格式、命名规则和局限见 [docs/multimodal.md](docs/multimodal.md)（英文）；暂不支持 hOCR。
 
 #### 审查 git 里的记忆改动
 
@@ -233,7 +233,7 @@ orgmemory explain        <数据集> "acme/web#12"
 
 - `events.jsonl`：每行一个事件，只追加。字段：`id`、`timestamp`（带时区，表示生效时间）、`actor`、`action`、`subject`、`evidence_ids`（至少一个），以及 `note`（动作为 `raise_risk` 时必填）、`dependency`（动作为 `dependency` 时必填）、`supersedes`（动作为 `revoke` 时必填，且必须指向当前生效的决定）。动作：`request`、`reconsider`、`raise_risk`、`dependency`、`approve`、`reject`、`revoke`、`comment`。
 - `policy.json`：`{"actors": {人: [角色]}, "permissions": {动作: [角色]}}`。不在名单里的人没有任何角色。`pending_approval` 列出既能批准又能拒绝的角色。
-- `evidence.jsonl`：`id`、`path`、原始字节的 `sha256`、逐字的 `quote` 及其 `[start, end)` 字符区间、`source_uri`、`source_kind`、`captured_at`；只有引用来自转写稿或 OCR 旁车文件时才有 `locator`（例如 `t=12.5,17`，每次加载都会重新核对它以及旁车文件与媒体文件的绑定）。请用 `orgmemory evidence add` 生成，不要手算哈希；对旁车文件它会记录 locator，`--locator` 可以指定字幕条目或行。
+- `evidence.jsonl`：`id`、`path`、原始字节的 `sha256`、逐字的 `quote` 及其 `[start, end)` 字符区间、`source_uri`、`source_kind`、`captured_at`；只有引用来自转写稿或 OCR 旁车文件时才有 `locator`（例如 `t=12.5,17`，每次加载都会重新核对它以及旁车文件与媒体文件的绑定）。旁车记录若省略 `locator`，校验失败。请用 `orgmemory evidence add` 生成，不要手算哈希；对旁车文件它会记录 locator，`--locator` 可以指定字幕条目或行。
 
 回放规则：事件按生效时间排序，时间相同时保持文件顺序。回放前会校验整个日志，包括 `--as-of` 之后的事件。有权限的 `approve` / `reject` 会设定状态，并清除“申请重新考虑”、待审批和被忽略的越权尝试。决定被推翻或同一时刻出现相互冲突的决定时，都会记录在 `conflicts` 中。
 

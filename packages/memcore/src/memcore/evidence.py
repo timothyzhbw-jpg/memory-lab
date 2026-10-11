@@ -22,9 +22,9 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from .jsonl import read_jsonl
-from .reading import file_sha256, list_files, read_file_bytes
-from .sidecar import (LABELS, Parsed, SidecarError, Unit, is_media, media_for, parse_sidecar, sidecar_base,
-                      sidecar_format, time_range)
+from .reading import entry_names, file_sha256, list_files, read_file_bytes
+from .sidecar import (LABELS, Parsed, SidecarError, Unit, is_media, media_for, one_line, parse_sidecar,
+                      sidecar_base, sidecar_format, time_range)
 
 
 class EvidenceError(ValueError):
@@ -144,18 +144,30 @@ class Sidecar:
 
 def _media_sha256(root: Path, media: str, name: str, hashes: dict[Path, str] | None) -> str | None:
     """The media file's SHA-256, or None when it is absent. A media file that is present but cannot be checked
-    (escaping symlink, broken link, not a regular file) makes the sidecar unusable; a read error propagates."""
-    if not os.path.lexists(Path(root) / media):
+    (escaping symlink, broken link, not a regular file) makes the sidecar unusable; a read error propagates.
+
+    The name must match a directory entry exactly. ``exists`` and ``resolve`` follow case-insensitive
+    filesystems, so ``Clip.mp4`` would hash ``clip.mp4`` on macOS and Windows and be missing on Linux."""
+    shown = one_line(name)
+    folder = PurePath(media).parent.as_posix()
+    try:
+        names = entry_names(resolve_inside(root, "." if folder == "." else folder))
+    except EvidenceError:
+        raise SidecarError(f"cannot check the binding: the media file {shown} is a symlink that escapes the "
+                           "evidence root") from None
+    except (OSError, RuntimeError):
+        raise SidecarError(f"cannot check the binding: the media file {shown} is a broken or cyclic symlink") from None
+    if name not in names:
         return None
     try:
         path = resolve_inside(root, media)
     except EvidenceError:
-        raise SidecarError(f"cannot check the binding: the media file {name} is a symlink that escapes the "
+        raise SidecarError(f"cannot check the binding: the media file {shown} is a symlink that escapes the "
                            "evidence root") from None
     except (OSError, RuntimeError):
-        raise SidecarError(f"cannot check the binding: the media file {name} is a broken or cyclic symlink") from None
+        raise SidecarError(f"cannot check the binding: the media file {shown} is a broken or cyclic symlink") from None
     if not path.is_file():
-        raise SidecarError(f"cannot check the binding: the media file {name} is a broken symlink or not a "
+        raise SidecarError(f"cannot check the binding: the media file {shown} is a broken symlink or not a "
                            "regular file")
     if hashes is not None and path in hashes:
         return hashes[path]
@@ -184,12 +196,13 @@ def load_sidecar(root: Path, relative: str, text: str, siblings: Iterable[str] |
         return Sidecar(parsed, None, None)
     media = (folder / media_name).as_posix()
     digest = _media_sha256(root, media, media_name, hashes)
+    shown = one_line(media_name)
     if digest is not None:
         if parsed.source_sha256 is None:
-            raise SidecarError(f"not bound to {media_name}: the sidecar records no source_sha256, so it cannot be "
+            raise SidecarError(f"not bound to {shown}: the sidecar records no source_sha256, so it cannot be "
                                "checked against the media file next to it")
         if parsed.source_sha256 != digest:
-            raise SidecarError(f"stale: its source_sha256 does not match {media_name}; the media file changed after "
+            raise SidecarError(f"stale: its source_sha256 does not match {shown}; the media file changed after "
                                "the sidecar was made")
     return Sidecar(parsed, media, digest)
 
@@ -199,7 +212,7 @@ def _sidecar(root: Path, relative: str, text: str) -> Sidecar:
         return load_sidecar(root, relative, text)
     except SidecarError as exc:
         label = LABELS[sidecar_format(PurePath(relative).name)]
-        raise EvidenceError(f"unusable {label} {relative}: {exc}") from None
+        raise EvidenceError(one_line(f"unusable {label} {relative}: {exc}")) from None
 
 
 def locate_quote(root: Path, relative: str, quote: str, locator: str | None = None, **provenance) -> EvidenceSpan:
@@ -210,10 +223,10 @@ def locate_quote(root: Path, relative: str, quote: str, locator: str | None = No
     digest, text = read_text(root, relative)
     if sidecar_format(PurePath(relative).name) is None:
         if locator is not None:
-            raise EvidenceError(f"a locator applies only to transcript and OCR sidecars: {relative}")
+            raise EvidenceError(one_line(f"a locator applies only to transcript and OCR sidecars: {relative}"))
         start = text.find(quote) if quote else -1
         if start < 0:
-            raise EvidenceError(f"quote not found verbatim in {relative}: {quote!r}")
+            raise EvidenceError(one_line(f"quote not found verbatim in {relative}: {quote!r}"))
         return make_span(relative, digest, text, start, start + len(quote), **provenance)
     sidecar = _sidecar(root, relative, text)
     for unit in sidecar.units:
@@ -224,7 +237,7 @@ def locate_quote(root: Path, relative: str, quote: str, locator: str | None = No
             return make_span(relative, digest, text, start, start + len(quote), media=sidecar.ref(unit),
                              **provenance)
     where = f"the cue or line at {locator}" if locator is not None else "any cue or line"
-    raise EvidenceError(f"quote not found verbatim in {where} of {relative}: {quote!r}")
+    raise EvidenceError(one_line(f"quote not found verbatim in {where} of {relative}: {quote!r}"))
 
 
 class ManifestEntry(BaseModel):
@@ -260,18 +273,24 @@ def verify_entry(entry: ManifestEntry, root: Path) -> EvidenceSpan:
     if entry.end <= entry.start or text[entry.start:entry.end] != entry.quote:
         raise EvidenceError(f"quote does not match recorded span: {entry.id}")
     media = None
-    if entry.locator is not None:
-        if sidecar_format(PurePath(entry.path).name) is None:
-            raise EvidenceError(f"evidence {entry.id} has a locator, but {entry.path} is not a transcript or OCR "
-                                "sidecar")
+    if sidecar_format(PurePath(entry.path).name) is not None:
+        # Omitting locator used to skip the cue check and the media binding, so a replaced recording still
+        # validated. Sidecar records are new; a missing locator is not a legacy shape.
+        if entry.locator is None:
+            raise EvidenceError(f"evidence {entry.id}: {one_line(entry.path)} is a transcript or OCR sidecar but "
+                                "records no locator")
         sidecar = _sidecar(root, entry.path, text)
         unit = next((u for u in sidecar.units if u.start <= entry.start and entry.end <= u.end), None)
         if unit is None:
-            raise EvidenceError(f"evidence {entry.id}: the quote is not inside one cue or line of {entry.path}")
+            raise EvidenceError(f"evidence {entry.id}: the quote is not inside one cue or line of "
+                                f"{one_line(entry.path)}")
         if unit.locator != entry.locator:
-            raise EvidenceError(f"evidence {entry.id}: recorded locator {entry.locator} does not match "
+            raise EvidenceError(f"evidence {entry.id}: recorded locator {one_line(entry.locator)} does not match "
                                 f"{unit.locator}")
         media = sidecar.ref(unit)
+    elif entry.locator is not None:
+        raise EvidenceError(f"evidence {entry.id} has a locator, but {one_line(entry.path)} is not a transcript "
+                            "or OCR sidecar")
     return make_span(entry.path, digest, text, entry.start, entry.end, id=entry.id,
                      source_uri=entry.source_uri, source_kind=entry.source_kind,
                      captured_at=entry.captured_at, media=media)

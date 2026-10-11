@@ -338,6 +338,7 @@ def test_orgmemory_audit_evidence_swap_cannot_escape_root(root, monkeypatch):
 
     original = evidence_module.read_file_bytes
     replaced = False
+    leaked = []
 
     def swap_then_read(path):
         nonlocal replaced
@@ -345,11 +346,15 @@ def test_orgmemory_audit_evidence_swap_cannot_escape_root(root, monkeypatch):
             path.unlink()
             path.symlink_to(root.parent / "outside.md")
             replaced = True
+            # A later error that omits the secret would still hide a successful read.
+            data = original(path)
+            leaked.append(data)
+            return data
         return original(path)
 
     monkeypatch.setattr(evidence_module, "read_file_bytes", swap_then_read)
     result = call(create_server(root), "orgmemory_audit", dataset=DATASET)
-    assert replaced and SECRET not in error(result)
+    assert replaced and not leaked and SECRET not in error(result)
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs require POSIX")
@@ -852,17 +857,20 @@ def test_a_media_symlink_out_of_the_root_is_never_hashed(media_root):
 @requires_confinement
 def test_media_swapped_for_an_outward_symlink_before_hashing_cannot_be_read(media_root, monkeypatch):
     from memcore import evidence as memcore_evidence
-    original, opened = memcore_evidence.file_sha256, []
+    original, opened, leaked = memcore_evidence.file_sha256, [], []
 
     def swap_then_hash(path):
         opened.append(path)
         path.unlink()
         path.symlink_to(media_root.parent / "outside.md")
-        return original(path)
+        # A successful hash is a read, even when the tool later returns an error that omits the secret.
+        digest = original(path)
+        leaked.append(digest)
+        return digest
 
     monkeypatch.setattr(memcore_evidence, "file_sha256", swap_then_hash)
     result = media_call(create_server(media_root), format="json")
-    assert opened and SECRET not in error(result)
+    assert opened and not leaked and SECRET not in error(result)
 
 
 # Windows asyncio creates a loopback socketpair even for stdio, which the

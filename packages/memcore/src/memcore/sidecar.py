@@ -29,6 +29,11 @@ MAX_DEPTH = 16  # the OCR schema nests four levels; anything deeper is not an OC
 _HEX64 = re.compile(r"[0-9a-fA-F]{64}")
 _BINDING = re.compile(r"source_sha256\s*:\s*(\S*)\s*")
 _EOL = re.compile(r"\r\n|\r|\n")
+# File names and diagnostics are untrusted. C0/C1 controls (including CR, LF and ESC), bidi overrides,
+# zero-width characters, line separators and a BOM must not reach a terminal or a Markdown line break.
+_CONTROLS = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+# Same set, but a quote may keep tab. Callers split CR/LF before using this.
+_LINE_CONTROLS = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
 # Hours are bounded so that hostile input can never build a huge integer.
 _VTT_TIME = r"(?:(\d{2,9}):)?([0-5]\d):([0-5]\d)\.(\d{3})"
 _VTT_TIMING = re.compile(rf"{_VTT_TIME}[ \t]+-->[ \t]+{_VTT_TIME}(?:[ \t]+.*)?")
@@ -41,6 +46,16 @@ _NUMBER = re.compile(r"-?(?:0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?")
 
 class SidecarError(ValueError):
     """A sidecar that cannot be used. The message is the reason a report shows."""
+
+
+def one_line(text: str) -> str:
+    """Untrusted file names and diagnostics on one line, without terminal or bidi controls."""
+    return _CONTROLS.sub("\ufffd", text)
+
+
+def show_line(text: str) -> str:
+    """One physical line of a quote: terminal and bidi controls removed, tabs kept."""
+    return _LINE_CONTROLS.sub("\ufffd", text)
 
 
 @dataclass(frozen=True)
@@ -100,8 +115,9 @@ def media_for(name: str, siblings: Iterable[str]) -> str | None:
     longest = max(found.values())
     best = sorted(other for other, size in found.items() if size == longest)
     if len(best) > 1:
-        raise SidecarError(f"describes more than one media file ({', '.join(best)}); name it after one of "
-                           f"them, such as {best[0]}{_suffix(name)}")
+        shown = [one_line(other) for other in best]
+        raise SidecarError(f"describes more than one media file ({', '.join(shown)}); name it after one of "
+                           f"them, such as {shown[0]}{one_line(_suffix(name))}")
     return best[0]
 
 

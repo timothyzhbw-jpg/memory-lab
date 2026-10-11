@@ -8,6 +8,7 @@ from html import escape
 from typing import Callable
 
 from memcore import EvidenceSpan
+from memcore.sidecar import one_line, show_line
 
 from .audit import KINDS, SEVERITIES, AuditFinding, AuditReport
 from .models import ReplayResult, SubjectState
@@ -28,16 +29,27 @@ def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = s
     """One evidence citation: id, location, source, short hash, then the exact quote.
 
     A quote from a transcript or OCR sidecar is located in the media file first (``clip.mp4#t=12.5,17``), then
-    in the sidecar whose bytes the hash covers."""
+    in the sidecar whose bytes the hash covers.
+
+    ``explain`` and ``replay`` use the default ``clean`` (``str``). They split cue lines first, then drop
+    terminal and bidi controls on each line, and they flatten ids and paths onto one line. The audit passes
+    ``_safe``, which already escapes those characters (a newline becomes a ``\\u`` escape) before the split."""
     code = code or (lambda value: f"`{clean(value)}`")
-    where = code(span.location)
+    # Identity, not a copy of ``str``: only the default display path scrubs. Audits pass ``_safe``.
+    literal = clean is str
+
+    def field(value: str) -> str:
+        return one_line(value) if literal else value
+
+    where = code(field(span.location))
     if span.media is not None:
         when = f" ({span.media.time_range})" if span.media.time_range else ""
-        where = f"{code(span.citation)}{when} · {span.media.label} {where}"
-    quote = re.split(r"\r\n|\r|\n", clean(span.quote))  # a transcript cue can span lines
-    return [f"{indent}- evidence {code(str(span.id))} · {where} · {clean(str(span.source_uri))} "
+        where = f"{code(field(span.citation))}{when} · {span.media.label} {where}"
+    raw = span.quote if literal else clean(span.quote)
+    lines = [show_line(line) if literal else line for line in re.split(r"\r\n|\r|\n", raw)]
+    return [f"{indent}- evidence {code(field(str(span.id)))} · {where} · {clean(field(str(span.source_uri)))} "
             f"· sha256 `{span.sha256[:12]}`",
-            *(f"{indent}  > {line}" for line in quote)]
+            *(f"{indent}  > {line}" for line in lines)]
 
 
 def state_block(state: SubjectState) -> list[str]:

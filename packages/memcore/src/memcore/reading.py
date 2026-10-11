@@ -203,3 +203,17 @@ def list_files(directory: Path) -> list[str]:
     for _, _, files in walk_files(directory, onerror=fail):
         return files
     return []
+
+
+def entry_names(directory: Path) -> list[str]:
+    """Every name in one directory, including directories and symlinks, without descending.
+
+    Names are the directory entries as stored. Callers that look a file up by name must use this rather
+    than ``exists``: a case-insensitive filesystem would otherwise open ``clip.mp4`` for ``Clip.mp4``,
+    while Linux would not, and the binding would depend on the operating system."""
+    def fail(error: OSError) -> None:
+        raise error
+
+    for _, directories, files in walk_files(directory, onerror=fail):
+        return [*directories, *files]
+    return []

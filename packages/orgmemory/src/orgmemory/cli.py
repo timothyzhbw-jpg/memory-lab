@@ -11,6 +11,7 @@ import typer
 from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
+from memcore.sidecar import one_line
 
 from .audit import DEFAULT_STALE_DAYS, audit
 from .models import Event
@@ -149,7 +150,7 @@ def evidence_add(
         _fail(str(exc))
     append_jsonl(manifest, entry.model_dump(mode="json"))
     where = span.location if span.media is None else f"{span.citation} ({span.media.label} {span.location})"
-    typer.echo(f"registered {id} at {where}")
+    typer.echo(one_line(f"registered {id} at {where}"))
 
 
 github_app = typer.Typer(no_args_is_help=True, help="Ingest GitHub issues and pull requests.")

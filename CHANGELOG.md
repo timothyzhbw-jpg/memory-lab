@@ -31,14 +31,18 @@ memlab-core needs a minor version and their pins must move to it.
   anything else. An OCR line written with JSON escape sequences is left out, since its quote could not be
   exact. hOCR is not supported.
 - `load_sidecar` binds a sidecar to the media file next to it (`clip.mp4.vtt`, `clip.vtt`, `clip.en.vtt`,
-  `scan.pdf.ocr.json`). When the media file is present, its SHA-256 must equal the `source_sha256` the
-  sidecar records (a `NOTE source_sha256: <hex>` block in a transcript); otherwise the sidecar is stale or
-  unbound.
+  `scan.pdf.ocr.json`). The media file name must match a directory entry exactly, including case, so
+  macOS, Windows and Linux bind the same files. When the media file is present, its SHA-256 must equal
+  the `source_sha256` the sidecar records (a `NOTE source_sha256: <hex>` block in a transcript); otherwise
+  the sidecar is stale or unbound.
 - `MediaRef` and `EvidenceSpan.media` (kind, media path, locator, media SHA-256), and
   `EvidenceSpan.citation` (`clip.mp4#t=12.5,17` for a sidecar quote, else `path:line`).
-- `ManifestEntry.locator` (optional). `verify_entry` checks a recorded locator and the sidecar's binding to
-  its media file on every load. Entries without a locator serialize exactly as before.
-- `memcore.reading.file_sha256` (hashes in chunks, confined like every other read) and `list_files`.
+- `ManifestEntry.locator` (optional). For a transcript or OCR sidecar, `verify_entry` requires a locator
+  and rechecks it and the sidecar's binding to its media file on every load; a sidecar record that omits
+  `locator` fails validation. Entries that are not sidecars and have no locator serialize exactly as before.
+- `memcore.reading.file_sha256` (hashes in chunks, confined like every other read), `list_files` and
+  `entry_names` (exact directory-entry names, including directories, so a case-insensitive filesystem
+  cannot open `clip.mp4` for `Clip.mp4`).
 
 #### Changed
 
@@ -62,7 +66,9 @@ memlab-core needs a minor version and their pins must move to it.
 
 - A media file is listed as skipped only when no sidecar was indexed for it, with the reason "no usable
   transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it". Malformed, stale, unbound and ambiguous
-  sidecars are listed as skipped with the reason.
+  sidecars are listed as skipped with the reason. Markdown keeps each skipped path and reason on one line,
+  with terminal and bidi controls replaced, so a file name cannot break the list. JSON still stores the
+  path exactly.
 - `.vtt`, `.srt` and `.ocr.json` files are parsed as sidecars instead of being indexed as plain text, so a
   malformed one is now skipped rather than read line by line.
 - JSON reports have a `media` field (null for text files) on every evidence span.
@@ -74,7 +80,9 @@ memlab-core needs a minor version and their pins must move to it.
 - `orgmemory evidence add` on a transcript or OCR sidecar records the cue's or line's `locator`;
   `--locator` picks it when the quote occurs more than once. The sidecar must match its media file.
 - `replay`, `explain` and `audit` cite sidecar evidence by media file and position, and print each line
-  of a multi-line cue as quoted text.
+  of a multi-line cue as quoted text. `explain` and `replay` replace terminal and bidi controls in a quote
+  after splitting lines, so a cue stays multi-line and cannot retarget the terminal. The audit report still
+  escapes those characters onto one line. `evidence add` prints its confirmation on one line.
 
 ### memlab-mcp
 

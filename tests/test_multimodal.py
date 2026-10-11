@@ -591,3 +591,109 @@ def test_sidecar_reads_never_write(media_dir):
     load_sidecar(media_dir, "clip.mp4.vtt", fixture("clip.mp4.vtt"))
     locate_quote(media_dir, "board.png.ocr.json", "every Monday")
     assert snapshot(media_dir.parent) == before
+
+
+def stored_name(path: Path, new_name: str) -> None:
+    """Rename, including a case-only change on a case-insensitive filesystem."""
+    staging = path.with_name(f".{new_name}.case-tmp")
+    path.rename(staging)
+    staging.rename(path.with_name(new_name))
+
+
+def test_embedded_media_names_are_case_sensitive(media_dir, monkeypatch):
+    """``Clip.mp4`` is a different file from ``clip.mp4`` on every platform, so it is not hashed."""
+    stored_name(media_dir / "clip.mp4.vtt", "Clip.mp4.vtt")
+    (media_dir / "talk.vtt").write_bytes(b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello there.\n")
+    (media_dir / "Talk.mp4").write_bytes(b"video\n")
+    hashed = []
+
+    def counting(path):
+        hashed.append(Path(path).name)
+        return file_sha256(path)
+
+    monkeypatch.setattr("memcore.evidence.file_sha256", counting)
+    passages, skipped = scan(media_dir)
+    refs = {p.span.path: p.span.media for p in passages}
+    assert refs["Clip.mp4.vtt"].path == "Clip.mp4" and refs["Clip.mp4.vtt"].sha256 is None
+    assert refs["talk.vtt"].path is None and refs["talk.vtt"].sha256 is None
+    reasons = by_path(skipped)
+    assert reasons["clip.mp4"] == NO_SIDECAR and reasons["Talk.mp4"] == NO_SIDECAR
+    assert not any(name.lower() in {"clip.mp4", "talk.mp4"} for name in hashed)
+
+
+def test_a_sidecar_record_without_a_locator_is_not_validated(org_media):
+    assert add(org_media, "--quote", "The public API rate limit is 60 requests").exit_code == 0
+    manifest = org_media / "evidence.jsonl"
+    lines = manifest.read_bytes().splitlines()
+    record = json.loads(lines[-1])
+    assert record.pop("locator") == "t=12.5,17"
+    lines[-1] = json.dumps(record).encode("utf-8")
+    manifest.write_bytes(b"\n".join(lines) + b"\n")
+    with pytest.raises(EvidenceError, match="records no locator"):
+        load_manifest(manifest)
+    (org_media / "media" / "clip.mp4").write_bytes(b"CHANGED")
+    with pytest.raises(EvidenceError, match="records no locator"):
+        load_manifest(manifest)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows forbids control characters in file names")
+def test_sidecar_diagnostics_keep_file_names_inert(tmp_path, git_repo):
+    stem = "clip\n\x1b\u202eINJECT"
+    root = tmp_path / "evidence"
+    root.mkdir()
+    (root / f"{stem}.mp4").write_bytes(b"a")
+    (root / f"{stem}.wav").write_bytes(b"b")
+    vtt = f"{stem}.vtt"
+    (root / vtt).write_bytes(b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello there.\n")
+    with pytest.raises(SidecarError, match="more than one media file") as caught:
+        media_for(vtt, [f"{stem}.mp4", f"{stem}.wav"])
+    message = str(caught.value)
+    assert "\n" not in message and "\x1b" not in message and "\u202e" not in message
+    report = media_audit(root, "Hello there.")
+    reason = by_path(report.skipped_evidence)[vtt]
+    assert "more than one media file" in reason
+    assert "\n" not in reason and "\x1b" not in reason and "\u202e" not in reason
+    assert any(item.path == vtt for item in report.skipped_evidence)  # stored path stays exact
+    markdown = to_markdown(report)
+    assert "\x1b" not in markdown and "\u202e" not in markdown
+    section = markdown.split("## Skipped evidence", 1)[1].split("## Limitations", 1)[0]
+    bullets = [line for line in section.splitlines() if line]
+    assert bullets and all(line.startswith("- `") for line in bullets)
+    base = git_repo.commit("memory", {"MEMORY.md": "- Unrelated claim stays.\n"})
+    git_repo.write({"MEMORY.md": "- Unrelated claim stays.\n"
+                                 "- The public API rate limit is 100 requests per minute.\n"})
+    diff = diff_to_markdown(memory_diff(git_repo.root / "MEMORY.md", base, evidence_root=root,
+                                        as_of=date(2026, 10, 10)))
+    assert "\x1b" not in diff and "\u202e" not in diff
+    diff_section = diff.split("## Skipped evidence", 1)[1].split("## Limitations", 1)[0]
+    diff_bullets = [line for line in diff_section.splitlines() if line]
+    assert diff_bullets and all(line.startswith("- `") for line in diff_bullets)
+
+
+def test_explain_quotes_keep_cue_lines_and_drop_terminal_controls(org_media):
+    clip = org_media / "media" / "clip.mp4.vtt"
+    clip.write_bytes(clip.read_bytes() + (
+        "\n00:03:00.000 --> 00:03:01.000\nHello\x1b[2J\u202e there\nline two\n".encode()))
+    quote = "Hello\x1b[2J\u202e there\nline two"
+    hostile = add(org_media, "--quote", quote, "--locator", "t=180,181", id="bad\n\x1bid")
+    assert hostile.exit_code == 0, hostile.output
+    assert hostile.output.count("\n") == 1 and "\x1b" not in hostile.output
+    assert "registered bad\ufffd\ufffdid at media/clip.mp4#t=180,181" in hostile.output
+    missing = add(org_media, "--quote", "no such words", "--locator", "t=1,2\n\x1b", id="nope")
+    assert missing.exit_code == 2 and missing.output.count("\n") == 1 and "\x1b" not in missing.output
+    assert "not found verbatim" in missing.output
+    assert add(org_media, "--quote", quote, "--locator", "t=180,181", id="scrub").exit_code == 0
+    record = json.loads((org_media / "evidence.jsonl").read_bytes().splitlines()[-1])
+    assert "\x1b" in record["quote"] and "\u202e" in record["quote"]  # the manifest stays exact
+    events = org_media / "events.jsonl"
+    for event_id, actor, action in (("fri", "zhou", "approve"), ("fri-sales", "wu", "reject")):
+        events.write_bytes(events.read_bytes() + (json.dumps({
+            "id": event_id, "timestamp": "2026-10-09T09:00:00Z", "actor": actor, "action": action,
+            "subject": "Rate limit", "evidence_ids": ["scrub"]}) + "\n").encode())
+    text = explain(replay(Dataset.load(org_media)), "Rate limit")
+    assert "Hello\ufffd[2J\ufffd there" in text and "    > line two" in text
+    assert "\x1b" not in text and "\u202e" not in text
+    result = runner.invoke(org_app, ["audit", str(org_media), "--as-of", "2026-10-10T00:00:00Z"])
+    assert result.exit_code == 0, result.output
+    assert "\x1b" not in result.output and "\u202e" not in result.output
+    assert "\\\\u001b" in result.output and "\\\\u202e" in result.output

@@ -38,7 +38,7 @@ Use this when the user asks what is stuck, contested or risky across a dataset, 
 Only when the user asks you to record something:
 
 1. Register the source: `orgmemory evidence add <dataset> --id <id> --path <file> --quote "<verbatim text>" --source-uri <uri> --source-kind <kind> --captured-at <ISO time with timezone>`.
-   For a recording or a scan, `--path` is the user's transcript or OCR sidecar next to the media file (`.vtt`, `.srt`, `.ocr.json`), and the quote must lie inside one cue or line. The record gets that cue's or line's locator, and `--locator t=12.5,17` picks one when the quote repeats. If the command says the sidecar is stale or not bound to its media file, tell the user; never edit a sidecar or its `source_sha256` yourself.
+   For a recording or a scan, `--path` is the user's transcript or OCR sidecar next to the media file (`.vtt`, `.srt`, `.ocr.json`), and the quote must lie inside one cue or line. The record gets that cue's or line's locator, and `--locator t=12.5,17` picks one when the quote repeats. A sidecar record that omits `locator` fails validation. The media file name is case-sensitive (`Clip.mp4.vtt` does not describe `clip.mp4`). If the command says the sidecar is stale or not bound to its media file, tell the user; never edit a sidecar or its `source_sha256` yourself.
 2. Append the event: `orgmemory append <dataset> --event '<json>'`. It is validated against the whole log and only ever appended.
 3. Use the actor ID and action the source actually supports. A customer asking again is `request` or `reconsider`, never `approve`.
 

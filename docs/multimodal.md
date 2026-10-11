@@ -29,6 +29,11 @@ Media files are `.png .jpg .jpeg .gif .webp .heic .bmp .tiff .mp3 .wav .m4a .fla
 after one of them. A stem-named transcript with no media file next to it, such as a meeting transcript
 exported without the recording, is used on its own and cited by its own path (`call.vtt#t=2,6.5`).
 
+The match is the directory entry's exact name, including case. `Clip.mp4.vtt` does not bind to `clip.mp4`,
+and `interview.vtt` does not bind to `Interview.mp4`, so macOS, Windows and Linux agree. The other-case
+file is a different file: the sidecar is used as if the name it asked for were absent, and that file is
+listed under *Skipped evidence*.
+
 A media file is listed under *Skipped evidence* unless a sidecar was indexed for it.
 
 ## Binding to the media file
@@ -125,7 +130,8 @@ markup included, without locators.
 - `orgmemory evidence add <dataset> --path media/clip.mp4.vtt --quote "..." [--locator t=12.5,17] ...`
   records the cue's `locator` in `evidence.jsonl`. Every load (`validate`, `replay`, `explain`, `audit`)
   checks it again, including the binding: if the media file changes later, the dataset stops validating.
-  Records without a sidecar have no `locator` key, exactly as before.
+  A sidecar record that omits `locator` fails validation. Records that are not sidecars have no `locator`
+  key, exactly as before.
 - The `memlab` MCP server reads sidecars and hashes media files through the same confined reads as other
   evidence, so a media file swapped for a symlink out of the root is never read.
 
