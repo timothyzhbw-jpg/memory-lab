@@ -62,7 +62,7 @@ The example memory holds ten claims about a fictional service. The audit ([full 
 
 Every quote carries `path:line`, character offsets and the SHA-256 of the file it came from. A whiteboard photo in the evidence folder is listed as skipped, not guessed at.
 
-Chinese memories work too (word bigrams, Chinese negation, antonym pairs such as 批准/拒绝, dates like 2026年3月2日, and wording such as 总是, 下周, 可能): see [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
+Chinese memories work too: Chinese text is matched by overlapping character pairs (no dictionary segmentation), with antonym pairs such as 批准/拒绝, dates like 2026年3月2日, and wording such as 总是, 下周 and 可能. Chinese negation is matched per character (不, 没, 未, 无, 非, 别, 勿), so words like 未来 or 非常 can trigger a false "only one side is negated" candidate. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
 
 **How status is decided.** MemFalsify nominates evidence by itself, but only a human review can settle a memory:
 
@@ -83,7 +83,7 @@ Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--fo
 ### Organizational Memory: replay decisions
 
 ```bash
-orgmemory replay examples/orgmemory/feature-a
+orgmemory replay examples/orgmemory/feature-a   # from the repository root
 ```
 
 | When | Who (role) | Event |
@@ -126,7 +126,7 @@ orgmemory append   <dataset> --event '{"id": ..., ...}'
 {"memory_id": "m-27e874e0", "relation": "contradicts", "path": "notes/2026-10-07-decision-log.md", "quote": "Product manager rejects Feature A (bulk export) for the November release.", "reviewer": "demo-reviewer", "note": "optional"}
 ```
 
-`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes and old reviews stop applying, so it must be reviewed again. `quote` must appear verbatim in `path`, which is relative to the evidence directory.
+`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes, and a review line that still names the old ID stops the audit with an `unknown memory_id` error (exit code 2) until the memory is re-reviewed and that line updated or removed. `quote` must appear verbatim in `path`, which is relative to the evidence directory.
 
 **Organizational dataset**: a directory with three files.
 
@@ -169,7 +169,7 @@ The two model backends work differently on purpose: Claude reasons its way to a 
 
 The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). `dual` is the stricter choice: every judgment is checked twice. `cascade` follows the "accept when confident, escalate when unsure" pattern and is much cheaper, but it trusts Jev's confident answers alone, so tune `--accept-at` on memories you have already reviewed before relying on it.
 
-For both model backends, an API failure or missing key stops the audit with exit code 2 rather than producing a partial report.
+For both model backends, an API failure, a missing SDK or missing credentials stops the audit with exit code 2 and an error message rather than producing a partial report.
 
 From Python:
 

@@ -70,6 +70,9 @@ class LLMVerifier:
             )
         except self._api_error as exc:
             raise VerifierError(f"{self.name}: {exc}") from exc
+        except TypeError as exc:
+            # The SDK only checks credentials when a request is sent, and reports missing ones as a TypeError.
+            raise VerifierError(f"{self.name}: {exc}") from exc
         verdict = response.parsed_output if response.stop_reason != "refusal" else None
         if verdict is None:
             return Judgment(relation="unrelated", verifier=self.name,

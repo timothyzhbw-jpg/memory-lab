@@ -106,6 +106,13 @@ def test_llm_api_error_becomes_verifier_error():
         LLMVerifier(client=fake_client(error=Boom())).judge(CLAIM, COUNTER)
 
 
+def test_llm_missing_credentials_becomes_verifier_error():
+    # anthropic raises a plain TypeError at the first request when no credentials resolve.
+    missing = TypeError('"Could not resolve authentication method. Expected one of api_key, auth_token, ..."')
+    with pytest.raises(VerifierError, match="Could not resolve authentication method"):
+        LLMVerifier(client=fake_client(error=missing)).judge(CLAIM, COUNTER)
+
+
 # --- Jev ---------------------------------------------------------------------------
 
 def test_jev_request_and_mapping():
