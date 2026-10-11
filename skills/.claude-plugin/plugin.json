@@ -1,0 +1,20 @@
+{
+  "name": "memory-lab",
+  "displayName": "Memory Lab",
+  "description": "Audit agent memory against evidence (memfalsify) and replay authorized organizational decisions (orgmemory), with the read-only memlab MCP server rooted at the project directory",
+  "author": {
+    "name": "timothyzhbw-jpg",
+    "url": "https://github.com/timothyzhbw-jpg"
+  },
+  "homepage": "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/docs/install-agents.md",
+  "repository": "https://github.com/timothyzhbw-jpg/memory-lab",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "evidence", "audit", "mcp"],
+  "skills": ["./memfalsify", "./orgmemory"],
+  "mcpServers": {
+    "memlab": {
+      "command": "memlab-mcp",
+      "args": ["--root", "${CLAUDE_PROJECT_DIR}"]
+    }
+  }
+}
