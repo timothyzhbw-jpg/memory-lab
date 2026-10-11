@@ -2,7 +2,7 @@
 
 English | [中文](mcp.zh-CN.md)
 
-`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server. It exposes MemFalsify and orgmemory to a local agent. The tools call the same library code as the `memfalsify` and `orgmemory` commands. They do not write reports, events, evidence, policy files or role changes.
+`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server. It exposes MemFalsify and orgmemory to a local agent as [tools](#tools), [resources](#resources) and [prompts](#prompts). The tools call the same library code as the `memfalsify` and `orgmemory` commands, and the resources call the tools' code. None of them write reports, events, evidence, policy files or role changes.
 
 ## Tools
 
@@ -38,6 +38,39 @@ Invalid tool calls return MCP tool errors and leave the connection usable. Schem
 The default verifier is `lexical`, which runs offline. `llm`, `jev`, `dual`, and `cascade` send memory and evidence text to external APIs and cost money. The server refuses them unless it was started with `--allow-model-verifiers`. With that flag, `memfalsify_audit` and `memfalsify_diff` are marked as reaching outside the local machine. On `memfalsify_diff` the model verifiers use the CLI's default model names and passage limits (at most 8 passages per claim, coverage 0.2). There is no argument for `--llm-model`, `--jev-model`, `--accept-at`, `--max-judged` or `--min-coverage`.
 
 `base`, `head` and `to` must be non-empty, must not start with `-` and must not contain control characters. Each is resolved to a commit. The memory file must sit in a git work tree whose top level, git directory, common directory (for a linked worktree, the main repository) and object store all resolve inside `--root`, with no `objects/info/alternates` and no symlinks in the object store. Otherwise the git tools refuse the file. `GIT_DIR` and the other git location variables are ignored, and git's own diagnostics are not returned, because they can name paths outside the root. Commit subjects and author names in a result are untrusted. These three tools follow local `.md` links, as the CLIs do by default. They have no `follow_links` switch, and no `--output`, `--strict` or `--stale-days`. A diff audit uses the 180-day staleness window.
+
+## Resources
+
+A client that supports MCP resources can read five reports by URI instead of calling a tool. They are resource templates (`resources/templates/list`); `resources/list` is empty. Each resource runs the code of the tool named in the table, so it returns the same text, under the same confinement and evidence limits (for example, evidence files over 2 MB are skipped). Its error is that tool's message, or a fixed message when the SDK refuses the URI before those checks.
+
+| URI template | MIME type | Same text as |
+|---|---|---|
+| `memlab://memory/{+memory_file}/claims` | `application/json` | `memfalsify_claims` |
+| `memlab://memory/{+memory_file}/audit{?evidence_dir,reviews_file,as_of}` | `text/markdown` | `memfalsify_audit` with the `lexical` verifier |
+| `memlab://dataset/{+dataset}/state{?as_of}` | `text/markdown` | `orgmemory_replay` |
+| `memlab://dataset/{+dataset}/audit{?as_of,stale_days}` | `text/markdown` | `orgmemory_audit` |
+| `memlab://dataset/{+dataset}/explain/{subject}{?as_of}` | `text/markdown` | `orgmemory_explain` |
+
+With `--root examples`, for example: `memlab://memory/memfalsify/MEMORY.md/claims`, `memlab://memory/memfalsify/MEMORY.md/audit?evidence_dir=memfalsify%2Fevidence&as_of=2026-10-10`, `memlab://dataset/orgmemory/feature-a/state` and `memlab://dataset/orgmemory/github-acme-web/explain/acme%2Fweb%2312`.
+
+- Paths are relative to `--root`. Before the server's own checks run, the SDK's default resource security refuses an absolute path, a `..` that leaves the root, and a NUL character in every path (`memory_file`, `dataset`, `evidence_dir`, `reviews_file`). After that, the same checks as for tool arguments apply, including symlinks and confined reads. `subject`, `as_of` and `stale_days` are not paths, so the tools' own checks and messages apply to them.
+- Query parameters are optional and mean what the tool argument of the same name means. Unknown query parameters are ignored. `stale_days` must be a whole number of at least 0. Percent-encode the subject: a space is `%20`, `/` is `%2F` and `#` is `%23`.
+- `memlab://memory/.../audit` always uses the offline `lexical` verifier, even on a server started with `--allow-model-verifiers`, because a client can read a resource without the model asking for it. Claims are JSON. The other four resources are Markdown only. There is no `exclude`, `verifier` or `format`, and there are no resources for diff, history or rollback: use the tools for those.
+- A failed read is a JSON-RPC error: `-32602` for an unknown URI, a refused path or invalid input, `-32603` when the read could not complete. The message is the one the tool would return, or a fixed one. The URI itself is not echoed back or logged.
+
+## Prompts
+
+Prompts are fixed instructions that a client can offer as commands. Each one returns a single user message that walks an agent through one of the skills' report-first workflows with the tools above.
+
+| Prompt | Arguments | Workflow |
+|---|---|---|
+| `audit_memory` | `memory_file`, optional `evidence_dir`, `reviews_file` (requires `evidence_dir`), `as_of` | Run `memfalsify_audit` with the `lexical` verifier, falsify the risky claims and report the memories that need attention first, with quotes and `path:line`. Without `evidence_dir`, the agent first asks the user which evidence to trust. |
+| `review_memory_changes` | `memory_file`, `base`, optional `head`, `evidence_dir` | Run `memfalsify_diff`, review the added and changed claims, point out removed ones and say that unchanged claims were not re-checked. `memfalsify_history` when the user asks where a claim came from; `memfalsify_rollback` only to show a patch. |
+| `explain_status` | `dataset`, `subject`, optional `as_of` | Run `orgmemory_validate`, then `orgmemory_explain`, and answer with the current status, the authorizing decision and its evidence, pending approvals, risks and ignored attempts. |
+
+The message quotes the arguments as one line of JSON in a code block, with control, bidirectional and other invisible characters escaped, so an argument cannot add a line or hide text. No prompt reads a file or embeds file contents. No prompt tells the agent to write a file, apply a patch, record a review or append an event: each one tells the agent to stop after reporting, and that such changes need the user's explicit approval. Text the tools quote stays untrusted, and the agent is told to report a tool error and stop rather than work around it.
+
+Arguments are checked before any text is returned. Paths must stay inside the root and exist, with the same checks as the tools. A revision must be non-empty, must not start with `-`, and must not contain control characters. The prompt does not resolve it to a commit or require a git repository; `memfalsify_diff` does that when it runs. `as_of` must be a date (`audit_memory`) or an ISO 8601 time with a timezone (`explain_status`). An unknown prompt and a missing, unknown or invalid argument are JSON-RPC errors (`-32602`). Path, revision and date errors carry the tools' messages, which never repeat a path outside the root. Nothing is logged.
 
 ## Install
 

@@ -228,6 +228,7 @@ release needs a memlab-core release that has it; raise their memlab-core pins th
   Only `http` and `https` URIs become links (`link()`, `safe_url()`), with `rel="noopener noreferrer"`.
   The page is 7-bit ASCII and is written to stdout as bytes, so a Windows text-mode console cannot turn
   LF into CRLF. It follows `prefers-color-scheme`, and its tables scroll sideways at phone width.
+
 ### orgmemory
 
 #### Added
@@ -343,6 +344,24 @@ a symlink out of the root is never read.
 - `orgmemory_changes` (`dataset`, `from_time`, `to_time`, `format`): the read-only tool over
   `orgmemory changes`, with the same root confinement as the other dataset tools. Requires the orgmemory
   release that adds `changes`.
+- Read-only resource templates: `memlab://memory/{+memory_file}/claims` and
+  `.../audit{?evidence_dir,reviews_file,as_of}`, and `memlab://dataset/{+dataset}/state{?as_of}`,
+  `.../audit{?as_of,stale_days}` and `.../explain/{subject}{?as_of}`. Each one runs the code of the matching
+  tool, so it returns the same text, under the same confinement. A resource error is the tool's message,
+  or a fixed one when the SDK refuses the URI. The memory audit resource always uses the lexical verifier,
+  even with `--allow-model-verifiers`.
+- Prompts `audit_memory`, `review_memory_changes` and `explain_status` for the skills' report-first
+  workflows. They quote their arguments as one line of JSON with invisible characters escaped the same way
+  on Python 3.10 through 3.13, check paths as the tools do, and accept a revision only as a non-empty
+  string that does not start with `-` or contain a control character. The tool resolves that revision to a
+  commit. Prompts embed no file contents and never tell the agent to write a file.
+
+#### Security
+
+- Resource and prompt errors carry the tools' messages or a fixed one. They do not echo the requested URI
+  or arguments, and they are not logged, so neither a client nor stderr sees a path outside the root or a
+  traceback. The SDK's default resource security (no `..` escape, absolute path or NUL) runs on every
+  resource path before the server's own path checks.
 
 ### Repository
 
