@@ -438,7 +438,7 @@ def test_cli_strict_exit_codes(tmp_path):
     (["--as-of", "2026-10-30"], "timezone"),
     (["--as-of", "yesterday"], "datetime"),
     (["--stale-days", "-1"], "stale-days"),
-    (["--format", "html"], "format"),
+    (["--format", "pdf"], "format"),
 ])
 def test_cli_invalid_options_exit_2(tmp_path, args, message):
     root = build(tmp_path / "data", MIXED)

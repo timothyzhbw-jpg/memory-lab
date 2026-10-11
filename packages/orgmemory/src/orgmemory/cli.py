@@ -13,6 +13,7 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 
 from .audit import DEFAULT_STALE_DAYS, audit
+from .htmlreport import audit_html, replay_html
 from .models import Event
 from .replay import Dataset, replay, validate
 from .report import audit_markdown, explain, to_markdown
@@ -28,6 +29,11 @@ DATASET = typer.Argument(..., exists=True, file_okay=False, help="Directory with
 class Format(str, Enum):
     markdown = "markdown"
     json = "json"
+    html = "html"
+
+
+FORMAT = typer.Option(Format.markdown, "--format", "-f",
+                      help="markdown, json, or html (one self-contained page: inline CSS, no scripts, nothing loaded)")
 
 
 def _fail(message: str) -> None:
@@ -50,7 +56,7 @@ def _load(dataset: Path) -> Dataset:
 def replay_command(
     dataset: Path = DATASET,
     as_of: Optional[str] = typer.Option(None, help="Ignore events after this time (ISO 8601 with timezone)"),
-    fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
+    fmt: Format = FORMAT,
 ) -> None:
     """Rebuild current state from the event log."""
     data = _load(dataset)
@@ -58,7 +64,10 @@ def replay_command(
         result = replay(data, _as_of(as_of))
     except ValidationError as exc:
         _fail(str(exc))
-    typer.echo(to_markdown(result) if fmt is Format.markdown else result.model_dump_json(indent=2))
+    if fmt is Format.html:
+        typer.echo(replay_html(result), nl=False)
+    else:
+        typer.echo(to_markdown(result) if fmt is Format.markdown else result.model_dump_json(indent=2))
 
 
 @app.command("explain")
@@ -79,7 +88,7 @@ def audit_command(
                    "default: whole log, staleness measured now)"),
     stale_days: int = typer.Option(DEFAULT_STALE_DAYS, min=0,
                                    help="Report pending approvals and reconsiderations open longer than this"),
-    fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
+    fmt: Format = FORMAT,
     strict: bool = typer.Option(False, help="Exit 1 if any finding has high severity"),
 ) -> None:
     """Report where the decision process needs attention, with the evidence of every event involved."""
@@ -88,8 +97,11 @@ def audit_command(
         report = audit(data, _as_of(as_of), stale_days)
     except ValidationError as exc:
         _fail(str(exc))
-    typer.echo(audit_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
-               nl=False)
+    if fmt is Format.json:
+        text = report.model_dump_json(indent=2) + "\n"
+    else:
+        text = audit_html(report) if fmt is Format.html else audit_markdown(report)
+    typer.echo(text, nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
 
