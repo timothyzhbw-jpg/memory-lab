@@ -13,7 +13,7 @@ It contains two independent tools that share one evidence core:
 | Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail |
 | Writes | Nothing (only the report you ask for) | Nothing on replay; `append` only appends |
 
-By default everything runs offline with no API keys; optional model verifiers (Claude, or a local judgment model) can be switched on. Python 3.10+, Apache-2.0.
+By default everything runs offline with no API keys; optional model verifiers (Claude and TypeSafe AI's Jev) can be switched on. Python 3.10+, Apache-2.0.
 
 ```text
         Claude Code / Codex / other agents  (skills/)
@@ -151,18 +151,18 @@ A verifier judges one memory against one evidence passage as `supports`, `contra
 |---|---|---|---|
 | `lexical` (default) | Term overlap, opposing terms, numbers, negation | Nothing | Offline, deterministic, explainable; misses paraphrases |
 | `llm` | Claude reads the passage and explains its verdict (`--llm-model`, default `claude-opus-5-5`) | `pip install 'memfalsify[llm]'` and Anthropic credentials | Understands paraphrase and context; costs API calls and **sends memory and evidence text to the API** |
-| `jev` | A judgment model: an NLI cross-encoder scores entailment / neutral / contradiction (`--jev-model`, default the multilingual `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`) | `pip install 'memfalsify[jev]'` (torch + transformers; the model downloads on first use) | Local and repeatable, reports a probability; no explanation beyond the scores |
+| `jev` | [Jev](https://docs.typesafe.ai), TypeSafe AI's decision-only judgment model, picks one of the three relations and returns a probability for each (`--jev-model`, default `jev-latest`) | `pip install 'memfalsify[jev]'` and `TYPESAFE_API_KEY` | A small fraction of an LLM judge's cost, with a calibrated confidence; no written explanation, and **sends memory and evidence text to the TypeSafe API** |
 | `dual` | `llm` and `jev`, independently | Both | Agreement passes through; disagreement becomes `disputed`, and the report shows both opinions |
 
 ```bash
 memfalsify audit MEMORY.md --evidence evidence --verifier dual
 ```
 
-The two model backends work differently on purpose: one generates a reasoned verdict, the other classifies. When they disagree, a human reads the evidence.
+The two model backends work differently on purpose: Claude reasons its way to a verdict and writes why, while Jev outputs a decision with probabilities. Both get the same written definitions of the three relations (`RELATION_CRITERIA` in `verify.py`), so when they disagree it is about the evidence, not the wording of the task, and a human reads that evidence. A Jev answer whose confidence is below `JevVerifier(threshold=0.5)` counts as `unrelated`; the rationale keeps all three probabilities and the resolved model version (for example `jev-1.13.0`, since `jev-latest` is an alias).
 
 **Which passages a model sees.** The term index still pre-selects passages. Model verifiers use a looser threshold (`--min-coverage`, default 0.2 instead of 0.5) so paraphrases are judged, and only the best `--max-judged` passages per memory (default 8) are sent. That bounds cost at *memories × max-judged* calls per model. A passage that shares no terms with a memory is never judged.
 
-The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). An API failure stops the audit with exit code 2 rather than producing a partial report.
+The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). For both model backends, an API failure or missing key stops the audit with exit code 2 rather than producing a partial report.
 
 From Python:
 
@@ -182,7 +182,7 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
-- `--verifier llm` and `dual` send memory claims and evidence passages to the Anthropic API. Use them only on material you are allowed to send there.
+- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` sends them to both. Use them only on material you are allowed to send there.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - This is a research MVP, not production infrastructure.

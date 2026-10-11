@@ -7,4 +7,4 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 cd "$CLAUDE_PROJECT_DIR"
-python3 -m pip install --quiet -e packages/memcore -e packages/memfalsify -e packages/orgmemory pytest
+python3 -m pip install --quiet -e packages/memcore -e "packages/memfalsify[all]" -e packages/orgmemory pytest

@@ -61,10 +61,10 @@ def audit_command(
     follow_links: bool = typer.Option(True, help="Also audit local .md files linked from MEMORY.md"),
     strict: bool = typer.Option(False, help="Exit 1 if any memory is challenged, conflicted or has counterevidence"),
     verifier: VerifierChoice = typer.Option(VerifierChoice.lexical, "--verifier",
-                                            help="lexical (offline), llm (Claude), jev (NLI judgment model), "
+                                            help="lexical (offline), llm (Claude), jev (TypeSafe Jev judgment model), "
                                                  "or dual (llm + jev; disagreements become disputed)"),
     llm_model: str = typer.Option(llm.DEFAULT_MODEL, help="Claude model for --verifier llm/dual"),
-    jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="Hugging Face NLI model for --verifier jev/dual"),
+    jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual"),
     max_judged: int = typer.Option(8, min=1, help="Model verifiers: passages judged per memory (bounds API calls)"),
     min_coverage: Optional[float] = typer.Option(
         None, min=0.0, max=1.0,

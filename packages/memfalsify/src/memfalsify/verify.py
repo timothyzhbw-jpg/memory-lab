@@ -1,7 +1,7 @@
 """Pluggable verifiers. A verifier judges one claim against one passage; it never edits memory.
 
 The built-in LexicalVerifier needs no model or API key. ``llm.LLMVerifier`` (Claude) and
-``jev.JevVerifier`` (a dedicated NLI judgment model) implement the same ``Verifier`` protocol;
+``jev.JevVerifier`` (TypeSafe AI's Jev judgment model) implement the same ``Verifier`` protocol;
 ``DualVerifier`` combines two of them and keeps their disagreement visible instead of picking a winner.
 """
 from __future__ import annotations
@@ -13,6 +13,15 @@ from pydantic import BaseModel
 from .text import features, has_negation, opposing_terms
 
 Relation = Literal["supports", "contradicts", "unrelated", "disputed"]
+
+# Shared by the model verifiers, so that when two of them disagree it is about the evidence,
+# not about differently worded definitions.
+RELATION_CRITERIA = {
+    "supports": "The passage states the claim or directly entails it.",
+    "contradicts": "The passage states something that cannot be true at the same time as the claim, such as "
+                   "a different value, the opposite decision, a negation, or a counterexample to an absolute claim.",
+    "unrelated": "The passage is about something else, or is compatible with the claim without establishing it.",
+}
 
 
 class Judgment(BaseModel):
