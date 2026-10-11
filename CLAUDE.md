@@ -3,7 +3,7 @@
 Monorepo with three Python packages (Python 3.10+):
 
 - `packages/memcore` — shared evidence core (models, JSONL store, retrieval)
-- `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory. Verifier backends: `verify.py` (lexical, `DualVerifier`), `llm.py` (Claude, extra `[llm]`), `jev.py` (TypeSafe AI's Jev judgment model via `typesafe-sdk`, extra `[jev]`)
+- `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory. Verifier backends: `verify.py` (lexical, `DualVerifier`, `CascadeVerifier`), `llm.py` (Claude, extra `[llm]`), `jev.py` (TypeSafe AI's Jev judgment model via `typesafe-sdk`, extra `[jev]`)
 - `packages/orgmemory` — `orgmemory` CLI: event replay, permissions, state machine, decision provenance
 
 Skills live in `skills/`, example inputs and generated reports in `examples/`.

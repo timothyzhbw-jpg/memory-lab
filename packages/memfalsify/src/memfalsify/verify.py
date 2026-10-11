@@ -2,7 +2,8 @@
 
 The built-in LexicalVerifier needs no model or API key. ``llm.LLMVerifier`` (Claude) and
 ``jev.JevVerifier`` (TypeSafe AI's Jev judgment model) implement the same ``Verifier`` protocol;
-``DualVerifier`` combines two of them and keeps their disagreement visible instead of picking a winner.
+``DualVerifier`` combines two of them and keeps their disagreement visible instead of picking a winner;
+``CascadeVerifier`` trusts a cheap verifier when it is confident and escalates to a stronger one otherwise.
 """
 from __future__ import annotations
 
@@ -96,3 +97,25 @@ class DualVerifier:
                             verifier=self.name, opinions=[a, b])
         return Judgment(relation="disputed", verifier=self.name, opinions=[a, b],
                         rationale=f"{a.verifier} says {a.relation}, {b.verifier} says {b.relation}")
+
+
+class CascadeVerifier:
+    """Accept ``first`` when its confidence reaches ``accept_at``; otherwise ``second`` decides.
+
+    ``first`` should report a confidence (Jev does); a judgment without one is always escalated.
+    The escalated result keeps both opinions, so the report shows what the first verifier thought.
+    """
+
+    def __init__(self, first: Verifier, second: Verifier, accept_at: float = 0.8):
+        self.first, self.second, self.accept_at = first, second, accept_at
+        self.name = f"{first.name}>{second.name}"
+
+    def judge(self, claim: str, passage: str) -> Judgment:
+        a = self.first.judge(claim, passage)
+        if a.confidence is not None and a.confidence >= self.accept_at:
+            return Judgment(relation=a.relation, rationale=f"{a.verifier}: {a.rationale}", verifier=self.name,
+                            confidence=a.confidence, opinions=[a])
+        b = self.second.judge(claim, passage)
+        unsure = "no confidence" if a.confidence is None else f"confidence {a.confidence:.2f} < {self.accept_at}"
+        return Judgment(relation=b.relation, verifier=self.name, opinions=[a, b],
+                        rationale=f"{a.verifier} unsure ({unsure}), escalated; {b.verifier}: {b.rationale}")

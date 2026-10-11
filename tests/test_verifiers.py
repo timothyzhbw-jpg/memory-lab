@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from memfalsify import llm
+from memfalsify import jev, llm
 from memfalsify.audit import MODEL_NOTE, audit
 from memfalsify.cli import app
 from memfalsify.jev import JevVerifier
 from memfalsify.llm import SYSTEM, LLMVerifier, Verdict
 from memfalsify.report import to_markdown
-from memfalsify.verify import RELATION_CRITERIA, DualVerifier, VerifierError
+from memfalsify.verify import RELATION_CRITERIA, CascadeVerifier, DualVerifier, LexicalVerifier, VerifierError
 
 runner = CliRunner()
 CLAIM = "Customers can download every past invoice as an Excel spreadsheet."
@@ -198,3 +198,41 @@ def test_cli_jev_without_api_key_exits_2(invoices, monkeypatch):
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     result = runner.invoke(app, ["audit", str(invoices / "MEMORY.md"), "--verifier", "jev"])
     assert result.exit_code == 2 and "TYPESAFE_API_KEY" in result.output
+
+
+# --- cascade -----------------------------------------------------------------------
+
+def test_cascade_accepts_confident_jev_without_calling_llm():
+    client = fake_client(verdict=Verdict(relation="supports", rationale="-"))
+    judgment = CascadeVerifier(mock_jev(), LLMVerifier(client=client)).judge(CLAIM, COUNTER)
+    assert judgment.relation == "contradicts" and judgment.confidence == 0.90
+    assert judgment.verifier == "jev:jev-latest>llm:claude-opus-5-5" and len(judgment.opinions) == 1
+    assert client.beta.messages.calls == []
+
+
+def test_cascade_escalates_unsure_jev_to_llm():
+    unsure = lambda state: ("supports", 0.60, {"supports": 0.60, "contradicts": 0.10, "unrelated": 0.30})
+    client = fake_client(verdict=Verdict(relation="unrelated", rationale="CSV is not Excel"))
+    judgment = CascadeVerifier(mock_jev(unsure), LLMVerifier(client=client), accept_at=0.8).judge(CLAIM, COUNTER)
+    assert judgment.relation == "unrelated" and len(client.beta.messages.calls) == 1
+    assert [o.relation for o in judgment.opinions] == ["supports", "unrelated"]
+    assert "(confidence 0.60 < 0.8), escalated; llm:claude-opus-5-5: CSV is not Excel" in judgment.rationale
+
+
+def test_cascade_escalates_judgments_without_confidence():
+    client = fake_client(verdict=Verdict(relation="contradicts", rationale="not available"))
+    judgment = CascadeVerifier(LexicalVerifier(), LLMVerifier(client=client)).judge(CLAIM, COUNTER)
+    assert judgment.relation == "contradicts" and "no confidence" in judgment.rationale
+
+
+def test_cli_cascade(invoices, monkeypatch):
+    unsure = lambda state: ("unrelated", 0.55, {"supports": 0.05, "contradicts": 0.40, "unrelated": 0.55})
+    client = fake_client(verdict=Verdict(relation="contradicts", rationale="not available"))
+    real = llm.LLMVerifier
+    monkeypatch.setattr(llm, "LLMVerifier", lambda model: real(model, client=client))
+    monkeypatch.setattr(jev, "JevVerifier", lambda model: mock_jev(unsure))
+    result = runner.invoke(app, ["audit", str(invoices / "MEMORY.md"), "-e", str(invoices / "evidence"),
+                                 "--verifier", "cascade", "--accept-at", "0.6"])
+    assert result.exit_code == 0 and "POSSIBLE COUNTEREVIDENCE" in result.output
+    assert "Verifier: `jev:jev-latest>llm:claude-opus-5-5`" in result.output
+    assert "(confidence 0.55 < 0.6), escalated" in result.output

@@ -145,7 +145,7 @@ The CLIs must be installed in the environment the agent's shell uses.
 
 ## Verifier backends: lexical, LLM, Jev
 
-A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Three backends ship, and `dual` runs two of them side by side:
+A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Three backends ship; `dual` and `cascade` combine the two model backends:
 
 | `--verifier` | Who judges | Needs | Trade-off |
 |---|---|---|---|
@@ -153,6 +153,7 @@ A verifier judges one memory against one evidence passage as `supports`, `contra
 | `llm` | Claude reads the passage and explains its verdict (`--llm-model`, default `claude-opus-5-5`) | `pip install 'memfalsify[llm]'` and Anthropic credentials | Understands paraphrase and context; costs API calls and **sends memory and evidence text to the API** |
 | `jev` | [Jev](https://docs.typesafe.ai), TypeSafe AI's decision-only judgment model, picks one of the three relations and returns a probability for each (`--jev-model`, default `jev-latest`) | `pip install 'memfalsify[jev]'` and `TYPESAFE_API_KEY` | A small fraction of an LLM judge's cost, with a calibrated confidence; no written explanation, and **sends memory and evidence text to the TypeSafe API** |
 | `dual` | `llm` and `jev`, independently | Both | Agreement passes through; disagreement becomes `disputed`, and the report shows both opinions |
+| `cascade` | `jev` first; Claude only when Jev's confidence is below `--accept-at` (default 0.8) | Both | Close to Jev's cost when Jev is usually sure; the report shows Jev's unsure opinion next to Claude's verdict. No cross-check on answers Jev is confident about |
 
 ```bash
 memfalsify audit MEMORY.md --evidence evidence --verifier dual
@@ -162,7 +163,9 @@ The two model backends work differently on purpose: Claude reasons its way to a 
 
 **Which passages a model sees.** The term index still pre-selects passages. Model verifiers use a looser threshold (`--min-coverage`, default 0.2 instead of 0.5) so paraphrases are judged, and only the best `--max-judged` passages per memory (default 8) are sent. That bounds cost at *memories × max-judged* calls per model. A passage that shares no terms with a memory is never judged.
 
-The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). For both model backends, an API failure or missing key stops the audit with exit code 2 rather than producing a partial report.
+The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). `dual` is the stricter choice: every judgment is checked twice. `cascade` follows the "accept when confident, escalate when unsure" pattern and is much cheaper, but it trusts Jev's confident answers alone, so tune `--accept-at` on memories you have already reviewed before relying on it.
+
+For both model backends, an API failure or missing key stops the audit with exit code 2 rather than producing a partial report.
 
 From Python:
 
