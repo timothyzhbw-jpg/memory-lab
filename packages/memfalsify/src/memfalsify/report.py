@@ -46,6 +46,7 @@ def to_markdown(report: AuditReport) -> str:
            f"- Memory: `{report.memory_file}` ({len(report.files_read)} file(s): "
            + ", ".join(f"`{p}`" for p in report.files_read) + ")",
            f"- Evidence root: `{report.evidence_root}`" if report.evidence_root else "- Evidence root: none supplied",
+           *(["- Excluded from evidence: " + ", ".join(f"`{p}`" for p in report.excluded)] if report.excluded else []),
            f"- Verifier: `{report.verifier}` · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]

@@ -1,0 +1,73 @@
+trigger:
+  branches:
+    include: [main]
+  tags:
+    include: ["v*"]
+
+pr:
+  branches:
+    include: [main]
+
+# Azure Pipelines cron schedules are in UTC.
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Nightly live tests
+    branches:
+      include: [main]
+    always: true
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: check
+    jobs:
+      - job: test
+        strategy:
+          matrix:
+            py311:
+              python.version: "3.11"
+            py312:
+              python.version: "3.12"
+            py313:
+              python.version: "3.13"
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(python.version)
+          - script: pipx install uv==0.4.20
+            displayName: Install uv
+          - script: make install
+          - script: make check
+            displayName: Lint, type-check and test
+
+      - job: live
+        condition: eq(variables['Build.Reason'], 'Schedule')
+        timeoutInMinutes: 30
+        variables:
+          - group: quayside-sandbox
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.12"
+          - script: pipx install uv==0.4.20
+          - script: make install
+          - script: make test-live
+            env:
+              QUAYSIDE_SANDBOX_KEY: $(QUAYSIDE_SANDBOX_KEY)
+
+  - stage: publish
+    dependsOn: check
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    jobs:
+      - job: pypi
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.12"
+          - script: pipx install uv==0.4.20
+          - script: make build
+          - script: uv publish
+            displayName: Upload to PyPI
+            env:
+              UV_PUBLISH_TOKEN: $(PYPI_TOKEN)

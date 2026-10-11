@@ -50,7 +50,7 @@ python benchmarks/memfalsify/run.py --verifier cascade   # 先问 Jev，没把�
 python benchmarks/memfalsify/run.py --verifier dual --json results-dual.json
 ```
 
-每个模型验证器对每条记忆最多判断 8 个片段，所以完整跑一遍，每个模型要调用几百次。建议先跑最便宜的 `jev`，或者用 `--case <id>` 只跑一部分。各项指标的含义见 `benchmarks/memfalsify/README.md`。
+[实测词法评测](../benchmarks/memfalsify/RESULTS.md)对 139 条记忆调用了 129 次 `judge()`。模型验证器使用不同的预筛选参数，每条记忆最多判断 8 个片段；实际调用次数须读取评测输出的 Cost 行或 JSON，不能用词法次数推算。可以用 `--case <id>` 只跑一部分。[评测说明](../benchmarks/memfalsify/README.md)解释了各项指标。
 
 ## 4. 继续用 Agent 开发
 

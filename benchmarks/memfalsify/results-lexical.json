@@ -1,0 +1,5295 @@
+{
+  "memfalsify_version": "0.1.0",
+  "verifier": "lexical",
+  "settings": {
+    "min_coverage": 0.5,
+    "max_judged": null,
+    "verifier": "lexical"
+  },
+  "cost": {
+    "judge_calls": 129,
+    "escalations": null,
+    "seconds": 0.126
+  },
+  "metrics": {
+    "claims": 139,
+    "contradiction": {
+      "tp": 13,
+      "fp": 8,
+      "fn": 35,
+      "precision": 0.6190476190476191,
+      "recall": 0.2708333333333333,
+      "f1": 0.37681159420289856,
+      "disputed": {
+        "contradicted": 0,
+        "supported": 0,
+        "unsupported": 0
+      }
+    },
+    "support": {
+      "tp": 4,
+      "fp": 5,
+      "fn": 40,
+      "precision": 0.4444444444444444,
+      "recall": 0.09090909090909091,
+      "f1": 0.1509433962264151
+    },
+    "accuracy": {
+      "correct": 61,
+      "total": 139,
+      "rate": 0.43884892086330934
+    },
+    "confusion": {
+      "contradicted": {
+        "contradicted": 13,
+        "supported": 4,
+        "unsupported": 31,
+        "disputed": 0
+      },
+      "supported": {
+        "contradicted": 6,
+        "supported": 4,
+        "unsupported": 34,
+        "disputed": 0
+      },
+      "unsupported": {
+        "contradicted": 2,
+        "supported": 1,
+        "unsupported": 44,
+        "disputed": 0
+      }
+    },
+    "issues": {
+      "overgeneralization": {
+        "tp": 13,
+        "fp": 2,
+        "fn": 3,
+        "precision": 0.8666666666666667,
+        "recall": 0.8125,
+        "f1": 0.8387096774193549
+      },
+      "relative_time": {
+        "tp": 9,
+        "fp": 0,
+        "fn": 4,
+        "precision": 1.0,
+        "recall": 0.6923076923076923,
+        "f1": 0.8181818181818182
+      },
+      "possibly_stale": {
+        "tp": 6,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "inference_marker": {
+        "tp": 10,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.9090909090909091,
+        "recall": 1.0,
+        "f1": 0.9523809523809523
+      },
+      "internal_conflict": {
+        "tp": 6,
+        "fp": 5,
+        "fn": 12,
+        "precision": 0.5454545454545454,
+        "recall": 0.3333333333333333,
+        "f1": 0.41379310344827586
+      },
+      "duplicate": {
+        "tp": 5,
+        "fp": 0,
+        "fn": 2,
+        "precision": 1.0,
+        "recall": 0.7142857142857143,
+        "f1": 0.8333333333333334
+      }
+    },
+    "tags": {
+      "paraphrase": {
+        "claims": 52,
+        "contradiction_recall": {
+          "hits": 1,
+          "n": 12,
+          "rate": 0.08333333333333333
+        },
+        "support_recall": {
+          "hits": 2,
+          "n": 40,
+          "rate": 0.05
+        },
+        "false_flags": {
+          "hits": 4,
+          "n": 40,
+          "rate": 0.1
+        }
+      },
+      "numeric": {
+        "claims": 44,
+        "contradiction_recall": {
+          "hits": 5,
+          "n": 18,
+          "rate": 0.2777777777777778
+        },
+        "support_recall": {
+          "hits": 1,
+          "n": 18,
+          "rate": 0.05555555555555555
+        },
+        "false_flags": {
+          "hits": 2,
+          "n": 26,
+          "rate": 0.07692307692307693
+        }
+      },
+      "antonym": {
+        "claims": 8,
+        "contradiction_recall": {
+          "hits": 3,
+          "n": 8,
+          "rate": 0.375
+        },
+        "support_recall": {
+          "hits": 0,
+          "n": 0,
+          "rate": null
+        },
+        "false_flags": {
+          "hits": 0,
+          "n": 0,
+          "rate": null
+        }
+      },
+      "negation": {
+        "claims": 14,
+        "contradiction_recall": {
+          "hits": 4,
+          "n": 14,
+          "rate": 0.2857142857142857
+        },
+        "support_recall": {
+          "hits": 0,
+          "n": 0,
+          "rate": null
+        },
+        "false_flags": {
+          "hits": 0,
+          "n": 0,
+          "rate": null
+        }
+      },
+      "negation_trap": {
+        "claims": 30,
+        "contradiction_recall": {
+          "hits": 0,
+          "n": 0,
+          "rate": null
+        },
+        "support_recall": {
+          "hits": 0,
+          "n": 16,
+          "rate": 0.0
+        },
+        "false_flags": {
+          "hits": 5,
+          "n": 30,
+          "rate": 0.16666666666666666
+        }
+      },
+      "distractor": {
+        "claims": 56,
+        "contradiction_recall": {
+          "hits": 4,
+          "n": 16,
+          "rate": 0.25
+        },
+        "support_recall": {
+          "hits": 0,
+          "n": 1,
+          "rate": 0.0
+        },
+        "false_flags": {
+          "hits": 3,
+          "n": 40,
+          "rate": 0.075
+        }
+      },
+      "temporal": {
+        "claims": 18,
+        "contradiction_recall": {
+          "hits": 3,
+          "n": 13,
+          "rate": 0.23076923076923078
+        },
+        "support_recall": {
+          "hits": 1,
+          "n": 5,
+          "rate": 0.2
+        },
+        "false_flags": {
+          "hits": 2,
+          "n": 5,
+          "rate": 0.4
+        }
+      },
+      "chinese": {
+        "claims": 51,
+        "contradiction_recall": {
+          "hits": 2,
+          "n": 19,
+          "rate": 0.10526315789473684
+        },
+        "support_recall": {
+          "hits": 0,
+          "n": 15,
+          "rate": 0.0
+        },
+        "false_flags": {
+          "hits": 6,
+          "n": 32,
+          "rate": 0.1875
+        }
+      },
+      "repo": {
+        "claims": 47,
+        "contradiction_recall": {
+          "hits": 3,
+          "n": 14,
+          "rate": 0.21428571428571427
+        },
+        "support_recall": {
+          "hits": 1,
+          "n": 17,
+          "rate": 0.058823529411764705
+        },
+        "false_flags": {
+          "hits": 2,
+          "n": 33,
+          "rate": 0.06060606060606061
+        }
+      },
+      "multi_sentence": {
+        "claims": 13,
+        "contradiction_recall": {
+          "hits": 1,
+          "n": 2,
+          "rate": 0.5
+        },
+        "support_recall": {
+          "hits": 1,
+          "n": 11,
+          "rate": 0.09090909090909091
+        },
+        "false_flags": {
+          "hits": 0,
+          "n": 11,
+          "rate": 0.0
+        }
+      }
+    },
+    "citations": {
+      "contradicted": {
+        "hits": 11,
+        "n": 13,
+        "rate": 0.8461538461538461
+      },
+      "supported": {
+        "hits": 4,
+        "n": 4,
+        "rate": 1.0
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "en-decisions-platform",
+      "description": "Corvane platform memory: database version, backups, the RabbitMQ replacement, gateway limits, deploy and on-call policy. Evidence is ADRs, platform sync notes, a backup doc, a runbook and the gateway config; the database version, a migration owner and the per-key API limit changed in August and September 2026.",
+      "as_of": "2026-10-01",
+      "judge_calls": 19,
+      "escalations": null,
+      "metrics": {
+        "claims": 17,
+        "contradiction": {
+          "tp": 3,
+          "fp": 0,
+          "fn": 4,
+          "precision": 1.0,
+          "recall": 0.42857142857142855,
+          "f1": 0.6,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 0,
+          "fp": 2,
+          "fn": 5,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "accuracy": {
+          "correct": 8,
+          "total": 17,
+          "rate": 0.47058823529411764
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 3,
+            "supported": 2,
+            "unsupported": 2,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 2,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6666666666666666
+          },
+          "relative_time": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "possibly_stale": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "duplicate": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 5,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "numeric": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 4,
+              "rate": 0.25
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          },
+          "antonym": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "distractor": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "repo": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          },
+          "multi_sentence": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 2,
+            "n": 3,
+            "rate": 0.6666666666666666
+          },
+          "supported": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          }
+        }
+      }
+    },
+    {
+      "id": "en-decisions-product",
+      "description": "Corvane product memory for the route-planning app: plan prices, signup policy, feature flags, mobile 4.0 scope, a postponed sunset and export formats. Evidence is the price list, the product decision log, two meeting notes, release notes and the feature-flag file; the signup policy changed on 2026-09-01 and the CSV importer sunset was postponed.",
+      "as_of": "2026-10-05",
+      "judge_calls": 27,
+      "escalations": null,
+      "metrics": {
+        "claims": 17,
+        "contradiction": {
+          "tp": 3,
+          "fp": 1,
+          "fn": 3,
+          "precision": 0.75,
+          "recall": 0.5,
+          "f1": 0.6,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 0,
+          "fp": 1,
+          "fn": 6,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "accuracy": {
+          "correct": 7,
+          "total": 17,
+          "rate": 0.4117647058823529
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 3,
+            "supported": 0,
+            "unsupported": 3,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 1,
+            "unsupported": 4,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 1,
+            "precision": 1.0,
+            "recall": 0.5,
+            "f1": 0.6666666666666666
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 2,
+            "fp": 3,
+            "fn": 0,
+            "precision": 0.4,
+            "recall": 1.0,
+            "f1": 0.5714285714285714
+          },
+          "duplicate": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 2,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "numeric": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          },
+          "antonym": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 5,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "distractor": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            }
+          },
+          "repo": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 3,
+            "n": 3,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          }
+        }
+      }
+    },
+    {
+      "id": "en-decisions-security",
+      "description": "Corvane security and data memory: retention periods, encryption, SSO and SCIM policy, an incident root cause, a vendor contract and the 2026 pen test and SOC 2 plans. Evidence is the retention and encryption policies, the SSO policy, a security review, a postmortem and the vendor register.",
+      "as_of": "2026-10-08",
+      "judge_calls": 14,
+      "escalations": null,
+      "metrics": {
+        "claims": 16,
+        "contradiction": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 3,
+          "fp": 2,
+          "fn": 2,
+          "precision": 0.6,
+          "recall": 0.6,
+          "f1": 0.6
+        },
+        "accuracy": {
+          "correct": 12,
+          "total": 16,
+          "rate": 0.75
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 2,
+            "supported": 2,
+            "unsupported": 0,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 0,
+            "supported": 3,
+            "unsupported": 2,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 7,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.5,
+            "f1": 0.6666666666666666
+          },
+          "duplicate": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 5,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 4,
+              "rate": 0.5
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            }
+          },
+          "numeric": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            }
+          },
+          "antonym": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "distractor": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 2,
+              "n": 3,
+              "rate": 0.6666666666666666
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "multi_sentence": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 1,
+            "n": 2,
+            "rate": 0.5
+          },
+          "supported": {
+            "hits": 3,
+            "n": 3,
+            "rate": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "repo-instructions-cli",
+      "description": "AGENTS.md-style notes for fernhook, a fictional CLI that syncs a folder of Markdown notes with a Fernwiki space, checked against the repository itself: pyproject.toml, justfile, bitbucket-pipelines.yml, and the click commands and config loader. The notes misstate the Python floor, what just test runs, the default cassette mode, and which tags publish.",
+      "as_of": "2026-10-11",
+      "judge_calls": 16,
+      "escalations": null,
+      "metrics": {
+        "claims": 21,
+        "contradiction": {
+          "tp": 2,
+          "fp": 1,
+          "fn": 4,
+          "precision": 0.6666666666666666,
+          "recall": 0.3333333333333333,
+          "f1": 0.4444444444444444,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 7,
+          "precision": null,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "accuracy": {
+          "correct": 10,
+          "total": 21,
+          "rate": 0.47619047619047616
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 2,
+            "supported": 0,
+            "unsupported": 4,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 6,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 8,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 2,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "duplicate": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 7,
+              "rate": 0.14285714285714285
+            }
+          },
+          "numeric": {
+            "claims": 10,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 9,
+              "rate": 0.0
+            }
+          },
+          "antonym": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            }
+          },
+          "distractor": {
+            "claims": 8,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 6,
+              "rate": 0.0
+            }
+          },
+          "repo": {
+            "claims": 21,
+            "contradiction_recall": {
+              "hits": 2,
+              "n": 6,
+              "rate": 0.3333333333333333
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 15,
+              "rate": 0.06666666666666667
+            }
+          },
+          "multi_sentence": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 2,
+            "n": 2,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          }
+        }
+      }
+    },
+    {
+      "id": "repo-instructions-sdk",
+      "description": "AGENTS.md-style notes for quayside, a fictional Python SDK, checked against the repository itself: pyproject.toml, Makefile, azure-pipelines.yml, client, error and model sources, CONTRIBUTING.md and CHANGELOG.md. Release 2.0.0 (2026-07-14) dropped Python 3.10, moved to httpx and changed how retries are counted, so several remembered facts are stale.",
+      "as_of": "2026-10-05",
+      "judge_calls": 21,
+      "escalations": null,
+      "metrics": {
+        "claims": 17,
+        "contradiction": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857
+        },
+        "accuracy": {
+          "correct": 7,
+          "total": 17,
+          "rate": 0.4117647058823529
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 0,
+            "supported": 1,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 1,
+            "precision": 1.0,
+            "recall": 0.6666666666666666,
+            "f1": 0.8
+          },
+          "relative_time": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 0,
+            "fp": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "duplicate": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "numeric": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            }
+          },
+          "negation": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          },
+          "distractor": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "repo": {
+            "claims": 17,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 6,
+              "rate": 0.16666666666666666
+            },
+            "support_recall": {
+              "hits": 1,
+              "n": 6,
+              "rate": 0.16666666666666666
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 11,
+              "rate": 0.0
+            }
+          },
+          "multi_sentence": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "zh-decisions-platform",
+      "description": "Chinese platform-team memory: database migration, deployment, a payment-timeout incident, logging and messaging. Evidence is two ADRs, the deployment YAML and payment-service code from the repository, the 2026-09-12 incident postmortem and the 2026-09-28 architecture meeting that postponed the database cutover. Hard parts: settings changed after the incident (the old timeout survives in a comment, and the memory keeps both values), a staging value next to the production one, a value that belongs to another service, a rule stated only for night releases, and negation characters that negate nothing (无异常, 未来, 无论) next to ones that do (非幂等, 暂不强制).",
+      "as_of": "2026-10-10",
+      "judge_calls": 9,
+      "escalations": null,
+      "metrics": {
+        "claims": 16,
+        "contradiction": {
+          "tp": 0,
+          "fp": 1,
+          "fn": 6,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "precision": null,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "accuracy": {
+          "correct": 5,
+          "total": 16,
+          "rate": 0.3125
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 6,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 4,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333333333333333,
+            "f1": 0.5
+          },
+          "relative_time": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 1,
+            "precision": 1.0,
+            "recall": 0.6666666666666666,
+            "f1": 0.8
+          },
+          "possibly_stale": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 1,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6666666666666666
+          },
+          "internal_conflict": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "duplicate": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 5,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            }
+          },
+          "numeric": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          },
+          "antonym": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 5,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "distractor": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 6,
+              "rate": 0.16666666666666666
+            }
+          },
+          "temporal": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "chinese": {
+            "claims": 16,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 6,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 10,
+              "rate": 0.1
+            }
+          },
+          "repo": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 4,
+              "rate": 0.25
+            }
+          },
+          "multi_sentence": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          },
+          "supported": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          }
+        }
+      }
+    },
+    {
+      "id": "zh-decisions-process",
+      "description": "Chinese engineering-management memory: purchasing approvals, code review, the National Day release freeze, hiring, remote work and the 2026 R&D budget. Evidence is the purchasing, code-review and remote-work policies, the 2025-12-18 annual budget meeting, the 2026-09-15 quarterly planning meeting that topped up the budget, and the freeze notice email. Hard parts: rules that apply only above a threshold or to some modules, two freeze claims that conflict with each other, a dated budget claim that stays true while the undated one does not, a cloud cap the memory derives by adding two numbers, and negation-character traps (无论, 非得, 非常, 未来, 不仅…而且).",
+      "as_of": "2026-10-08",
+      "judge_calls": 8,
+      "escalations": null,
+      "metrics": {
+        "claims": 17,
+        "contradiction": {
+          "tp": 1,
+          "fp": 2,
+          "fn": 6,
+          "precision": 0.3333333333333333,
+          "recall": 0.14285714285714285,
+          "f1": 0.2,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "precision": null,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "accuracy": {
+          "correct": 7,
+          "total": 17,
+          "rate": 0.4117647058823529
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 6,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 2,
+            "supported": 0,
+            "unsupported": 2,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 6,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 2,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "duplicate": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 8,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            }
+          },
+          "numeric": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            }
+          },
+          "antonym": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 3,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 6,
+              "rate": 0.16666666666666666
+            }
+          },
+          "distractor": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            }
+          },
+          "chinese": {
+            "claims": 17,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 7,
+              "rate": 0.14285714285714285
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 2,
+              "n": 10,
+              "rate": 0.2
+            }
+          },
+          "multi_sentence": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          }
+        }
+      }
+    },
+    {
+      "id": "zh-decisions-roadmap",
+      "description": "Chinese product memory for a reporting app: release plans, pricing, templates and roadmap focus. Evidence is two roadmap meetings (2026-09-03 and a 2026-09-24 re-review that postponed bulk export), a 2026-03-02 decision log, the pricing ADR, a weekly product report and release notes. Hard parts: proposals versus decisions, a web-only rollout figure, the pricing grace period for existing customers, Chinese numerals (一成, 三秒), a dated decision that is now over 180 days old, and negation-character traps (未来, 非常, 无论, 非得, 不仅…而且).",
+      "as_of": "2026-10-09",
+      "judge_calls": 15,
+      "escalations": null,
+      "metrics": {
+        "claims": 18,
+        "contradiction": {
+          "tp": 1,
+          "fp": 3,
+          "fn": 5,
+          "precision": 0.25,
+          "recall": 0.16666666666666666,
+          "f1": 0.2,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 7,
+          "precision": null,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "accuracy": {
+          "correct": 5,
+          "total": 18,
+          "rate": 0.2777777777777778
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 2,
+            "supported": 0,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 1,
+            "supported": 0,
+            "unsupported": 4,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 1,
+            "precision": 1.0,
+            "recall": 0.6666666666666666,
+            "f1": 0.8
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "duplicate": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 9,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 2,
+              "n": 7,
+              "rate": 0.2857142857142857
+            }
+          },
+          "numeric": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 4,
+              "rate": 0.25
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            }
+          },
+          "antonym": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 8,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 3,
+              "n": 8,
+              "rate": 0.375
+            }
+          },
+          "distractor": {
+            "claims": 8,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 2,
+              "n": 6,
+              "rate": 0.3333333333333333
+            }
+          },
+          "temporal": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "chinese": {
+            "claims": 18,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 6,
+              "rate": 0.16666666666666666
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 3,
+              "n": 12,
+              "rate": 0.25
+            }
+          },
+          "multi_sentence": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 0,
+            "n": 0,
+            "rate": null
+          }
+        }
+      }
+    }
+  ],
+  "predictions": [
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-b1cafc32",
+      "text": "The primary database runs PostgreSQL 15.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "temporal",
+        "numeric"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "duplicate"
+      ],
+      "cites_labeled_passage": false,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "adr/ADR-014-primary-database.md:9",
+          "quote": "The primary cluster still runs PostgreSQL 13, and our managed-database provider ends support for it this year.",
+          "rationale": "different values: claim ['15'] vs source ['13']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-954d2a36",
+      "text": "Writes were unavailable for roughly 11 minutes during the Postgres 16 upgrade.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-be9f9141",
+      "text": "Production database backups run every 6 hours and are kept for 35 days.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-fd8793fa",
+      "text": "The staging database is backed up every 6 hours.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-62ecd726",
+      "text": "Self-hosting Kafka on EC2 was approved as the replacement for RabbitMQ.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "antonym"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "adr/ADR-019-message-queue.md:19",
+          "quote": "Option A (self-hosted Kafka on EC2) was rejected: nobody on the team has run Kafka in production, and we cannot staff a broker on-call.",
+          "rationale": "opposing terms: claim 'approv…' vs source 'reject…'",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-c3246e87",
+      "text": "We picked Amazon's managed Kafka service to replace RabbitMQ.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-7a3af36d",
+      "text": "Marcus Oyelaran owns the MSK migration.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "temporal"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notes/2026-09-03-platform-sync.md:7",
+          "quote": "Ownership of the MSK migration moves from Marcus Oyelaran to Hannah Ilves, effective today, because Marcus is joining the data team.",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-8fa37c41",
+      "text": "Hannah Ilves is the DRI for the move from RabbitMQ to MSK.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "temporal"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-e612c6ef",
+      "text": "The MSK cluster runs in three availability zones.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-b8d7a81e",
+      "text": "Kafka topics on MSK keep messages for 7 days.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "negation_trap",
+        "repo"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-a4056d5e",
+      "text": "The public API allows 1,200 requests per minute per API key.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-390e6011",
+      "text": "Per-client-IP traffic is capped at 1200 requests per minute.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-332c7290",
+      "text": "Production deploys are never allowed on Fridays.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "negation"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "runbooks/platform.md:6",
+          "quote": "Production deploys on Fridays are allowed until 14:00 UTC.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-0cc62843",
+      "text": "Platform on-call shifts last one week.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-5eaab674",
+      "text": "Every service must move to Vault by 2026-12-31.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notes/2026-09-03-platform-sync.md:9",
+          "quote": "Tier-1 services must move their secrets to Vault by 2026-12-31, and tier-2 services have until 2027-03-31.",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-0f50cf98",
+      "text": "Datadog was recently approved as the logging vendor.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-platform",
+      "memory_id": "m-866e9818",
+      "text": "We think read replicas lag about 2 seconds behind the primary.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-2d0fc175",
+      "text": "The Team plan costs $49 per seat per month.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "pricing/plans-2026.md:6",
+          "quote": "Team: $39 per seat per month billed annually, or $45 per seat billed monthly.",
+          "rationale": "different values: claim ['49'] vs source ['39', '45']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-53fbbee9",
+      "text": "Annual billing on the Team plan is cheaper than paying monthly.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-cc4bf35e",
+      "text": "Kenji Mori approved the 2027 price increase a few days ago.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-8f9488d0",
+      "text": "Self-serve signup currently requires a credit card.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "negation",
+        "temporal"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/product-decision-log.md:9",
+          "quote": "2026-09-01 — Self-serve signup no longer asks for a credit card.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "decisions/product-decision-log.md:7",
+          "quote": "2026-05-06 — Self-serve signup requires a credit card to start a trial.",
+          "rationale": "source restates the claim (term coverage 0.86)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-778083d2",
+      "text": "Route optimization v2 is enabled for all Enterprise customers.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "antonym"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-29-launch-sync.md:15",
+          "quote": "Route optimization v2 stays disabled by default for Enterprise accounts and is switched on per account when the customer asks.",
+          "rationale": "opposing terms: claim 'enabl…' vs source 'disabl…'",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-2e530e5e",
+      "text": "Route optimization v2 cut average route time by 12%.",
+      "truth": "unsupported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "distractor",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notes/2026-09-29-launch-sync.md:16",
+          "quote": "In the pilot, route optimization v2 cut dispatcher planning time by 12%.",
+          "rationale": "source restates the claim (term coverage 0.83)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-ccc33983",
+      "text": "Pilot customers will probably get route optimization v2 for free.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-32117f49",
+      "text": "Driver tipping is turned on only for US drivers.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-2e42e994",
+      "text": "The customer ETA widget was approved at the 2026-08-21 roadmap review.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "antonym",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-aefa26da",
+      "text": "Offline mode was cut from the 4.0 mobile release.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-b9cb0106",
+      "text": "Mobile 4.0 will not include offline mode.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-a52605c2",
+      "text": "The Android app requires Android 11 or later.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-d692eef6",
+      "text": "2026-02-10: we decided to sunset the legacy CSV importer.",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "temporal"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/product-decision-log.md:8",
+          "quote": "2026-06-24 — CSV importer sunset postponed indefinitely: 14% of active accounts still import with it every week.",
+          "rationale": "different values: claim ['2026-02-10'] vs source ['14', '2026-06-24']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "decisions/product-decision-log.md:5",
+          "quote": "2026-02-10 — Sunset the legacy CSV importer by 2026-06-30.",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-56171f56",
+      "text": "The legacy CSV importer was shut down at the end of June 2026.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "temporal",
+        "paraphrase"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-c43293ba",
+      "text": "The legacy CSV importer sunset remains postponed because the new importer is not ready.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-bf25c44a",
+      "text": "Customers can no longer export routes as KML.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-product",
+      "memory_id": "m-4886cf5e",
+      "text": "GPX files can no longer be exported.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-8ce3d204",
+      "text": "Raw GPS pings are deleted after 90 days.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "policies/data-retention.md:7",
+          "quote": "Raw GPS pings: deleted after 30 days.",
+          "rationale": "different values: claim ['90'] vs source ['30']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-fdad5c61",
+      "text": "Aggregated route history is retained for just over a year.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-b2d71151",
+      "text": "Since 2026-01-15, driver chat messages are deleted after 90 days.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "temporal"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "policies/data-retention.md:9",
+          "quote": "Driver chat messages: deleted after 90 days (in force since 2026-01-15, previously kept for 1 year).",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-d5392bf4",
+      "text": "Customer data is encrypted at rest with AES-256.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-95dc22ff",
+      "text": "SAML SSO is mandatory for every Enterprise workspace.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [
+        "overgeneralization",
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "security/sso-policy.md:5",
+          "quote": "SAML SSO is required for Enterprise workspaces created on or after 2026-07-01.",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-6fb1c86a",
+      "text": "Enterprise workspaces created before 2026-07-01 can keep password login until they renew.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "security/sso-policy.md:6",
+          "quote": "Enterprise workspaces created before that date may keep password login until their next renewal.",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-ca785080",
+      "text": "SCIM provisioning was approved for the Business plan.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "antonym",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notes/2026-09-24-security-review.md:7",
+          "quote": "SCIM provisioning for the Business plan: declined.",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-cae14c28",
+      "text": "The 2026-07-30 tile outage was caused by an expired TLS certificate.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": false,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "incidents/2026-07-30-tile-outage.md:17",
+          "quote": "14:21 Investigated an expired TLS certificate on the staging tile server;",
+          "rationale": "different values: claim ['2026-07-30'] vs source ['14:21']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-7267bbf4",
+      "text": "Affected customers probably received service credits for the tile outage.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-363504b7",
+      "text": "Cancelling the Geoloom contract requires 60 days' notice.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-1582e586",
+      "text": "Geoloom bills per geocoding request.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-e02d62c9",
+      "text": "Leila Haddad recently took over vendor management from Sven Aaltonen.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-b3644770",
+      "text": "Kessel & Partners ran the 2026 penetration test.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-ef3cbe73",
+      "text": "The 2026 penetration test found two high-severity issues.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-a084bb6e",
+      "text": "The SOC 2 Type II audit window starts in January 2027.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-decisions-security",
+      "memory_id": "m-73f76e06",
+      "text": "Raw GPS pings are kept for 30 days.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "policies/data-retention.md:7",
+          "quote": "Raw GPS pings: deleted after 30 days.",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-b3a1b199",
+      "text": "Fernhook requires Python 3.11 or newer.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-1190aaee",
+      "text": "Python 3.10 is the oldest version fernhook supports.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-db853f98",
+      "text": "Release 0.9.0, shipped on 2026-02-03, added the --prefer-local flag.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-aa191ca7",
+      "text": "just test runs ruff and pyright before the test suite.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-18e919fd",
+      "text": "just ci runs the linter, the type checker and the tests, in that order.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-6493ed70",
+      "text": "The docs server listens on 127.0.0.1 port 8000.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "duplicate"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-cdbb902a",
+      "text": "The nightly publish job seems to run at 03:00 UTC.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "distractor"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-90d72507",
+      "text": "A normal pytest run rewrites HTTP cassettes.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "negation",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-722e345c",
+      "text": "Failures of the cassette rewrite are probably Fernwiki outages, not fernhook bugs.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-784dd5ce",
+      "text": "uv is pinned to 0.4.20 because 0.5 breaks the Bitbucket cache.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-70dd63fd",
+      "text": "push uploads changed notes with 8 pages in parallel by default.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-2f15a046",
+      "text": "push retries a failed upload 3 times before giving up.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-e848b75a",
+      "text": "On a conflict, push always keeps the wiki page and never uploads the local note.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "repo",
+        "negation"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "src/fernhook/cli.py:19",
+          "quote": "@click.option(\"--prefer-local\", is_flag=True, help=\"On a conflict, upload the local note instead of keeping the wiki page.\")",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-8bbe5053",
+      "text": "status never writes files, and it exits with code 1 when something changed.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase",
+        "negation_trap",
+        "multi_sentence"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-50c5acea",
+      "text": "The Fernwiki API currently allows 60 requests per minute per token.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-fbb2d337",
+      "text": "FERNHOOK_TOKEN overrides the token in the config file.",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "repo",
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "src/fernhook/config.py:31",
+          "quote": "FERNHOOK_TOKEN wins over the file so CI never needs a token on disk.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "src/fernhook/config.py:34",
+          "quote": "set FERNHOOK_TOKEN or `token` in {CONFIG_FILE}\")",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-a4992bad",
+      "text": "The default ignore patterns are .obsidian/*, *.tmp and drafts/*.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-e5bad3f3",
+      "text": "Pyright's include list excludes src.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "repo",
+        "antonym"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "pyproject.toml:48",
+          "quote": "include = [\"src\"]",
+          "rationale": "opposing terms: claim 'exclud…' vs source 'includ…'",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-d11cfe4b",
+      "text": "Pull requests are squash-merged.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-65d044ed",
+      "text": "The publish step waits for a manual approval before uploading to PyPI.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-cli",
+      "memory_id": "m-a9b0a40a",
+      "text": "The publish step runs for every tag.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-fb6c4aaf",
+      "text": "The SDK requires Python 3.10 or newer.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "temporal"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-8dfaf6b1",
+      "text": "Python 3.11 is the oldest version the SDK supports.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-2f7c12b4",
+      "text": "make test runs ruff and mypy before the test suite.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-c1c2fa6b",
+      "text": "Run make check before opening a pull request.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "repo"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "duplicate"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "CONTRIBUTING.md:30",
+          "quote": "Run `make check` locally before you open a pull request.",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-fa5f38b9",
+      "text": "The nightly live job seems to run at 03:00 UTC.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-2ccce523",
+      "text": "Live tests need the QUAYSIDE_API_KEY environment variable.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "repo",
+        "negation",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "CONTRIBUTING.md:18",
+          "quote": "Live tests authenticate with `QUAYSIDE_SANDBOX_KEY`, not with `QUAYSIDE_API_KEY`.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-0956d9e7",
+      "text": "Failures of the nightly live job are probably sandbox outages, not SDK bugs.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-e6d7f60a",
+      "text": "mypy is pinned to 1.11.2 because 1.12 breaks the pydantic plugin.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-92d8a7dd",
+      "text": "The client retries a failed request 3 times before giving up.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "temporal",
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-a8c154c2",
+      "text": "The client retries on any 5xx response.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "negation"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-e0d43d9d",
+      "text": "The retry loop parses Retry-After as a number of seconds.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-157b6f64",
+      "text": "Catching QuaysideError handles every failure the SDK can raise.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "paraphrase"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-8637318a",
+      "text": "The production API currently allows 60 requests per minute per key.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-11472f90",
+      "text": "Release 1.8.0, shipped on 2026-02-03, added retries for HTTP 429.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "numeric",
+        "paraphrase",
+        "multi_sentence"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-f89604b7",
+      "text": "Never import requests in the SDK package.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-d11cfe4b",
+      "text": "Pull requests are squash-merged.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "repo-instructions-sdk",
+      "memory_id": "m-3b680c57",
+      "text": "The publish stage waits for a manual approval before uploading to PyPI.",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "repo",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-4084509d",
+      "text": "主库从 MySQL 换成 PostgreSQL 的方案已经获批。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "multi_sentence",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-21309f6b",
+      "text": "数据库切换定在今年第四季度。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "temporal",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-39d9234a",
+      "text": "下周开始做数据库迁移演练。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-d1cd0f91",
+      "text": "订单服务的数据库连接池上限是 80。",
+      "truth": "unsupported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "distractor",
+        "repo",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "复盘/2026-09-12-支付超时事故复盘.md:15",
+          "quote": "支付服务的数据库连接池上限只有20，大促流量下连接被全部占满，请求排队直至超时。",
+          "rationale": "different values: claim ['80'] vs source ['20']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-f4090e8d",
+      "text": "生产发布先切 5% 流量，观察半小时没问题再全量。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "negation_trap",
+        "repo",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-b93b73c0",
+      "text": "生产环境出错时会自动回滚。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "antonym",
+        "temporal",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "duplicate"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-0eaa4489",
+      "text": "无论白天还是夜间，生产发布都需要两名审批人。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "distractor",
+        "repo",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-a7883e45",
+      "text": "新服务一律要接入统一 API 网关。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-24f0e4fc",
+      "text": "这次支付超时事故没有造成资金损失。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-61fd0981",
+      "text": "事故后支付接口超时放宽到了 8 秒，为的是降低误判超时的可能性。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "repo",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "inference_marker",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-32ec244d",
+      "text": "支付接口的超时时间是 3 秒。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "repo",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-650dec1e",
+      "text": "支付服务对所有接口都会重试两次。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "repo",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-c47ba677",
+      "text": "大促期间支付服务会临时扩容到 12 个副本。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-69291020",
+      "text": "应用日志只保存三个月。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-9fed9b8d",
+      "text": "未来半年日志平台会迁到 ClickHouse。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-platform",
+      "memory_id": "m-681dca9f",
+      "text": "消息队列可能会从 RabbitMQ 换成 Kafka。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-7a15a662",
+      "text": "所有采购都需要财务审批。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-7040f2ee",
+      "text": "超过 5 万元的采购还需要 CTO 签字。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-aae9bd7a",
+      "text": "提交采购申请时要附三家供应商的报价。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-8f3f03c8",
+      "text": "代码合并前至少需要两人审查。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "paraphrase",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-520508e3",
+      "text": "改动支付模块的代码非得两个人评审通过才能合并。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "multi_sentence",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-4f95fae0",
+      "text": "新的代码评审规范执行得非常顺利。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "duplicate"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-54843a0c",
+      "text": "封版期间禁止任何上线。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "antonym",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization",
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-a61ef737",
+      "text": "封版期间上线不仅要是 P0 修复，而且要 CTO 审批。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-710db4bc",
+      "text": "2026年10月12日起恢复正常发布节奏。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-63f2ac53",
+      "text": "第四季度不招前端了。",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-15-季度规划会.md:8",
+          "quote": "第四季度前端岗位冻结招聘，后端新增2个名额。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-15-季度规划会.md:1",
+          "quote": "第四季度规划会纪要",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-8344dfb6",
+      "text": "后端新增的 2 个名额都给支付组。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-1fd0eb98",
+      "text": "远程办公的日子可以自己选，没有固定的到岗日。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-86e87d7e",
+      "text": "2025年12月18日：2026年研发预算定为1200万元。",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "chinese"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2025-12-18-年度预算会.md:5",
+          "quote": "2025年12月18日的年度预算会确定：2026年研发预算总额为1200万元，其中云资源费用不超过400万元。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-f962643e",
+      "text": "2026年研发预算一共是1200万元。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "multi_sentence",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2025-12-18-年度预算会.md:5",
+          "quote": "2025年12月18日的年度预算会确定：2026年研发预算总额为1200万元，其中云资源费用不超过400万元。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-15-季度规划会.md:13",
+          "quote": "由于云资源费用超支，下半年研发预算追加150万元。",
+          "rationale": "different values: claim ['1200', '2026'] vs source ['150']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-65731dfb",
+      "text": "2026年云资源费用的上限已经上调到 550 万元。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-d0292ca7",
+      "text": "云资源超支估计主要是 GPU 训练任务导致的。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-process",
+      "memory_id": "m-138e998b",
+      "text": "未来一年内会把代码仓库从 GitLab 迁到自建 Gitea。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-7bbcbb20",
+      "text": "批量导出会跟随 11 月版本一起上线。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "temporal",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-8ca903a0",
+      "text": "批量导出上线前需要先过隐私评审。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "multi_sentence",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-9b86490a",
+      "text": "所有新功能上线前都要经过隐私评审。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-b8ed0317",
+      "text": "2026年3月2日：协作空间推迟到第三季度。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "temporal",
+        "chinese"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-f1908085",
+      "text": "协作空间目前还在内测，尚未正式发布。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation",
+        "temporal",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-3f1bebfb",
+      "text": "新版首页已经向一成的网页端用户开放。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-02ca1d80",
+      "text": "新版首页的移动端灰度比例是 10%。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "negation",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-aea8fcf4",
+      "text": "断网的时候也能新建报表草稿。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-c222110f",
+      "text": "老客户从2026年11月1日起也要按 129 元付费。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-adb1072d",
+      "text": "企业版月费将上调到 399 元。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-7ef50f0f",
+      "text": "免费用户也可以使用基础模板。",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-24-路线图复审.md:20",
+          "quote": "无论是否付费，所有用户都可以使用基础模板；",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-07ef87dd",
+      "text": "免费版的存储额度会提高到 5GB。",
+      "truth": "unsupported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "distractor",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-24-路线图复审.md:21",
+          "quote": "王磊建议提高免费版的存储额度，比如提到5GB，会上没有形成结论。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-bc8a72da",
+      "text": "大客户似乎更倾向于按年付费。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-c22ca88d",
+      "text": "接下来两个季度的工作重点是报表加载性能。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-18e4e54e",
+      "text": "报表首屏加载的目标是三秒以内。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-24-路线图复审.md:15",
+          "quote": "未来两个季度，团队的重点是提升报表加载速度，目标是把首屏加载时间降到2秒以内。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-d20f4fc2",
+      "text": "路线图评审批准了第三方插件市场。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "antonym",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-06ff09ce",
+      "text": "报表导出 PDF 的排版问题明年交给设计组处理。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time"
+      ],
+      "predicted_issues": [
+        "relative_time"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-144d9912",
+      "text": "客户对新版筛选器的评价很好，NPS 涨到了 42。",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "周报/2026-W40-产品周报.md:10",
+          "quote": "客户对新版筛选器的反馈非常积极，NPS从31提升到42。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    }
+  ]
+}

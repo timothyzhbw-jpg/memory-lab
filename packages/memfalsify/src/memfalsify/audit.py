@@ -1,6 +1,7 @@
 """MemFalsify audit: challenge each memory claim against evidence. Read-only by construction."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
@@ -73,6 +74,7 @@ class AuditReport(BaseModel):
     memory_file: str
     files_read: list[str]
     evidence_root: str | None
+    excluded: list[str] = []
     verifier: str
     as_of: date
     summary: dict[str, int]
@@ -195,8 +197,9 @@ ISSUE_PROPOSALS = {
 def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | None = None,
           verifier: Verifier | None = None, as_of: date | None = None, stale_days: int = 180,
           follow_links: bool = True, max_candidates: int = 3, min_coverage: float = 0.5,
-          max_judged: int | None = None) -> AuditReport:
-    """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees."""
+          max_judged: int | None = None, exclude: Iterable[str] = ()) -> AuditReport:
+    """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees;
+    ``exclude`` globs (relative to the evidence root) keep files out of the evidence."""
     verifier = verifier or LexicalVerifier()
     as_of = as_of or date.today()
     claims, files = parse_memory(memory_file, follow_links=follow_links)
@@ -204,7 +207,12 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
     root = Path(evidence_root).resolve() if evidence_root else None
     if root is not None and not root.is_dir():
         raise EvidenceError(f"evidence root is not a directory: {evidence_root}")
-    passages, skipped = scan(root, exclude=files) if root else ([], [])
+    exclude = [p.strip() for p in exclude if p.strip()]
+    if exclude and root is None:
+        raise EvidenceError("--exclude requires --evidence: patterns are relative to the evidence root")
+    passages, skipped = scan(root, exclude=exclude, memory_files=files) if root else ([], [])
+    if claims and root is not None and exclude and not passages:
+        raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
     confirmed = load_reviews(reviews, root, by_id) if reviews else {}
     findings = []
     for claim in claims:
@@ -223,7 +231,8 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
     base = Path(memory_file).resolve().parent
     return AuditReport(memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
-                       evidence_root=str(evidence_root) if evidence_root else None, verifier=verifier.name,
-                       as_of=as_of, summary=summary, findings=findings, skipped_evidence=skipped,
+                       evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,
+                       verifier=verifier.name, as_of=as_of, summary=summary, findings=findings,
+                       skipped_evidence=skipped,
                        limitations=[LEXICAL_NOTE if isinstance(verifier, LexicalVerifier) else MODEL_NOTE,
                                     *LIMITATIONS])

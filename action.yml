@@ -1,0 +1,100 @@
+name: MemFalsify
+description: Audit agent instruction files (CLAUDE.md, AGENTS.md) against the repository's own docs and configs.
+author: timothyzhbw-jpg
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  memory:
+    description: >-
+      Memory files to audit, separated by spaces or newlines; quote a path that contains spaces
+      (shell-style, e.g. CLAUDE.md "docs/agent notes.md"). Files that do not exist are skipped;
+      if none exists the action emits a notice and succeeds. Markdown links are not followed;
+      list additional instruction files explicitly. Use forward slashes in paths on every runner.
+    required: false
+    default: CLAUDE.md AGENTS.md
+  evidence:
+    description: Evidence directory, relative to the workspace.
+    required: false
+    default: "."
+  exclude:
+    description: >-
+      Globs to leave out of the evidence, one per line, matched (fnmatch) against paths relative to the
+      evidence directory; "dir/**" and "dir/*" exclude everything under dir.
+    required: false
+    default: ""
+  strict:
+    description: Fail when any memory is challenged, conflicted, disputed or has possible counterevidence.
+    required: false
+    default: "true"
+  verifier:
+    description: >-
+      lexical (offline, default), llm (Claude; needs ANTHROPIC_API_KEY), jev (TypeSafe Jev; needs
+      TYPESAFE_API_KEY), dual or cascade (both keys). Model verifiers send memory text and evidence
+      passages to the provider.
+    required: false
+    default: lexical
+  as-of:
+    description: Reference date YYYY-MM-DD for staleness checks; empty means today.
+    required: false
+    default: ""
+  python-version:
+    description: Python used for an isolated MemFalsify install (the job's own Python is not changed).
+    required: false
+    default: "3.12"
+
+outputs:
+  report:
+    description: Path of the Markdown report (also written to the job summary).
+    value: ${{ steps.audit.outputs.report }}
+  attention:
+    description: Number of memories that are challenged, conflicted, disputed or have possible counterevidence.
+    value: ${{ steps.audit.outputs.attention }}
+
+runs:
+  using: composite
+  steps:
+    - id: python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        update-environment: false
+
+    - id: install
+      shell: bash
+      env:
+        MEMFALSIFY_VERIFIER: ${{ inputs.verifier }}
+        SETUP_PYTHON: ${{ steps.python.outputs.python-path }}
+      run: |
+        set -euo pipefail
+        case "$MEMFALSIFY_VERIFIER" in
+          lexical) extra="" ;;
+          llm) extra="[llm]" ;;
+          jev) extra="[jev]" ;;
+          dual|cascade) extra="[all]" ;;
+          *) echo "::error title=MemFalsify::the verifier input must be lexical, llm, jev, dual or cascade"; exit 2 ;;
+        esac
+        # Build from a copy: pip writes build/ and *.egg-info into the source tree, which is the
+        # audited workspace when the action runs from the checkout (uses: ./).
+        src="$RUNNER_TEMP/memfalsify-src"
+        venv="$RUNNER_TEMP/memfalsify-venv"
+        rm -rf "$src" "$venv"
+        mkdir -p "$src"
+        cp -R "$GITHUB_ACTION_PATH/packages/memcore" "$GITHUB_ACTION_PATH/packages/memfalsify" "$src/"
+        "$SETUP_PYTHON" -m venv "$venv"
+        if [ -x "$venv/bin/python" ]; then py="$venv/bin/python"; else py="$venv/Scripts/python.exe"; fi
+        "$py" -m pip install --quiet --disable-pip-version-check "$src/memcore" "$src/memfalsify$extra"
+        echo "python=$py" >> "$GITHUB_OUTPUT"
+
+    - id: audit
+      shell: bash
+      env:
+        MEMFALSIFY_PYTHON: ${{ steps.install.outputs.python }}
+        MEMFALSIFY_MEMORY: ${{ inputs.memory }}
+        MEMFALSIFY_EVIDENCE: ${{ inputs.evidence }}
+        MEMFALSIFY_EXCLUDE: ${{ inputs.exclude }}
+        MEMFALSIFY_STRICT: ${{ inputs.strict }}
+        MEMFALSIFY_VERIFIER: ${{ inputs.verifier }}
+        MEMFALSIFY_AS_OF: ${{ inputs.as-of }}
+      run: '"$MEMFALSIFY_PYTHON" -I -X utf8 "$GITHUB_ACTION_PATH/action/memfalsify_action.py"'

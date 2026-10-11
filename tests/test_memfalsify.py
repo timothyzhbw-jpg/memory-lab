@@ -104,6 +104,36 @@ def test_memory_files_are_excluded_from_evidence(memfalsify_demo):
     assert any(s.path == "report.md" and "report" in s.reason for s in report.skipped_evidence)
 
 
+@pytest.mark.parametrize("pattern", ["docs/**", "docs/*", "docs", "./docs/"])
+def test_exclude_drops_whole_directories_silently(memfalsify_demo, pattern):
+    deep = memfalsify_demo / "evidence" / "docs" / "v1" / "old"
+    deep.mkdir(parents=True)
+    (deep / "api.md").write_text("The public API rate limit is 5 requests per minute.\n", encoding="utf-8")
+    cited = lambda report: {e.span.path for f in report.findings for e in f.evidence}
+    assert "docs/v1/old/api.md" in cited(audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence",
+                                               as_of=AS_OF))
+    report = audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence", as_of=AS_OF,
+                   exclude=[pattern, "*.png"])
+    assert not any(path.startswith("docs/") for path in cited(report))
+    assert by_text(report)["The public API rate limit is 100 requests per minute."].status == "insufficient_evidence"
+    assert report.skipped_evidence == [] and report.excluded == [pattern, "*.png"]
+
+
+def test_exclude_matches_paths_relative_to_evidence_root(memfalsify_demo):
+    report = audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence", as_of=AS_OF,
+                   exclude=["notes/2026-10-07-*.md", "evidence/docs/**"])
+    cited = {e.span.path for f in report.findings for e in f.evidence}
+    assert "notes/2026-10-07-decision-log.md" not in cited and "docs/api.md" in cited
+
+
+def test_cli_exclude_is_repeatable_and_needs_evidence(memfalsify_demo):
+    result = runner.invoke(app, cli_args(memfalsify_demo, "--exclude", "docs/**", "-x", "media/*"))
+    assert result.exit_code == 0 and "Excluded from evidence: `docs/**`, `media/*`" in result.output
+    assert "docs/api.md" not in result.output and "whiteboard.png" not in result.output
+    result = runner.invoke(app, ["audit", str(memfalsify_demo / "MEMORY.md"), "--exclude", "docs/**"])
+    assert result.exit_code == 2 and "--exclude requires --evidence" in result.output
+
+
 def test_media_is_reported_not_read(memfalsify_demo):
     skipped = run_demo(memfalsify_demo).skipped_evidence
     assert [s.path for s in skipped] == ["media/whiteboard.png"]
@@ -115,6 +145,71 @@ def test_evidence_symlink_escape_is_skipped(memfalsify_demo, tmp_path):
     report = run_demo(memfalsify_demo)
     assert any(s.path == "leak.md" and "escapes" in s.reason for s in report.skipped_evidence)
     assert all(e.span.path != "leak.md" for f in report.findings for e in f.evidence)
+
+
+@pytest.mark.parametrize("patterns", [["*"], ["**"], ["docs/**", "notes/**", "media/**", "CONTRIBUTING.md"]])
+def test_excluding_all_evidence_fails_closed(memfalsify_demo, patterns):
+    with pytest.raises(EvidenceError, match="no evidence passages indexed with --exclude"):
+        audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence", exclude=patterns)
+    result = runner.invoke(app, cli_args(memfalsify_demo, "--strict",
+                                        *[arg for p in patterns for arg in ("--exclude", p)]))
+    assert result.exit_code == 2 and "no evidence passages indexed" in result.output
+
+
+def test_empty_evidence_without_exclusions_remains_unverified(memfalsify_demo, tmp_path):
+    evidence = tmp_path / "empty"
+    evidence.mkdir()
+    report = audit(memfalsify_demo / "MEMORY.md", evidence)
+    assert report.findings and set(report.summary) == {"insufficient_evidence"}
+
+
+def test_broken_and_cyclic_links_are_reported(memfalsify_demo):
+    evidence = memfalsify_demo / "evidence"
+    (evidence / "broken.md").symlink_to("absent.md")
+    (evidence / "loop.md").symlink_to("loop.md")
+    report = run_demo(memfalsify_demo)
+    skipped = {s.path: s.reason for s in report.skipped_evidence}
+    assert skipped["broken.md"] == skipped["loop.md"] == "broken or cyclic symlink"
+    assert any(f.status == "candidate_counterevidence" for f in report.findings)
+    excluded = audit(memfalsify_demo / "MEMORY.md", evidence, exclude=["loop.md"])
+    assert "loop.md" not in {s.path for s in excluded.skipped_evidence}
+
+
+def test_symlinked_directories_are_reported_unless_excluded(memfalsify_demo, tmp_path):
+    evidence = memfalsify_demo / "evidence"
+    (evidence / "alias").symlink_to(evidence / "docs", target_is_directory=True)
+    (evidence / "outside").symlink_to(tmp_path, target_is_directory=True)
+    report = run_demo(memfalsify_demo)
+    skipped = {s.path: s.reason for s in report.skipped_evidence}
+    assert skipped["alias"] == skipped["outside"] == "symlinked directory not followed"
+    assert not any(e.span.path.startswith(("alias/", "outside/")) for f in report.findings for e in f.evidence)
+    report = audit(memfalsify_demo / "MEMORY.md", evidence, exclude=["alias/**", "outside"])
+    assert not {"alias", "outside"} & {s.path for s in report.skipped_evidence}
+
+
+def test_unreadable_evidence_fails_closed(memfalsify_demo, monkeypatch):
+    original = Path.read_bytes
+
+    def read(path):
+        if path.name == "api.md":
+            raise PermissionError("cannot read api.md")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read)
+    result = runner.invoke(app, cli_args(memfalsify_demo))
+    assert result.exit_code == 2 and "cannot read api.md" in result.output
+
+
+def test_unreadable_evidence_directory_fails_closed(memfalsify_demo, monkeypatch):
+    import memfalsify.corpus as corpus
+
+    def walk(root, *, onerror):
+        onerror(PermissionError("cannot traverse docs"))
+        yield root, [], []
+
+    monkeypatch.setattr(corpus.os, "walk", walk)
+    result = runner.invoke(app, cli_args(memfalsify_demo))
+    assert result.exit_code == 2 and "cannot traverse docs" in result.output
 
 
 # --- reviews ---------------------------------------------------------------------

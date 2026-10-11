@@ -249,6 +249,15 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 
 任何有 `name` 属性和 `judge(claim, passage) -> Judgment` 方法的对象都可以当验证器，其他模型可以用同样的方式接入。模型的判断始终只是候选：它们永远不能代替人工确认。
 
+## 评测集与 GitHub Action
+
+[MemFalsify 评测集](benchmarks/memfalsify/README.md)包含八组虚构案例、139 条中英文标注记忆。
+[实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.62、召回率为 0.27，三分类准确率为 0.44。
+这些案例用于检验已知失败模式，不能代表真实记忆的准确率。运行 `python benchmarks/memfalsify/run.py` 即可离线评测。
+
+[GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件与仓库证据核对，并把报告放入任务摘要。
+默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。
+
 ## 信任边界与局限
 
 - 哈希只能证明某段引用确实存在于特定的字节里，不能证明来源是真实的，也不能证明这段话的意思就是某人所说的那样。

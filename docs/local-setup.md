@@ -50,7 +50,7 @@ python benchmarks/memfalsify/run.py --verifier cascade   # Jev first, Claude onl
 python benchmarks/memfalsify/run.py --verifier dual --json results-dual.json
 ```
 
-Each model verifier judges up to 8 passages per memory, so a full run makes several hundred calls per model. Start with `jev` (the cheapest), or limit the run with `--case <id>`. `benchmarks/memfalsify/README.md` explains the metrics.
+The [measured lexical run](../benchmarks/memfalsify/RESULTS.md) made 129 `judge()` calls for 139 claims. Model runs use different preselection (up to 8 passages per memory), so their actual call counts must come from the harness's Cost line or JSON, not from this lexical count. Use `--case <id>` to limit a run. [The benchmark README](../benchmarks/memfalsify/README.md) explains the metrics.
 
 ## 4. Keep working with an agent
 

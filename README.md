@@ -249,6 +249,17 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 
 Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a verifier, so other models plug in the same way. Model judgments stay candidates: they never replace the human review step.
 
+## Benchmark and GitHub Action
+
+The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 139 labeled English and Chinese claims across
+eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
+precision 0.62, recall 0.27 and 3-way accuracy 0.44; these cases exercise failure modes rather than estimate
+accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
+
+The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files against repository
+evidence and puts the report in the job summary. Its default strict check fails on possible counterevidence;
+unsupported claims and wording issues remain review leads.
+
 ## Trust boundaries and limitations
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
