@@ -2,8 +2,8 @@
 
 Measured locally on 2026-10-11 with MemFalsify 0.3.0. The original eight cases keep the labels from the
 independent Qwen/Grok audits and lead adjudication. The three cases added after that
-(`en-units-scope`, `zh-units-negation`, `es-operacion-alcance`) were labeled from their evidence alone,
-before this run. Reproduce from the repository root:
+(`en-units-scope`, `zh-units-negation`, `es-operacion-alcance`) received an independent Codex audit
+of all 63 claims before this run; see [the audit and changes](../../AUDIT_CODEX.md). Reproduce from the repository root:
 
 ```bash
 .venv/bin/python benchmarks/memfalsify/run.py --json benchmarks/memfalsify/results-lexical.json
@@ -17,8 +17,8 @@ Truth labels are based only on case evidence. Wording labels describe semantic i
 of the detectors (including paraphrase duplicates). This is an offline lexical run only.
 The benchmark follows linked memory files by default; the GitHub Action audits only explicitly named files.
 
-Contradiction recall is 27/81 and support recall is 12/72. Chinese contradiction recall is 7/29;
-negation traps falsely flag 8/40 claims. Three of the 27 correct contradiction flags do not cite the
+Contradiction recall is 29/81 and support recall is 12/72. Chinese contradiction recall is 7/29;
+negation traps falsely flag 6/40 claims. Three of the 29 correct contradiction flags do not cite the
 labeled passage, so a correct flag still needs a human read. Sentence splitting and term preselection
 limit what the verifier sees, especially for paraphrases, unit changes that keep the same digits, and
 conclusions that need more than one sentence.
@@ -26,7 +26,7 @@ Elapsed time below is the local audit duration, excluding installation and label
 
 - Verifier: `lexical` · min_coverage 0.5 · max_judged unbounded
 - Cases: 11 (en-decisions-platform, en-decisions-product, en-decisions-security, en-units-scope, es-operacion-alcance, repo-instructions-cli, repo-instructions-sdk, zh-decisions-platform, zh-decisions-process, zh-decisions-roadmap, zh-units-negation) · claims: 202
-- Cost: 227 judge() calls · 0.3 s
+- Cost: 236 judge() calls · 0.3 s
 
 ## Contradiction detection
 
@@ -34,7 +34,7 @@ Flagged = predicted contradicted or disputed (the statuses that fail `--strict`)
 
 | Precision | Recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|
-| 0.71 | 0.33 | 0.45 | 27 | 11 | 54 |
+| 0.76 | 0.36 | 0.49 | 29 | 9 | 52 |
 
 Disputed predictions by label: contradicted 0, supported 0, unsupported 0 (total 0)
 
@@ -46,15 +46,15 @@ Disputed predictions by label: contradicted 0, supported 0, unsupported 0 (total
 
 ## 3-way accuracy
 
-0.42 (84/202; disputed counts as wrong)
+0.43 (86/202; disputed counts as wrong)
 
 | Label \ predicted | contradicted | supported | unsupported | disputed |
 |---|---|---|---|---|
-| contradicted | 27 | 10 | 44 | 0 |
-| supported | 9 | 12 | 51 | 0 |
+| contradicted | 29 | 10 | 42 | 0 |
+| supported | 7 | 12 | 53 | 0 |
 | unsupported | 2 | 2 | 45 | 0 |
 
-Detections citing the labeled passage: contradicted 24/27 (0.89), supported 12/12 (1.00)
+Detections citing the labeled passage: contradicted 26/29 (0.90), supported 12/12 (1.00)
 
 ## Issue detection
 
@@ -64,23 +64,23 @@ Detections citing the labeled passage: contradicted 24/27 (0.89), supported 12/1
 | relative_time | 14 | 10 | 1.00 | 0.71 |
 | possibly_stale | 8 | 8 | 1.00 | 1.00 |
 | inference_marker | 11 | 12 | 0.92 | 1.00 |
-| internal_conflict | 35 | 27 | 0.44 | 0.34 |
+| internal_conflict | 47 | 36 | 0.61 | 0.47 |
 | duplicate | 15 | 5 | 1.00 | 0.33 |
 
 ## By tag
 
 | Tag | Claims | Contradiction recall | Support recall | False flags |
 |---|---|---|---|---|
-| paraphrase | 78 | 1/12 (0.08) | 10/66 (0.15) | 7/66 (0.11) |
-| numeric | 90 | 16/47 (0.34) | 5/35 (0.14) | 2/43 (0.05) |
+| paraphrase | 78 | 1/12 (0.08) | 10/66 (0.15) | 5/66 (0.08) |
+| numeric | 90 | 18/47 (0.38) | 5/35 (0.14) | 2/43 (0.05) |
 | antonym | 8 | 3/8 (0.38) | – | – |
 | negation | 17 | 7/17 (0.41) | – | – |
-| negation_trap | 40 | – | 3/24 (0.12) | 8/40 (0.20) |
+| negation_trap | 40 | – | 3/24 (0.12) | 6/40 (0.15) |
 | distractor | 75 | 15/33 (0.45) | 0/1 (0.00) | 3/42 (0.07) |
-| temporal | 29 | 5/17 (0.29) | 2/12 (0.17) | 4/12 (0.33) |
+| temporal | 29 | 5/17 (0.29) | 2/12 (0.17) | 2/12 (0.17) |
 | chinese | 71 | 7/29 (0.24) | 2/24 (0.08) | 6/42 (0.14) |
 | repo | 47 | 3/14 (0.21) | 1/17 (0.06) | 2/33 (0.06) |
-| multi_sentence | 21 | 1/5 (0.20) | 1/16 (0.06) | 2/16 (0.12) |
+| multi_sentence | 21 | 1/5 (0.20) | 1/16 (0.06) | 0/16 (0.00) |
 
 ## By case
 
@@ -89,14 +89,14 @@ Detections citing the labeled passage: contradicted 24/27 (0.89), supported 12/1
 | en-decisions-platform | 17 | 0.47 | 1.00 / 0.43 | 0.00 / 0.00 | 19 |
 | en-decisions-product | 17 | 0.41 | 0.75 / 0.50 | 0.00 / 0.00 | 27 |
 | en-decisions-security | 16 | 0.75 | 1.00 / 0.50 | 0.60 / 0.60 | 14 |
-| en-units-scope | 23 | 0.39 | 0.78 / 0.54 | 0.67 / 0.20 | 45 |
-| es-operacion-alcance | 20 | 0.30 | 0.67 / 0.20 | 0.50 / 0.44 | 30 |
+| en-units-scope | 23 | 0.43 | 0.89 / 0.62 | 0.67 / 0.20 | 45 |
+| es-operacion-alcance | 20 | 0.35 | 1.00 / 0.30 | 0.50 / 0.44 | 38 |
 | repo-instructions-cli | 21 | 0.48 | 0.67 / 0.33 | n/a / 0.00 | 16 |
 | repo-instructions-sdk | 17 | 0.41 | 1.00 / 0.17 | 1.00 / 0.17 | 21 |
 | zh-decisions-platform | 16 | 0.31 | 0.00 / 0.00 | n/a / 0.00 | 9 |
 | zh-decisions-process | 17 | 0.41 | 0.33 / 0.14 | n/a / 0.00 | 8 |
 | zh-decisions-roadmap | 18 | 0.28 | 0.25 / 0.17 | n/a / 0.00 | 15 |
-| zh-units-negation | 20 | 0.40 | 1.00 / 0.50 | 0.50 / 0.22 | 23 |
+| zh-units-negation | 20 | 0.40 | 1.00 / 0.50 | 0.50 / 0.22 | 24 |
 
 ## Misclassified claims
 
@@ -135,9 +135,8 @@ Detections citing the labeled passage: contradicted 24/27 (0.89), supported 12/1
 | en-units-scope | contradicted | supported | numeric | The billing archive holds 500 GiB. |
 | en-units-scope | supported | unsupported | numeric, temporal, multi_sentence | 105 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0. |
 | en-units-scope | contradicted | unsupported | numeric, temporal, multi_sentence | Only 30 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0. |
-| en-units-scope | contradicted | unsupported | numeric | Production is one patch release ahead of release 2.3.1. |
 | en-units-scope | supported | contradicted | paraphrase, negation_trap | A search query that returned HTTP 200 must not be retried. |
-| en-units-scope | supported | contradicted | paraphrase, negation_trap, temporal, multi_sentence | Clients no longer retry search queries after HTTP 200. |
+| en-units-scope | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence | On 2026-07-22, ADR-030 was accepted with a rule forbidding clients to retry search queries after HTTP 200. |
 | en-units-scope | supported | unsupported | paraphrase | Retrying a billing invoice render is permitted solely when the first try responded with HTTP 503. |
 | es-operacion-alcance | supported | unsupported | paraphrase, numeric | La latencia p99 de la búsqueda tiene que mantenerse dentro de un cuarto de segundo. |
 | es-operacion-alcance | contradicted | unsupported | numeric, distractor | El presupuesto p99 de facturación es un cuarto de segundo. |
@@ -146,13 +145,12 @@ Detections citing the labeled passage: contradicted 24/27 (0.89), supported 12/1
 | es-operacion-alcance | contradicted | unsupported | numeric, distractor | La búsqueda puede fallar en el 1 por ciento de las peticiones cada mes. |
 | es-operacion-alcance | contradicted | supported | numeric | Los índices de búsqueda ocupan 512 GB en el nivel caliente. |
 | es-operacion-alcance | contradicted | supported | numeric | El archivo de facturas ocupa 500 GiB. |
-| es-operacion-alcance | supported | contradicted | paraphrase, negation_trap, temporal, multi_sentence | Las búsquedas ya no se reintentan después de un HTTP 200. |
+| es-operacion-alcance | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence | El 2026-07-22 se aceptó la ADR-015 con una regla que prohíbe reintentar consultas de búsqueda después de un HTTP 200. |
 | es-operacion-alcance | supported | unsupported | paraphrase | Reintentar el renderizado de una factura está permitido únicamente cuando el primer intento contestó con HTTP 503. |
 | es-operacion-alcance | unsupported | supported | negation_trap, distractor | El turno de búsqueda no debe reconocer una alerta de facturación. |
 | es-operacion-alcance | contradicted | supported | distractor | Cualquier persona del turno de búsqueda puede silenciar una alerta de búsqueda. |
 | es-operacion-alcance | supported | unsupported | numeric, temporal, multi_sentence | Pasaron 105 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0. |
 | es-operacion-alcance | contradicted | unsupported | numeric, temporal, multi_sentence | Solo pasaron 30 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0. |
-| es-operacion-alcance | contradicted | unsupported | numeric | La versión de producción está solo un parche por encima de la 2.3.1. |
 | repo-instructions-cli | contradicted | unsupported | repo, numeric | Fernhook requires Python 3.11 or newer. |
 | repo-instructions-cli | supported | unsupported | repo, numeric, paraphrase | Python 3.10 is the oldest version fernhook supports. |
 | repo-instructions-cli | contradicted | unsupported | repo, distractor | just test runs ruff and pyright before the test suite. |
@@ -218,5 +216,5 @@ Detections citing the labeled passage: contradicted 24/27 (0.89), supported 12/1
 | zh-units-negation | contradicted | supported | numeric, chinese | 检索索引的热数据占了 512 GB。 |
 | zh-units-negation | contradicted | supported | numeric, chinese | 账单归档有 500 GiB。 |
 | zh-units-negation | supported | unsupported | paraphrase, temporal, numeric, chinese | 2026年3月2日容量组曾打算让检索热数据保留三十天。 |
-| zh-units-negation | supported | unsupported | paraphrase, negation_trap, chinese | 已经成功的检索查询不得再发一次。 |
-| zh-units-negation | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence, chinese | 检索查询成功之后已经不再重试。 |
+| zh-units-negation | supported | unsupported | paraphrase, negation_trap, chinese | 已经返回 HTTP 200 的检索查询不得再发一次。 |
+| zh-units-negation | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence, chinese | 2026年7月22日，ADR-011 获得通过，其中规定返回 HTTP 200 的检索查询不得重试。 |

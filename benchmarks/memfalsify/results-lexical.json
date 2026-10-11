@@ -7,19 +7,19 @@
     "verifier": "lexical"
   },
   "cost": {
-    "judge_calls": 227,
+    "judge_calls": 236,
     "escalations": null,
-    "seconds": 0.264
+    "seconds": 0.267
   },
   "metrics": {
     "claims": 202,
     "contradiction": {
-      "tp": 27,
-      "fp": 11,
-      "fn": 54,
-      "precision": 0.7105263157894737,
-      "recall": 0.3333333333333333,
-      "f1": 0.453781512605042,
+      "tp": 29,
+      "fp": 9,
+      "fn": 52,
+      "precision": 0.7631578947368421,
+      "recall": 0.35802469135802467,
+      "f1": 0.48739495798319327,
       "disputed": {
         "contradicted": 0,
         "supported": 0,
@@ -35,21 +35,21 @@
       "f1": 0.25
     },
     "accuracy": {
-      "correct": 84,
+      "correct": 86,
       "total": 202,
-      "rate": 0.4158415841584158
+      "rate": 0.42574257425742573
     },
     "confusion": {
       "contradicted": {
-        "contradicted": 27,
+        "contradicted": 29,
         "supported": 10,
-        "unsupported": 44,
+        "unsupported": 42,
         "disputed": 0
       },
       "supported": {
-        "contradicted": 9,
+        "contradicted": 7,
         "supported": 12,
-        "unsupported": 51,
+        "unsupported": 53,
         "disputed": 0
       },
       "unsupported": {
@@ -93,12 +93,12 @@
         "f1": 0.9565217391304348
       },
       "internal_conflict": {
-        "tp": 12,
-        "fp": 15,
-        "fn": 23,
-        "precision": 0.4444444444444444,
-        "recall": 0.34285714285714286,
-        "f1": 0.3870967741935484
+        "tp": 22,
+        "fp": 14,
+        "fn": 25,
+        "precision": 0.6111111111111112,
+        "recall": 0.46808510638297873,
+        "f1": 0.5301204819277109
       },
       "duplicate": {
         "tp": 5,
@@ -123,17 +123,17 @@
           "rate": 0.15151515151515152
         },
         "false_flags": {
-          "hits": 7,
+          "hits": 5,
           "n": 66,
-          "rate": 0.10606060606060606
+          "rate": 0.07575757575757576
         }
       },
       "numeric": {
         "claims": 90,
         "contradiction_recall": {
-          "hits": 16,
+          "hits": 18,
           "n": 47,
-          "rate": 0.3404255319148936
+          "rate": 0.3829787234042553
         },
         "support_recall": {
           "hits": 5,
@@ -195,9 +195,9 @@
           "rate": 0.125
         },
         "false_flags": {
-          "hits": 8,
+          "hits": 6,
           "n": 40,
-          "rate": 0.2
+          "rate": 0.15
         }
       },
       "distractor": {
@@ -231,9 +231,9 @@
           "rate": 0.16666666666666666
         },
         "false_flags": {
-          "hits": 4,
+          "hits": 2,
           "n": 12,
-          "rate": 0.3333333333333333
+          "rate": 0.16666666666666666
         }
       },
       "chinese": {
@@ -285,17 +285,17 @@
           "rate": 0.0625
         },
         "false_flags": {
-          "hits": 2,
+          "hits": 0,
           "n": 16,
-          "rate": 0.125
+          "rate": 0.0
         }
       }
     },
     "citations": {
       "contradicted": {
-        "hits": 24,
-        "n": 27,
-        "rate": 0.8888888888888888
+        "hits": 26,
+        "n": 29,
+        "rate": 0.896551724137931
       },
       "supported": {
         "hits": 12,
@@ -1099,19 +1099,19 @@
     },
     {
       "id": "en-units-scope",
-      "description": "Northline capacity memory: latency budgets, error budgets, storage units, retention, gateway timeouts, retries and the Search 2.4 rollout. Evidence is the SLO policy, a 2026-09-18 capacity note, a 2026-03-02 retention plan, ADR-030, the superseded ADR-018 and the search release notes. Hard parts: milliseconds against seconds and minutes, GB against GiB, percent paraphrases, a 105-day gap stated only as two dates, a minor version mistaken for a patch, search versus billing scope, and modality (must not, no longer, only if).",
+      "description": "Northline capacity memory: latency budgets, error budgets, storage units, retention, gateway timeouts, retries and the Search 2.4 rollout. Evidence is the SLO policy, a 2026-09-18 capacity note, a 2026-03-02 retention plan, ADR-030, the superseded ADR-018 and the search release notes. Hard parts: milliseconds against seconds and minutes, GB against GiB, percent paraphrases, a 105-day gap stated only as two dates, an incorrect production version, search versus billing scope, and modality (must not, only if) and dated rule adoption.",
       "as_of": "2026-10-08",
       "judge_calls": 45,
       "escalations": null,
       "metrics": {
         "claims": 23,
         "contradiction": {
-          "tp": 7,
-          "fp": 2,
-          "fn": 6,
-          "precision": 0.7777777777777778,
-          "recall": 0.5384615384615384,
-          "f1": 0.6363636363636364,
+          "tp": 8,
+          "fp": 1,
+          "fn": 5,
+          "precision": 0.8888888888888888,
+          "recall": 0.6153846153846154,
+          "f1": 0.7272727272727273,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -1127,21 +1127,21 @@
           "f1": 0.3076923076923077
         },
         "accuracy": {
-          "correct": 9,
+          "correct": 10,
           "total": 23,
-          "rate": 0.391304347826087
+          "rate": 0.43478260869565216
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 7,
+            "contradicted": 8,
             "supported": 1,
-            "unsupported": 5,
+            "unsupported": 4,
             "disputed": 0
           },
           "supported": {
-            "contradicted": 2,
+            "contradicted": 1,
             "supported": 2,
-            "unsupported": 6,
+            "unsupported": 7,
             "disputed": 0
           },
           "unsupported": {
@@ -1185,12 +1185,12 @@
             "f1": 1.0
           },
           "internal_conflict": {
-            "tp": 4,
-            "fp": 4,
+            "tp": 8,
+            "fp": 3,
             "fn": 3,
-            "precision": 0.5,
-            "recall": 0.5714285714285714,
-            "f1": 0.5333333333333333
+            "precision": 0.7272727272727273,
+            "recall": 0.7272727272727273,
+            "f1": 0.7272727272727273
           },
           "duplicate": {
             "tp": 0,
@@ -1215,17 +1215,17 @@
               "rate": 0.2222222222222222
             },
             "false_flags": {
-              "hits": 2,
+              "hits": 1,
               "n": 9,
-              "rate": 0.2222222222222222
+              "rate": 0.1111111111111111
             }
           },
           "numeric": {
             "claims": 19,
             "contradiction_recall": {
-              "hits": 6,
+              "hits": 7,
               "n": 12,
-              "rate": 0.5
+              "rate": 0.5833333333333334
             },
             "support_recall": {
               "hits": 2,
@@ -1269,9 +1269,9 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 2,
+              "hits": 1,
               "n": 2,
-              "rate": 1.0
+              "rate": 0.5
             }
           },
           "distractor": {
@@ -1305,9 +1305,9 @@
               "rate": 0.3333333333333333
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 3,
-              "rate": 0.3333333333333333
+              "rate": 0.0
             }
           },
           "multi_sentence": {
@@ -1323,17 +1323,17 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 2,
-              "rate": 0.5
+              "rate": 0.0
             }
           }
         },
         "citations": {
           "contradicted": {
-            "hits": 6,
-            "n": 7,
-            "rate": 0.8571428571428571
+            "hits": 7,
+            "n": 8,
+            "rate": 0.875
           },
           "supported": {
             "hits": 2,
@@ -1345,19 +1345,19 @@
     },
     {
       "id": "es-operacion-alcance",
-      "description": "Rumbal operations memory in Spanish: latency budgets, storage units, retention, gateway timeouts, retries, paging and the search 2.4 rollout. Evidence is the SLO note, ADR-015, superseded ADR-008, the 2026-09-18 capacity note, the on-call runbook and the version notes. Hard parts: unit and percent paraphrases, search versus billing scope, a 105-day gap stated only as two dates, a patch-versus-minor mistake, and modality (no se debe, ya no, únicamente cuando, solo).",
+      "description": "Rumbal operations memory in Spanish: latency budgets, storage units, retention, gateway timeouts, retries, paging and the search 2.4 rollout. Evidence is the SLO note, ADR-015, superseded ADR-008, the 2026-09-18 capacity note, the on-call runbook and the version notes. Hard parts: unit and percent paraphrases, search versus billing scope, a 105-day gap stated only as two dates, an incorrect production version, and modality (no se debe, únicamente cuando, solo) and dated rule adoption.",
       "as_of": "2026-10-08",
-      "judge_calls": 30,
+      "judge_calls": 38,
       "escalations": null,
       "metrics": {
         "claims": 20,
         "contradiction": {
-          "tp": 2,
-          "fp": 1,
-          "fn": 8,
-          "precision": 0.6666666666666666,
-          "recall": 0.2,
-          "f1": 0.3076923076923077,
+          "tp": 3,
+          "fp": 0,
+          "fn": 7,
+          "precision": 1.0,
+          "recall": 0.3,
+          "f1": 0.46153846153846156,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -1373,21 +1373,21 @@
           "f1": 0.47058823529411764
         },
         "accuracy": {
-          "correct": 6,
+          "correct": 7,
           "total": 20,
-          "rate": 0.3
+          "rate": 0.35
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 2,
+            "contradicted": 3,
             "supported": 3,
-            "unsupported": 5,
+            "unsupported": 4,
             "disputed": 0
           },
           "supported": {
-            "contradicted": 1,
+            "contradicted": 0,
             "supported": 4,
-            "unsupported": 4,
+            "unsupported": 5,
             "disputed": 0
           },
           "unsupported": {
@@ -1431,12 +1431,12 @@
             "f1": null
           },
           "internal_conflict": {
-            "tp": 0,
-            "fp": 2,
+            "tp": 4,
+            "fp": 4,
             "fn": 5,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0
+            "precision": 0.5,
+            "recall": 0.4444444444444444,
+            "f1": 0.47058823529411764
           },
           "duplicate": {
             "tp": 0,
@@ -1461,17 +1461,17 @@
               "rate": 0.5
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 8,
-              "rate": 0.125
+              "rate": 0.0
             }
           },
           "numeric": {
             "claims": 13,
             "contradiction_recall": {
-              "hits": 1,
+              "hits": 2,
               "n": 8,
-              "rate": 0.125
+              "rate": 0.25
             },
             "support_recall": {
               "hits": 2,
@@ -1515,9 +1515,9 @@
               "rate": 0.6666666666666666
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 4,
-              "rate": 0.25
+              "rate": 0.0
             }
           },
           "distractor": {
@@ -1551,9 +1551,9 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 2,
-              "rate": 0.5
+              "rate": 0.0
             }
           },
           "multi_sentence": {
@@ -1569,16 +1569,16 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 2,
-              "rate": 0.5
+              "rate": 0.0
             }
           }
         },
         "citations": {
           "contradicted": {
-            "hits": 2,
-            "n": 2,
+            "hits": 3,
+            "n": 3,
             "rate": 1.0
           },
           "supported": {
@@ -2983,9 +2983,9 @@
     },
     {
       "id": "zh-units-negation",
-      "description": "航标容量与重试记忆：时延预算、错误预算、存储单位、保留期、网关超时和重试条件。证据是服务指标、ADR-011、被取代的 ADR-004、2026-09-18 容量会，以及 2026-03-02 的保留计划。难点是毫秒对分钟、GB 对 GiB、百分数的中文换算、检索与账单的适用范围，以及“不得”“不再”“只有…才”。",
+      "description": "航标容量与重试记忆：时延预算、错误预算、存储单位、保留期、网关超时和重试条件。证据是服务指标、ADR-011、被取代的 ADR-004、2026-09-18 容量会，以及 2026-03-02 的保留计划。难点是毫秒对分钟、GB 对 GiB、百分数的中文换算、检索与账单的适用范围，以及“不得”“只有…才”和带日期的规则通过记录。",
       "as_of": "2026-10-08",
-      "judge_calls": 23,
+      "judge_calls": 24,
       "escalations": null,
       "metrics": {
         "claims": 20,
@@ -3069,12 +3069,12 @@
             "f1": null
           },
           "internal_conflict": {
-            "tp": 2,
-            "fp": 4,
-            "fn": 3,
-            "precision": 0.3333333333333333,
-            "recall": 0.4,
-            "f1": 0.36363636363636365
+            "tp": 4,
+            "fp": 2,
+            "fn": 5,
+            "precision": 0.6666666666666666,
+            "recall": 0.4444444444444444,
+            "f1": 0.5333333333333333
           },
           "duplicate": {
             "tp": 0,
@@ -4345,7 +4345,9 @@
         "paraphrase",
         "numeric"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
@@ -4369,7 +4371,9 @@
         "numeric",
         "distractor"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
@@ -4710,7 +4714,9 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -4729,24 +4735,43 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
       "evidence": []
     },
     {
       "case": "en-units-scope",
-      "memory_id": "m-287387be",
-      "text": "Production is one patch release ahead of release 2.3.1.",
+      "memory_id": "m-2dcc4527",
+      "text": "Production is running release 2.3.2.",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric"
       ],
       "issues": [],
-      "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "releases/search.md:3",
+          "quote": "On 2026-05-20 the production release became release 2.3.1.",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2026-05-20']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "releases/search.md:5",
+          "quote": "On 2026-09-02 the production release became release 2.4.0, which replaced release 2.3.1.",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2.4.0', '2026-09-02']",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "en-units-scope",
@@ -4774,11 +4799,11 @@
     },
     {
       "case": "en-units-scope",
-      "memory_id": "m-079af382",
-      "text": "Clients no longer retry search queries after HTTP 200.",
+      "memory_id": "m-fc33d510",
+      "text": "On 2026-07-22, ADR-030 was accepted with a rule forbidding clients to retry search queries after HTTP 200.",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "paraphrase",
         "negation_trap",
@@ -4788,15 +4813,7 @@
       "issues": [],
       "predicted_issues": [],
       "cites_labeled_passage": null,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "decisions/ADR-030-timeouts.md:13",
-          "quote": "Until 2026-07-22, clients retried search queries even after HTTP 200.",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        }
-      ]
+      "evidence": []
     },
     {
       "case": "en-units-scope",
@@ -4809,7 +4826,9 @@
         "negation",
         "distractor"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [
         "internal_conflict"
       ],
@@ -4841,7 +4860,9 @@
       "tags": [
         "paraphrase"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [
         "internal_conflict"
       ],
@@ -4906,7 +4927,9 @@
         "paraphrase",
         "numeric"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
@@ -4922,7 +4945,9 @@
         "numeric",
         "distractor"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
@@ -5041,7 +5066,9 @@
         "distractor"
       ],
       "issues": [],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -5065,7 +5092,9 @@
         "negation_trap"
       ],
       "issues": [],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -5079,11 +5108,11 @@
     },
     {
       "case": "es-operacion-alcance",
-      "memory_id": "m-4a817988",
-      "text": "Las búsquedas ya no se reintentan después de un HTTP 200.",
+      "memory_id": "m-c907bcdb",
+      "text": "El 2026-07-22 se aceptó la ADR-015 con una regla que prohíbe reintentar consultas de búsqueda después de un HTTP 200.",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "paraphrase",
         "negation_trap",
@@ -5091,17 +5120,11 @@
         "multi_sentence"
       ],
       "issues": [],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "decisiones/ADR-015-reintentos.md:13",
-          "quote": "Hasta el 2026-07-22, las consultas de búsqueda se reintentaban incluso después de un HTTP 200.",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        }
-      ]
+      "evidence": []
     },
     {
       "case": "es-operacion-alcance",
@@ -5114,7 +5137,9 @@
         "negation",
         "distractor"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [
         "internal_conflict"
       ],
@@ -5139,7 +5164,9 @@
       "tags": [
         "paraphrase"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [
         "internal_conflict"
       ],
@@ -5234,7 +5261,9 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -5253,24 +5282,50 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
       "evidence": []
     },
     {
       "case": "es-operacion-alcance",
-      "memory_id": "m-e211bea2",
-      "text": "La versión de producción está solo un parche por encima de la 2.3.1.",
+      "memory_id": "m-5da516e2",
+      "text": "La versión de producción es la 2.3.2.",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric"
       ],
       "issues": [],
-      "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "versiones/busqueda.md:3",
+          "quote": "El 2026-05-20 la versión de producción pasó a ser la 2.3.1.",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2026-05-20']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "versiones/busqueda.md:5",
+          "quote": "El 2026-09-02 la versión de producción pasó a ser la 2.4.0, que sustituyó a la 2.3.1.",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2.4.0', '2026-09-02']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "notas/2026-09-18-capacidad.md:7",
+          "quote": "La retención del nivel caliente de búsqueda es de 14 días.",
+          "rationale": "different values: claim ['2.3.2'] vs source ['14']",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "repo-instructions-cli",
@@ -7114,7 +7169,9 @@
         "numeric",
         "chinese"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
@@ -7131,7 +7188,9 @@
         "distractor",
         "chinese"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
@@ -7388,8 +7447,8 @@
     },
     {
       "case": "zh-units-negation",
-      "memory_id": "m-7b71be98",
-      "text": "已经成功的检索查询不得再发一次。",
+      "memory_id": "m-c9ed7466",
+      "text": "已经返回 HTTP 200 的检索查询不得再发一次。",
       "truth": "supported",
       "predicted": "unsupported",
       "status": "insufficient_evidence",
@@ -7405,8 +7464,8 @@
     },
     {
       "case": "zh-units-negation",
-      "memory_id": "m-fa982fc7",
-      "text": "检索查询成功之后已经不再重试。",
+      "memory_id": "m-d284e515",
+      "text": "2026年7月22日，ADR-011 获得通过，其中规定返回 HTTP 200 的检索查询不得重试。",
       "truth": "supported",
       "predicted": "unsupported",
       "status": "insufficient_evidence",
@@ -7434,7 +7493,9 @@
         "distractor",
         "chinese"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [
         "internal_conflict"
       ],
@@ -7467,7 +7528,9 @@
         "paraphrase",
         "chinese"
       ],
-      "issues": [],
+      "issues": [
+        "internal_conflict"
+      ],
       "predicted_issues": [
         "internal_conflict"
       ],

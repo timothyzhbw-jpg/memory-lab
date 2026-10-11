@@ -21,7 +21,7 @@
 ## Reintentos, guardias y versiones
 
 - No se debe reintentar una búsqueda que ya respondió con HTTP 200.
-- Las búsquedas ya no se reintentan después de un HTTP 200.
+- El 2026-07-22 se aceptó la ADR-015 con una regla que prohíbe reintentar consultas de búsqueda después de un HTTP 200.
 - El renderizado de facturas no se puede reintentar.
 - Reintentar el renderizado de una factura está permitido únicamente cuando el primer intento contestó con HTTP 503.
 - El turno de facturación no debe reconocer una alerta de búsqueda.
@@ -29,4 +29,4 @@
 - Cualquier persona del turno de búsqueda puede silenciar una alerta de búsqueda.
 - Pasaron 105 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0.
 - Solo pasaron 30 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0.
-- La versión de producción está solo un parche por encima de la 2.3.1.
+- La versión de producción es la 2.3.2.

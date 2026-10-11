@@ -28,8 +28,8 @@
 - Every gateway timeout is 1500 ms.
 - 105 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0.
 - Only 30 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0.
-- Production is one patch release ahead of release 2.3.1.
+- Production is running release 2.3.2.
 - A search query that returned HTTP 200 must not be retried.
-- Clients no longer retry search queries after HTTP 200.
+- On 2026-07-22, ADR-030 was accepted with a rule forbidding clients to retry search queries after HTTP 200.
 - Billing invoice renders must not be retried.
 - Retrying a billing invoice render is permitted solely when the first try responded with HTTP 503.
