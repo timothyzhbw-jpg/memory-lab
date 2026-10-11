@@ -249,6 +249,9 @@ def test_diff_cli_model_options_and_usage(repo, monkeypatch):
            "15 read from it · output tokens: 6" in result.stdout
     data = json.loads(runner.invoke(app, args + ["--format", "json"]).stdout)
     assert data["audit"]["verifier_stats"][0]["requests"] == 3
+    monkeypatch.undo()
+    result = runner.invoke(app, ["diff", str(repo.root / "MEMORY.md"), "--base", base, "--verifier", "jev", "--batch"])
+    assert result.exit_code == 2 and "use it with --verifier llm, dual or cascade" in result.output
 
 
 def test_diff_between_two_commits_ignores_the_working_tree(repo):

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import threading
 import time
 from datetime import date
@@ -465,3 +466,196 @@ def test_cli_max_concurrency_applies_to_model_verifiers_only(two_claims, monkeyp
     assert runner.invoke(app, args + ["--verifier", "llm", "--max-concurrency", "2"]).exit_code == 0
     assert seen == [1, 1, 4, 2]
     assert runner.invoke(app, args + ["--max-concurrency", "0"]).exit_code == 2
+
+
+# --- Message Batches -----------------------------------------------------------------
+
+class FakeBatches:
+    """Message Batches stand-in. A batch ends after ``polls`` retrievals; results come back in reverse order.
+    ``outcome(custom_id)`` picks the result type; ``decide`` answers succeeded requests (a str is sent as raw text)."""
+
+    def __init__(self, decide=decide, polls=2, outcome=lambda custom_id: "succeeded", usage=None):
+        self.decide, self.polls, self.outcome, self.usage = decide, polls, outcome, usage
+        self.created, self.retrieved, self.canceled = [], [], []
+
+    def create(self, requests):
+        batch = SimpleNamespace(id=f"msgbatch_{len(self.created)}", processing_status="in_progress")
+        self.created.append((batch.id, list(requests)))
+        return batch
+
+    def retrieve(self, batch_id):
+        self.retrieved.append(batch_id)
+        ended = self.retrieved.count(batch_id) >= self.polls
+        return SimpleNamespace(id=batch_id, processing_status="ended" if ended else "in_progress")
+
+    def results(self, batch_id):
+        for request in reversed(dict(self.created)[batch_id]):
+            kind = self.outcome(request["custom_id"])
+            if kind != "succeeded":
+                error = SimpleNamespace(error=SimpleNamespace(type="overloaded_error")) if kind == "errored" else None
+                yield SimpleNamespace(custom_id=request["custom_id"], result=SimpleNamespace(type=kind, error=error))
+                continue
+            verdict, stop_reason = self.decide(*unwrap(request["params"]))
+            text = verdict if isinstance(verdict, str) else verdict.model_dump_json() if verdict else None
+            content = [SimpleNamespace(type="text", text=text)] if text is not None else []
+            message = SimpleNamespace(stop_reason=stop_reason, content=content, usage=self.usage)
+            yield SimpleNamespace(custom_id=request["custom_id"], result=SimpleNamespace(type="succeeded",
+                                                                                        message=message))
+
+    def cancel(self, batch_id):
+        self.canceled.append(batch_id)
+
+
+def batch_client(batches=None, messages=None):
+    return SimpleNamespace(messages=SimpleNamespace(batches=batches or FakeBatches()),
+                           beta=SimpleNamespace(messages=messages or ScriptedMessages()))
+
+
+def batched(client, model=llm.DEFAULT_MODEL, delays=None, progress=None):
+    return LLMVerifier(model, client=client, batch=True, sleep=(delays if delays is not None else []).append,
+                       progress=progress)
+
+
+def test_batch_verdicts_match_direct_requests(two_claims):
+    direct = model_audit(two_claims, LLMVerifier(client=scripted_client()))
+    client, delays, lines = batch_client(FakeBatches(usage=usage(write=0, read=30))), [], []
+    report = model_audit(two_claims, batched(client, delays=delays, progress=lines.append))
+    assert report.findings == direct.findings  # results came back in reverse order, mapped by custom_id
+    assert [f.status for f in report.findings] == ["candidate_counterevidence", "candidate_support"]
+    assert client.beta.messages.calls == [] and delays == [5.0, 10.0]
+    [stats] = report.verifier_stats
+    assert (stats.requests, stats.batched_requests, stats.cache_read_input_tokens) == (4, 4, 120)
+    assert "4 request(s) (4 through the Message Batches API)" in to_markdown(report)
+    assert lines[0].startswith("llm:claude-opus-5-5: submitted Message Batch msgbatch_0 with 4 request(s)")
+
+
+def test_batch_request_shape(two_claims):
+    anthropic = pytest.importorskip("anthropic")
+    client = batch_client()
+    model_audit(two_claims, batched(client))
+    [(_, requests)] = client.messages.batches.created
+    assert [r["custom_id"] for r in requests] == ["pair-0", "pair-1", "pair-2", "pair-3"]
+    hour = {"type": "ephemeral", "ttl": "1h"}
+    for request in requests:
+        params = request["params"]
+        assert set(params) == {"model", "max_tokens", "system", "messages", "output_config"}  # no fallbacks
+        assert params["model"] == "claude-opus-5-5" and params["max_tokens"] == llm.MAX_TOKENS
+        assert params["system"] == [{"type": "text", "text": SYSTEM, "cache_control": hour}]
+        assert params["output_config"] == {"effort": "low", "format": {
+            "type": "json_schema", "schema": anthropic.transform_schema(Verdict.model_json_schema())}}
+        claim_block = params["messages"][0]["content"][0]
+        assert claim_block.get("cache_control") == (hour if unwrap(params)[0] == CSV_CLAIM else None)
+
+
+def test_batch_polling_backs_off_to_a_minute():
+    delays = []
+    verifier = batched(batch_client(FakeBatches(polls=8)), delays=delays)
+    assert verifier.judge_many([(CLAIM, COUNTER)])[0].relation == "contradicts"
+    assert delays == [5.0, 10.0, 20.0, 40.0, 60.0, 60.0, 60.0, 60.0]
+
+
+@pytest.mark.parametrize("outcome, detail", [("expired", "1 expired"), ("errored", "1 errored (overloaded_error)"),
+                                             ("canceled", "1 canceled")])
+def test_batch_failures_fail_closed(two_claims, outcome, detail):
+    client = batch_client(FakeBatches(outcome=lambda custom_id: outcome if custom_id == "pair-2" else "succeeded"))
+    with pytest.raises(VerifierError, match=rf"1 of 4 batch requests did not succeed \({re.escape(detail)}\) "
+                                            r"in msgbatch_0; no partial report"):
+        model_audit(two_claims, batched(client))
+
+
+def test_batch_missing_or_unknown_results_fail_closed():
+    class Lossy(FakeBatches):
+        def results(self, batch_id):
+            yield from list(super().results(batch_id))[1:]
+
+    with pytest.raises(VerifierError, match=r"1 missing"):
+        batched(batch_client(Lossy())).judge_many([(CLAIM, COUNTER), (CLAIM, REDIS_CLAIM)])
+
+    class Stranger(FakeBatches):
+        def results(self, batch_id):
+            yield SimpleNamespace(custom_id="pair-99", result=SimpleNamespace(type="succeeded"))
+
+    with pytest.raises(VerifierError, match="unexpected result 'pair-99'"):
+        batched(batch_client(Stranger())).judge_many([(CLAIM, COUNTER)])
+
+
+def test_batch_unreadable_verdict_fails_closed():
+    client = batch_client(FakeBatches(decide=lambda claim, passage: ("not json", "max_tokens")))
+    with pytest.raises(VerifierError, match=r"batch result pair-0 is not a verdict \(stop_reason: max_tokens\)"):
+        batched(client).judge_many([(CLAIM, COUNTER)])
+
+
+def test_batch_refusal_is_asked_again_with_the_server_side_fallback():
+    refuse = lambda claim, passage: (None, "refusal") if "not available" in passage else decide(claim, passage)
+    pairs = [(CLAIM, COUNTER), (REDIS_CLAIM, REDIS_CLAIM)]
+    client = batch_client(FakeBatches(decide=refuse))
+    verifier = batched(client)
+    judgments = verifier.judge_many(pairs)
+    assert [j.relation for j in judgments] == ["contradicts", "supports"]
+    [retry] = client.beta.messages.calls  # only the refused pair, directly, with the fallback
+    assert unwrap(retry) == pairs[0] and retry["fallbacks"] == "default"
+    assert (verifier.usage()[0].requests, verifier.usage()[0].batched_requests) == (3, 2)
+    # A model without the fallback keeps the refusal as no verdict, as a direct request would.
+    client = batch_client(FakeBatches(decide=refuse))
+    judgments = batched(client, model="claude-haiku-5-5").judge_many(pairs)
+    assert judgments[0].relation == "unrelated" and "refusal" in judgments[0].rationale
+    assert client.beta.messages.calls == []
+
+
+def test_batch_interrupt_cancels_the_batch():
+    batches = FakeBatches(polls=5)
+
+    def interrupt(seconds):
+        raise KeyboardInterrupt
+
+    verifier = LLMVerifier(client=batch_client(batches), batch=True, sleep=interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        verifier.judge_many([(CLAIM, COUNTER)])
+    assert batches.canceled == ["msgbatch_0"]
+
+
+def test_large_batches_are_split(monkeypatch):
+    monkeypatch.setattr(llm, "MAX_BATCH_REQUESTS", 3)
+    batches = FakeBatches()
+    pairs = [(CLAIM, f"Invoices are not available in region {n}.") for n in range(4)] + [(REDIS_CLAIM, REDIS_CLAIM)]
+    judgments = batched(batch_client(batches)).judge_many(pairs)
+    assert [len(requests) for _, requests in batches.created] == [3, 2]
+    assert [j.relation for j in judgments] == ["contradicts"] * 4 + ["supports"]
+    assert batched(batch_client(batches)).judge_many([]) == [] and len(batches.created) == 2
+
+
+def test_cascade_batches_only_the_escalated_pairs():
+    unsure = lambda state: (("contradicts", 0.9, {"supports": 0.0, "contradicts": 0.9, "unrelated": 0.1})
+                            if "not available" in state["passage"]
+                            else ("unrelated", 0.5, {"supports": 0.2, "contradicts": 0.3, "unrelated": 0.5}))
+    batches = FakeBatches()
+    cascade = CascadeVerifier(mock_jev(unsure), batched(batch_client(batches)))
+    judgments = cascade.judge_many([(CLAIM, COUNTER), (REDIS_CLAIM, REDIS_CLAIM)], max_concurrency=2)
+    assert [j.relation for j in judgments] == ["contradicts", "supports"]
+    [(_, requests)] = batches.created
+    assert [unwrap(r["params"]) for r in requests] == [(REDIS_CLAIM, REDIS_CLAIM)]
+
+
+def test_cli_batch(two_claims, monkeypatch):
+    client = batch_client()
+    real = llm.LLMVerifier
+    monkeypatch.setattr(llm, "LLMVerifier", lambda model, **kw: real(model, client=client, sleep=lambda s: None, **kw))
+    args = ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"), "--batch"]
+    result = runner.invoke(app, args + ["--verifier", "llm"])
+    assert result.exit_code == 0 and "POSSIBLE COUNTEREVIDENCE" in result.stdout
+    assert "(4 through the Message Batches API)" in result.stdout
+    assert "submitted Message Batch msgbatch_0" in result.stderr
+    for verifier in ("lexical", "jev"):
+        result = runner.invoke(app, args + ["--verifier", verifier])
+        assert result.exit_code == 2 and "use it with --verifier llm, dual or cascade" in result.output
+
+
+def test_cli_batch_failure_exits_2_without_a_report(two_claims, monkeypatch, tmp_path):
+    client = batch_client(FakeBatches(outcome=lambda custom_id: "expired"))
+    real = llm.LLMVerifier
+    monkeypatch.setattr(llm, "LLMVerifier", lambda model, **kw: real(model, client=client, sleep=lambda s: None, **kw))
+    out = tmp_path / "report.md"
+    result = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"),
+                                 "--verifier", "llm", "--batch", "-o", str(out)])
+    assert result.exit_code == 2 and "4 of 4 batch requests did not succeed (4 expired)" in result.output
+    assert not out.exists()
