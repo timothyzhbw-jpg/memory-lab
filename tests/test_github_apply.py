@@ -69,7 +69,7 @@ def test_golden_example_reproducible(github_dataset):
     converted(github_dataset,2)
     Dataset.load(github_dataset)
     assert relative_snapshot(github_dataset) == {
-        k:v for k,v in relative_snapshot(GOLDEN).items() if k not in ('replay-report.md', 'audit-report.md')}
+        k:v for k,v in relative_snapshot(GOLDEN).items() if k not in ('replay-report.md', 'audit-report.md', 'changes-report.md')}
     from orgmemory.report import to_markdown
     assert to_markdown(replay(Dataset.load(github_dataset)))+'\n' == (GOLDEN/'replay-report.md').read_text(encoding='utf-8')
 

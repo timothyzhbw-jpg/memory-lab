@@ -1,4 +1,5 @@
-"""orgmemory command line. Replay and audit are read-only; `append` and `evidence add` only ever append lines."""
+"""orgmemory command line. Replay, explain, audit and changes are read-only; `append` and `evidence add` only ever
+append lines."""
 from __future__ import annotations
 
 import json
@@ -13,9 +14,10 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 
 from .audit import DEFAULT_STALE_DAYS, audit
+from .changes import changes
 from .models import Event
 from .replay import Dataset, replay, validate
-from .report import audit_markdown, explain, to_markdown
+from .report import audit_markdown, changes_markdown, explain, to_markdown
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="Replay organizational decisions under explicit authority rules.")
@@ -92,6 +94,34 @@ def audit_command(
                nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
+
+
+def _moment(value: str, flag: str) -> datetime:
+    try:
+        return TypeAdapter(AwareDatetime).validate_python(value)
+    except ValidationError:
+        _fail(f"{flag} must be an ISO 8601 time with a timezone, like 2026-10-07T23:59:59Z")
+
+
+@app.command("changes")
+def changes_command(
+    dataset: Path = DATASET,
+    start: str = typer.Option(..., "--from", help="Start of the period: events after this time are in it "
+                                                  "(ISO 8601 with timezone)"),
+    end: str = typer.Option(..., "--to", help="End of the period, inclusive (ISO 8601 with timezone)"),
+    fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
+) -> None:
+    """Report what changed between two times, per subject, with the evidence of every event involved."""
+    start_time, end_time = _moment(start, "--from"), _moment(end, "--to")
+    if start_time > end_time:
+        _fail("--from must not be after --to")
+    data = _load(dataset)
+    try:
+        report = changes(data, start_time, end_time)
+    except (ValidationError, ValueError) as exc:
+        _fail(str(exc))
+    typer.echo(changes_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
+               nl=False)
 
 
 @app.command("validate")
