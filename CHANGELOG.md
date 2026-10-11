@@ -16,7 +16,26 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+Repository-level changes; no package version changes.
+
+### Added
+
+- Claude Code plugin marketplace. `.claude-plugin/marketplace.json` lists the `memory-lab` plugin, whose root is
+  `skills/`. `claude plugin marketplace add timothyzhbw-jpg/memory-lab` and
+  `claude plugin install memory-lab@memory-lab` install `skills/memfalsify`, `skills/orgmemory` and the read-only
+  `memlab` MCP server, started as `memlab-mcp --root ${CLAUDE_PROJECT_DIR}` without `--allow-model-verifiers`.
+  The plugin pins no version, so Claude Code versions it by commit. It does not install the Python packages.
+- `docs/install-agents.md` and `docs/install-agents.zh-CN.md`: installing into Claude Code with the plugin and into
+  Codex with `~/.agents/skills` and `codex mcp add`, including the `config.toml` table that command writes.
+- `tests/test_packaging_agents.py`: the manifests' fields, names and paths follow the Claude Code marketplace and
+  manifest references, the plugin ships exactly the repository's skills, and the server's arguments parse with
+  `memlab-mcp`'s own command line with model verifiers off. An unexpanded `${CLAUDE_PROJECT_DIR}` fails to start.
+
+### Changed
+
+- README: the Codex skills location is `~/.agents/skills/`, the user location in OpenAI's documentation, instead
+  of `~/.codex/skills/`. The memfalsify and orgmemory skills say that the plugin roots the server at the project
+  directory.
 
 ## memlab-core
 
