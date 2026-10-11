@@ -146,6 +146,7 @@ orgmemory explain        <数据集> "acme/web#12"
 
 - token 取 `GITHUB_TOKEN`、`GH_TOKEN` 中第一个非空的值（可以用 `GH_TOKEN=$(gh auth token)`）；没有 `--token` 参数。一个只读的细粒度（fine-grained）token，带 Issues、Pull requests 和 Metadata 的读权限就够了。没有 token 时以未认证方式运行：只能访问公开仓库，每小时 60 次请求。
 - 第一次运行读取全部内容；可以用 `--since ISO时间`（必须带时区）限定范围，但仓库一旦有了游标（完成过一次完整同步），这个参数就会被拒绝。之后每次只读取上一次完整同步以来变化的内容，并往前多重叠 5 分钟。`--full` 重新扫描全部，`--issue N`（可重复）只刷新指定编号，不能与 `--full` 或 `--since` 同用。重复运行是安全的：ID 是确定的，日志里已有的内容不会被追加第二次。GitHub 不一定会因为每种变化（标签、依赖关系）都把 issue 标为已更新，所以隔一段时间跑一次 `--full`。
+- `sync` 会复用到 `api.github.com` 的 HTTPS 连接，使用系统 CA 存储校验证书，每次请求超时为 30 秒；运行结束（包括出错）时关闭连接。连接在收到任何响应字节之前失败时，会新建连接重试一次 GET；限流和其他重试行为保持原样。设置 `HTTPS_PROXY` / `https_proxy` 或 `ALL_PROXY` / `all_proxy` 时回退到原有 urllib 传输，按 urllib 的代理规则处理，不复用连接。传输层不会自动跟随重定向；客户端只允许经过校验的同源重定向。
 - `sync` 抓取期间最多每 5 秒向 stderr 输出一次进度，显示已完整抓取的 issue/PR 数、请求数和剩余限额（不可用时为 `unknown`）。每次因速率限制休眠时还会输出休眠时长和 UTC 唤醒时间。短运行可能不显示进度；stdout 保持不变，包括摘要和 `--dry-run` JSONL。
 - `--dry-run` 会实际请求 GitHub（消耗请求次数），打印摘要和计划写入的事件，但不写入数据集或锁文件。`--save-capture` 把抓取到的 issue 和时间线按 API 返回的原样写入一个新文件，之后可以用 `convert` 应用；它可以和 `--dry-run` 一起用，这样就能先审阅抓取结果再应用。文件里是原始的、可能私密的文本。保存路径只能是新文件，不能覆盖导入工具管理的文件或 `policy.json` / `github.json`。
 - 退出码：`0` 表示完整完成（包括“没有新内容”）；`2` 表示出错，没有追加任何内容；`3` 表示只完成了一部分：限流等待超过 `--max-wait`（默认 3600 秒），或服务端、网络反复出错，导致抓取中止，已完整抓取的条目已经写入，游标没有移动，稍后再运行一次即可。
@@ -219,14 +220,14 @@ Approved now that export waits for the billing migration.
 
 ## Agent 技能
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。把它们复制到 Agent 的技能目录即可：
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。GitHub 账号不是已认证的人，`memlab` MCP 工具引用的文件文本也不可信。技能里写了什么时候用这些只读工具、什么时候用命令行，以及怎样把 [GitHub Action](docs/github-action.md) 加到仓库里，让仓库核对自己的指令文件。把它们复制到 Agent 的技能目录即可：
 
 ```bash
 cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
 cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 ```
 
-命令行工具需要安装在 Agent 的 shell 所用的环境里。
+命令行工具需要安装在 Agent 的 shell 所用的环境里。要用 MCP 工具，还要单独注册 `memlab-mcp`（见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)）。
 
 ## MCP 服务器
 

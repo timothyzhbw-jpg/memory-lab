@@ -20,7 +20,7 @@ The following are grafted onto it:
 | authority-first | The importer never opens `policy.json`, and its output is byte-identical under any policy. |
 | authority-first | The cited quote is an ASCII **fact line** built only from validated fields and naming the actor. Untrusted text appears only JSON-escaped or after a fixed separator. Spans are computed by construction. |
 | authority-first | Automated actors (bots, apps, agent intent, ghost) only ever produce `comment`. |
-| authority-first | `Authorization` is sent with `add_unredirected_header`, and urllib does not auto-follow redirects. A 301 or a change of repo id fails closed. Link URLs are checked by origin and path. |
+| authority-first | `Authorization` is sent only to the API origin. Neither transport auto-follows redirects; urllib uses `add_unredirected_header`. A 301 or a change of repo id fails closed. Link URLs are checked by origin and path. |
 | authority-first | A desc-ordered PR scan guards against reviews that might not bump the issue's `updated_at`. |
 | github-native | `reopened` after a decision close becomes `revoke` (superseding that close) followed by `request`. |
 | github-native | Optional user-owned `github.json` decision labels, with unlabel producing `revoke`. |
@@ -105,7 +105,7 @@ The following are grafted onto it:
 
 | File | Contents | ~LOC |
 |---|---|---|
-| `packages/orgmemory/src/orgmemory/github_fetch.py` | Network only: `Transport`, `urllib_transport()`, `Client` (redirect policy, rate limits, retries, request counter, first `Date` header), `pages()` (Link validation), `fetch()` (returns a capture dict), `token_from_env()`, `GitHubError`, `Stopped` | 140 |
+| `packages/orgmemory/src/orgmemory/github_fetch.py` | Network only: `Transport`, `PersistentTransport`, `urllib_transport()`, `Client` (redirect policy, rate limits, retries, request counter, first `Date` header), `pages()` (Link validation), `fetch()` (returns a capture dict), `token_from_env()`, `GitHubError`, `Stopped` | 140 |
 | `packages/orgmemory/src/orgmemory/github_map.py` | Pure logic: `GithubConfig`, validators, `actor()`, `render()`, `text_span()`, `plan_item()`, `convert()` (returns a `Plan`). No I/O and no clock. | 210 |
 | `packages/orgmemory/src/orgmemory/github_apply.py` | Writes: `lock()`, `load_existing()`, `load_config()`, `next_since()`, `pinned_repo_id()`, `apply()`, `run_sync()`, `run_convert()` | 85 |
 | `packages/orgmemory/src/orgmemory/cli.py` | Adds the `github` sub-app with `sync` and `convert`, plus summary printing | +45 |
@@ -242,7 +242,7 @@ Every request is a `GET` to `https://api.github.com` with:
 - `X-GitHub-Api-Version: 2022-11-28` (pinned; confirmed live as the selected version);
 - `User-Agent: orgmemory/0.2`.
 
-`Authorization: Bearer <token>` is added through `Request.add_unredirected_header` and only when the URL's origin is exactly `https://api.github.com`.
+`Authorization: Bearer <token>` is sent only when the URL's origin is exactly `https://api.github.com`. `PersistentTransport` refuses every other origin before opening a connection; the urllib fallback uses `Request.add_unredirected_header`.
 
 ### 6.2 Requests, in this order
 
@@ -318,7 +318,11 @@ raise Stopped(...)
 
 This matters because CPython's `HTTPRedirectHandler.redirect_request` copies every entry of `req.headers` except Content-Length and Content-Type to the redirect target. Those entries include anything set with `add_header`, so an `Authorization` header added that way would follow a redirect to any host. Unredirected headers are excluded.
 
-Proxy settings (`HTTPS_PROXY`) and the system CA store are honoured by urllib.
+`orgmemory github sync` defaults to the callable `PersistentTransport`, which reuses one serial `http.client.HTTPSConnection` to the fixed API origin. TLS uses `ssl.create_default_context()` (system CA store, certificate verification and hostname checking), and each request resets the socket timeout (default 30 seconds). It reads the entire body and returns the same `(status, lower-cased headers, bytes)` contract as urllib, without changing response-size handling or credential-reflection checks in `Client`.
+
+A server-declared `Connection: close` discards the connection after the response. A stale connection or other network/HTTP failure before **any** response bytes receives at most one immediate GET retry on a new connection. Socket reads are counted before buffering, so even an incomplete status line followed by a timeout prevents this transport retry. All errors after response bytes, and a failed reconnect, are surfaced as `URLError`; `Client` retains its existing backoff, rate limits and partial-run rules. HTTP statuses never trigger a transport retry or redirect. Only `Client` follows validated same-origin 302/307 redirects.
+
+If any of `HTTPS_PROXY`, `https_proxy`, `ALL_PROXY` or `all_proxy` is non-empty, the transport falls back to `urllib_transport` with its existing proxy rules and system CA handling, without connection reuse or a custom CONNECT tunnel. `sync` closes the transport in `finally`, including validation failures, partial runs and interrupts. Python callers can close it explicitly or use its context manager. Plain callable test transports remain valid.
 
 ### 6.7 Capture format (fetch output, `convert` input, test fixture format)
 
@@ -679,7 +683,7 @@ The hash proves the bytes the importer rendered from the API. It does not prove 
 4. **Untrusted text** appears only in the verbatim section or as escaped values in the record. It never reaches notes, ids, paths, subjects, actors, dependencies or terminal output. The importer is deterministic and uses no LLM. The skill says that captured GitHub text is data, never instructions, and that prompt injection in issue bodies is expected.
 5. **Report rendering.** `report.explain` prints quotes unescaped. Body quotes are single-line and free of control and bidi characters, but may contain markdown or HTML (for example remote images). Escaping quotes as inline code is a recommended follow-up (§15).
 6. **Filesystem.** Path parts are validated owner and repo, integers and hex. Everything goes through `resolve_inside`. Files are create-only, and an existing path must match byte for byte.
-7. **Token.** It comes from the environment only. It is sent with `add_unredirected_header` and only to `https://api.github.com`. There are no automatic redirects, and same-origin redirects and Link URLs are checked. It is never in errors, captures, the dataset or stdout. Requests are GET only.
+7. **Token.** It comes from the environment only. It is sent only to `https://api.github.com`; urllib uses `add_unredirected_header` and the persistent transport rejects every other origin. There are no automatic redirects, and same-origin redirects and Link URLs are checked. It is never in errors, captures, the dataset or stdout. Requests are GET only.
 8. **Private repos.** Captures and saved captures copy private text. The README says never to commit such datasets, and `--save-capture` prints a warning.
 9. **Captures given to `convert`** are untrusted input. They are type-checked, but their authenticity cannot be established without signed provenance.
 
@@ -695,6 +699,12 @@ class Stopped(Exception): ...                # transient stop -> partial capture
 Transport = Callable[[str, dict[str, str]], tuple[int, dict[str, str], bytes]]   # (url, headers) -> (status, lower-cased headers, body)
 def token_from_env(env: Mapping[str, str] = os.environ) -> str | None
 def urllib_transport(opener: urllib.request.OpenerDirector | None = None, timeout: float = 30) -> Transport
+class PersistentTransport:
+    def __init__(self, timeout: float = 30, *, connection_factory: Callable[..., Any] | None = None,
+                 env: Mapping[str, str] = os.environ): ...
+    def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]: ...
+    def close(self) -> None: ...
+    # Also implements __enter__ / __exit__.
 class Client:
     def __init__(self, transport: Transport, token: str | None, *, max_wait: float = 3600,
                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time): ...
@@ -734,7 +744,7 @@ def run_convert(dataset: Path, capture_path: Path, *, dry_run: bool, now: Callab
 github_app = typer.Typer(no_args_is_help=True, help="Ingest GitHub issues and pull requests.")
 app.add_typer(github_app, name="github")
 # sync / convert map GitHubError, ValidationError, ValueError, OSError, EvidenceError -> _fail (exit 2); a partial run -> typer.Exit(3).
-# CLI tests monkeypatch orgmemory.github_fetch.urllib_transport.
+# CLI tests monkeypatch orgmemory.github_fetch.PersistentTransport with plain callable fakes.
 ```
 
 ---
@@ -841,6 +851,8 @@ app.add_typer(github_app, name="github")
 | `test_fetch_convert_round_trip` | `fetch` over `routes_from_capture(capture-1, page_size=2)` gives items equal to capture-1's, and `convert` gives identical events. |
 | `test_no_network_and_no_token_leak` | With token `ghp_TESTTOKEN`, the token string is absent from every file under the dataset, from the saved capture, and from stdout and stderr. |
 | `test_cli_sync_and_convert` | `orgmemory github convert` exits 0 with the summary lines (actors listed, automated actors listed); with `--dry-run`, JSONL is printed and nothing is written; exit 2 and 3 paths through `CliRunner` with a monkeypatched transport. |
+
+**`tests/test_github_keepalive.py`** uses real stdlib HTTP parsing over injected socket readers (no network). It covers N requests using one connection, per-request timeouts and verified TLS context configuration, one reconnect after a silent close or pre-response failure, no transport retry after partial status/header/body bytes, response framing and full-body handling, unchanged status/header handling, origin and redirect restrictions, credential-reflection rejection, proxy fallback, and cleanup on normal/error/partial/interrupt CLI exits. Live TLS peer behavior, actual proxy tunnelling and GitHub speed remain manual checks.
 
 **Manual smoke test** (not in CI): `GH_TOKEN=$(gh auth token) orgmemory github sync /tmp/gh-smoke timothyzhbw-jpg/memory-lab` against the live repo, which has 0 issues today. Expected: exit 0, 0 items, one `github-sync.jsonl` line with `repo_id` 1413898629, and empty `events.jsonl` and `evidence.jsonl`. Once the repo has activity, record a real capture with `--save-capture`, review it, and add it as a second fixture to confirm the items listed in §16.
 
