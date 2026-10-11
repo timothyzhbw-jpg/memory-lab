@@ -365,6 +365,8 @@ What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
+Several AI agents develop this repository together. Roles, the gates a change passes before it reaches `main`, and the report and log formats are in [process/README.md](process/README.md).
+
 ```bash
 pip install pytest
 python -m pytest   # runs against packages/*/src, no install needed

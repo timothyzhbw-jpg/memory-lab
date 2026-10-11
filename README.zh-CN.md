@@ -359,6 +359,8 @@ Action 还会警告并跳过解析到工作区外的记忆符号链接。
 
 ## 开发
 
+本仓库由多个 AI agent 协作开发。角色分工、改动进入 `main` 前要过的关卡，以及报告和日志格式，见 [process/README.zh-CN.md](process/README.zh-CN.md)。
+
 ```bash
 pip install pytest
 python -m pytest     # 直接针对 packages/*/src 运行，无需安装
