@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memory-lab-pre-commit"
-version = "0.3.0"
+version = "0.4.0"
 description = "pre-commit install of MemFalsify. The published packages live under packages/."
 requires-python = ">=3.10"
 license = "Apache-2.0"

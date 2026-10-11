@@ -422,6 +422,10 @@ a symlink out of the root is never read.
 
 ## memlab-core
 
+### 0.3.0 - Unreleased
+
+Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
+
 ### 0.2.0 - 2026-10-11
 
 #### Added
@@ -449,6 +453,10 @@ a symlink out of the root is never read.
   symlinks inside a root. Evidence manifests and append-only JSONL storage.
 
 ## memfalsify
+
+### 0.4.0 - Unreleased
+
+Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
 
 ### 0.3.0 - 2026-10-11
 
@@ -537,6 +545,10 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
+### 0.4.0 - Unreleased
+
+Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
+
 ### 0.3.0 - 2026-10-11
 
 #### Added
@@ -576,6 +588,10 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
   `validate`, `append` and `evidence add`.
 
 ## memlab-mcp
+
+### 0.4.0 - Unreleased
+
+Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
 
 ### 0.3.0 - 2026-10-11
 
