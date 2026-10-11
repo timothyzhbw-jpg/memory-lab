@@ -28,6 +28,8 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 
 `memory_file` 可以是命令行能审计的任何文件：`MEMORY.md`、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md`，或 Cursor、Copilot、Windsurf、Claude Code 的规则文件（见 README）。没有发现文件的工具；要列出仓库里的指令文件，请运行 `memfalsify discover`。
 
+所有工具的 `format` 都只能是 `markdown` 或 `json`。CLI 的 `--format html` 网页是给人看的，不是给 Agent 的，而且服务器不写任何文件，所以要分享 HTML 报告，请运行 CLI。
+
 `reviews_file` 必须同时提供 `evidence_dir`。可选路径可以省略或传 `null`，空路径会报错。记忆链接和 `@file.md` 导入只能指向记忆文件所在目录内的文件；人工复核引用只能指向证据目录内的文件；数据集证据引用只能指向清单所在目录内的文件。证据扫描会跳过指向外部文件的符号链接、目录符号链接和非普通文件。转写稿和 OCR 旁车文件（[docs/multimodal.md](multimodal.md)）旁边的媒体文件只为核对绑定而计算哈希，走的也是同样受限的读取。数据集目录里要有 `events.jsonl`、`policy.json` 和 `evidence.jsonl`，证据源必须是普通文件。
 
 无效的工具调用返回 MCP 工具错误，连接仍可继续使用。参数结构校验错误只列字段名，不回显被拒绝的值；错误会隐藏根目录外的路径参数、后端诊断和堆栈。模型验证器失败时返回通用错误，提示检查 SDK、凭据和后端服务。

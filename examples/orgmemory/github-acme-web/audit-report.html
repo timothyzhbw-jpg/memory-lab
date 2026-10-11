@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="generator" content="orgmemory">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Organizational decision audit</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --panel: #f6f8fa; --link: #0969da;
+  --red-bg: #ffebe9; --red-fg: #a40e26; --amber-bg: #fff8c5; --amber-fg: #6c4400;
+  --blue-bg: #ddf4ff; --blue-fg: #0a3069; --green-bg: #dafbe1; --green-fg: #116329;
+  --gray-bg: #eff2f5; --gray-fg: #424a53;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --panel: #161b22; --link: #58a6ff;
+    --red-bg: #42181c; --red-fg: #ffa198; --amber-bg: #3b2b05; --amber-fg: #e3b341;
+    --blue-bg: #0c2d6b; --blue-fg: #a5d6ff; --green-bg: #0f3d1f; --green-fg: #7ee787;
+    --gray-bg: #262c36; --gray-fg: #d1d7e0;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); overflow-wrap: break-word;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: .5rem 0 1rem; }
+h2 { font-size: 1.3rem; line-height: 1.3; margin: 2rem 0 .75rem; padding-bottom: .25rem;
+     border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 .5rem; overflow-wrap: break-word; }
+p { margin: .4rem 0; }
+a { color: var(--link); overflow-wrap: break-word; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+       font-size: .875em; background: var(--panel); padding: .1em .3em; border-radius: 4px;
+       overflow-wrap: break-word; }
+.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; margin: 0 0 1rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: break-word; }
+.scroll { overflow-x: auto; margin: .5rem 0 1rem; }
+table { border-collapse: collapse; }
+caption { text-align: left; color: var(--muted); padding-bottom: .25rem; }
+th, td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: left; vertical-align: top; }
+thead th, tfoot th, tfoot td { background: var(--panel); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin: 0 0 1rem; }
+blockquote { margin: .5rem 0; padding: .4rem .8rem; border-left: 4px solid var(--line); background: var(--panel);
+             white-space: pre-wrap; overflow-wrap: break-word; }
+ul { padding-left: 1.25rem; margin: .25rem 0 .5rem; }
+li { margin: .25rem 0; overflow-wrap: break-word; }
+.label { font-weight: 600; margin: .75rem 0 .25rem; }
+.muted { color: var(--muted); }
+.hash { font-size: .75em; }
+time { white-space: nowrap; }
+.badge { display: inline-block; padding: 0 .5em; border-radius: 1em; font-size: .8rem; font-weight: 600;
+         white-space: nowrap; vertical-align: .1em; }
+.red { background: var(--red-bg); color: var(--red-fg); }
+.amber { background: var(--amber-bg); color: var(--amber-fg); }
+.blue { background: var(--blue-bg); color: var(--blue-fg); }
+.green { background: var(--green-bg); color: var(--green-fg); }
+.gray { background: var(--gray-bg); color: var(--gray-fg); }
+.ctl { font: .75em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--red-fg);
+       border: 1px dashed currentColor; border-radius: 3px; padding: 0 .2em; }
+@media (max-width: 40rem) {
+  main { padding: 1rem; }
+  .meta { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .meta dd { margin-bottom: .5rem; }
+  .item { padding: .6rem .75rem; }
+  ul { padding-left: 1rem; }
+}
+@media print {
+  .item { break-inside: avoid; }
+  a { color: inherit; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Organizational decision audit</h1>
+<dl class="meta">
+<dt>Audited</dt><dd>59 of 59 events on 13 subject(s), as of <time datetime="2026-10-31T00:00:00+00:00">2026-10-31T00:00:00+00:00</time></dd>
+<dt>Stale after</dt><dd>14 days, measured at <time datetime="2026-10-31T00:00:00+00:00">2026-10-31T00:00:00+00:00</time></dd>
+<dt>Mode</dt><dd><strong>read_only</strong> (the event log was not modified)</dd>
+</dl>
+<section>
+<h2>Summary</h2>
+<div class="scroll"><table>
+<caption>Findings by kind and severity</caption>
+<thead><tr><th scope="col">Kind</th><th scope="col">High</th><th scope="col">Medium</th><th scope="col">Low</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>decision_reversed</code></th><td class="num">0</td><td class="num">0</td><td class="num">1</td></tr>
+<tr><th scope="row"><code>invalid_supersession</code></th><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><code>risk_after_approval</code></th><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><code>self_approval</code></th><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><code>simultaneous_decisions</code></th><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><code>stale_pending_approval</code></th><td class="num">0</td><td class="num">7</td><td class="num">0</td></tr>
+<tr><th scope="row"><code>stale_reconsideration</code></th><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr>
+<tr><th scope="row"><code>unauthorized_attempts</code></th><td class="num">0</td><td class="num">5</td><td class="num">1</td></tr>
+<tr><th scope="row"><code>unresolved_dependency</code></th><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+</tbody>
+<tfoot>
+<tr><th scope="row">Total</th><td class="num">0</td><td class="num"><a href="#severity-medium">13</a></td><td class="num"><a href="#severity-low">2</a></td></tr>
+</tfoot>
+</table></div>
+</section>
+<section id="severity-medium">
+<h2><span class="badge amber">medium</span> 13 finding(s)</h2>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#10</h3>
+<p>awaiting a decision from product_manager since 2026-10-05T18:00:00+00:00 (status proposed): 25d 6h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#10/opened</code> at <time datetime="2026-10-05T18:00:00+00:00">2026-10-05T18:00:00+00:00</time>: gh:buyer-acme:5001 (roles: customer) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#10/issue@465eec665981/fact</code> &middot; <code>sources/github/acme/web/10/issue-10-7693093dd36d.txt:1</code> <span class="muted">(characters 0&ndash;84)</span> &middot; <a href="https://github.com/acme/web/issues/10" rel="noopener noreferrer">https://github.com/acme/web/issues/10</a> &middot; sha256 <code class="hash">7693093dd36d490a32e368d6763bf37e2d3da9880ff90f90ed75b4c82a8ca0f6</code></p>
+<blockquote>GitHub issue acme/web#10 opened by gh:buyer-acme:5001 (User) at 2026-10-05T18:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#10/issue@465eec665981/text</code> &middot; <code>sources/github/acme/web/10/issue-10-7693093dd36d.txt:4</code> <span class="muted">(characters 377&ndash;408)</span> &middot; <a href="https://github.com/acme/web/issues/10" rel="noopener noreferrer">https://github.com/acme/web/issues/10</a> &middot; sha256 <code class="hash">7693093dd36d490a32e368d6763bf37e2d3da9880ff90f90ed75b4c82a8ca0f6</code></p>
+<blockquote>&#23548;&#20986;&#21151;&#33021; &#128640; CSV export for &#21326;&#19996; region</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#11</h3>
+<p>awaiting a decision from product_manager since 2026-10-05T19:00:00+00:00 (status proposed): 25d 5h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#11/opened</code> at <time datetime="2026-10-05T19:00:00+00:00">2026-10-05T19:00:00+00:00</time>: gh:lin-eng:5002 (roles: engineer) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#11/issue@31ed21be627f/fact</code> &middot; <code>sources/github/acme/web/11/issue-11-bafe92e40b18.txt:1</code> <span class="muted">(characters 0&ndash;88)</span> &middot; <a href="https://github.com/acme/web/pull/11" rel="noopener noreferrer">https://github.com/acme/web/pull/11</a> &middot; sha256 <code class="hash">bafe92e40b18054b820b788e42a7ebbc565d37d139f784e4891b41a5b25143e8</code></p>
+<blockquote>GitHub pull request acme/web#11 opened by gh:lin-eng:5002 (User) at 2026-10-05T19:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#11/issue@31ed21be627f/text</code> &middot; <code>sources/github/acme/web/11/issue-11-bafe92e40b18.txt:4</code> <span class="muted">(characters 393&ndash;413)</span> &middot; <a href="https://github.com/acme/web/pull/11" rel="noopener noreferrer">https://github.com/acme/web/pull/11</a> &middot; sha256 <code class="hash">bafe92e40b18054b820b788e42a7ebbc565d37d139f784e4891b41a5b25143e8</code></p>
+<blockquote>Export: Excel format</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#13</h3>
+<p>awaiting a decision from product_manager since 2026-10-10T11:00:00+00:00 (status proposed): 20d 13h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#13/event/1302</code> at <time datetime="2026-10-10T11:00:00+00:00">2026-10-10T11:00:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; revoke &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#13/event/1302/fact</code> &middot; <code>sources/github/acme/web/13/event-1302-96770770ecf3.txt:1</code> <span class="muted">(characters 0&ndash;92)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/1302" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/1302</a> &middot; sha256 <code class="hash">96770770ecf3baaadb504297a537ca06b55abdb7a34d91971a7d74beea0165ec</code></p>
+<blockquote>GitHub event 1302 on acme/web#13 by gh:zhou-pm:5003 (User) at 2026-10-10T11:00:00Z: reopened</blockquote></li>
+</ul></li>
+<li><p><code>gh:acme/web#13/event/1302/request</code> at <time datetime="2026-10-10T11:00:00+00:00">2026-10-10T11:00:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#13/event/1302/fact</code> &middot; <code>sources/github/acme/web/13/event-1302-96770770ecf3.txt:1</code> <span class="muted">(characters 0&ndash;92)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/1302" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/1302</a> &middot; sha256 <code class="hash">96770770ecf3baaadb504297a537ca06b55abdb7a34d91971a7d74beea0165ec</code></p>
+<blockquote>GitHub event 1302 on acme/web#13 by gh:zhou-pm:5003 (User) at 2026-10-10T11:00:00Z: reopened</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#4</h3>
+<p>awaiting a decision from product_manager since 2026-10-05T12:00:00+00:00 (status proposed): 25d 12h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#4/opened</code> at <time datetime="2026-10-05T12:00:00+00:00">2026-10-05T12:00:00+00:00</time>: gh:wu-sales:5004 (roles: account_manager) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#4/issue@056ae0f1f4a7/fact</code> &middot; <code>sources/github/acme/web/4/issue-4-92ce26146a0b.txt:1</code> <span class="muted">(characters 0&ndash;81)</span> &middot; <a href="https://github.com/acme/web/issues/4" rel="noopener noreferrer">https://github.com/acme/web/issues/4</a> &middot; sha256 <code class="hash">92ce26146a0bc562ed82e0102d92a52da21cb86b2ffc178b819454a887719a43</code></p>
+<blockquote>GitHub issue acme/web#4 opened by gh:wu-sales:5004 (User) at 2026-10-05T12:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#4/issue@056ae0f1f4a7/text</code> &middot; <code>sources/github/acme/web/4/issue-4-92ce26146a0b.txt:4</code> <span class="muted">(characters 402&ndash;437)</span> &middot; <a href="https://github.com/acme/web/issues/4" rel="noopener noreferrer">https://github.com/acme/web/issues/4</a> &middot; sha256 <code class="hash">92ce26146a0bc562ed82e0102d92a52da21cb86b2ffc178b819454a887719a43</code></p>
+<blockquote>Feature B: SSO for the buyer portal</blockquote></li>
+</ul></li>
+<li><p><code>gh:acme/web#4/event/402</code> at <time datetime="2026-10-06T13:00:00+00:00">2026-10-06T13:00:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#4/event/402/fact</code> &middot; <code>sources/github/acme/web/4/event-402-6638825c8152.txt:1</code> <span class="muted">(characters 0&ndash;90)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/402" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/402</a> &middot; sha256 <code class="hash">6638825c8152394feeddb5dfdb1ac545f8a3be53ab6b02f05eed2003ec7ac2a8</code></p>
+<blockquote>GitHub event 402 on acme/web#4 by gh:zhou-pm:5003 (User) at 2026-10-06T13:00:00Z: reopened</blockquote></li>
+</ul></li>
+<li><p><code>gh:acme/web#4/event/404</code> at <time datetime="2026-10-07T13:00:00+00:00">2026-10-07T13:00:00+00:00</time>: gh:wu-sales:5004 (roles: account_manager) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#4/event/404/fact</code> &middot; <code>sources/github/acme/web/4/event-404-a441811c0258.txt:1</code> <span class="muted">(characters 0&ndash;91)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/404" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/404</a> &middot; sha256 <code class="hash">a441811c0258a78cd74510db4a77c56f72e6185d1fec1f93269a430c16113800</code></p>
+<blockquote>GitHub event 404 on acme/web#4 by gh:wu-sales:5004 (User) at 2026-10-07T13:00:00Z: reopened</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#5</h3>
+<p>awaiting a decision from product_manager since 2026-10-10T10:00:00+00:00 (status proposed): 20d 14h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#5/event/502</code> at <time datetime="2026-10-10T10:00:00+00:00">2026-10-10T10:00:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; revoke &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#5/event/502/fact</code> &middot; <code>sources/github/acme/web/5/event-502-907481344b21.txt:1</code> <span class="muted">(characters 0&ndash;124)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/502" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/502</a> &middot; sha256 <code class="hash">907481344b212220485073d5bc5db7ad83a27e3a2300c2186a6445c5f5e61643</code></p>
+<blockquote>GitHub event 502 on acme/web#5 by gh:zhou-pm:5003 (User) at 2026-10-10T10:00:00Z: review_dismissed review 501 (was approved)</blockquote></li>
+<li><p>evidence <code>gh:acme/web#5/event/502/text</code> &middot; <code>sources/github/acme/web/5/event-502-907481344b21.txt:4</code> <span class="muted">(characters 406&ndash;468)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/502" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/502</a> &middot; sha256 <code class="hash">907481344b212220485073d5bc5db7ad83a27e3a2300c2186a6445c5f5e61643</code></p>
+<blockquote>Approved too early: the billing migration slipped to November.</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#8</h3>
+<p>awaiting a decision from product_manager since 2026-10-05T16:00:00+00:00 (status proposed): 25d 8h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#8/opened</code> at <time datetime="2026-10-05T16:00:00+00:00">2026-10-05T16:00:00+00:00</time>: gh:buyer-acme:5001 (roles: customer) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#8/issue@d6c8a99af495/fact</code> &middot; <code>sources/github/acme/web/8/issue-8-857663fb24db.txt:1</code> <span class="muted">(characters 0&ndash;83)</span> &middot; <a href="https://github.com/acme/web/issues/8" rel="noopener noreferrer">https://github.com/acme/web/issues/8</a> &middot; sha256 <code class="hash">857663fb24dbbad70233a2f69a1f5e767ccd5c1dc0487f795441f0500267ec45</code></p>
+<blockquote>GitHub issue acme/web#8 opened by gh:buyer-acme:5001 (User) at 2026-10-05T16:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#8/issue@d6c8a99af495/text</code> &middot; <code>sources/github/acme/web/8/issue-8-857663fb24db.txt:4</code> <span class="muted">(characters 406&ndash;433)</span> &middot; <a href="https://github.com/acme/web/issues/8" rel="noopener noreferrer">https://github.com/acme/web/issues/8</a> &middot; sha256 <code class="hash">857663fb24dbbad70233a2f69a1f5e767ccd5c1dc0487f795441f0500267ec45</code></p>
+<blockquote>Feature C: audit log export</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_pending_approval</code> &middot; acme/web#9</h3>
+<p>awaiting a decision from product_manager since 2026-10-05T17:00:00+00:00 (status proposed): 25d 7h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#9/opened</code> at <time datetime="2026-10-05T17:00:00+00:00">2026-10-05T17:00:00+00:00</time>: gh:buyer-acme:5001 (roles: customer) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#9/issue@3d6b16682d24/fact</code> &middot; <code>sources/github/acme/web/9/issue-9-410aa41fcb45.txt:1</code> <span class="muted">(characters 0&ndash;83)</span> &middot; <a href="https://github.com/acme/web/issues/9" rel="noopener noreferrer">https://github.com/acme/web/issues/9</a> &middot; sha256 <code class="hash">410aa41fcb45197e3ef119212275292fcba9d7239633a477a2489283a237948f</code></p>
+<blockquote>GitHub issue acme/web#9 opened by gh:buyer-acme:5001 (User) at 2026-10-05T17:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#9/issue@3d6b16682d24/text</code> &middot; <code>sources/github/acme/web/9/issue-9-410aa41fcb45.txt:4</code> <span class="muted">(characters 406&ndash;427)</span> &middot; <a href="https://github.com/acme/web/issues/9" rel="noopener noreferrer">https://github.com/acme/web/issues/9</a> &middot; sha256 <code class="hash">410aa41fcb45197e3ef119212275292fcba9d7239633a477a2489283a237948f</code></p>
+<blockquote>Feature D: PDF export</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>stale_reconsideration</code> &middot; acme/web#1</h3>
+<p>reconsideration awaiting a decision from product_manager since 2026-10-10T09:00:00+00:00 (status rejected): 20d 15h at 2026-10-31T00:00:00+00:00, more than 14 days</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#1/event/105</code> at <time datetime="2026-10-07T15:30:00+00:00">2026-10-07T15:30:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; reject &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#1/event/105/fact</code> &middot; <code>sources/github/acme/web/1/event-105-c2a1c517e9cc.txt:1</code> <span class="muted">(characters 0&ndash;128)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/105" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/105</a> &middot; sha256 <code class="hash">c2a1c517e9cc4a6781b0271e52a5fa74b5c91dc4c1dc49118ca45104ecd7b977</code></p>
+<blockquote>GitHub event 105 on acme/web#1 by gh:zhou-pm:5003 (User) at 2026-10-07T15:30:00Z: closed (state_reason not_planned, commit none)</blockquote></li>
+</ul></li>
+<li><p><code>gh:acme/web#1/event/108/request</code> at <time datetime="2026-10-10T09:00:00+00:00">2026-10-10T09:00:00+00:00</time>: gh:buyer-acme:5001 (roles: customer) &middot; request &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#1/event/108/fact</code> &middot; <code>sources/github/acme/web/1/event-108-51c7ff41e966.txt:1</code> <span class="muted">(characters 0&ndash;93)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/108" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/108</a> &middot; sha256 <code class="hash">51c7ff41e966e4bf61e6fd7ea3d497719c64a24974cc0c147a8a06aa8d8184bc</code></p>
+<blockquote>GitHub event 108 on acme/web#1 by gh:buyer-acme:5001 (User) at 2026-10-10T09:00:00Z: reopened</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>unauthorized_attempts</code> &middot; actor gh:buyer-acme:5001</h3>
+<p>1 attempt(s) the policy ignored (revoke &#215;1) on 1 subject(s): acme/web#1; roles: customer</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#1/event/108</code> on acme/web#1 at <time datetime="2026-10-10T09:00:00+00:00">2026-10-10T09:00:00+00:00</time>: gh:buyer-acme:5001 (roles: customer) &middot; revoke &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#1/event/108/fact</code> &middot; <code>sources/github/acme/web/1/event-108-51c7ff41e966.txt:1</code> <span class="muted">(characters 0&ndash;93)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/108" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/108</a> &middot; sha256 <code class="hash">51c7ff41e966e4bf61e6fd7ea3d497719c64a24974cc0c147a8a06aa8d8184bc</code></p>
+<blockquote>GitHub event 108 on acme/web#1 by gh:buyer-acme:5001 (User) at 2026-10-10T09:00:00Z: reopened</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>unauthorized_attempts</code> &middot; actor gh:lin-eng:5002</h3>
+<p>1 attempt(s) the policy ignored (approve &#215;1) on 1 subject(s): acme/web#6; roles: engineer</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#6/event/602</code> on acme/web#6 at <time datetime="2026-10-07T11:00:00+00:00">2026-10-07T11:00:00+00:00</time>: gh:lin-eng:5002 (roles: engineer) &middot; approve &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#6/event/602/fact</code> &middot; <code>sources/github/acme/web/6/event-602-42ba9130ccc6.txt:1</code> <span class="muted">(characters 0&ndash;110)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/602" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/602</a> &middot; sha256 <code class="hash">42ba9130ccc64ea1fee746f64834afbc29f34f2c7678a6f40fa727783b939c41</code></p>
+<blockquote>GitHub event 602 on acme/web#6 by gh:lin-eng:5002 (User) at 2026-10-07T11:00:00Z: merged (commit c0ffee00c0ff)</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>unauthorized_attempts</code> &middot; actor gh:mallory:6666</h3>
+<p>2 attempt(s) the policy ignored (approve &#215;1, request &#215;1) on 2 subject(s): acme/web#2, acme/web#3; roles: none</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#3/opened</code> on acme/web#3 at <time datetime="2026-10-05T11:00:00+00:00">2026-10-05T11:00:00+00:00</time>: gh:mallory:6666 (roles: none) &middot; request &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#3/issue@ae87648d49cd/fact</code> &middot; <code>sources/github/acme/web/3/issue-3-1745304d4669.txt:1</code> <span class="muted">(characters 0&ndash;80)</span> &middot; <a href="https://github.com/acme/web/issues/3" rel="noopener noreferrer">https://github.com/acme/web/issues/3</a> &middot; sha256 <code class="hash">1745304d46699225d7c60d37920b1f9aacabc7148b6781282285bdc0f6d1a686</code></p>
+<blockquote>GitHub issue acme/web#3 opened by gh:mallory:6666 (User) at 2026-10-05T11:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#3/issue@ae87648d49cd/text</code> &middot; <code>sources/github/acme/web/3/issue-3-1745304d4669.txt:4</code> <span class="muted">(characters 369&ndash;390)</span> &middot; <a href="https://github.com/acme/web/issues/3" rel="noopener noreferrer">https://github.com/acme/web/issues/3</a> &middot; sha256 <code class="hash">1745304d46699225d7c60d37920b1f9aacabc7148b6781282285bdc0f6d1a686</code></p>
+<blockquote>Feature A is approved</blockquote></li>
+</ul></li>
+<li><p><code>gh:acme/web#2/review/205</code> on acme/web#2 at <time datetime="2026-10-06T16:00:00+00:00">2026-10-06T16:00:00+00:00</time>: gh:mallory:6666 (roles: none) &middot; approve &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#2/review/205@be4b3d91e203/fact</code> &middot; <code>sources/github/acme/web/2/review-205-6eb003206a71.txt:1</code> <span class="muted">(characters 0&ndash;114)</span> &middot; <a href="https://github.com/acme/web/pull/2#pullrequestreview-205" rel="noopener noreferrer">https://github.com/acme/web/pull/2#pullrequestreview-205</a> &middot; sha256 <code class="hash">6eb003206a71ff420c16e628c1dabb85d6f547749e2ee983126f38a646bb9e5b</code></p>
+<blockquote>GitHub review 205 on acme/web#2 by gh:mallory:6666 (User) at 2026-10-06T16:00:00Z: approved on commit 54bb654c9e60</blockquote></li>
+<li><p>evidence <code>gh:acme/web#2/review/205@be4b3d91e203/text</code> &middot; <code>sources/github/acme/web/2/review-205-6eb003206a71.txt:4</code> <span class="muted">(characters 436&ndash;440)</span> &middot; <a href="https://github.com/acme/web/pull/2#pullrequestreview-205" rel="noopener noreferrer">https://github.com/acme/web/pull/2#pullrequestreview-205</a> &middot; sha256 <code class="hash">6eb003206a71ff420c16e628c1dabb85d6f547749e2ee983126f38a646bb9e5b</code></p>
+<blockquote>LGTM</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>unauthorized_attempts</code> &middot; actor gh:wu-sales:5004</h3>
+<p>1 attempt(s) the policy ignored (approve &#215;1) on 1 subject(s): acme/web#1; roles: account_manager</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#1/event/107</code> on acme/web#1 at <time datetime="2026-10-08T16:00:00+00:00">2026-10-08T16:00:00+00:00</time>: gh:wu-sales:5004 (roles: account_manager) &middot; approve &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#1/event/107/fact</code> &middot; <code>sources/github/acme/web/1/event-107-31aa8f7390a0.txt:1</code> <span class="muted">(characters 0&ndash;107)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/107" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/107</a> &middot; sha256 <code class="hash">31aa8f7390a07a14f7e147582413e9d7b3a9a530d207b394fe1f82ae14d021f0</code></p>
+<blockquote>GitHub event 107 on acme/web#1 by gh:wu-sales:5004 (User) at 2026-10-08T16:00:00Z: labeled label &quot;approved&quot;</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">medium</span> <code>unauthorized_attempts</code> &middot; actor gh:zhou:4242</h3>
+<p>1 attempt(s) the policy ignored (approve &#215;1) on 1 subject(s): acme/web#11; roles: none</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#11/review/1101</code> on acme/web#11 at <time datetime="2026-10-06T13:00:00+00:00">2026-10-06T13:00:00+00:00</time>: gh:zhou:4242 (roles: none) &middot; approve &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#11/review/1101@1e6574a2f889/fact</code> &middot; <code>sources/github/acme/web/11/review-1101-24b2753298b9.txt:1</code> <span class="muted">(characters 0&ndash;113)</span> &middot; <a href="https://github.com/acme/web/pull/11#pullrequestreview-1101" rel="noopener noreferrer">https://github.com/acme/web/pull/11#pullrequestreview-1101</a> &middot; sha256 <code class="hash">24b2753298b91670b0004a67b3278861b98331bb19ef060adf1b0490c4433822</code></p>
+<blockquote>GitHub review 1101 on acme/web#11 by gh:zhou:4242 (User) at 2026-10-06T13:00:00Z: approved on commit 11aa11aa11aa</blockquote></li>
+<li><p>evidence <code>gh:acme/web#11/review/1101@1e6574a2f889/text</code> &middot; <code>sources/github/acme/web/11/review-1101-24b2753298b9.txt:4</code> <span class="muted">(characters 441&ndash;459)</span> &middot; <a href="https://github.com/acme/web/pull/11#pullrequestreview-1101" rel="noopener noreferrer">https://github.com/acme/web/pull/11#pullrequestreview-1101</a> &middot; sha256 <code class="hash">24b2753298b91670b0004a67b3278861b98331bb19ef060adf1b0490c4433822</code></p>
+<blockquote>Approved, ship it.</blockquote></li>
+</ul></li>
+</ul>
+</article>
+</section>
+<section id="severity-low">
+<h2><span class="badge gray">low</span> 2 finding(s)</h2>
+<article class="item">
+<h3><span class="badge gray">low</span> <code>decision_reversed</code> &middot; acme/web#2</h3>
+<p>reject by gh:zhou-pm:5003 then approve by gh:zhou-pm:5003; the same actor changed the decision</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#2/review/203</code> at <time datetime="2026-10-06T09:00:00+00:00">2026-10-06T09:00:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; reject &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#2/review/203@c9068cf0646a/fact</code> &middot; <code>sources/github/acme/web/2/review-203-1b76d52c07b0.txt:1</code> <span class="muted">(characters 0&ndash;123)</span> &middot; <a href="https://github.com/acme/web/pull/2#pullrequestreview-203" rel="noopener noreferrer">https://github.com/acme/web/pull/2#pullrequestreview-203</a> &middot; sha256 <code class="hash">1b76d52c07b0cad04f55794e0be736ada9622dc05ae9dec19de482265fb4fef4</code></p>
+<blockquote>GitHub review 203 on acme/web#2 by gh:zhou-pm:5003 (User) at 2026-10-06T09:00:00Z: changes_requested on commit 0c5a1f3e9b7d</blockquote></li>
+<li><p>evidence <code>gh:acme/web#2/review/203@c9068cf0646a/text</code> &middot; <code>sources/github/acme/web/2/review-203-1b76d52c07b0.txt:4</code> <span class="muted">(characters 456&ndash;517)</span> &middot; <a href="https://github.com/acme/web/pull/2#pullrequestreview-203" rel="noopener noreferrer">https://github.com/acme/web/pull/2#pullrequestreview-203</a> &middot; sha256 <code class="hash">1b76d52c07b0cad04f55794e0be736ada9622dc05ae9dec19de482265fb4fef4</code></p>
+<blockquote>Hold this until the billing migration (acme/billing#3) lands.</blockquote></li>
+</ul></li>
+<li><p><code>gh:acme/web#2/review/206</code> at <time datetime="2026-10-07T09:00:00+00:00">2026-10-07T09:00:00+00:00</time>: gh:zhou-pm:5003 (roles: product_manager) &middot; approve &middot; <span class="badge green">applied</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#2/review/206@67c4aa9e1b3a/fact</code> &middot; <code>sources/github/acme/web/2/review-206-b326a7cde4c0.txt:1</code> <span class="muted">(characters 0&ndash;114)</span> &middot; <a href="https://github.com/acme/web/pull/2#pullrequestreview-206" rel="noopener noreferrer">https://github.com/acme/web/pull/2#pullrequestreview-206</a> &middot; sha256 <code class="hash">b326a7cde4c054563c7a40c6cb99f3f176685b34448d284385500b66c47ba518</code></p>
+<blockquote>GitHub review 206 on acme/web#2 by gh:zhou-pm:5003 (User) at 2026-10-07T09:00:00Z: approved on commit 54bb654c9e60</blockquote></li>
+<li><p>evidence <code>gh:acme/web#2/review/206@67c4aa9e1b3a/text</code> &middot; <code>sources/github/acme/web/2/review-206-b326a7cde4c0.txt:4</code> <span class="muted">(characters 438&ndash;495)</span> &middot; <a href="https://github.com/acme/web/pull/2#pullrequestreview-206" rel="noopener noreferrer">https://github.com/acme/web/pull/2#pullrequestreview-206</a> &middot; sha256 <code class="hash">b326a7cde4c054563c7a40c6cb99f3f176685b34448d284385500b66c47ba518</code></p>
+<blockquote>Approved now that export waits for the billing migration.</blockquote></li>
+</ul></li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge gray">low</span> <code>unauthorized_attempts</code> &middot; actor gh:jdoe_acme:77</h3>
+<p>1 attempt(s) the policy ignored (request &#215;1) on 1 subject(s): acme/web#12; roles: none</p>
+<p class="label">Cited events</p>
+<ul>
+<li><p><code>gh:acme/web#12/opened</code> on acme/web#12 at <time datetime="2026-10-05T20:00:00+00:00">2026-10-05T20:00:00+00:00</time>: gh:jdoe_acme:77 (roles: none) &middot; request &middot; <span class="badge red">unauthorized</span></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#12/issue@8c328458c2c1/fact</code> &middot; <code>sources/github/acme/web/12/issue-12-175b6453d050.txt:1</code> <span class="muted">(characters 0&ndash;81)</span> &middot; <a href="https://github.com/acme/web/issues/12" rel="noopener noreferrer">https://github.com/acme/web/issues/12</a> &middot; sha256 <code class="hash">175b6453d05028fcd8d413c05f922d97a3cbcf257e3ea4ea9ff148e32f41031c</code></p>
+<blockquote>GitHub issue acme/web#12 opened by gh:jdoe_acme:77 (User) at 2026-10-05T20:00:00Z</blockquote></li>
+<li><p>evidence <code>gh:acme/web#12/issue@8c328458c2c1/text</code> &middot; <code>sources/github/acme/web/12/issue-12-175b6453d050.txt:4</code> <span class="muted">(characters 402&ndash;417)</span> &middot; <a href="https://github.com/acme/web/issues/12" rel="noopener noreferrer">https://github.com/acme/web/issues/12</a> &middot; sha256 <code class="hash">175b6453d05028fcd8d413c05f922d97a3cbcf257e3ea4ea9ff148e32f41031c</code></p>
+<blockquote>Feature E: SAML</blockquote></li>
+</ul></li>
+</ul>
+</article>
+</section>
+<section>
+<h2>Notes</h2>
+<ul>
+<li>Findings restate the replayed log and policy. They are leads for a person to review, not verdicts.</li>
+<li>The log has no event that resolves a risk, so a risk stays on record after it is addressed.</li>
+</ul>
+</section>
+</main>
+</body>
+</html>

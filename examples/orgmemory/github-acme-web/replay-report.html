@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="generator" content="orgmemory">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Organizational memory replay</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --panel: #f6f8fa; --link: #0969da;
+  --red-bg: #ffebe9; --red-fg: #a40e26; --amber-bg: #fff8c5; --amber-fg: #6c4400;
+  --blue-bg: #ddf4ff; --blue-fg: #0a3069; --green-bg: #dafbe1; --green-fg: #116329;
+  --gray-bg: #eff2f5; --gray-fg: #424a53;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --panel: #161b22; --link: #58a6ff;
+    --red-bg: #42181c; --red-fg: #ffa198; --amber-bg: #3b2b05; --amber-fg: #e3b341;
+    --blue-bg: #0c2d6b; --blue-fg: #a5d6ff; --green-bg: #0f3d1f; --green-fg: #7ee787;
+    --gray-bg: #262c36; --gray-fg: #d1d7e0;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); overflow-wrap: break-word;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: .5rem 0 1rem; }
+h2 { font-size: 1.3rem; line-height: 1.3; margin: 2rem 0 .75rem; padding-bottom: .25rem;
+     border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 .5rem; overflow-wrap: break-word; }
+p { margin: .4rem 0; }
+a { color: var(--link); overflow-wrap: break-word; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+       font-size: .875em; background: var(--panel); padding: .1em .3em; border-radius: 4px;
+       overflow-wrap: break-word; }
+.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; margin: 0 0 1rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: break-word; }
+.scroll { overflow-x: auto; margin: .5rem 0 1rem; }
+table { border-collapse: collapse; }
+caption { text-align: left; color: var(--muted); padding-bottom: .25rem; }
+th, td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: left; vertical-align: top; }
+thead th, tfoot th, tfoot td { background: var(--panel); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin: 0 0 1rem; }
+blockquote { margin: .5rem 0; padding: .4rem .8rem; border-left: 4px solid var(--line); background: var(--panel);
+             white-space: pre-wrap; overflow-wrap: break-word; }
+ul { padding-left: 1.25rem; margin: .25rem 0 .5rem; }
+li { margin: .25rem 0; overflow-wrap: break-word; }
+.label { font-weight: 600; margin: .75rem 0 .25rem; }
+.muted { color: var(--muted); }
+.hash { font-size: .75em; }
+time { white-space: nowrap; }
+.badge { display: inline-block; padding: 0 .5em; border-radius: 1em; font-size: .8rem; font-weight: 600;
+         white-space: nowrap; vertical-align: .1em; }
+.red { background: var(--red-bg); color: var(--red-fg); }
+.amber { background: var(--amber-bg); color: var(--amber-fg); }
+.blue { background: var(--blue-bg); color: var(--blue-fg); }
+.green { background: var(--green-bg); color: var(--green-fg); }
+.gray { background: var(--gray-bg); color: var(--gray-fg); }
+.ctl { font: .75em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--red-fg);
+       border: 1px dashed currentColor; border-radius: 3px; padding: 0 .2em; }
+@media (max-width: 40rem) {
+  main { padding: 1rem; }
+  .meta { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .meta dd { margin-bottom: .5rem; }
+  .item { padding: .6rem .75rem; }
+  ul { padding-left: 1rem; }
+}
+@media print {
+  .item { break-inside: avoid; }
+  a { color: inherit; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Organizational memory replay</h1>
+<dl class="meta">
+<dt>Replayed</dt><dd>59 of 59 events, as of end of log</dd>
+<dt>Mode</dt><dd><strong>read_only</strong> (the event log was not modified)</dd>
+</dl>
+<section>
+<h2>Summary</h2>
+<div class="scroll"><table>
+<caption>Subjects and their current state</caption>
+<thead><tr><th scope="col">Subject</th><th scope="col">Status</th><th scope="col">Reconsideration</th><th scope="col">Pending approval</th><th scope="col">Last authorized decision</th><th scope="col">Ignored attempts</th><th scope="col">Conflicts</th></tr></thead>
+<tbody>
+<tr><th scope="row"><a href="#subject-1">acme/web#1</a></th><td><span class="badge red">rejected</span></td><td>yes</td><td><code>product_manager</code></td><td><code>gh:acme/web#1/event/105</code></td><td class="num">2</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-2">acme/web#2</a></th><td><span class="badge green">approved</span></td><td>no</td><td><span class="muted">none</span></td><td><code>gh:acme/web#2/event/207</code></td><td class="num">0</td><td class="num">1</td></tr>
+<tr><th scope="row"><a href="#subject-3">acme/web#3</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><span class="muted">none</span></td><td><span class="muted">none</span></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-4">acme/web#4</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><span class="muted">none</span></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-5">acme/web#5</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><code>gh:acme/web#5/event/502</code></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-6">acme/web#6</a></th><td><span class="badge red">rejected</span></td><td>no</td><td><span class="muted">none</span></td><td><code>gh:acme/web#6/review/601</code></td><td class="num">1</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-7">acme/web#7</a></th><td><span class="badge green">approved</span></td><td>no</td><td><span class="muted">none</span></td><td><code>gh:acme/web#7/review/701</code></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-8">acme/web#8</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><span class="muted">none</span></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-9">acme/web#9</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><span class="muted">none</span></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-10">acme/web#10</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><span class="muted">none</span></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-11">acme/web#11</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><span class="muted">none</span></td><td class="num">1</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-12">acme/web#12</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><span class="muted">none</span></td><td><span class="muted">none</span></td><td class="num">0</td><td class="num">0</td></tr>
+<tr><th scope="row"><a href="#subject-13">acme/web#13</a></th><td><span class="badge gray">proposed</span></td><td>no</td><td><code>product_manager</code></td><td><code>gh:acme/web#13/event/1302</code></td><td class="num">0</td><td class="num">0</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-1">
+<h2>acme/web#1</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge red">rejected</span></dd>
+<dt>Reconsideration requested</dt><dd>yes</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><code>acme/billing#3</code></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><code>gh:acme/web#1/event/105</code> (reject by gh:zhou-pm:5003)</dd>
+<dt>Unauthorized change attempts</dt><dd><code>gh:acme/web#1/event/107</code>, <code>gh:acme/web#1/event/108</code></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>gh:acme/web#1/event/105</code>: gh:zhou-pm:5003 (roles: product_manager) chose <strong>reject</strong> at <time datetime="2026-10-07T15:30:00+00:00">2026-10-07T15:30:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#1/event/105/fact</code> &middot; <code>sources/github/acme/web/1/event-105-c2a1c517e9cc.txt:1</code> <span class="muted">(characters 0&ndash;128)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/105" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/105</a> &middot; sha256 <code class="hash">c2a1c517e9cc4a6781b0271e52a5fa74b5c91dc4c1dc49118ca45104ecd7b977</code></p>
+<blockquote>GitHub event 105 on acme/web#1 by gh:zhou-pm:5003 (User) at 2026-10-07T15:30:00Z: closed (state_reason not_planned, commit none)</blockquote></li>
+</ul>
+<h3>Ignored: actor lacked authority</h3>
+<ul>
+<li><code>gh:acme/web#1/event/107</code>: gh:wu-sales:5004 tried to approve; actor roles [&#x27;account_manager&#x27;] may not approve</li>
+<li><code>gh:acme/web#1/event/108</code>: gh:buyer-acme:5001 tried to revoke; actor roles [&#x27;customer&#x27;] may not revoke</li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#1/opened</code></th><td><time datetime="2026-10-05T09:00:00+00:00">2026-10-05T09:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/comment/102</code></th><td><time datetime="2026-10-05T14:00:00+00:00">2026-10-05T14:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/event/103</code></th><td><time datetime="2026-10-06T10:00:00+00:00">2026-10-06T10:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>dependency</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/event/105</code></th><td><time datetime="2026-10-07T15:30:00+00:00">2026-10-07T15:30:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>reject</td><td><span class="badge green">applied</span></td><td>proposed &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/comment/106</code></th><td><time datetime="2026-10-08T10:00:00+00:00">2026-10-08T10:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>rejected &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/event/107</code></th><td><time datetime="2026-10-08T16:00:00+00:00">2026-10-08T16:00:00+00:00</time></td><td>gh:wu-sales:5004 (account_manager)</td><td>approve</td><td><span class="badge red">unauthorized</span></td><td>rejected &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/event/108</code></th><td><time datetime="2026-10-10T09:00:00+00:00">2026-10-10T09:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>revoke</td><td><span class="badge red">unauthorized</span></td><td>rejected &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#1/event/108/request</code></th><td><time datetime="2026-10-10T09:00:00+00:00">2026-10-10T09:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>rejected &rarr; rejected</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-2">
+<h2>acme/web#2</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge green">approved</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><span class="muted">none</span></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><code>gh:acme/web#2/event/207</code> (approve by gh:zhou-pm:5003)</dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>gh:acme/web#2/event/207</code>: gh:zhou-pm:5003 (roles: product_manager) chose <strong>approve</strong> at <time datetime="2026-10-07T10:00:00+00:00">2026-10-07T10:00:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#2/event/207/fact</code> &middot; <code>sources/github/acme/web/2/event-207-b9890b2ca38e.txt:1</code> <span class="muted">(characters 0&ndash;110)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/207" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/207</a> &middot; sha256 <code class="hash">b9890b2ca38e9f38701b0d517452bf7c914b18cb8b10ca56ee56b634d6d15502</code></p>
+<blockquote>GitHub event 207 on acme/web#2 by gh:zhou-pm:5003 (User) at 2026-10-07T10:00:00Z: merged (commit 54bb654c9e60)</blockquote></li>
+</ul>
+<h3>Conflicts</h3>
+<ul>
+<li><code>decision_reversed</code> <code>gh:acme/web#2/review/203</code>, <code>gh:acme/web#2/review/206</code>: reject by gh:zhou-pm:5003 then approve by gh:zhou-pm:5003</li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#2/opened</code></th><td><time datetime="2026-10-05T10:00:00+00:00">2026-10-05T10:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#2/review/203</code></th><td><time datetime="2026-10-06T09:00:00+00:00">2026-10-06T09:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>reject</td><td><span class="badge green">applied</span></td><td>proposed &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#2/event/204</code></th><td><time datetime="2026-10-06T15:00:00+00:00">2026-10-06T15:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>request</td><td><span class="badge green">applied</span></td><td>rejected &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#2/review/205</code></th><td><time datetime="2026-10-06T16:00:00+00:00">2026-10-06T16:00:00+00:00</time></td><td>gh:mallory:6666 (no role)</td><td>approve</td><td><span class="badge red">unauthorized</span></td><td>rejected &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#2/review/206</code></th><td><time datetime="2026-10-07T09:00:00+00:00">2026-10-07T09:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>approve</td><td><span class="badge green">applied</span></td><td>rejected &rarr; approved</td></tr>
+<tr><th scope="row"><code>gh:acme/web#2/event/207</code></th><td><time datetime="2026-10-07T10:00:00+00:00">2026-10-07T10:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>approve</td><td><span class="badge green">applied</span></td><td>approved &rarr; approved</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-3">
+<h2>acme/web#3</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><span class="muted">none</span></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#3/opened</code></th><td><time datetime="2026-10-05T11:00:00+00:00">2026-10-05T11:00:00+00:00</time></td><td>gh:mallory:6666 (no role)</td><td>request</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#3/comment/301</code></th><td><time datetime="2026-10-06T11:00:00+00:00">2026-10-06T11:00:00+00:00</time></td><td>gh:mallory:6666 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#3/comment/302</code></th><td><time datetime="2026-10-06T11:05:00+00:00">2026-10-06T11:05:00+00:00</time></td><td>gh:mallory:6666 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#3/comment/303</code></th><td><time datetime="2026-10-06T11:10:00+00:00">2026-10-06T11:10:00+00:00</time></td><td>gh:mallory:6666 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#3/comment/304</code></th><td><time datetime="2026-10-10T08:30:00+00:00">2026-10-10T08:30:00+00:00</time></td><td>gh:mallory:6666 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-4">
+<h2>acme/web#4</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#4/opened</code></th><td><time datetime="2026-10-05T12:00:00+00:00">2026-10-05T12:00:00+00:00</time></td><td>gh:wu-sales:5004 (account_manager)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#4/event/401</code></th><td><time datetime="2026-10-06T12:00:00+00:00">2026-10-06T12:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#4/event/402</code></th><td><time datetime="2026-10-06T13:00:00+00:00">2026-10-06T13:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#4/event/403</code></th><td><time datetime="2026-10-07T12:00:00+00:00">2026-10-07T12:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#4/event/404</code></th><td><time datetime="2026-10-07T13:00:00+00:00">2026-10-07T13:00:00+00:00</time></td><td>gh:wu-sales:5004 (account_manager)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#4/event/405</code></th><td><time datetime="2026-10-08T12:00:00+00:00">2026-10-08T12:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-5">
+<h2>acme/web#5</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><code>gh:acme/web#5/event/502</code> (revoke by gh:zhou-pm:5003)</dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>gh:acme/web#5/event/502</code>: gh:zhou-pm:5003 (roles: product_manager) chose <strong>revoke</strong> at <time datetime="2026-10-10T10:00:00+00:00">2026-10-10T10:00:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#5/event/502/fact</code> &middot; <code>sources/github/acme/web/5/event-502-907481344b21.txt:1</code> <span class="muted">(characters 0&ndash;124)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/502" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/502</a> &middot; sha256 <code class="hash">907481344b212220485073d5bc5db7ad83a27e3a2300c2186a6445c5f5e61643</code></p>
+<blockquote>GitHub event 502 on acme/web#5 by gh:zhou-pm:5003 (User) at 2026-10-10T10:00:00Z: review_dismissed review 501 (was approved)</blockquote></li>
+<li><p>evidence <code>gh:acme/web#5/event/502/text</code> &middot; <code>sources/github/acme/web/5/event-502-907481344b21.txt:4</code> <span class="muted">(characters 406&ndash;468)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/502" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/502</a> &middot; sha256 <code class="hash">907481344b212220485073d5bc5db7ad83a27e3a2300c2186a6445c5f5e61643</code></p>
+<blockquote>Approved too early: the billing migration slipped to November.</blockquote></li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#5/opened</code></th><td><time datetime="2026-10-05T13:00:00+00:00">2026-10-05T13:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#5/review/501</code></th><td><time datetime="2026-10-06T14:00:00+00:00">2026-10-06T14:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>approve</td><td><span class="badge green">applied</span></td><td>proposed &rarr; approved</td></tr>
+<tr><th scope="row"><code>gh:acme/web#5/event/502</code></th><td><time datetime="2026-10-10T10:00:00+00:00">2026-10-10T10:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>revoke</td><td><span class="badge green">applied</span></td><td>approved &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-6">
+<h2>acme/web#6</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge red">rejected</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><span class="muted">none</span></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><code>gh:acme/web#6/review/601</code> (reject by gh:zhou-pm:5003)</dd>
+<dt>Unauthorized change attempts</dt><dd><code>gh:acme/web#6/event/602</code></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>gh:acme/web#6/review/601</code>: gh:zhou-pm:5003 (roles: product_manager) chose <strong>reject</strong> at <time datetime="2026-10-06T10:00:00+00:00">2026-10-06T10:00:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#6/review/601@a8490d7f6e90/fact</code> &middot; <code>sources/github/acme/web/6/review-601-ad3111cafa43.txt:1</code> <span class="muted">(characters 0&ndash;123)</span> &middot; <a href="https://github.com/acme/web/pull/6#pullrequestreview-601" rel="noopener noreferrer">https://github.com/acme/web/pull/6#pullrequestreview-601</a> &middot; sha256 <code class="hash">ad3111cafa43724ae8ba6c3e011873c557a4b99e7e6a7c5329b22e8ff43e876c</code></p>
+<blockquote>GitHub review 601 on acme/web#6 by gh:zhou-pm:5003 (User) at 2026-10-06T10:00:00Z: changes_requested on commit c0ffee00c0ff</blockquote></li>
+<li><p>evidence <code>gh:acme/web#6/review/601@a8490d7f6e90/text</code> &middot; <code>sources/github/acme/web/6/review-601-ad3111cafa43.txt:4</code> <span class="muted">(characters 456&ndash;494)</span> &middot; <a href="https://github.com/acme/web/pull/6#pullrequestreview-601" rel="noopener noreferrer">https://github.com/acme/web/pull/6#pullrequestreview-601</a> &middot; sha256 <code class="hash">ad3111cafa43724ae8ba6c3e011873c557a4b99e7e6a7c5329b22e8ff43e876c</code></p>
+<blockquote>Not until the billing migration lands.</blockquote></li>
+</ul>
+<h3>Ignored: actor lacked authority</h3>
+<ul>
+<li><code>gh:acme/web#6/event/602</code>: gh:lin-eng:5002 tried to approve; actor roles [&#x27;engineer&#x27;] may not approve</li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#6/opened</code></th><td><time datetime="2026-10-05T14:00:00+00:00">2026-10-05T14:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#6/review/601</code></th><td><time datetime="2026-10-06T10:00:00+00:00">2026-10-06T10:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>reject</td><td><span class="badge green">applied</span></td><td>proposed &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#6/event/602</code></th><td><time datetime="2026-10-07T11:00:00+00:00">2026-10-07T11:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>approve</td><td><span class="badge red">unauthorized</span></td><td>rejected &rarr; rejected</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-7">
+<h2>acme/web#7</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge green">approved</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><span class="muted">none</span></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><code>gh:acme/web#7/review/701</code> (approve by gh:zhou-pm:5003)</dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>gh:acme/web#7/review/701</code>: gh:zhou-pm:5003 (roles: product_manager) chose <strong>approve</strong> at <time datetime="2026-10-06T12:00:00+00:00">2026-10-06T12:00:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#7/review/701@55f1d3e9d8ec/fact</code> &middot; <code>sources/github/acme/web/7/review-701-2681090de1bd.txt:1</code> <span class="muted">(characters 0&ndash;115)</span> &middot; <a href="https://github.com/acme/web/pull/7#pullrequestreview-701" rel="noopener noreferrer">https://github.com/acme/web/pull/7#pullrequestreview-701</a> &middot; sha256 <code class="hash">2681090de1bdd1f0dd7ca6eac9f54399de0a9f68ed6d59e67e84561e3e3214cf</code></p>
+<blockquote>GitHub review 701 on acme/web#7 by gh:zhou-pm:5003 (User) at 2026-10-06T12:00:00Z: dismissed on commit 7a7a7a7a7a7a</blockquote></li>
+<li><p>evidence <code>gh:acme/web#7/review/701@55f1d3e9d8ec/text</code> &middot; <code>sources/github/acme/web/7/review-701-2681090de1bd.txt:4</code> <span class="muted">(characters 440&ndash;451)</span> &middot; <a href="https://github.com/acme/web/pull/7#pullrequestreview-701" rel="noopener noreferrer">https://github.com/acme/web/pull/7#pullrequestreview-701</a> &middot; sha256 <code class="hash">2681090de1bdd1f0dd7ca6eac9f54399de0a9f68ed6d59e67e84561e3e3214cf</code></p>
+<blockquote>Looks good.</blockquote></li>
+<li><p>evidence <code>gh:acme/web#7/event/702/fact</code> &middot; <code>sources/github/acme/web/7/event-702-500d1312635a.txt:1</code> <span class="muted">(characters 0&ndash;148)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/702" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/702</a> &middot; sha256 <code class="hash">500d1312635a18a5e8def4cc5bc3514b52da25594a766deab312252f9a3261d5</code></p>
+<blockquote>GitHub event 702 on acme/web#7 by gh:lin-eng:5002 (User) at 2026-10-07T08:00:00Z: review_dismissed review 701 (was approved, by commit 7b7b7b7b7b7b)</blockquote></li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#7/opened</code></th><td><time datetime="2026-10-05T15:00:00+00:00">2026-10-05T15:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#7/review/701</code></th><td><time datetime="2026-10-06T12:00:00+00:00">2026-10-06T12:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>approve</td><td><span class="badge green">applied</span></td><td>proposed &rarr; approved</td></tr>
+<tr><th scope="row"><code>gh:acme/web#7/event/702</code></th><td><time datetime="2026-10-07T08:00:00+00:00">2026-10-07T08:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>approved &rarr; approved</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-8">
+<h2>acme/web#8</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#8/opened</code></th><td><time datetime="2026-10-05T16:00:00+00:00">2026-10-05T16:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#8/event/801</code></th><td><time datetime="2026-10-06T08:00:00+00:00">2026-10-06T08:00:00+00:00</time></td><td>gh:github-actions[bot]:41898282 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#8/event/802</code></th><td><time datetime="2026-10-06T09:00:00+00:00">2026-10-06T09:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#8/event/803</code></th><td><time datetime="2026-10-06T10:00:00+00:00">2026-10-06T10:00:00+00:00</time></td><td>gh:ghost:10137 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#8/event/804</code></th><td><time datetime="2026-10-06T11:00:00+00:00">2026-10-06T11:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-9">
+<h2>acme/web#9</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#9/opened</code></th><td><time datetime="2026-10-05T17:00:00+00:00">2026-10-05T17:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-10">
+<h2>acme/web#10</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#10/opened</code></th><td><time datetime="2026-10-05T18:00:00+00:00">2026-10-05T18:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#10/comment/1011</code></th><td><time datetime="2026-10-06T08:00:00+00:00">2026-10-06T08:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#10/comment/1012</code></th><td><time datetime="2026-10-06T08:10:00+00:00">2026-10-06T08:10:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#10/comment/1013</code></th><td><time datetime="2026-10-06T08:20:00+00:00">2026-10-06T08:20:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#10/comment/1014</code></th><td><time datetime="2026-10-06T08:30:00+00:00">2026-10-06T08:30:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#10/comment/1015</code></th><td><time datetime="2026-10-06T08:40:00+00:00">2026-10-06T08:40:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#10/comment/1016</code></th><td><time datetime="2026-10-06T08:50:00+00:00">2026-10-06T08:50:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-11">
+<h2>acme/web#11</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><code>gh:acme/web#11/review/1101</code></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Ignored: actor lacked authority</h3>
+<ul>
+<li><code>gh:acme/web#11/review/1101</code>: gh:zhou:4242 tried to approve; actor roles none may not approve</li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#11/opened</code></th><td><time datetime="2026-10-05T19:00:00+00:00">2026-10-05T19:00:00+00:00</time></td><td>gh:lin-eng:5002 (engineer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#11/review/1101</code></th><td><time datetime="2026-10-06T13:00:00+00:00">2026-10-06T13:00:00+00:00</time></td><td>gh:zhou:4242 (no role)</td><td>approve</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#11/review/1102</code></th><td><time datetime="2026-10-06T13:30:00+00:00">2026-10-06T13:30:00+00:00</time></td><td>gh:wu-sales:5004 (account_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#11/review/1105</code></th><td><time datetime="2026-10-07T10:00:00+00:00">2026-10-07T10:00:00+00:00</time></td><td>gh:github-actions[bot]:41898282 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#11/event/1106</code></th><td><time datetime="2026-10-07T11:00:00+00:00">2026-10-07T11:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>comment</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-12">
+<h2>acme/web#12</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><span class="muted">none</span></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><span class="muted">none</span></dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p>No authorized decision yet.</p>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#12/opened</code></th><td><time datetime="2026-10-05T20:00:00+00:00">2026-10-05T20:00:00+00:00</time></td><td>gh:jdoe_acme:77 (no role)</td><td>request</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#12/event/1201</code></th><td><time datetime="2026-10-08T00:00:00+00:00">2026-10-08T00:00:00+00:00</time></td><td>gh:github-actions[bot]:41898282 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#12/comment/1202</code></th><td><time datetime="2026-10-08T09:00:00+00:00">2026-10-08T09:00:00+00:00</time></td><td>gh:jdoe_acme:77 (no role)</td><td>comment</td><td><span class="badge red">unauthorized</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-13">
+<h2>acme/web#13</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge gray">proposed</span></dd>
+<dt>Reconsideration requested</dt><dd>no</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><span class="muted">none</span></dd>
+<dt>Last authorized decision</dt><dd><code>gh:acme/web#13/event/1302</code> (revoke by gh:zhou-pm:5003)</dd>
+<dt>Unauthorized change attempts</dt><dd><span class="muted">none</span></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>gh:acme/web#13/event/1302</code>: gh:zhou-pm:5003 (roles: product_manager) chose <strong>revoke</strong> at <time datetime="2026-10-10T11:00:00+00:00">2026-10-10T11:00:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>gh:acme/web#13/event/1302/fact</code> &middot; <code>sources/github/acme/web/13/event-1302-96770770ecf3.txt:1</code> <span class="muted">(characters 0&ndash;92)</span> &middot; <a href="https://api.github.com/repos/acme/web/issues/events/1302" rel="noopener noreferrer">https://api.github.com/repos/acme/web/issues/events/1302</a> &middot; sha256 <code class="hash">96770770ecf3baaadb504297a537ca06b55abdb7a34d91971a7d74beea0165ec</code></p>
+<blockquote>GitHub event 1302 on acme/web#13 by gh:zhou-pm:5003 (User) at 2026-10-10T11:00:00Z: reopened</blockquote></li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>gh:acme/web#13/opened</code></th><td><time datetime="2026-10-05T21:00:00+00:00">2026-10-05T21:00:00+00:00</time></td><td>gh:buyer-acme:5001 (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#13/event/1301</code></th><td><time datetime="2026-10-08T09:00:00+00:00">2026-10-08T09:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>reject</td><td><span class="badge green">applied</span></td><td>proposed &rarr; rejected</td></tr>
+<tr><th scope="row"><code>gh:acme/web#13/event/1302</code></th><td><time datetime="2026-10-10T11:00:00+00:00">2026-10-10T11:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>revoke</td><td><span class="badge green">applied</span></td><td>rejected &rarr; proposed</td></tr>
+<tr><th scope="row"><code>gh:acme/web#13/event/1302/request</code></th><td><time datetime="2026-10-10T11:00:00+00:00">2026-10-10T11:00:00+00:00</time></td><td>gh:zhou-pm:5003 (product_manager)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+</tbody>
+</table></div>
+</section>
+</main>
+</body>
+</html>

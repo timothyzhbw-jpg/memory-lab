@@ -16,6 +16,7 @@ from memcore.jsonutil import loads_at
 from memcore.sidecar import one_line
 
 from .audit import DEFAULT_STALE_DAYS, audit
+from .htmlreport import audit_html, replay_html
 from .models import Event
 from .replay import Dataset, replay, validate
 from .report import audit_markdown, explain, to_markdown
@@ -31,6 +32,11 @@ DATASET = typer.Argument(..., exists=True, file_okay=False, help="Directory with
 class Format(str, Enum):
     markdown = "markdown"
     json = "json"
+    html = "html"
+
+
+FORMAT = typer.Option(Format.markdown, "--format", "-f",
+                      help="markdown, json, or html (one self-contained page: inline CSS, no scripts, nothing loaded)")
 
 
 _JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
@@ -45,6 +51,11 @@ def _fail(message: str) -> None:
     flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
     typer.echo(f"error: {flat}", err=True)
     raise typer.Exit(2)
+
+
+def _echo_exact(text: str) -> None:
+    """ASCII report bytes. Windows text-mode stdout would otherwise turn LF into CRLF."""
+    typer.echo(text.encode("ascii"), nl=False)
 
 
 def _as_of(value: Optional[str]) -> Optional[datetime]:
@@ -62,7 +73,7 @@ def _load(dataset: Path) -> Dataset:
 def replay_command(
     dataset: Path = DATASET,
     as_of: Optional[str] = typer.Option(None, help="Ignore events after this time (ISO 8601 with timezone)"),
-    fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
+    fmt: Format = FORMAT,
 ) -> None:
     """Rebuild current state from the event log."""
     data = _load(dataset)
@@ -70,7 +81,10 @@ def replay_command(
         result = replay(data, _as_of(as_of))
     except ValidationError as exc:
         _fail(str(exc))
-    typer.echo(to_markdown(result) if fmt is Format.markdown else _json_shield(result.model_dump_json(indent=2)))
+    if fmt is Format.html:
+        _echo_exact(replay_html(result))
+    else:
+        typer.echo(to_markdown(result) if fmt is Format.markdown else _json_shield(result.model_dump_json(indent=2)))
 
 
 @app.command("explain")
@@ -91,7 +105,7 @@ def audit_command(
                    "default: whole log, staleness measured now)"),
     stale_days: int = typer.Option(DEFAULT_STALE_DAYS, min=0,
                                    help="Report pending approvals and reconsiderations open longer than this"),
-    fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
+    fmt: Format = FORMAT,
     strict: bool = typer.Option(False, help="Exit 1 if any finding has high severity"),
 ) -> None:
     """Report where the decision process needs attention, with the evidence of every event involved."""
@@ -100,8 +114,12 @@ def audit_command(
         report = audit(data, _as_of(as_of), stale_days)
     except ValidationError as exc:
         _fail(str(exc))
-    text = audit_markdown(report) if fmt is Format.markdown else _json_shield(report.model_dump_json(indent=2) + "\n")
-    typer.echo(text, nl=False)
+    if fmt is Format.json:
+        typer.echo(_json_shield(report.model_dump_json(indent=2) + "\n"), nl=False)
+    elif fmt is Format.html:
+        _echo_exact(audit_html(report))
+    else:
+        typer.echo(audit_markdown(report), nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
 

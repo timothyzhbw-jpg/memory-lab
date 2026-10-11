@@ -86,7 +86,7 @@ Independent of evidence, each memory is checked for `overgeneralization` (always
 
 Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
-Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `memfalsify discover` lists a repository's agent instruction files (below); `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
+Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `memfalsify discover` lists a repository's agent instruction files (below); `--format json`, `--format html` (one self-contained page, see [HTML reports](#html-reports)), `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
 
 #### Instruction files of other agents
 
@@ -191,7 +191,7 @@ orgmemory append   <dataset> --event '{"id": ..., ...}'
 `replay` says what the state is; `audit` says where the decision process needs attention. It replays the log under the same rules, read-only, and reports findings. Each finding has a `kind`, a `severity` (`high`, `medium` or `low`), the `subject` it is about (or, for a finding about one actor, the `actor`), the `subjects` and `event_ids` involved (event IDs in replay order), a `detail` line, and every cited event with its evidence quotes, as `explain` cites them. The audit adds no event semantics: it only restates what replay, its conflicts and its audit trail already contain.
 
 ```bash
-orgmemory audit <dataset> [--as-of ISO8601] [--stale-days 14] [--format markdown|json] [--strict]
+orgmemory audit <dataset> [--as-of ISO8601] [--stale-days 14] [--format markdown|json|html] [--strict]
 ```
 
 On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.md)), the customer's reconsideration has waited more than 14 days for the product manager (`stale_reconsideration`, medium), and the account manager's ignored "approval" is an `unauthorized_attempts` finding (medium). The [GitHub example's audit](examples/orgmemory/github-acme-web/audit-report.md) lists stale requests awaiting a policy decision, ignored reviews, labels and merges per account, and a reviewer who requested changes and then approved. Pending approval reflects policy replay, not whether an issue or pull request is open on GitHub: for example, `acme/web#4` is closed as duplicate, a `comment` that leaves its request pending.
@@ -253,6 +253,22 @@ Text is never parsed: "LGTM", "/approve", "approved by @pm" or "depends on #3" a
 A reopen by someone who may `revoke` returns the subject to `proposed`. Otherwise the revoke is an ignored attempt, and the `request` after it marks a reconsideration only if the reopener's role permits `request`. Expect two kinds of noise: a merge by someone without approve authority is listed as an ignored attempt even after an authorized approval, and reopening a close that was not the current decision (an unauthorized close, for example) shows `invalid_supersession` when the reopener may revoke.
 
 Example: [`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-web/) is built with `orgmemory github convert` from two synthetic captures of `acme/web` (in `tests/fixtures/github/`), with its [replay report](examples/orgmemory/github-acme-web/replay-report.md). In it, `acme/web#1` is the Feature A story on GitHub: the product manager closes the issue as not planned, an account manager adds the `approved` label, and the customer reopens it. The issue stays `rejected` with `reconsideration_requested: true` and `pending_approval: [product_manager]`; the label and the reopen's `revoke` are listed as ignored attempts.
+
+### HTML reports
+
+`memfalsify audit`, `memfalsify diff`, `orgmemory replay` and `orgmemory audit` take `--format html` and print one self-contained page to share with people who will not run the tools: open it in a browser, attach it to an e-mail or a ticket, or upload it as a CI artifact.
+
+```bash
+memfalsify audit MEMORY.md --evidence evidence --format html -o report.html
+orgmemory audit <dataset> --as-of 2026-10-31T00:00:00Z --format html > audit-report.html
+```
+
+- Same content as the Markdown report: the summary table first, then the findings grouped by status (MemFalsify) or severity (`orgmemory audit`), each evidence quote with its `path:line`, character range and full SHA-256, and for `orgmemory replay` each subject's state, authorizing decision and decision trail. A summary entry that has a section links to it (a status, a changed or added or removed group, a subject, or a severity total).
+- Self-contained: CSS is inline, there is no JavaScript, and nothing is loaded (no fonts, images or scripts), so the page works offline. A `Content-Security-Policy` meta tag (`default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`) blocks loading and scripts even if a value were ever left unescaped. The file is 7-bit ASCII (other characters as `&#...;` references), so redirects and mail relays cannot re-encode it.
+- Untrusted text stays text: memory, evidence, file names, reviews, event logs, policy names and source URIs are HTML-escaped. Control, bidi, zero-width, variation-selector and other invisible characters are shown as `U+XXXX` markers instead of being rendered. Only `http` and `https` source URIs become links, with `rel="noopener noreferrer"`; `javascript:`, `data:` and any other scheme stay plain text. A source URI that hides an invisible character stays text too.
+- Light and dark mode follow the system (`prefers-color-scheme`); tables scroll sideways on a phone instead of the page; tables have captions and header scopes.
+- Deterministic: the same input gives the same bytes. The examples have HTML next to their Markdown reports ([`examples/memfalsify/report.html`](examples/memfalsify/report.html), [`examples/orgmemory/audit-report.html`](examples/orgmemory/audit-report.html), ...); GitHub shows their source, so download them to view.
+- A MemFalsify HTML report is never read as evidence, like its Markdown and JSON reports. `memfalsify history` and the MCP tools stay Markdown or JSON.
 
 ## Data formats
 
@@ -407,6 +423,7 @@ and resolved symlink targets. The action also warns and skips memory symlinks th
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
 - On public repositories anyone can open issues, comment, review pull requests and close their own issues. All of it is recorded under the real account and ignored by replay unless that account is mapped, so expect `unauthorized_change_attempts`. That is accurate, not a bug.
 - Capture hashes prove the bytes the importer rendered from the API, not what GitHub served, and a capture given to `convert` is trusted as what GitHub said: convert only captures you made. Captured GitHub text is untrusted, and prompt injection in issue bodies is expected. It never becomes IDs, notes, actors or importer output, but `replay` and `explain` print evidence quotes as they are (single-line, with no terminal escapes or bidi characters, but possibly with markdown or HTML).
+- HTML reports show untrusted text as inert text (escaped, invisible characters as `U+XXXX`, no scripts, nothing loaded), but the words are still whatever the memory, evidence or log says, and a source link goes to whatever http(s) URL the evidence recorded, shown in full as its own link text.
 - The GitHub token is read from the environment only, sent only to `https://api.github.com` (redirects are never followed to another host), and never written or printed.
 - Datasets imported from private repositories, and `--save-capture` files, contain private text: never commit them. There is no redaction workflow: removing a secret from a capture means editing it by hand, after which `validate` fails on purpose.
 - This is a research MVP, not production infrastructure.

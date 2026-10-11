@@ -20,6 +20,9 @@ Multimodal evidence through transcript and OCR sidecars (roadmap v0.4). See
 [docs/multimodal.md](docs/multimodal.md). memfalsify and orgmemory use new memlab-core API, so at release
 memlab-core needs a minor version and their pins must move to it.
 
+HTML reports. memfalsify's and orgmemory's `--format html` import `memcore.htmlpage`, so their next
+release needs a memlab-core release that has it; raise their memlab-core pins then.
+
 ### Security
 
 - MemFalsify applies one shared path policy to memory, linked memory and evidence inputs (including
@@ -203,6 +206,30 @@ memlab-core needs a minor version and their pins must move to it.
 - `locate_quote(root, path, quote, locator=None)`: in a sidecar, the quote must lie inside one cue or OCR
   line (the one at `locator`, if given), and the span carries its media position.
 
+- `memcore.htmlpage`: building blocks for self-contained HTML report pages. A page has inline CSS, no
+  JavaScript and loads nothing, behind a `Content-Security-Policy` meta tag (`default-src 'none';
+  style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`) and `referrer` `no-referrer`. `text()`
+  HTML-escapes every value and shows control, format (bidi, zero-width, tag), separator, surrogate and
+  other default-ignorable characters (variation selectors, Hangul fillers) as visible `U+XXXX` markers.
+  Only `http` and `https` URIs become links (`link()`, `safe_url()`), with `rel="noopener noreferrer"`.
+  The page is 7-bit ASCII and is written to stdout as bytes, so a Windows text-mode console cannot turn
+  LF into CRLF. It follows `prefers-color-scheme`, and its tables scroll sideways at phone width.
+
+### memfalsify
+
+#### Added
+
+- `--format html` on `audit` and `diff`: one self-contained page with the same content as the Markdown
+  report (summary table, findings grouped by status, every evidence quote with location, character range
+  and full SHA-256, issues and proposed actions; for `diff`, the changed, added and removed claims).
+  Works with `--output`. `history` stays `markdown` or `json`. The examples have `report.html` next to
+  `report.md`.
+
+#### Changed
+
+- An HTML report (a `<!DOCTYPE html>` page whose head names `memfalsify` as its generator) is skipped as
+  evidence, like the Markdown and JSON reports.
+
 ### orgmemory
 
 #### Added
@@ -214,6 +241,11 @@ memlab-core needs a minor version and their pins must move to it.
   after splitting lines, so a cue stays multi-line and cannot retarget the terminal. The audit report still
   escapes those characters onto one line. `evidence add` prints its confirmation on one line.
 
+- `--format html` on `replay` and `audit`. `replay`: a summary row per subject, then each subject's
+  state, authorizing decision with its quoted evidence, ignored attempts, conflicts and decision trail.
+  `audit`: the kind-by-severity table, then findings grouped by severity with every cited event and
+  quote. The examples have `replay-report.html` and `audit-report.html` next to the Markdown reports.
+
 ### memlab-mcp
 
 No code change. Through the libraries, `memfalsify_audit`, `memfalsify_diff` and the orgmemory tools read
@@ -223,6 +255,8 @@ a symlink out of the root is never read.
 
 - `memfalsify_claims` returns the same objects as `memfalsify claims`, including `metadata`, and the
   other memfalsify tools accept the new instruction formats.
+- No change. The tools' `format` stays `markdown` or `json`: an MCP client reads text, and HTML is for
+  people, through the CLIs.
 
 ### Repository
 

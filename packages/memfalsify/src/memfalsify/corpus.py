@@ -29,6 +29,15 @@ ROLLBACK_HEADER = "# MemFalsify rollback patch"
 DISCOVER_HEADER = "# MemFalsify instruction files"
 # Anything MemFalsify prints is about memory; none of it may count as evidence for that memory.
 OUTPUT_HEADERS = (REPORT_HEADER, DIFF_HEADER, HISTORY_HEADER, ROLLBACK_HEADER, DISCOVER_HEADER)
+# HTML reports start with a doctype and name MemFalsify as their generator at the top of <head>.
+HTML_GENERATOR = "memfalsify"
+HTML_MARKER = f'<meta name="generator" content="{HTML_GENERATOR}">'
+
+
+def is_report(text: str) -> bool:
+    """Whether ``text`` is MemFalsify output (Markdown, JSON or HTML)."""
+    return (text.startswith(OUTPUT_HEADERS) or text.lstrip().startswith('{\n  "tool": "memfalsify"')
+            or (text.startswith("<!DOCTYPE html>") and HTML_MARKER in text[:300]))
 
 
 class Passage(BaseModel):
@@ -130,7 +139,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
             except UnicodeDecodeError:
                 local.append(Skipped(path=relative, reason="not UTF-8 text"))
                 continue
-            if text.startswith(OUTPUT_HEADERS) or text.lstrip().startswith('{\n  "tool": "memfalsify"'):
+            if is_report(text):
                 local.append(Skipped(path=relative, reason="MemFalsify report: a report cannot be its own evidence"))
                 continue
             digest = sha256_bytes(raw)

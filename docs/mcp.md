@@ -28,6 +28,8 @@ For root-relative paths, a tool returns the text the matching command prints whe
 
 `memory_file` can be any file the CLI audits: `MEMORY.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, or a Cursor, Copilot, Windsurf or Claude Code rule file (see the README). There is no discovery tool; run `memfalsify discover` to list a repository's instruction files.
 
+`format` is `markdown` or `json` on every tool. The CLIs' `--format html` pages are for people, not agents, and the server writes no files, so to share an HTML report, run the CLI.
+
 `reviews_file` requires `evidence_dir`. Omit optional paths or pass `null`; empty paths are errors. Memory links and `@file.md` imports stay within the memory file's directory. Review references stay within the evidence directory, and dataset evidence references stay within the manifest's directory. Evidence scans skip outward file symlinks, directory symlinks and non-regular files. Media files next to transcript and OCR sidecars ([docs/multimodal.md](multimodal.md)) are hashed, only to check the binding, through the same confined reads. A dataset directory must contain `events.jsonl`, `policy.json`, and `evidence.jsonl`, with regular files as evidence sources.
 
 Invalid tool calls return MCP tool errors and leave the connection usable. Schema-validation errors report field names without rejected values; errors conceal outside-root path arguments, backend diagnostics and tracebacks. Model-verifier failures report a generic error suggesting SDK, credentials and backend checks.

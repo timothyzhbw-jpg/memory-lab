@@ -18,6 +18,8 @@ from orgmemory.replay import Dataset, replay, validate
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'github'
 GOLDEN = Path(__file__).parents[1] / 'examples' / 'orgmemory' / 'github-acme-web'
+# Rendered reports next to the dataset; tests/test_html.py and test_orgmemory_audit.py check them.
+REPORTS = ('replay-report.md', 'audit-report.md', 'replay-report.html', 'audit-report.html')
 RUNNER = CliRunner()
 TOKEN = 'ghp_TESTTOKEN'
 
@@ -69,7 +71,7 @@ def test_golden_example_reproducible(github_dataset):
     converted(github_dataset,2)
     Dataset.load(github_dataset)
     assert relative_snapshot(github_dataset) == {
-        k:v for k,v in relative_snapshot(GOLDEN).items() if k not in ('replay-report.md', 'audit-report.md')}
+        k:v for k,v in relative_snapshot(GOLDEN).items() if k not in REPORTS}
     from orgmemory.report import to_markdown
     assert to_markdown(replay(Dataset.load(github_dataset)))+'\n' == (GOLDEN/'replay-report.md').read_text(encoding='utf-8')
 

@@ -84,7 +84,7 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 
 `verify_counterevidence`、`add_absolute_date`、`narrow_scope` 这类操作只是建议，不会自动执行。`replacement` 字段永远是空的：MemFalsify 从不替你编写事实。
 
-其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`memfalsify discover` 列出仓库里各家 Agent 的指令文件（见下）；`--format json`、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
+其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`memfalsify discover` 列出仓库里各家 Agent 的指令文件（见下）；`--format json`、`--format html`（一个自包含的网页，见 [HTML 报告](#html-报告)）、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
 
 #### 其他 Agent 的指令文件
 
@@ -191,7 +191,7 @@ orgmemory append   <数据集> --event '{"id": ..., ...}'
 `replay` 回答“现在是什么状态”，`audit` 回答“决策流程哪里需要关注”。它用同样的规则只读地回放日志，然后列出发现项。每个发现项包含 `kind`（类型）、`severity`（严重程度：`high`、`medium` 或 `low`）、所涉及的议题 `subject`（如果是针对某个参与者的发现项，则为 `actor`）、涉及的 `subjects` 和 `event_ids`（事件 ID 按回放顺序排列）、一行说明 `detail`，以及每个被引用的事件及其证据原文，引用方式与 `explain` 相同。审计不引入任何新的事件语义：它只复述回放结果、回放记录的冲突和审计轨迹里已有的内容。
 
 ```bash
-orgmemory audit <数据集> [--as-of ISO8601] [--stale-days 14] [--format markdown|json] [--strict]
+orgmemory audit <数据集> [--as-of ISO8601] [--stale-days 14] [--format markdown|json|html] [--strict]
 ```
 
 以 2026-10-31 为时间点审计示例数据（[完整报告](examples/orgmemory/audit-report.md)）：客户的“申请重新考虑”已经等了产品经理超过 14 天（`stale_reconsideration`，medium）；客户经理那次被忽略的“批准”列为 `unauthorized_attempts`（medium）。[GitHub 示例的审计报告](examples/orgmemory/github-acme-web/audit-report.md)按账号列出了长期等待权限策略下决定的请求、被忽略的审查、标签和合并，以及一位先要求修改、后又批准的审查者。等待批准反映的是权限策略下的回放结果，不是 GitHub 上的 issue 或 PR 是否仍然打开：例如，`acme/web#4` 因重复而关闭，但这次关闭记为 `comment`，请求仍在等待决定。
@@ -253,6 +253,22 @@ orgmemory explain        <数据集> "acme/web#12"
 有权 `revoke` 的人重新打开时，议题回到 `proposed`。否则这次撤销是一次被忽略的越权尝试，后面的 `request` 只有在重新打开者的角色允许 `request` 时才会标记“申请重新考虑”。有两种预期内的噪声：没有批准权限的人合并 PR，即使之前已有授权的批准，这次合并也会被列为被忽略的越权尝试；重新打开一次并非当前决定的关闭（例如一次越权的关闭）时，如果重新打开者有权撤销，会显示 `invalid_supersession`。
 
 示例：[`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-web/) 是用 `orgmemory github convert` 从 `acme/web` 的两份合成抓取结果（在 `tests/fixtures/github/` 里）生成的，附有[回放报告](examples/orgmemory/github-acme-web/replay-report.md)。其中 `acme/web#1` 就是 GitHub 上的功能A故事：产品经理以“不计划做”关闭了 issue，客户经理加上了 `approved` 标签，客户又重新打开了它。这个 issue 仍是 `rejected`，`reconsideration_requested: true`，`pending_approval: [product_manager]`；标签和重新打开带来的 `revoke` 都列为被忽略的越权尝试。
+
+### HTML 报告
+
+`memfalsify audit`、`memfalsify diff`、`orgmemory replay` 和 `orgmemory audit` 都支持 `--format html`，输出一个自包含的网页，方便分享给不运行这些工具的人：用浏览器打开、作为邮件或工单附件，或作为 CI 产物上传。
+
+```bash
+memfalsify audit MEMORY.md --evidence evidence --format html -o report.html
+orgmemory audit <数据集> --as-of 2026-10-31T00:00:00Z --format html > audit-report.html
+```
+
+- 内容与 Markdown 报告相同：先是汇总表，然后按状态（MemFalsify）或严重程度（`orgmemory audit`）分组列出发现项，每条证据引文都带 `路径:行号`、字符范围和完整的 SHA-256；`orgmemory replay` 列出每个议题的状态、授权决定和决策轨迹。有对应小节的汇总项会链接过去（状态、变更分组、议题，或严重程度的合计）。
+- 自包含：CSS 内联，没有 JavaScript，不加载任何东西（字体、图片、脚本都没有），离线也能看。`Content-Security-Policy` meta 标签（`default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`）即使某个值漏了转义，也会阻止加载资源和执行脚本。文件是 7 位 ASCII（其他字符写成 `&#...;` 字符引用），重定向和邮件中转都不会改坏编码。
+- 不可信文本只当文本显示：记忆、证据、文件名、审核记录、事件日志、策略里的名字和来源 URI 都做 HTML 转义。控制字符、双向文本（bidi）字符、零宽字符、变体选择符等不可见字符显示为 `U+XXXX` 标记，而不会被渲染。只有 `http` 和 `https` 来源 URI 会变成链接，并带 `rel="noopener noreferrer"`；`javascript:`、`data:` 等其他协议只显示为纯文本。来源 URI 里若藏着不可见字符，也只显示为纯文本。
+- 浅色和深色模式跟随系统（`prefers-color-scheme`）；在手机上表格横向滚动，页面本身不会横向滚动；表格带标题（caption）和表头作用域（scope）。
+- 输出确定：同样的输入得到同样的字节。示例目录里，HTML 报告就放在 Markdown 报告旁边（[`examples/memfalsify/report.html`](examples/memfalsify/report.html)、[`examples/orgmemory/audit-report.html`](examples/orgmemory/audit-report.html) 等）；GitHub 只显示其源码，下载后再打开查看。
+- MemFalsify 的 HTML 报告和它的 Markdown、JSON 报告一样，永远不会被当作证据读取。`memfalsify history` 和 MCP 工具仍只输出 Markdown 或 JSON。
 
 ## 数据格式
 
@@ -401,6 +417,7 @@ Action 还会警告并跳过解析到工作区外的记忆符号链接。
 - `policy.json` 是全局的：给一个 `gh:` 账号配置角色，等于在所有导入仓库的议题上都授予了这个角色。
 - 在公开仓库里，任何人都可以开 issue、评论、审查 PR、关闭自己的 issue。这些都会以真实账号记录下来，只要账号没有配置角色，回放就会忽略它们，所以会出现 `unauthorized_change_attempts`。这是如实记录，不是 bug。
 - 存档文件的哈希只能证明导入工具根据 API 响应生成的字节，不能证明 GitHub 实际返回了什么；交给 `convert` 的抓取结果会被当作“GitHub 的原话”，所以只转换你自己抓取的结果。抓取到的 GitHub 文本不可信，issue 正文里出现提示注入是预料之中的。这些文本永远不会进入 ID、备注、参与者或导入工具的输出，但 `replay` 和 `explain` 会原样打印证据引用（单行，不含终端转义序列和双向文本控制字符，但可能包含 markdown 或 HTML）。
+- HTML 报告把不可信文本显示为惰性文本（已转义，不可见字符显示为 `U+XXXX`，没有脚本，不加载任何东西），但文字内容仍然是记忆、证据或日志里写的内容；来源链接指向证据记录的那个 http(s) URL，链接文字就是完整的 URL。
 - GitHub token 只从环境变量读取，只发送给 `https://api.github.com`（从不跟随重定向到其他主机），也从不写入文件或打印出来。
 - 从私有仓库导入的数据集和 `--save-capture` 文件包含私密文本，绝不要提交。目前没有脱敏流程：要从存档文件里删掉泄露的密钥只能手工编辑，之后 `validate` 会按设计报错。
 - 这是一个研究用的 MVP，不是生产级基础设施。

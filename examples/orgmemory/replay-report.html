@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="generator" content="orgmemory">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Organizational memory replay</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --panel: #f6f8fa; --link: #0969da;
+  --red-bg: #ffebe9; --red-fg: #a40e26; --amber-bg: #fff8c5; --amber-fg: #6c4400;
+  --blue-bg: #ddf4ff; --blue-fg: #0a3069; --green-bg: #dafbe1; --green-fg: #116329;
+  --gray-bg: #eff2f5; --gray-fg: #424a53;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --panel: #161b22; --link: #58a6ff;
+    --red-bg: #42181c; --red-fg: #ffa198; --amber-bg: #3b2b05; --amber-fg: #e3b341;
+    --blue-bg: #0c2d6b; --blue-fg: #a5d6ff; --green-bg: #0f3d1f; --green-fg: #7ee787;
+    --gray-bg: #262c36; --gray-fg: #d1d7e0;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); overflow-wrap: break-word;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: .5rem 0 1rem; }
+h2 { font-size: 1.3rem; line-height: 1.3; margin: 2rem 0 .75rem; padding-bottom: .25rem;
+     border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 .5rem; overflow-wrap: break-word; }
+p { margin: .4rem 0; }
+a { color: var(--link); overflow-wrap: break-word; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+       font-size: .875em; background: var(--panel); padding: .1em .3em; border-radius: 4px;
+       overflow-wrap: break-word; }
+.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; margin: 0 0 1rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: break-word; }
+.scroll { overflow-x: auto; margin: .5rem 0 1rem; }
+table { border-collapse: collapse; }
+caption { text-align: left; color: var(--muted); padding-bottom: .25rem; }
+th, td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: left; vertical-align: top; }
+thead th, tfoot th, tfoot td { background: var(--panel); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin: 0 0 1rem; }
+blockquote { margin: .5rem 0; padding: .4rem .8rem; border-left: 4px solid var(--line); background: var(--panel);
+             white-space: pre-wrap; overflow-wrap: break-word; }
+ul { padding-left: 1.25rem; margin: .25rem 0 .5rem; }
+li { margin: .25rem 0; overflow-wrap: break-word; }
+.label { font-weight: 600; margin: .75rem 0 .25rem; }
+.muted { color: var(--muted); }
+.hash { font-size: .75em; }
+time { white-space: nowrap; }
+.badge { display: inline-block; padding: 0 .5em; border-radius: 1em; font-size: .8rem; font-weight: 600;
+         white-space: nowrap; vertical-align: .1em; }
+.red { background: var(--red-bg); color: var(--red-fg); }
+.amber { background: var(--amber-bg); color: var(--amber-fg); }
+.blue { background: var(--blue-bg); color: var(--blue-fg); }
+.green { background: var(--green-bg); color: var(--green-fg); }
+.gray { background: var(--gray-bg); color: var(--gray-fg); }
+.ctl { font: .75em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--red-fg);
+       border: 1px dashed currentColor; border-radius: 3px; padding: 0 .2em; }
+@media (max-width: 40rem) {
+  main { padding: 1rem; }
+  .meta { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .meta dd { margin-bottom: .5rem; }
+  .item { padding: .6rem .75rem; }
+  ul { padding-left: 1rem; }
+}
+@media print {
+  .item { break-inside: avoid; }
+  a { color: inherit; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Organizational memory replay</h1>
+<dl class="meta">
+<dt>Replayed</dt><dd>5 of 5 events, as of end of log</dd>
+<dt>Mode</dt><dd><strong>read_only</strong> (the event log was not modified)</dd>
+</dl>
+<section>
+<h2>Summary</h2>
+<div class="scroll"><table>
+<caption>Subjects and their current state</caption>
+<thead><tr><th scope="col">Subject</th><th scope="col">Status</th><th scope="col">Reconsideration</th><th scope="col">Pending approval</th><th scope="col">Last authorized decision</th><th scope="col">Ignored attempts</th><th scope="col">Conflicts</th></tr></thead>
+<tbody>
+<tr><th scope="row"><a href="#subject-1">Feature A</a></th><td><span class="badge red">rejected</span></td><td>yes</td><td><code>product_manager</code></td><td><code>ev-wed-reject</code></td><td class="num">1</td><td class="num">0</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="subject-1">
+<h2>Feature A</h2>
+<dl class="meta">
+<dt>Current status</dt><dd><span class="badge red">rejected</span></dd>
+<dt>Reconsideration requested</dt><dd>yes</dd>
+<dt>Pending approval</dt><dd><code>product_manager</code></dd>
+<dt>Dependencies</dt><dd><span class="muted">none</span></dd>
+<dt>Open risks</dt><dd><ul>
+<li>Bulk export reads the billing schema, which is mid-migration <span class="muted">(raised by lin in <code>ev-tue-risk</code>)</span></li>
+</ul></dd>
+<dt>Last authorized decision</dt><dd><code>ev-wed-reject</code> (reject by zhou)</dd>
+<dt>Unauthorized change attempts</dt><dd><code>ev-thu-sales-approve</code></dd>
+</dl>
+<h3>Why this is the current status</h3>
+<p><code>ev-wed-reject</code>: zhou (roles: product_manager) chose <strong>reject</strong> at <time datetime="2026-10-07T15:30:00+00:00">2026-10-07T15:30:00+00:00</time></p>
+<ul>
+<li><p>evidence <code>wed</code> &middot; <code>sources/2026-10-07-decision-log.txt:3</code> <span class="muted">(characters 57&ndash;138)</span> &middot; synthetic://decision-log/2026-10-07 &middot; sha256 <code class="hash">fb85f034a99fde2c00e7173add0e9ab03bc23283d8a9983c3b6cac99f59ea21f</code></p>
+<blockquote>Feature A is rejected for the November release until the billing migration lands.</blockquote></li>
+</ul>
+<h3>Ignored: actor lacked authority</h3>
+<ul>
+<li><code>ev-thu-sales-approve</code>: wu tried to approve; actor roles [&#x27;account_manager&#x27;] may not approve</li>
+</ul>
+<h3>Decision trail</h3>
+<div class="scroll"><table>
+<caption>Events in replay order</caption>
+<thead><tr><th scope="col">Event</th><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>ev-mon-request</code></th><td><time datetime="2026-10-05T09:12:00+00:00">2026-10-05T09:12:00+00:00</time></td><td>buyer@acme (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>ev-tue-risk</code></th><td><time datetime="2026-10-06T10:00:00+00:00">2026-10-06T10:00:00+00:00</time></td><td>lin (engineer)</td><td>raise_risk</td><td><span class="badge green">applied</span></td><td>proposed &rarr; proposed</td></tr>
+<tr><th scope="row"><code>ev-wed-reject</code></th><td><time datetime="2026-10-07T15:30:00+00:00">2026-10-07T15:30:00+00:00</time></td><td>zhou (product_manager)</td><td>reject</td><td><span class="badge green">applied</span></td><td>proposed &rarr; rejected</td></tr>
+<tr><th scope="row"><code>ev-thu-request</code></th><td><time datetime="2026-10-08T08:45:00+00:00">2026-10-08T08:45:00+00:00</time></td><td>buyer@acme (customer)</td><td>request</td><td><span class="badge green">applied</span></td><td>rejected &rarr; rejected</td></tr>
+<tr><th scope="row"><code>ev-thu-sales-approve</code></th><td><time datetime="2026-10-08T11:20:00+00:00">2026-10-08T11:20:00+00:00</time></td><td>wu (account_manager)</td><td>approve</td><td><span class="badge red">unauthorized</span></td><td>rejected &rarr; rejected</td></tr>
+</tbody>
+</table></div>
+</section>
+</main>
+</body>
+</html>
