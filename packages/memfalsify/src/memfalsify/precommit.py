@@ -1,7 +1,10 @@
 """pre-commit hooks for MemFalsify. Read-only.
 
 Claims come from the git index (the blob ``git commit`` will record). Evidence comes from the working
-tree. ``memfalsify diff --base HEAD --staged`` is the same diff. During ``git commit``, pre-commit hides
+tree, and the hook defaults that root to the repository. The diff hook matches
+``memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict``.
+The CLI leaves ``--strict`` off and, without ``--evidence``, has nothing to contradict a claim.
+During ``git commit``, pre-commit hides
 unstaged changes to tracked files before the hook runs, so tracked evidence then matches the index;
 untracked evidence files stay visible. A hand-run ``--staged`` does not hide those edits.
 
@@ -168,7 +171,9 @@ def _execute(mode: str, filenames: list[str] | None, *, evidence: Path | None, e
         except (ValidationError, ValueError, OSError, VerifierError) as exc:
             _fail(str(exc))
         if fmt is Format.markdown:
-            text = diff_to_markdown(report) if mode == "diff" else to_markdown(report)
+            # Diff Markdown already scrubs. Audit Markdown is literal on the CLI; the hook prints it
+            # on a terminal, so the same controls have to come out inert here too.
+            text = diff_to_markdown(report) if mode == "diff" else to_markdown(report, scrub=True)
             typer.echo(text, nl=False)
         else:
             dumped.append(report.model_dump(mode="json"))

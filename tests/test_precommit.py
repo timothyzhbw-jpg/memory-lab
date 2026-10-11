@@ -310,3 +310,42 @@ def test_hook_chinese_report_is_utf8(repo, monkeypatch):
     result = runner.invoke(app, ["diff", "--as-of", "2026-10-10"])
     assert result.exit_code == 0, result.output
     assert "缓存使用 Redis 保存会话" in result.stdout
+
+
+@needs_git
+def test_hook_markdown_keeps_untrusted_text_inert_and_json_escapes_controls(repo, monkeypatch):
+    """Claim text and evidence quotes are untrusted. Both hooks print them on a terminal.
+
+    Markdown must not contain ESC, CR or bidi controls. JSON keeps the text, with C0 escaped, matching
+    ``memfalsify diff --format json``.
+    """
+    esc, rlo, cr = "\x1b[2J", "\u202e", "\r"
+    repo.commit("base", {"CLAUDE.md": "- The cache uses Redis.\n",
+                         "evidence/note.md": "The cache uses Redis.\n"})
+    repo.write({"CLAUDE.md": f"- The cache uses Redis for {esc}{rlo}sessions.\n",
+                "evidence/note.md": f"The cache uses Redis{cr} for {esc}{rlo}sessions.\n"})
+    repo.git("add", "--", "CLAUDE.md")
+    monkeypatch.chdir(repo.root)
+    common = ["CLAUDE.md", "--evidence", "evidence", "--as-of", "2026-10-10"]
+    for mode in ("diff", "audit"):
+        result = runner.invoke(app, [mode, *common])
+        assert result.exit_code in (0, 1), result.output
+        assert esc not in result.stdout and rlo not in result.stdout and cr not in result.stdout
+        assert "\ufffd" in result.stdout and "sessions" in result.stdout
+    payload = runner.invoke(app, ["audit", *common, "--format", "json"])
+    assert payload.exit_code in (0, 1), payload.output
+    assert rlo in payload.stdout and esc not in payload.stdout and cr not in payload.stdout
+    assert "\\u001b" in payload.stdout
+    data = json.loads(payload.stdout)
+    quotes = [e["span"]["quote"] for report in data["reports"] for finding in report["findings"]
+              for e in finding["evidence"]]
+    assert any(cr in quote and esc in quote and rlo in quote for quote in quotes)
+
+
+def test_docs_name_the_strict_staged_command():
+    """The hook fails closed and reads evidence. The CLI does neither unless the command says so."""
+    command = "memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict"
+    for name in ("README.md", "README.zh-CN.md", "skills/memfalsify/SKILL.md", "docs/github-action.md",
+                 "packages/memfalsify/src/memfalsify/precommit.py"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert command in text, name

@@ -48,21 +48,30 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
     return out
 
 
-def to_markdown(report: AuditReport) -> str:
+def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
+    """Render the report. ``scrub`` strips terminal and bidi controls from untrusted text.
+
+    The CLI keeps audit Markdown literal. The pre-commit hook scrubs, because it prints the report
+    on a terminal during ``git commit``.
+    """
+    def show(text: str) -> str:
+        return show_text(text) if scrub else text
+
+    files = ", ".join(f"`{show(p)}`" for p in report.files_read)
     out = [REPORT_HEADER, "",
-           f"- Memory: `{report.memory_file}` ({len(report.files_read)} file(s): "
-           + ", ".join(f"`{p}`" for p in report.files_read) + ")",
-           f"- Evidence root: `{report.evidence_root}`" if report.evidence_root else "- Evidence root: none supplied",
-           *(["- Excluded from evidence: " + ", ".join(f"`{p}`" for p in report.excluded)] if report.excluded else []),
+           f"- Memory: `{show(report.memory_file)}` ({len(report.files_read)} file(s): {files})",
+           f"- Evidence root: `{show(report.evidence_root)}`" if report.evidence_root else "- Evidence root: none supplied",
+           *(["- Excluded from evidence: " + ", ".join(f"`{show(p)}`" for p in report.excluded)]
+             if report.excluded else []),
            f"- Verifier: `{report.verifier}` · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]
     out.append("")
     for finding in report.findings:
-        out += _finding(finding)
+        out += _finding(finding, scrub=scrub)
     if report.skipped_evidence:
         out += ["## Skipped evidence", ""]
-        out += [f"- `{s.path}`: {s.reason}" for s in report.skipped_evidence]
+        out += [f"- `{show(s.path)}`: {show(s.reason)}" for s in report.skipped_evidence]
         out.append("")
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
     return "\n".join(out) + "\n"

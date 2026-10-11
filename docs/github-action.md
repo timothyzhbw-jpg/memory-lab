@@ -97,7 +97,9 @@ in the index, the [pre-commit hooks](../README.md#pre-commit) run that check loc
 Before the commit exists, [`memfalsify-diff` and `memfalsify-audit`](../.pre-commit-hooks.yaml) apply the
 same attention gate to staged `CLAUDE.md`, `AGENTS.md` and `MEMORY.md`. Setup is in the
 [README](../README.md#pre-commit). `memfalsify-diff` reads those files from the index and audits added or
-changed claims against the working tree, which is `memfalsify diff --base HEAD --staged`.
+changed claims against the working tree, the same check as
+`memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict`.
+The CLI leaves `--strict` off and, without `--evidence`, has nothing to contradict a claim.
 
 ## Inputs
 
