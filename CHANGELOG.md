@@ -16,7 +16,20 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+No package changes yet.
+
+### Repository
+
+- An Organizational Memory benchmark (`benchmarks/orgmemory`): ten labeled datasets (233 labels, 598
+  checks) that attack the authority rules, from unknown and look-alike actors, same-instant decisions,
+  revoke chains and as-of cutoffs to forged evidence, malformed logs and a GitHub import. `run.py`
+  replays them offline through `Dataset.load`, `replay` and `audit` and reports every check (`--check`,
+  `--case`, `--json`); it exits 1 on any mismatch. `tests/test_orgbench.py` runs it in CI against the
+  known mismatches.
+- [Measured results](benchmarks/orgmemory/RESULTS.md): 588 of 598 checks pass. Two findings remain open.
+  Duplicate JSON keys in `events.jsonl`, `evidence.jsonl` or `policy.json` are accepted, and the last
+  one wins. Role changes in `policy.json` apply to every past event, because the policy has no
+  effective dates.
 
 ## memlab-core
 

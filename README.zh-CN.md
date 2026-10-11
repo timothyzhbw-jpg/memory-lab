@@ -305,6 +305,12 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 [实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.62、召回率为 0.27，三分类准确率为 0.44。
 这些案例用于检验已知失败模式，不能代表真实记忆的准确率。运行 `python benchmarks/memfalsify/run.py` 即可离线评测。
 
+[组织记忆评测集](benchmarks/orgmemory/README.md)包含十组带标注的数据集、233 条标注（598 项检查），覆盖指定时间点的最终状态、
+审计轨迹结果、`orgmemory audit` 发现项和校验错误。这些案例专门攻击权限规则：未知和仿冒的参与者、角色变更、同一时刻的决策、
+撤销链、截止时间与文件顺序、伪造证据、格式错误的日志，以及一份 GitHub 导入数据。
+[实测结果](benchmarks/orgmemory/RESULTS.md)中 588 项检查通过，10 项失败来自两个发现：JSON 重复键会被接受，
+角色变更会追溯生效。运行 `python benchmarks/orgmemory/run.py` 即可离线评测，任何不符都会以退出码 1 结束。
+
 [GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件与仓库证据核对，并把报告放入任务摘要。
 默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。
 设置 `diff-base`（例如 PR 的基准提交，并给 `actions/checkout` 加上 `fetch-depth: 0`）后，Action 改为运行
@@ -316,7 +322,8 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
 - `orgmemory audit` 的发现项只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
-- 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
+- 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果：角色变更对过去的事件同样生效（[评测发现](benchmarks/orgmemory/RESULTS.md)）。
+- `events.jsonl`、`evidence.jsonl` 和 `policy.json` 中重复的 JSON 键会被接受，以最后一个值为准。其他 JSON 工具可能读取第一个值，所以要确保每一行都没有重复的键（[评测发现](benchmarks/orgmemory/RESULTS.md)）。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
 - `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。
 - GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。

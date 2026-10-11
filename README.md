@@ -306,6 +306,14 @@ eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RES
 precision 0.62, recall 0.27 and 3-way accuracy 0.44; these cases exercise failure modes rather than estimate
 accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
 
+The [Organizational Memory benchmark](benchmarks/orgmemory/README.md) has ten labeled datasets with 233 labels
+(598 checks) on final states at chosen times, audit-trail outcomes, audit findings and validation errors. The cases
+attack the authority rules: unknown and look-alike actors, role changes, same-instant decisions, revoke chains,
+cutoffs against file order, forged evidence, malformed logs and a GitHub import. In the
+[measured results](benchmarks/orgmemory/RESULTS.md), 588 checks pass. The 10 failures come from two findings:
+duplicate JSON keys are accepted, and role changes apply retroactively. Run it offline with
+`python benchmarks/orgmemory/run.py`, which exits 1 on any mismatch.
+
 The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files against repository
 evidence and puts the report in the job summary. Its default strict check fails on possible counterevidence;
 unsupported claims and wording issues remain review leads. With `diff-base` (for example the pull request's base
@@ -318,7 +326,8 @@ the claims it adds or changes.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
-- Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
+- Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay: a role change applies to past events too ([benchmark finding](benchmarks/orgmemory/RESULTS.md)).
+- A JSON object with a repeated key is accepted in `events.jsonl`, `evidence.jsonl` and `policy.json`, and the last value wins. Other JSON tools may read the first, so make sure no line repeats a key ([benchmark finding](benchmarks/orgmemory/RESULTS.md)).
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
