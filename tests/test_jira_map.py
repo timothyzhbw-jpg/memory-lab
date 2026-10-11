@@ -215,6 +215,9 @@ def test_a_duplicate_with_different_content_fails_closed():
     ([page(issue(1), issue(2), total=1)], ["pages extend past the result total"]),
     ([page(issue(1), issue(2)), page(issue(3), start=1, total=2)], ["the result order changed between pages"]),
     ([page(issue(1), issue(2)), page(issue(3), start=2, total=2)], ["pages extend past the result total"]),
+    # ACME-2 at two positions: the result set shifted, so some other issue may be missing.
+    ([page(issue(1), issue(2), total=3), page(issue(2), start=2, total=3)],
+     ["the result order changed between pages"]),
 ])
 def test_incomplete_pagination_is_reported_and_present_issues_still_planned(pages, reasons):
     p = plan(capture(*pages))

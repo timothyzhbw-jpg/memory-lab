@@ -64,7 +64,7 @@ leaves the subject `proposed`. Problems are therefore handled as follows.
 | Not a `jira_capture` 1 document; site not `https://<name>.atlassian.net`; an issue's `self` is not `<site>/rest/api/3/issue/<id>` (another site, or API v2); invalid key, id, timestamp or changelog item; duplicate history or comment ids; a history that changes the status twice; one issue key with two ids | Exit 2, nothing written |
 | The same issue on two pages with different content (pages saved from two runs) | Exit 2, nothing written |
 | An identical duplicate copy (a page saved twice) | Ignored and counted |
-| Pages do not cover `[0, total)`, disagree on `total`, extend past it, or put two issues at one position | Incomplete: exit 3, and the issues present are applied |
+| Pages do not cover `[0, total)`, disagree on `total`, extend past it, or put two issues at one position (or one issue at two) | Incomplete: exit 3, and the issues present are applied |
 | An issue without `changelog` or `comment`, or with either truncated (`startAt` > 0 or `total` > length) | That issue is skipped whole; incomplete |
 | Consecutive status changes do not chain (`to` of one is not `from` of the next), or the last one does not end at `fields.status.id` | That issue is skipped whole; incomplete |
 | An issue id recorded under another key (a moved issue), or a key recorded for another id | That issue is skipped and reported; the run can still be complete |

@@ -479,7 +479,8 @@ def convert(capture: object, existing: dict[str, Event], evidence_ids: set[str],
     incomplete = (["pages disagree on the result total"] if len(totals) > 1 else []) \
         + ([f"pages cover {covered} of {total} results"] if covered < total else []) \
         + (["pages extend past the result total"] if len(positions) > covered else []) \
-        + (["the result order changed between pages"] if reordered else [])
+        + (["the result order changed between pages"]
+           if reordered or len(set(positions.values())) < len(positions) else [])
     ctx = Ctx(site, captured_at, existing, evidence_ids, config)
     planned = sorted((p for issue in sorted(issues.values(), key=lambda i: i.order) for p in plan_issue(ctx, issue)),
                      key=lambda p: p.order)
