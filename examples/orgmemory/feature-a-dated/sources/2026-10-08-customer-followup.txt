@@ -1,0 +1,4 @@
+From: buyer@acme.example (synthetic)
+Subject: Re: Bulk export
+
+Please reconsider Feature A; the audit deadline has not moved.

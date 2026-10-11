@@ -1,0 +1,2 @@
+{"id": "pl-wu-pm", "timestamp": "2026-10-09T09:00:00Z", "actor": "chen", "action": "grant", "subject_actor": "wu", "role": "product_manager", "evidence_ids": ["org-wu"]}
+{"id": "pl-zhou-leaves", "timestamp": "2026-10-12T09:00:00Z", "actor": "chen", "action": "revoke_role", "subject_actor": "zhou", "role": "product_manager", "evidence_ids": ["org-zhou"], "note": "moved to the platform team"}

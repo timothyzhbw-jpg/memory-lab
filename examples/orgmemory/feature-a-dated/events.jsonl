@@ -1,0 +1,5 @@
+{"id": "ev-mon-request", "timestamp": "2026-10-05T09:12:00Z", "actor": "buyer@acme", "action": "request", "subject": "Feature A", "evidence_ids": ["mon"]}
+{"id": "ev-tue-risk", "timestamp": "2026-10-06T10:00:00Z", "actor": "lin", "action": "raise_risk", "subject": "Feature A", "note": "Bulk export reads the billing schema, which is mid-migration", "evidence_ids": ["tue"]}
+{"id": "ev-wed-reject", "timestamp": "2026-10-07T15:30:00Z", "actor": "zhou", "action": "reject", "subject": "Feature A", "evidence_ids": ["wed"]}
+{"id": "ev-thu-request", "timestamp": "2026-10-08T08:45:00Z", "actor": "buyer@acme", "action": "request", "subject": "Feature A", "evidence_ids": ["thu"]}
+{"id": "ev-thu-sales-approve", "timestamp": "2026-10-08T11:20:00Z", "actor": "wu", "action": "approve", "subject": "Feature A", "evidence_ids": ["thu-sales"]}

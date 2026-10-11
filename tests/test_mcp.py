@@ -183,6 +183,29 @@ def test_orgmemory_audit_matches_the_library(root):
     assert json.loads(ok(call(server, "orgmemory_audit", dataset=DATASET, format="json")))["as_of"] is None
 
 
+@requires_confinement
+def test_orgmemory_dated_roles_match_the_cli(root):
+    from typer.testing import CliRunner
+    from orgmemory.cli import app as orgmemory_app
+
+    example = EXAMPLES / "orgmemory" / "feature-a-dated"
+    shutil.copytree(example, root / "dated")
+    server = create_server(root)
+    expected = CliRunner().invoke(orgmemory_app, ["validate", str(root / "dated")]).output
+    assert ok(call(server, "orgmemory_validate", dataset="dated")) + "\n" == expected
+    assert "2 role change(s) in policy-log.jsonl" in expected
+    markdown = ok(call(server, "orgmemory_audit", dataset="dated", as_of="2026-10-31T00:00:00Z"))
+    assert markdown == (example / "audit-report.md").read_text(encoding="utf-8")
+    assert "`pl-zhou-leaves`" in ok(call(server, "orgmemory_explain", dataset="dated", subject="Feature A"))
+
+
+@requires_confinement
+def test_policy_log_symlink_cannot_leave_the_root(root):
+    (root / DATASET / "policy-log.jsonl").symlink_to(root.parent / "outside.md")
+    message = error(call(create_server(root), "orgmemory_validate", dataset=DATASET))
+    assert "policy-log.jsonl is a symlink that leaves the server root" in message and SECRET not in message
+
+
 # --- path safety ---------------------------------------------------------------------------
 
 def escapes(root):
