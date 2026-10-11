@@ -1,13 +1,14 @@
 """Time lexical ``audit`` and ``diff`` on deterministic memories.
 
     .venv/bin/python benchmarks/perf/run.py
-    .venv/bin/python benchmarks/perf/run.py --sizes 100 500 --profile 500
+    .venv/bin/python benchmarks/perf/run.py --sizes 100 500
+    .venv/bin/python benchmarks/perf/run.py --profile 500
 
 Builds synthetic MEMORY.md files of exactly 100, 500, 1,000 and 3,000 claims (plus a few
 duplicate copies that merge away), and also times the repository README.md. Synthetic claims
 are a pure function of their index: clusters share terms so some pairs conflict, and unrelated
-clusters do not. ``diff`` compares a committed file with a working tree where every 10th claim
-is revised. Timings cover the library calls, not process startup.
+clusters do not. Synthetic ``diff`` revises every 10th claim; the README timing appends one claim.
+Timings cover the library calls, not process startup.
 """
 from __future__ import annotations
 

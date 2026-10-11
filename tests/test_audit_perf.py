@@ -6,7 +6,7 @@ parser would drop, and a full audit of a seeded memory file.
 import random
 from datetime import date
 
-from memfalsify.audit import Issue, audit, issues_for
+from memfalsify.audit import Issue, audit, audit_claims, issues_for
 from memfalsify.memory import Claim, parse_memory
 from memfalsify.report import to_markdown
 from memfalsify.text import ABSOLUTE, HEDGE, RELATIVE_TIME, explicit_dates
@@ -138,3 +138,51 @@ def test_pairwise_reference_on_more_seeds():
         claims = _claims(seed, 30)
         for claim in claims:
             assert issues_for(claim, claims, AS_OF, 90) == reference_issues_for(claim, claims, AS_OF, 90)
+
+
+def test_one_term_claim_conflicts_when_its_only_term_is_common():
+    """A one-term claim has no rare-term prefix. Negation and a different number still contradict.
+
+    Pads make ``billing`` and ``批准`` more common than the unique tokens, so a longer claim's
+    prefix omits them. Both sides of the pair have to report the conflict, and ``audit_claims``
+    (one shared index) has to agree with a fresh index per claim.
+    """
+    unique = " ".join(f"uniq{i}xx" for i in range(12))
+    zh_unique = " ".join(f"zhuniq{i}xx" for i in range(12))
+    claims = [
+        Claim(id="long", text=f"billing {unique}", path="MEMORY.md", line=1),
+        Claim(id="neg", text="not billing", path="MEMORY.md", line=2),
+        Claim(id="numbered", text=f"billing {unique} 10", path="MEMORY.md", line=3),
+        Claim(id="other-number", text="billing 99", path="MEMORY.md", line=4),
+        Claim(id="zh-long", text=f"批准 {zh_unique}", path="MEMORY.md", line=5),
+        Claim(id="zh-neg", text="不批准", path="MEMORY.md", line=6),
+    ]
+    claims += [Claim(id=f"pad-{i}", text=f"billing pad{i}xx", path="MEMORY.md", line=10 + i) for i in range(6)]
+    claims += [Claim(id=f"zhpad-{i}", text=f"批准 zpad{i}xx", path="MEMORY.md", line=20 + i) for i in range(6)]
+    report = audit_claims(claims, memory_file="MEMORY.md", files_read=["MEMORY.md"], memory_paths=[], as_of=AS_OF)
+    by_id = {finding.memory_id: finding for finding in report.findings}
+    assert set(by_id) == {claim.id for claim in claims}
+    for claim in claims:
+        reference = reference_issues_for(claim, claims, AS_OF, 180)
+        assert by_id[claim.id].issues == reference
+        assert issues_for(claim, claims, AS_OF, 180) == reference
+    outsider = Claim(id="outsider", text="not billing", path="MEMORY.md", line=40)
+    assert issues_for(outsider, claims, AS_OF, 180) == reference_issues_for(outsider, claims, AS_OF, 180)
+
+
+def test_rare_prefix_keeps_the_marginal_shared_term():
+    """Sharing exactly ``k`` terms must still be found when only the least-rare prefix term overlaps.
+
+    Twelve copies make the six ``common`` tokens more frequent than ``marginalqq``, which is
+    itself more frequent than the tokens that appear once. The prefix of the approved claim is
+    seven terms and ``marginalqq`` is the last of them; a prefix one term shorter would miss
+    the rejected claim.
+    """
+    commons = " ".join(f"common{i}qq" for i in range(6))
+    approved = "approved " + commons + " marginalqq " + " ".join(f"rare{i}qq" for i in range(5))
+    rejected = "rejected " + commons + " marginalqq " + " ".join(f"bonly{i}qq" for i in range(6))
+    claims = [Claim(id="approved", text=approved, path="MEMORY.md", line=1),
+              Claim(id="rejected", text=rejected, path="MEMORY.md", line=2)]
+    claims += [Claim(id=f"pad-{i}", text=f"{commons} pad{i}qq", path="MEMORY.md", line=10 + i) for i in range(12)]
+    for claim in claims:
+        assert issues_for(claim, claims, AS_OF, 180) == reference_issues_for(claim, claims, AS_OF, 180)

@@ -1,6 +1,6 @@
 # Audit and diff performance
 
-Times `memfalsify` lexical `audit` and `diff` on deterministic inputs. One run each, in process, so process startup is not included. `diff` is a committed file against a working tree where every 10th claim is revised.
+Times `memfalsify` lexical `audit` and `diff` on deterministic inputs. One run each, in process, so process startup is not included. On a synthetic file, `diff` is the committed file against a working tree where every 10th claim is revised. On `README.md`, `diff` appends one claim.
 
 ```bash
 .venv/bin/python benchmarks/perf/run.py
@@ -9,9 +9,9 @@ Times `memfalsify` lexical `audit` and `diff` on deterministic inputs. One run e
 
 Synthetic files parse to exactly 100, 500, 1,000 and 3,000 claims. Claims in a group of eight share terms (so some pairs conflict); other groups do not. `README.md` is timed as itself, and again with the local `.md` links it follows. That linked run has no `diff` column: the link targets are the rest of this repository, not a synthetic git history.
 
-Internal conflicts used to call the lexical verifier on every pair, and each call tokenized both texts again. They now keep one feature record per claim and compare a claim only with claims that share a rare term (or a one-term antonym). Reports are unchanged.
+Internal conflicts used to call the lexical verifier on every pair, and each call tokenized both texts again. They now keep one feature record per claim and compare a claim only with claims that share a rare term, plus one-term claims reached by that term or an antonym. Reports are unchanged.
 
-Timings below are one machine (macOS, CPython 3.13), before and after that change. README gained a few claims from the documentation sentence added with the change (305 → 307 alone, 1,888 → 1,895 with links). The synthetic files did not.
+Timings below are one machine (macOS, CPython 3.13), before and after that change. README.md alone went from 305 claims to 307 because of the sentence added with the change. Following its local links, the count went from 1,888 to 1,895: that run also parses the Chinese README and the changelog entry from this change. The synthetic files did not.
 
 | Input | Claims | Audit before (s) | Audit after (s) | Diff before (s) | Diff after (s) |
 |---|---:|---:|---:|---:|---:|

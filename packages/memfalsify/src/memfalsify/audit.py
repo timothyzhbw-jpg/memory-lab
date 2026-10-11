@@ -222,8 +222,10 @@ class _ConflictIndex:
     Terms are ordered by increasing document frequency. If claim A must share at least ``k`` terms
     with another claim to clear the coverage threshold (counting the antonym bonus), any such claim
     contains one of A's rarest ``len(A) - k + 1`` terms. Claims whose own threshold is lower are
-    found from their prefixes. A claim of one term can also contradict a claim it shares nothing
-    with, when that term and an antonym are opposed; those are probed directly.
+    found from their prefixes. A one-term claim has no prefix: sharing nothing can already clear
+    its threshold. It is probed from its own term (negation or a different number) and from an
+    antonym (no shared term). The other claim's prefix can omit a common term, so the posting
+    list is what keeps that pair.
     """
 
     def __init__(self, claims: list[Claim]):
@@ -243,8 +245,8 @@ class _ConflictIndex:
             for term in lex.zh:
                 self.zh_at[term].append(index)
         self._counts = counts
-        # One-term claims can contradict a claim they share nothing with, via an antonym.
-        # Everyone else has to be able to find those claims from the opposite term.
+        # One content term means an empty prefix. Callers probe the term itself and its antonyms:
+        # a longer claim's rare terms can omit this common term, and an antonym shares nothing.
         self.singletons: dict[str, list[int]] = defaultdict(list)
         for index, lex in enumerate(self.lex):
             if len(lex.words) == 1:
@@ -281,6 +283,9 @@ class _ConflictIndex:
 
     def _antonym_singletons(self, lex: _Lex, chosen: set[int]) -> None:
         for term in lex.words:
+            # Same term: negation or a different number still contradicts when the longer
+            # claim's rare-term prefix left this common term out.
+            chosen.update(self.singletons.get(term, ()))
             for opposite in _EN_OPPOSITES.get(term, ()):
                 chosen.update(self.singletons.get(opposite, ()))
         for term in lex.zh:
