@@ -270,6 +270,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.__version__` | 已安装发行包的版本字符串。 |
 | `memfalsify.audit` | 解析记忆并用可选的证据与人工审核记录进行审计；不修改记忆。max_concurrency 限制同时进行的验证器调用数（默认 1）。 |
 | `memfalsify.audit_claims` | 审计已解析的记忆；only= 限定输出，但审核与冲突检查仍使用全部记忆。memory_paths 不作为证据。 |
+| `memfalsify.audit_staged` | 用工作区里的证据审计 git 暂存区（index）中记忆文件的每条记忆（链接的 .md 文件也从暂存区读取）；不修改记忆。 |
 | `memfalsify.claim_id` | 返回规范化文本的记忆 ID。 |
 | `memfalsify.compare` | 按 ID、章节及词语相似度确定性比较两组 Claim。 |
 | `memfalsify.detect` | 按精确且区分大小写的文件名和所在目录（CLAUDE.md、AGENTS.md、GEMINI.md、.cursor/rules/*.mdc、.github/copilot-instructions.md 等）返回路径的 MemoryFormat；其他文件按普通 Markdown 处理。 |
@@ -277,17 +278,18 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.history_to_markdown` | 将 HistoryReport 渲染为 Markdown。 |
 | `memfalsify.judge_all` | 按顺序判断（记忆、片段）对：验证器有 judge_many 时交给它，否则每次最多并发 max_concurrency 个 judge 调用。 |
 | `memfalsify.load_reviews` | 根据记忆 ID 映射验证人工审核记录及其逐字引用；传入 skipped= 时，被输入路径策略排除的审核证据记录到该列表而不是抛出异常。 |
-| `memfalsify.memory_diff` | 比较 base 与 head 或工作区，仅以当前证据审计新增／修改的记忆。 |
+| `memfalsify.memory_diff` | 比较 base 与 head、工作区，或 staged=True 时的 git 暂存区，只用当前证据审计新增或修改的记忆。 |
 | `memfalsify.memory_history` | 沿 HEAD 第一父提交链溯源记忆；max_commits 默认 100。 |
 | `memfalsify.parse_memory` | 返回（去重后的记忆、已读文件）；follow_links=True 跟随记忆目录内的本地 Markdown 链接。传入 skipped= 时，被输入路径策略排除的记忆文件或链接文件记录到该列表而不读取。 |
 | `memfalsify.parse_text` | 解析给定文本与显示路径，返回（记忆、链接目标和 @file.md 导入），不读取文件；跳过 frontmatter，fmt（默认普通 Markdown）决定保留哪些元数据字段。 |
 | `memfalsify.resolve_commit` | 在仓库目录内将经过验证的修订解析为提交 ID。 |
 | `memfalsify.rollback_patch` | 生成恢复 to 修订中记忆措辞的补丁；接受旧 ID 或当前 ID。 |
-| `memfalsify.to_markdown` | 将 AuditReport 渲染为 Markdown。 |
+| `memfalsify.to_markdown` | 把 AuditReport 渲染为 Markdown；scrub=True 时还会去掉引用的记忆和证据文本中的终端控制符和双向文本控制符。 |
 
 ```python
 audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
 audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
+audit_staged(memory_file: Path, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]
 detect(path: str | PurePath) -> MemoryFormat
@@ -295,13 +297,13 @@ diff_to_markdown(report: DiffReport) -> str
 history_to_markdown(report: HistoryReport) -> str
 judge_all(verifier: Verifier, pairs: Sequence[tuple[str, str]], max_concurrency: int=1) -> list[Judgment]
 load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *, skipped: list[Skipped] | None=None) -> dict[str, list[EvidenceFinding]]
-memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> DiffReport
+memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, staged: bool=False) -> DiffReport
 memory_history(memory_file: Path, max_commits: int=100, follow_links: bool=True) -> HistoryReport
 parse_memory(memory_file: Path, follow_links: bool=True, *, skipped: list[Skipped] | None=None) -> tuple[list[Claim], list[Path]]
 parse_text(text: str, display: str, fmt: MemoryFormat=MARKDOWN) -> tuple[list[Claim], list[str]]
 resolve_commit(directory: Path, rev: str) -> str
 rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool=True) -> Rollback
-to_markdown(report: AuditReport) -> str
+to_markdown(report: AuditReport, *, scrub: bool=False) -> str
 ```
 
 ### `orgmemory`

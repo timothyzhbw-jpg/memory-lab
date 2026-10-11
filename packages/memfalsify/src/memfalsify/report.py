@@ -112,7 +112,15 @@ def usage_lines(report: AuditReport) -> list[str]:
     return out
 
 
-def to_markdown(report: AuditReport) -> str:
+def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
+    """Render the report. ``scrub`` strips terminal and bidi controls from untrusted text.
+
+    Paths are always code spans without controls. The CLI keeps memory and evidence text literal; the
+    pre-commit hook scrubs, because it prints the report on a terminal during ``git commit``.
+    """
+    def show(text: str) -> str:
+        return show_text(text) if scrub else text
+
     out = [REPORT_HEADER, "",
            f"- Memory: {code_span(report.memory_file)} ({len(report.files_read)} file(s): "
            + ", ".join(code_span(p) for p in report.files_read) + ")",
@@ -125,10 +133,10 @@ def to_markdown(report: AuditReport) -> str:
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]
     out.append("")
     for finding in report.findings:
-        out += _finding(finding)
+        out += _finding(finding, scrub=scrub)
     if report.skipped_evidence:
         out += ["## Skipped evidence", ""]
-        out += [skipped_line(s.path, s.reason) for s in report.skipped_evidence]
+        out += [skipped_line(s.path, s.reason, show) for s in report.skipped_evidence]
         out.append("")
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
     return "\n".join(out) + "\n"

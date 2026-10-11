@@ -27,8 +27,8 @@ from .report import LABELS, _finding, _quote, metadata_line, skipped_line, usage
 from .text import terms
 from .verify import Verifier
 
-__all__ = ["ClaimChange", "DiffReport", "HistoryError", "HistoryReport", "compare", "diff_to_markdown",
-           "history_to_markdown", "memory_diff", "memory_history", "resolve_commit"]
+__all__ = ["ClaimChange", "DiffReport", "HistoryError", "HistoryReport", "audit_staged", "compare",
+           "diff_to_markdown", "history_to_markdown", "memory_diff", "memory_history", "resolve_commit"]
 
 SIMILAR = 0.5  # minimum term similarity for an edit to count as "changed" rather than removed + added
 
@@ -169,17 +169,51 @@ DIFF_LIMITATIONS = [
 ]
 
 
+# Appended to a staged diff. Evidence stays the working tree; pre-commit's own stash is called out so the
+# report still matches what a hand-run `memfalsify diff --staged` does.
+STAGED_LIMITATION = (
+    "The head version is the git index (what this commit will record). Unstaged edits to the memory file "
+    "and to the .md files it links are outside this diff. Evidence is the working tree as it is now. "
+    "During a pre-commit run, unstaged changes to tracked files are hidden first, so tracked evidence "
+    "matches the index; untracked evidence files stay visible."
+)
+STAGED_AUDIT_NOTE = (
+    "Every claim was read from the git index (the staged text a commit would record), including one level "
+    "of linked .md files, also from the index. Evidence is the working tree as it is now. During a "
+    "pre-commit run, unstaged changes to tracked files are hidden first, so tracked evidence matches the "
+    "index; untracked evidence files stay visible."
+)
+
+
 def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow_links: bool = True,
                 evidence_root: Path | None = None, reviews: Path | None = None, verifier: Verifier | None = None,
                 as_of: date | None = None, stale_days: int = 180, min_coverage: float = 0.5,
-                max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1) -> DiffReport:
-    """Diff the memory at ``base`` against ``head`` (default: the working tree); audit added and changed claims."""
+                max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1,
+                staged: bool = False) -> DiffReport:
+    """Diff the memory at ``base`` against ``head`` (default: the working tree); audit added and changed claims.
+
+    With ``staged=True``, head is the index (what ``git commit`` will record) and ``head`` must be omitted.
+    A repository with no commits yet accepts ``base="HEAD"`` and treats every staged claim as added.
+    Evidence is the working tree in every mode.
+    """
+    if staged and head is not None:
+        raise HistoryError("a staged diff reads the index and does not take a head revision")
     repo = open_repository(memory_file)
-    base_commit = repo.resolve(base)
-    head_commit = repo.resolve(head) if head is not None else None
+    if staged and repo.head() is None:
+        if base != "HEAD":
+            raise HistoryError("this repository has no commits; a staged diff only accepts --base HEAD")
+        base_commit = None
+    else:
+        base_commit = repo.resolve(base)
+    head_commit = None if staged or head is None else repo.resolve(head)
     with Objects(repo) as objects:
-        old = repo.at(objects, base_commit, follow_links)
-        new = repo.at(objects, head_commit, follow_links) if head_commit else repo.worktree(follow_links)
+        old = Snapshot() if base_commit is None else repo.at(objects, base_commit, follow_links)
+        if staged:
+            new = repo.index(objects, follow_links)
+        elif head_commit is not None:
+            new = repo.at(objects, head_commit, follow_links)
+        else:
+            new = repo.worktree(follow_links)
     changes = compare(old.claims, new.claims)
     touched = [c.new.id for c in changes if c.kind in ("added", "changed")]
     # The memory files (either version's paths, as they are now) are never evidence for themselves.
@@ -197,11 +231,31 @@ def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow
                            status=status.get(c.new.id) if c.kind in ("added", "changed") else None)
                for c in changes]
     summary = {kind: sum(c.kind == kind for c in changes) for kind in ("added", "changed", "removed", "unchanged")}
+    limitations = [*DIFF_LIMITATIONS, STAGED_LIMITATION] if staged else DIFF_LIMITATIONS
+    head_rev = "index" if staged else (head if head is not None else "working tree")
     return DiffReport(memory_file=str(memory_file),
                       base=Revision(rev=base, commit=base_commit, files=old.files),
-                      head=Revision(rev=head if head is not None else "working tree", commit=head_commit,
-                                    files=new.files),
-                      summary=summary, changes=entries, audit=report, limitations=DIFF_LIMITATIONS)
+                      head=Revision(rev=head_rev, commit=head_commit, files=new.files),
+                      summary=summary, changes=entries, audit=report, limitations=limitations)
+
+
+def audit_staged(memory_file: Path, *, follow_links: bool = True, evidence_root: Path | None = None,
+                 reviews: Path | None = None, verifier: Verifier | None = None, as_of: date | None = None,
+                 stale_days: int = 180, min_coverage: float = 0.5, max_judged: int | None = None,
+                 exclude: Iterable[str] = ()) -> AuditReport:
+    """Audit every claim in the index copy of ``memory_file``. Evidence is the working tree."""
+    repo = open_repository(memory_file)
+    with Objects(repo) as objects:
+        snap = repo.index(objects, follow_links)
+    memory_paths = [p for name in snap.files if (p := repo.worktree_path(name))]
+    report = audit_claims(snap.claims, memory_file=str(memory_file), files_read=snap.files,
+                          memory_paths=memory_paths, evidence_root=evidence_root, reviews=reviews,
+                          verifier=verifier, as_of=as_of, stale_days=stale_days, min_coverage=min_coverage,
+                          max_judged=max_judged, exclude=exclude)
+    report.skipped_evidence[:0] = [s.model_copy(update={"reason": "memory skipped: " + s.reason})
+                                  for s in snap.skipped]
+    report.limitations.append(STAGED_AUDIT_NOTE)
+    return report
 
 
 def _files(files: list[str]) -> str:
@@ -216,15 +270,23 @@ def _meta(metadata: dict[str, Value]) -> list[str]:
     return [metadata_line(metadata), ""] if metadata else []
 
 
+def _point(revision: Revision) -> str:
+    """One endpoint of a diff. A missing commit is the working tree, the index, or a repo with no commits."""
+    if revision.commit:
+        return f"{code_span(revision.rev)} (commit {code_span(revision.commit[:12])})"
+    if revision.rev == "working tree":
+        return "working tree"
+    if revision.rev == "index":
+        return "the index (staged content)"
+    return f"{code_span(revision.rev)} (no commit yet)"
+
+
 def diff_to_markdown(report: DiffReport) -> str:
     audit = report.audit
-    head = (f"{code_span(report.head.rev)} (commit {code_span(report.head.commit[:12])})" if report.head.commit
-            else "working tree")
     out = [DIFF_HEADER, "",
            f"- Memory: {code_span(report.memory_file)}",
-           f"- Base: {code_span(report.base.rev)} (commit {code_span(report.base.commit[:12])}), "
-           f"{_files(report.base.files)}",
-           f"- Head: {head}, {_files(report.head.files)}",
+           f"- Base: {_point(report.base)}, {_files(report.base.files)}",
+           f"- Head: {_point(report.head)}, {_files(report.head.files)}",
            f"- Evidence root: {code_span(audit.evidence_root)} (as it is now)" if audit.evidence_root
            else "- Evidence root: none supplied",
            *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in audit.excluded)]

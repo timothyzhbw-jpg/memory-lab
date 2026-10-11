@@ -213,7 +213,12 @@ def diff_command(
     memory: Path = GIT_MEMORY_ARG,
     base: str = typer.Option(..., "--base", help="Revision to compare against (branch, tag or commit), "
                                                  "e.g. main or the pull request's base commit"),
-    head: Optional[str] = typer.Option(None, "--head", help="Revision to compare (default: the working tree)"),
+    head: Optional[str] = typer.Option(None, "--head", help="Revision to compare (default: the working tree). "
+                                                            "Not used with --staged."),
+    staged: bool = typer.Option(False, "--staged",
+                                help="Compare --base with the index (what git commit will record) instead of "
+                                     "the working tree. Unstaged edits to memory are ignored. Evidence is still "
+                                     "the working tree. Cannot be combined with --head."),
     evidence: Optional[Path] = EVIDENCE,
     exclude: Optional[list[str]] = EXCLUDE,
     reviews: Optional[Path] = REVIEWS,
@@ -234,13 +239,16 @@ def diff_command(
     max_concurrency: int = MAX_CONCURRENCY,
     batch: bool = BATCH,
 ) -> None:
-    """Show which claims changed between two revisions and audit only the added and changed ones."""
+    """Show which claims changed between two revisions and audit only the added and changed ones.
+
+    With --staged, the version under test is the index. Evidence is the working tree either way.
+    """
     try:
         reference = date.fromisoformat(as_of) if as_of else None
         judge = build_verifier(verifier, llm_model, jev_model, accept_at, batch=batch, progress=_progress)
         report = memory_diff(memory, base, head, follow_links=follow_links, evidence_root=evidence, reviews=reviews,
                              verifier=judge, as_of=reference, stale_days=stale_days, exclude=exclude or (),
-                             max_concurrency=concurrency(verifier, max_concurrency),
+                             max_concurrency=concurrency(verifier, max_concurrency), staged=staged,
                              **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))

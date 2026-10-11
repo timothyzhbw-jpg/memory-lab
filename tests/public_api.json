@@ -65,6 +65,7 @@
     "__version__",
     "audit",
     "audit_claims",
+    "audit_staged",
     "claim_id",
     "compare",
     "detect",

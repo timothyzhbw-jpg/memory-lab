@@ -1,6 +1,6 @@
 ---
 name: memfalsify
-description: Audit an agent's MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, Cursor rules (.cursor/rules/*.mdc, .cursorrules), GitHub Copilot instructions or Windsurf rules against evidence (documents, notes, and transcripts or OCR of recordings and scans) and report which memories are supported, contradicted, unverified, stale or overgeneralized, with cited quotes. Use when asked to check, verify, audit, fact-check or clean up agent memory or instruction files, to find which instruction files a repository has, to review the memory changes in a commit or pull request (instruction files or MEMORY.md in git), before relying on a remembered fact, when choosing the memlab MCP tools versus the memfalsify CLI, or when adding the MemFalsify GitHub Action. Read-only. Proposes changes, never applies them.
+description: Audit an agent's MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, Cursor rules (.cursor/rules/*.mdc, .cursorrules), GitHub Copilot instructions or Windsurf rules against evidence (documents, notes, and transcripts or OCR of recordings and scans) and report which memories are supported, contradicted, unverified, stale or overgeneralized, with cited quotes. Use when asked to check, verify, audit, fact-check or clean up agent memory or instruction files, to find which instruction files a repository has, to review the memory changes in a commit or pull request (instruction files or MEMORY.md in git), before relying on a remembered fact, when choosing the memlab MCP tools versus the memfalsify CLI, or when adding the MemFalsify GitHub Action or its pre-commit hooks. Read-only. Proposes changes, never applies them.
 ---
 
 # MemFalsify: audit memory against evidence
@@ -90,10 +90,24 @@ When the memory file is versioned, review only what changed instead of re-auditi
    ```bash
    memfalsify diff CLAUDE.md --base origin/main --evidence . --output memfalsify-diff.md
    ```
-   The report lists claims as added, changed (old → new wording), removed or unchanged, and audits only the added and changed ones against the evidence as it is now. `--format html` works here too, for reviewers who want a page. If the base is missing (shallow clone), say so and ask before fetching history.
+   To review the index, the text the next commit will record, use `--staged` with `--base`. Evidence is still the working tree. `--staged` does not combine with `--head`:
+   ```bash
+   memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict
+   ```
+   `--staged` reads the memory file and one level of linked `.md` files from the index. The report lists claims as added, changed (old → new wording), removed or unchanged, and audits only the added and changed ones against the evidence as it is now. `--format html` works here too, for reviewers who want a page. If the base is missing (shallow clone), say so and ask before fetching history.
 2. **Review the touched claims** as in steps 3 and 4 above: falsify each `POSSIBLE COUNTEREVIDENCE` or `DISPUTED` one, and flag new claims with `NO EVIDENCE`. Point out removed claims too: a removal can be a silent policy change. Say clearly that unchanged claims were not re-checked.
 3. **Trace a claim** when the user asks where it came from: `memfalsify history CLAUDE.md` gives the commit that introduced each claim and the one that last changed it, plus claims removed and when. History follows the first-parent line, so merged branches show up as their merge commit.
 4. **Rolling back needs permission.** `memfalsify rollback CLAUDE.md --claim <id> --to <rev> -o restore.patch` only writes a patch that restores the old wording (or re-adds a removed claim). Show the patch to the user; run `git apply restore.patch` from the repository root only if they approve it, then rerun `diff`. Never commit, push or rewrite history on your own.
+
+## Pre-commit
+
+When the user wants MemFalsify on each commit, point them at `.pre-commit-hooks.yaml` in the Memory Lab repository. The hook ids are `memfalsify-diff` and `memfalsify-audit`. Pin a full commit SHA. `memfalsify-diff` is the staged form of this command:
+
+```bash
+memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict
+```
+
+It audits claims added or changed in staged `CLAUDE.md`, `AGENTS.md` and `MEMORY.md`. `memfalsify-audit` audits every claim in those staged files. Both fail the commit when a checked claim is challenged, conflicted, disputed or has possible counterevidence. A claim with no evidence does not fail the commit. The hooks read memory from the index and evidence from the working tree. During pre-commit, unstaged edits to tracked files are hidden first, so tracked evidence matches the index. Setup, including model verifiers via `additional_dependencies` and `--verifier`, is in the repository README under Pre-commit and in `docs/github-action.md`.
 
 ## Rules
 

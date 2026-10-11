@@ -1,0 +1,24 @@
+# pre-commit installs a hook repository with `pip install .` at the clone root
+# (https://pre-commit.com/#python). This file exists for that install. It is not
+# the memfalsify distribution: that package, and memlab-core, stay under packages/.
+# The sources below are the ones in this commit, so the hook does not download
+# memfalsify or memlab-core from PyPI.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memory-lab-pre-commit"
+version = "0.3.0"
+description = "pre-commit install of MemFalsify. The published packages live under packages/."
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = ["pydantic>=2.5", "typer>=0.12"]
+
+[project.scripts]
+memfalsify-pre-commit = "memfalsify.precommit:main"
+
+[tool.setuptools.packages.find]
+where = ["packages/memfalsify/src", "packages/memcore/src"]
+include = ["memfalsify*", "memcore*"]
