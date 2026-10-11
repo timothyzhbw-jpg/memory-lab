@@ -47,14 +47,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           persist-credentials: false
-      - uses: timothyzhbw-jpg/memory-lab@main
+      - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # main, <date>
         with:
           exclude: |
             vendor/**
             CHANGELOG.md
 ```
 
-Pin the action to a full commit SHA rather than `@main`, with a comment saying which version it is, for
+Pin the action to a full commit SHA rather than a branch such as `main`, with a comment saying which version it is, for
 example `uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # main, 2026-10-11`. The action runs inside your
 job, and a branch can move under you; update the SHA when you choose to. Pin the other actions in your workflow
 the same way, as the examples here do: a tag such as `@v4` is a pointer its owner can move to other code. The
