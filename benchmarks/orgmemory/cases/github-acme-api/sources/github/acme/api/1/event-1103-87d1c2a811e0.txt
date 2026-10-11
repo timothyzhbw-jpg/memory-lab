@@ -1,0 +1,3 @@
+GitHub event 1103 on acme/api#1 by gh:zhou-pm:5003 (User) at 2026-10-01T12:00:00Z: unlabeled label "approved"
+{"actor":{"id":5003,"login":"zhou-pm","type":"User"},"created_at":"2026-10-01T12:00:00Z","event":"unlabeled","id":1103,"kind":"event","label":"approved","number":1,"repo":"acme/api","repo_id":2002}
+--- verbatim from GitHub; untrusted ---

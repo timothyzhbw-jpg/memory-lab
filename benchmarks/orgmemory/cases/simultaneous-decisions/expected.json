@@ -1,0 +1,90 @@
+{
+  "description": "Conflicting authorized decisions at the same instant (also written in different UTC offsets, and three at once): file order decides and the conflict is reported; same-instant agreement or an ignored attempt is no conflict.",
+  "snapshots": [
+    {
+      "as_of": "2026-10-02T16:59:59+02:00",
+      "trail": {
+        "s02": {"outcome": "not_replayed", "note": "15:00Z is one second after the cutoff (14:59:59Z)"},
+        "s03": {"outcome": "not_replayed", "note": "17:00+02:00 is the same instant as 15:00Z, after the cutoff"}
+      }
+    },
+    {
+      "as_of": "2026-10-02T15:00:00Z",
+      "states": {
+        "Pricing page": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "s03",
+          "note": "Both decisions take effect exactly at the cutoff, which is inclusive; they are the same instant, so file order puts Ana's reject last."
+        },
+        "Referral program": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Only Lin's request so far."
+        },
+        "Partner API": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Only Lin's request so far."
+        },
+        "Loyalty points": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Only the customer's request so far."
+        },
+        "Search": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Only Lin's request so far."
+        }
+      },
+      "order": ["s02", "s03"]
+    },
+    {
+      "as_of": "2026-10-10T00:00:00Z",
+      "states": {
+        "Pricing page": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "s03",
+          "note": "Nothing later; the order-chosen reject stands."
+        },
+        "Referral program": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "s07",
+          "note": "Three decisions at 12:00Z; file order applies approve, reject, approve, so Ana's approve is last."
+        },
+        "Partner API": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "s11",
+          "note": "Zhou's approve won the 10-04 tie by file order; Ana's reject two days later replaces it."
+        },
+        "Loyalty points": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "s14",
+          "note": "The account manager's approves, one at the same instant as Zhou's reject, are ignored."
+        },
+        "Search": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "s18",
+          "note": "Two approves at the same instant agree; the later in file order is the last decision."
+        }
+      },
+      "trail": {
+        "s13": {"outcome": "unauthorized", "note": "account_manager may not approve"},
+        "s15": {"outcome": "unauthorized", "note": "account_manager may not approve"},
+        "s18": {"outcome": "applied", "note": "a second agreeing approve applies"}
+      },
+      "order": ["s05", "s06", "s07"],
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "simultaneous_decisions", "severity": "high", "subject": "Pricing page", "note": "the order-chosen reject is still current"},
+          {"kind": "simultaneous_decisions", "severity": "medium", "subject": "Referral program", "note": "approve then reject at 12:00Z; the reject was replaced by the third decision"},
+          {"kind": "simultaneous_decisions", "severity": "high", "subject": "Referral program", "note": "reject then approve at 12:00Z; that approve is still current"},
+          {"kind": "simultaneous_decisions", "severity": "medium", "subject": "Partner API", "note": "the order-chosen approve was later replaced by a reject"},
+          {"kind": "decision_reversed", "severity": "medium", "subject": "Partner API", "note": "Zhou's approve reversed by Ana's reject, a different actor"},
+          {"kind": "unauthorized_attempts", "severity": "high", "actor": "wu", "note": "two ignored approves"}
+        ]
+      }
+    }
+  ]
+}

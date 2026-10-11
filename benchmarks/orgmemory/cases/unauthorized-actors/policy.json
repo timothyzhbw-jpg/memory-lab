@@ -1,0 +1,67 @@
+{
+  "actors": {
+    "zhou": [
+      "product_manager"
+    ],
+    "lin": [
+      "engineer"
+    ],
+    "wu": [
+      "account_manager"
+    ],
+    "kim": [
+      "Product_Manager"
+    ],
+    "qa-bot": [],
+    "li": [
+      "cto"
+    ],
+    "fang": [
+      "legal"
+    ],
+    "buyer@acme": [
+      "customer"
+    ]
+  },
+  "permissions": {
+    "request": [
+      "customer",
+      "account_manager",
+      "engineer",
+      "product_manager"
+    ],
+    "reconsider": [
+      "customer",
+      "account_manager",
+      "engineer",
+      "product_manager"
+    ],
+    "comment": [
+      "customer",
+      "account_manager",
+      "engineer",
+      "product_manager",
+      "cto",
+      "legal"
+    ],
+    "raise_risk": [
+      "engineer",
+      "product_manager"
+    ],
+    "dependency": [
+      "engineer",
+      "product_manager"
+    ],
+    "approve": [
+      "product_manager",
+      "cto"
+    ],
+    "reject": [
+      "product_manager",
+      "legal"
+    ],
+    "revoke": [
+      "product_manager"
+    ]
+  }
+}

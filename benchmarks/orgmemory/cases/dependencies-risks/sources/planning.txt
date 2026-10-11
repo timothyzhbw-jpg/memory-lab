@@ -1,0 +1,15 @@
+Exports planning notes
+Lin: proposing bulk export.
+Lin: bulk export depends on the billing migration.
+Lin: proposing the billing migration.
+Lin: export reads billing tables while they are being migrated.
+Wu (sales): bulk export also needs the search reindex.
+Wu (sales): customers may export stale data.
+Lin: bulk export also depends on ledger v2.
+Lin: reminder, bulk export depends on the billing migration.
+Zhou: bulk export approved.
+Lin: the approved scope exceeds the export rate limit.
+Zhou: billing migration rejected for this quarter.
+Lin: please reconsider the billing migration; bulk export needs it.
+Zhou: billing migration approved.
+Lin: the migration must ship with bulk export.

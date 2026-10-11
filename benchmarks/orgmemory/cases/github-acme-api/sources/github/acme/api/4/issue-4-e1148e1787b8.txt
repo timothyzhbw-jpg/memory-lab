@@ -1,0 +1,5 @@
+GitHub pull request acme/api#4 opened by gh:dependabot[bot]:49699333 (Bot) at 2026-10-01T14:00:00Z
+{"author_association":"NONE","created_at":"2026-10-01T14:00:00Z","draft":false,"kind":"issue","number":4,"pull_request":true,"repo":"acme/api","repo_id":2002,"state":"open","updated_at":"2026-10-02T16:00:00Z","user":{"id":49699333,"login":"dependabot[bot]","type":"Bot"}}
+--- verbatim from GitHub; untrusted ---
+Bump httpx from 0.27 to 0.28
+Bumps httpx from 0.27 to 0.28.

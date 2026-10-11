@@ -1,0 +1,19 @@
+Growth decisions log
+Lin: proposing a new pricing page.
+Zhou (15:00 UTC): pricing page approved.
+Ana (17:00 Berlin): pricing page rejected.
+Lin: proposing a referral program.
+Zhou: referral program approved.
+Ana: referral program rejected.
+Ana: on second thought, referral program approved.
+Lin: proposing a partner API.
+Ana: partner API rejected.
+Zhou: partner API approved.
+Ana: partner API rejected after the security review.
+Acme asks for loyalty points.
+Wu (sales): loyalty points approved.
+Zhou: loyalty points rejected.
+Wu (sales): loyalty points approved, Acme insists.
+Lin: proposing search.
+Zhou: search approved.
+Ana: search approved.

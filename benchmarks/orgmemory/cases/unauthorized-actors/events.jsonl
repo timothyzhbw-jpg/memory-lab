@@ -1,0 +1,14 @@
+{"id": "u01", "timestamp": "2026-10-01T09:00:00Z", "actor": "wu", "action": "request", "subject": "Export API", "evidence_ids": ["q-u01"]}
+{"id": "u02", "timestamp": "2026-10-01T10:00:00Z", "actor": "wu", "action": "approve", "subject": "Export API", "evidence_ids": ["q-u02"]}
+{"id": "u03", "timestamp": "2026-10-01T11:00:00Z", "actor": "kim", "action": "approve", "subject": "Export API", "evidence_ids": ["q-u03"]}
+{"id": "u04", "timestamp": "2026-10-01T12:00:00Z", "actor": "mallory", "action": "reject", "subject": "Export API", "evidence_ids": ["q-u04"]}
+{"id": "u05", "timestamp": "2026-10-01T13:00:00Z", "actor": "wu", "action": "raise_risk", "subject": "Export API", "note": "Export may overload the database", "evidence_ids": ["q-u05"]}
+{"id": "u06", "timestamp": "2026-10-01T14:00:00Z", "actor": "mallory", "action": "request", "subject": "Dark mode", "evidence_ids": ["q-u06"]}
+{"id": "u07", "timestamp": "2026-10-01T15:00:00Z", "actor": "mallory", "action": "comment", "subject": "Dark mode", "evidence_ids": ["q-u07"]}
+{"id": "u08", "timestamp": "2026-10-02T09:00:00Z", "actor": "qa-bot", "action": "approve", "subject": "Dark mode", "evidence_ids": ["q-u08"]}
+{"id": "u09", "timestamp": "2026-10-03T09:00:00Z", "actor": "zhou", "action": "approve", "subject": "Export API", "evidence_ids": ["q-u09"]}
+{"id": "u10", "timestamp": "2026-10-03T10:00:00Z", "actor": "buyer@acme", "action": "request", "subject": "Audit trail", "evidence_ids": ["q-u10"]}
+{"id": "u11", "timestamp": "2026-10-04T09:00:00Z", "actor": "li", "action": "reject", "subject": "Audit trail", "evidence_ids": ["q-u11"]}
+{"id": "u12", "timestamp": "2026-10-04T10:00:00Z", "actor": "fang", "action": "reject", "subject": "Audit trail", "evidence_ids": ["q-u12"]}
+{"id": "u13", "timestamp": "2026-10-05T09:00:00Z", "actor": "li", "action": "approve", "subject": "Audit trail", "evidence_ids": ["q-u13"]}
+{"id": "u14", "timestamp": "2026-10-05T10:00:00Z", "actor": "zһou", "action": "approve", "subject": "Dark mode", "evidence_ids": ["q-u14"]}

@@ -1,0 +1,16 @@
+Customer and team requests, September 2026
+Acme asks for a mobile app.
+Zhou: mobile app approved for Q4.
+Acme asks for the mobile app again, now for Q3.
+Lin: proposing offline mode.
+Zhou: offline mode rejected.
+Wu (sales): please reconsider offline mode.
+Acme: please reconsider offline mode, our field teams need it.
+Zhou: offline mode rejected again.
+Zhou: proposing a beta flag.
+Zhou: beta flag approved.
+Lin: proposing a dark launch.
+Zhou: dark launch approved.
+Zhou: withdrawing the dark launch approval.
+Lin: requesting the dark launch again.
+Lin: please reconsider night mode.

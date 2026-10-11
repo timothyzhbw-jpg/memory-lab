@@ -1,0 +1,14 @@
+{"id": "p01", "timestamp": "2026-10-01T09:00:00Z", "actor": "lin", "action": "request", "subject": "Bulk export", "evidence_ids": ["q-p01"]}
+{"id": "p02", "timestamp": "2026-10-01T10:00:00Z", "actor": "lin", "action": "dependency", "subject": "Bulk export", "dependency": "Billing migration", "evidence_ids": ["q-p02"]}
+{"id": "p03", "timestamp": "2026-10-01T11:00:00Z", "actor": "lin", "action": "request", "subject": "Billing migration", "evidence_ids": ["q-p03"]}
+{"id": "p04", "timestamp": "2026-10-02T09:00:00Z", "actor": "lin", "action": "raise_risk", "subject": "Bulk export", "note": "Export reads billing tables while they are being migrated", "evidence_ids": ["q-p04"]}
+{"id": "p05", "timestamp": "2026-10-02T10:00:00Z", "actor": "wu", "action": "dependency", "subject": "Bulk export", "dependency": "Search reindex", "evidence_ids": ["q-p05"]}
+{"id": "p06", "timestamp": "2026-10-02T11:00:00Z", "actor": "wu", "action": "raise_risk", "subject": "Bulk export", "note": "Customers may export stale data", "evidence_ids": ["q-p06"]}
+{"id": "p07", "timestamp": "2026-10-03T09:00:00Z", "actor": "lin", "action": "dependency", "subject": "Bulk export", "dependency": "Ledger v2", "evidence_ids": ["q-p07"]}
+{"id": "p08", "timestamp": "2026-10-03T10:00:00Z", "actor": "lin", "action": "dependency", "subject": "Bulk export", "dependency": "Billing migration", "evidence_ids": ["q-p08"]}
+{"id": "p09", "timestamp": "2026-10-04T09:00:00Z", "actor": "zhou", "action": "approve", "subject": "Bulk export", "evidence_ids": ["q-p09"]}
+{"id": "p10", "timestamp": "2026-10-05T09:00:00Z", "actor": "lin", "action": "raise_risk", "subject": "Bulk export", "note": "The approved scope exceeds the export rate limit", "evidence_ids": ["q-p10"]}
+{"id": "p11", "timestamp": "2026-10-06T09:00:00Z", "actor": "zhou", "action": "reject", "subject": "Billing migration", "evidence_ids": ["q-p11"]}
+{"id": "p12", "timestamp": "2026-10-07T09:00:00Z", "actor": "lin", "action": "reconsider", "subject": "Billing migration", "evidence_ids": ["q-p12"]}
+{"id": "p13", "timestamp": "2026-10-09T09:00:00Z", "actor": "zhou", "action": "approve", "subject": "Billing migration", "evidence_ids": ["q-p13"]}
+{"id": "p14", "timestamp": "2026-10-09T10:00:00Z", "actor": "lin", "action": "dependency", "subject": "Billing migration", "dependency": "Bulk export", "evidence_ids": ["q-p14"]}

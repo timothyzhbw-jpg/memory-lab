@@ -1,0 +1,3 @@
+{"id": "e1", "timestamp": "2026-10-01T09:00:00Z", "actor": "lin", "action": "request", "subject": "Report builder", "evidence_ids": ["q-e1"], "authorized": true, "role": "product_manager"}
+{"id": "e2", "timestamp": "2026-10-02T09:00:00Z", "actor": "zhou", "action": "approve", "subject": "Report builder", "evidence_ids": ["q-e2"]}
+{"id": "e3", "timestamp": "2026-10-09T09:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Report builder", "supersedes": "e2", "evidence_ids": ["q-e3"]}

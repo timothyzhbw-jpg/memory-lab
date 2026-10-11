@@ -1,0 +1,50 @@
+{
+  "description": "Role changes are not retroactive: policy.json holds today's roles (Lin promoted to product manager and Zhou moved to advisor on 2026-10-10, per the dated announcement), but each act should be judged by the role held when it took effect.",
+  "snapshots": [
+    {
+      "as_of": "2026-10-09T00:00:00Z",
+      "trail": {
+        "c02": {"outcome": "applied", "note": "Zhou was product manager on 2026-10-03; the later move to advisor does not undo that approval"},
+        "c04": {"outcome": "unauthorized", "note": "Lin was an engineer on 2026-10-05; the later promotion does not make that approval authorized"}
+      }
+    },
+    {
+      "as_of": "2026-10-20T00:00:00Z",
+      "states": {
+        "Audit log export": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "c02",
+          "note": "Approved by Zhou while Zhou was product manager."
+        },
+        "Bulk delete": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "c09",
+          "note": "Lin's pre-promotion approve is ignored; Ana (product manager throughout) rejects."
+        },
+        "Webhooks": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "c08",
+          "note": "After 2026-10-10 Zhou is an advisor (ignored) and Lin is product manager (applies): both readings agree."
+        },
+        "Exports team": {
+          "status": "proposed", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "The announcement is a comment: announcing a role change in the log grants nothing."
+        }
+      },
+      "trail": {
+        "c05": {"outcome": "applied", "note": "people_ops may comment"},
+        "c07": {"outcome": "unauthorized", "note": "Zhou is an advisor after 2026-10-10"},
+        "c08": {"outcome": "applied", "note": "Lin is product manager after 2026-10-10"},
+        "c09": {"outcome": "applied", "note": "Ana is product manager throughout"}
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "zhou", "note": "only the post-change approve of Webhooks was outside Zhou's role"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "lin", "note": "Lin's approve of Bulk delete came before the promotion"}
+        ]
+      }
+    }
+  ]
+}

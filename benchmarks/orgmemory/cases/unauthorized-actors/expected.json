@@ -1,0 +1,97 @@
+{
+  "description": "Unauthorized and unknown actors, a look-alike actor id, a role that differs only in case, a listed actor with no roles, and split approve/reject authority: none of the ignored events may change state, and pending_approval names only roles that may both approve and reject.",
+  "snapshots": [
+    {
+      "as_of": "2026-10-02T00:00:00Z",
+      "states": {
+        "Export API": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Only wu's request applies; the approves by an account manager, by the role 'Product_Manager' and the reject by an unknown actor are ignored, and an account manager may not raise a risk."
+        },
+        "Dark mode": {
+          "status": "proposed", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "The subject exists because an unknown actor asked for it, but that request did not apply, so no role is awaited."
+        }
+      },
+      "trail": {
+        "u02": {"outcome": "unauthorized", "note": "account_manager may not approve"},
+        "u03": {"outcome": "unauthorized", "note": "roles match exactly: 'Product_Manager' is not 'product_manager'"},
+        "u04": {"outcome": "unauthorized", "note": "mallory is not in policy.json, so has no roles"},
+        "u05": {"outcome": "unauthorized", "note": "account_manager may not raise_risk"},
+        "u06": {"outcome": "unauthorized", "note": "an unknown actor may not request"},
+        "u07": {"outcome": "unauthorized", "note": "an unknown actor may not even comment"},
+        "u08": {"outcome": "not_replayed", "note": "dated 2026-10-02T09:00Z, after the cutoff"}
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "wu", "note": "one ignored approve plus one ignored raise_risk: one decision attempt is medium"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "kim", "note": "one ignored approve"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "mallory", "note": "one ignored reject and one ignored request; the comment is not counted"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-10-03T12:00:00Z",
+      "states": {
+        "Export API": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "u09",
+          "note": "zhou (product_manager) approves; the ignored attempts before it changed nothing."
+        },
+        "Dark mode": {
+          "status": "proposed", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "qa-bot is listed in policy.json with no roles, so its approve is ignored like an unknown actor's."
+        },
+        "Audit trail": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "cto may approve but not reject and legal may reject but not approve, so only product_manager may do both and is awaited."
+        }
+      }
+    },
+    {
+      "as_of": "2026-10-20T00:00:00Z",
+      "states": {
+        "Export API": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "u09",
+          "note": "Nothing after u09 touches Export API."
+        },
+        "Dark mode": {
+          "status": "proposed", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Every event on Dark mode was ignored, including an approve by 'zһou', whose second letter is Cyrillic."
+        },
+        "Audit trail": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "u13",
+          "note": "li's reject is ignored (cto may not reject), fang's reject applies (legal may), then li's approve applies (cto may approve)."
+        }
+      },
+      "trail": {
+        "u08": {"outcome": "unauthorized", "note": "a listed actor with no roles"},
+        "u09": {"outcome": "applied", "note": "product_manager may approve"},
+        "u11": {"outcome": "unauthorized", "note": "cto may approve but not reject"},
+        "u12": {"outcome": "applied", "note": "legal may reject"},
+        "u13": {"outcome": "applied", "note": "cto may approve"},
+        "u14": {"outcome": "unauthorized", "note": "'zһou' (Cyrillic һ) only looks like zhou; it is a different actor with no roles"}
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "wu", "note": "one ignored approve plus one ignored raise_risk"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "kim", "note": "one ignored approve"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "mallory", "note": "one ignored reject and one ignored request; the comment is not counted"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "qa-bot", "note": "one ignored approve"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "li", "note": "one ignored reject; li's approve applied"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "zһou", "note": "one ignored approve by the look-alike actor, reported apart from zhou"},
+          {"kind": "decision_reversed", "severity": "medium", "subject": "Audit trail", "note": "fang's reject is followed by li's approve with no revoke between: a different actor reversed it"}
+        ]
+      }
+    }
+  ]
+}

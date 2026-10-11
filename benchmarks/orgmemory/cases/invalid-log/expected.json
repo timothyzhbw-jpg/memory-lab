@@ -1,0 +1,25 @@
+{
+  "description": "Invalid event logs and policies fail closed before any replay: a reused event id (even dated after any cutoff), a revoke without or with an unknown target, malformed fields and lines, an event that declares its own authority, ambiguous duplicate JSON keys, and malformed policies; a CRLF log stays valid.",
+  "validation": [
+    {"name": "main", "error": "duplicate event id: e2", "note": "the last line reuses e2 for a reject dated 10-20; the whole log is validated, so no cutoff can skip it"},
+    {"name": "valid", "events": "events.valid.jsonl", "error": null, "note": "the same log without the reused id loads, so each variant below differs from a valid log by one defect"},
+    {"name": "unknown-supersedes", "events": "events.unknown-supersedes.jsonl", "error": "event e3 supersedes unknown event e9", "note": "a revoke naming an id that is not in the log"},
+    {"name": "revoke-without-target", "events": "events.revoke-without-target.jsonl", "error": "a revoke event requires 'supersedes'", "note": "a revoke that names nothing"},
+    {"name": "supersedes-on-approve", "events": "events.supersedes-on-approve.jsonl", "error": "only revoke events may set 'supersedes'", "note": "an approve may not claim to replace another event"},
+    {"name": "naive-timestamp", "events": "events.naive-timestamp.jsonl", "error": "timezone", "note": "an effective time without a timezone is ambiguous"},
+    {"name": "unknown-action", "events": "events.unknown-action.jsonl", "error": "input_value='veto'", "note": "'veto' is not an action"},
+    {"name": "no-evidence", "events": "events.no-evidence.jsonl", "error": "List should have at least 1 item", "note": "every event cites at least one piece of evidence"},
+    {"name": "risk-without-note", "events": "events.risk-without-note.jsonl", "error": "a raise_risk event requires 'note'", "note": "a risk must say what the risk is"},
+    {"name": "dependency-without-target", "events": "events.dependency-without-target.jsonl", "error": "a dependency event requires 'dependency'", "note": "a dependency must name what it depends on"},
+    {"name": "self-declared-authority", "events": "events.self-declared-authority.jsonl", "error": "Extra inputs are not permitted", "note": "an event carrying 'authorized' and 'role' fields is refused, not trusted: authority comes only from policy.json"},
+    {"name": "empty-actor", "events": "events.empty-actor.jsonl", "error": "String should have at least 1 character", "note": "an event needs an actor"},
+    {"name": "not-an-object", "events": "events.not-an-object.jsonl", "error": "expected a JSON object", "note": "a JSON array line"},
+    {"name": "truncated-line", "events": "events.truncated-line.jsonl", "error": "invalid JSON", "note": "a line cut off mid-record"},
+    {"name": "crlf-log", "events": "events.crlf.jsonl", "error": null, "note": "CRLF line endings in the log are only line breaks"},
+    {"name": "duplicate-key-event", "events": "events.duplicate-key.jsonl", "error": "duplicate", "note": "the approve line names its actor twice ('lin', then 'zhou'); JSON parsers disagree on which one wins, so an authority log must refuse the line rather than silently pick the authorized one"},
+    {"name": "duplicate-key-policy", "events": "events.valid.jsonl", "policy": "policy.duplicate-key.json", "error": "duplicate", "note": "'lin' is listed twice in actors (engineer, then product_manager); an ambiguous grant must fail closed rather than silently grant the last one"},
+    {"name": "policy-unknown-action", "events": "events.valid.jsonl", "policy": "policy.unknown-action.json", "error": "input_value='veto'", "note": "the policy grants an action that does not exist"},
+    {"name": "policy-extra-key", "events": "events.valid.jsonl", "policy": "policy.extra-key.json", "error": "Extra inputs are not permitted", "note": "an unknown top-level 'admins' key is refused, not ignored"},
+    {"name": "policy-role-string", "events": "events.valid.jsonl", "policy": "policy.role-string.json", "error": "Input should be a valid list", "note": "roles given as a string, which must not be read as a list of characters"}
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "description": "Revoke chains and invalid supersession: a revoke must name the decision in force on its own subject at its effective time; stale, cross-subject, backdated and unauthorized revokes change nothing, and reversals are reported unless a revoke came between.",
+  "snapshots": [
+    {
+      "as_of": "2026-10-07T12:00:00Z",
+      "states": {
+        "Data retention": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "r07",
+          "note": "approve, revoke, approve, two revokes naming decisions no longer current (ignored), then a revoke of the current approval."
+        },
+        "Retention exceptions": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "x04",
+          "note": "approve, reject, approve; the last authorized decision stands."
+        },
+        "Key rotation": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "k04",
+          "note": "Neither the backdated revoke nor the revoke naming another subject's decision withdrew the approval; Ana's reject replaced it."
+        }
+      },
+      "trail": {
+        "r05": {"outcome": "invalid_supersession", "note": "names r02, but r04 is the decision in force"},
+        "r06": {"outcome": "invalid_supersession", "note": "names the earlier revoke r03, but r04 is the decision in force"},
+        "r07": {"outcome": "applied", "note": "names r04, the decision in force"},
+        "k00": {"outcome": "invalid_supersession", "note": "takes effect on 09-30, before the approval it names exists"},
+        "k03": {"outcome": "invalid_supersession", "note": "names x02, a decision on Retention exceptions, not on Key rotation"}
+      }
+    },
+    {
+      "as_of": "2026-10-25T00:00:00Z",
+      "states": {
+        "Data retention": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "r08",
+          "note": "r08 withdraws the current withdrawal r07, which restores nothing: no approve followed, so the subject stays proposed; Lin's revoke is ignored."
+        },
+        "Retention exceptions": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "x04",
+          "note": "Nothing after x04."
+        },
+        "Key rotation": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "k04",
+          "note": "Nothing after k04."
+        }
+      },
+      "trail": {
+        "r08": {"outcome": "applied", "note": "r07, a revoke, is the decision in force, and product_manager may revoke"},
+        "r09": {"outcome": "unauthorized", "note": "engineer may not revoke"}
+      },
+      "order": ["k00", "k01", "k02", "k03", "k04"],
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Data retention", "note": "r05 names r02"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Data retention", "note": "r06 names r03"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Key rotation", "note": "k00 is dated before its target"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Key rotation", "note": "k03 names another subject's decision"},
+          {"kind": "decision_reversed", "severity": "low", "subject": "Retention exceptions", "note": "Zhou approved, then Zhou rejected"},
+          {"kind": "decision_reversed", "severity": "medium", "subject": "Retention exceptions", "note": "Zhou's reject reversed by Ana's approve"},
+          {"kind": "decision_reversed", "severity": "medium", "subject": "Key rotation", "note": "Zhou's approve reversed by Ana's reject; the ignored revoke between does not count"},
+          {"kind": "stale_pending_approval", "severity": "medium", "subject": "Data retention", "note": "awaiting product_manager since the revoke on 10-07, more than 14 days before 10-25"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "lin", "note": "one ignored revoke"}
+        ]
+      }
+    }
+  ]
+}

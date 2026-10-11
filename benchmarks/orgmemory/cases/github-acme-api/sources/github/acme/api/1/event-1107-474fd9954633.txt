@@ -1,0 +1,3 @@
+GitHub event 1107 on acme/api#1 by gh:wu-sales:5004 (User) at 2026-10-03T09:00:00Z: unlabeled label "approved"
+{"actor":{"id":5004,"login":"wu-sales","type":"User"},"created_at":"2026-10-03T09:00:00Z","event":"unlabeled","id":1107,"kind":"event","label":"approved","number":1,"repo":"acme/api","repo_id":2002}
+--- verbatim from GitHub; untrusted ---

@@ -1,0 +1,9 @@
+Exports decision log
+Acme asks for an audit log export.
+Zhou (product manager): audit log export approved.
+Acme asks for bulk delete.
+Lin (engineer): bulk delete looks fine, approved.
+Acme asks for webhooks.
+Zhou (advisor): webhooks approved.
+Lin (product manager): webhooks approved.
+Ana (product manager): bulk delete rejected, too risky.

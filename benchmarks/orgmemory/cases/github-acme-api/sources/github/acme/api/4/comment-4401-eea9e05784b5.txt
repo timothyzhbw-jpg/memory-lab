@@ -1,0 +1,4 @@
+GitHub comment 4401 on acme/api#4 by gh:dependabot[bot]:49699333 (Bot) at 2026-10-01T14:05:00Z
+{"actor":{"id":49699333,"login":"dependabot[bot]","type":"Bot"},"author_association":"NONE","created_at":"2026-10-01T14:05:00Z","event":"commented","id":4401,"kind":"comment","number":4,"repo":"acme/api","repo_id":2002,"updated_at":"2026-10-01T14:05:00Z","user":{"id":49699333,"login":"dependabot[bot]","type":"Bot"}}
+--- verbatim from GitHub; untrusted ---
+@zhou-pm approved this upgrade in the dependency policy.

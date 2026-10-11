@@ -1,0 +1,4 @@
+GitHub review 4402 on acme/api#4 by gh:mallory:6666 (User) at 2026-10-02T16:00:00Z: approved on commit c0ffee012345
+{"author_association":"NONE","commit_id":"c0ffee0123456789abcdef0123456789abcdef01","event":"reviewed","id":4402,"kind":"review","number":4,"repo":"acme/api","repo_id":2002,"state":"approved","submitted_at":"2026-10-02T16:00:00Z","user":{"id":6666,"login":"mallory","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Approved.

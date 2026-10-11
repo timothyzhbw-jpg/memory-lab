@@ -1,0 +1,57 @@
+{
+  "actors": {
+    "lin": [
+      "product_manager"
+    ],
+    "zhou": [
+      "advisor"
+    ],
+    "ana": [
+      "product_manager"
+    ],
+    "buyer@acme": [
+      "customer"
+    ],
+    "hr@corp": [
+      "people_ops"
+    ]
+  },
+  "permissions": {
+    "request": [
+      "customer",
+      "engineer",
+      "product_manager",
+      "advisor"
+    ],
+    "reconsider": [
+      "customer",
+      "engineer",
+      "product_manager",
+      "advisor"
+    ],
+    "comment": [
+      "customer",
+      "engineer",
+      "product_manager",
+      "advisor",
+      "people_ops"
+    ],
+    "raise_risk": [
+      "engineer",
+      "product_manager"
+    ],
+    "dependency": [
+      "engineer",
+      "product_manager"
+    ],
+    "approve": [
+      "product_manager"
+    ],
+    "reject": [
+      "product_manager"
+    ],
+    "revoke": [
+      "product_manager"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{"id": "f01", "timestamp": "2026-10-01T09:00:00Z", "actor": "lin", "action": "request", "subject": "Retention policy", "evidence_ids": ["q-f01"]}
+{"id": "f02", "timestamp": "2026-10-02T09:00:00Z", "actor": "lin", "action": "raise_risk", "subject": "Retention policy", "note": "365-day retention doubles storage cost", "evidence_ids": ["q-f02"]}
+{"id": "f03", "timestamp": "2026-10-03T09:00:00Z", "actor": "zhou", "action": "reject", "subject": "Retention policy", "evidence_ids": ["q-f03", "q-f03-legal"]}
+{"id": "f04", "timestamp": "2026-10-04T09:00:00Z", "actor": "buyer@acme", "action": "reconsider", "subject": "Retention policy", "evidence_ids": ["q-f04"]}

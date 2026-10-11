@@ -1,0 +1,4 @@
+From: buyer@acme.test
+Subject: Audit log retention
+
+Please reconsider: our auditors need 365 days of audit logs.
