@@ -33,8 +33,10 @@ from memfalsify.report import to_markdown as audit_markdown
 from memfalsify.rollback import rollback_patch
 from memfalsify.verify import VerifierError
 from orgmemory.audit import DEFAULT_STALE_DAYS, audit as decision_audit
+from orgmemory.changes import changes as decision_changes
 from orgmemory.replay import Dataset, replay
-from orgmemory.report import audit_markdown as decision_audit_markdown, explain, to_markdown as replay_markdown
+from orgmemory.report import (audit_markdown as decision_audit_markdown, changes_markdown as decision_changes_markdown,
+                              explain, to_markdown as replay_markdown)
 
 from . import __version__
 
@@ -60,8 +62,8 @@ kept in git, memfalsify_diff audits only the claims a revision added or changed,
 which commits introduced and last changed each claim, and memfalsify_rollback returns (never applies) a \
 patch restoring one claim's earlier wording.
 - orgmemory_*: replay an organizational decision log (events.jsonl + policy.json + evidence.jsonl) under \
-its authority policy, explain why a subject is in its current state, and audit where the decision process \
-needs attention.
+its authority policy, explain why a subject is in its current state, audit where the decision process \
+needs attention, and report what changed between two times.
 
 Server root: {root}
 Every path argument is resolved inside this root. Paths outside it, '..' escapes and symlinks that \
@@ -195,13 +197,17 @@ def _date(value: Optional[str]) -> Optional[date]:
 _AWARE = TypeAdapter(AwareDatetime)
 
 
-def _moment(value: Optional[str]) -> Optional[datetime]:
+def _moment(value: Optional[str], name: str = "as_of") -> Optional[datetime]:
     if not value:
         return None
+    return _required_moment(value, name)
+
+
+def _required_moment(value: str, name: str) -> datetime:
     try:
         return _AWARE.validate_python(value)
     except ValidationError:
-        raise ToolError("as_of must be an ISO 8601 time with a timezone, like 2026-10-07T23:59:59Z") from None
+        raise ToolError(f"{name} must be an ISO 8601 time with a timezone, like 2026-10-07T23:59:59Z") from None
 
 
 def _replay(data: Dataset, moment: Optional[datetime]):
@@ -215,6 +221,13 @@ def _audit(data: Dataset, moment: Optional[datetime], stale_days: int):
     try:
         return decision_audit(data, moment, stale_days)
     except ValueError:  # includes pydantic ValidationError
+        raise ToolError("invalid replay data; check events and policy") from None
+
+
+def _changes(data: Dataset, start: datetime, end: datetime):
+    try:
+        return decision_changes(data, start, end)
+    except ValueError:  # includes pydantic ValidationError; the period's order is checked before
         raise ToolError("invalid replay data; check events and policy") from None
 
 
@@ -414,6 +427,21 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         report = _audit(ws.dataset(dataset), _moment(as_of), stale_days)
         return decision_audit_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
 
+    def orgmemory_changes(
+        dataset: Annotated[str, Field(description=dataset_help)],
+        from_time: Annotated[str, Field(
+            description="Start of the period: events after this time are in it. ISO 8601 with a timezone, "
+                        "e.g. 2026-10-05T23:59:59Z")],
+        to_time: Annotated[str, Field(
+            description="End of the period, inclusive: ISO 8601 with a timezone, e.g. 2026-10-08T23:59:59Z")],
+        format: Annotated[FORMATS, Field(description="markdown (readable report) or json")] = "markdown",
+    ) -> str:
+        start, end = _required_moment(from_time, "from_time"), _required_moment(to_time, "to_time")
+        if start > end:
+            raise ToolError("from_time must not be after to_time")
+        report = _changes(ws.dataset(dataset), start, end)
+        return decision_changes_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+
     tools = [
         (memfalsify_claims, "MemFalsify: list claims",
          "List the claims MemFalsify extracts from a memory file (and the local .md files it links to), with "
@@ -451,6 +479,12 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
          "reconsiderations, risks on approved subjects, unapproved dependencies of approved subjects and "
          "self-approvals. Each finding has a severity (high, medium, low), the event IDs involved and their "
          "quoted evidence. Findings are leads for a person to review; nothing is changed."),
+        (orgmemory_changes, "orgmemory: changes between two times",
+         "Report what changed between two times: replays the log at from_time and at to_time and lists, per "
+         "subject, the authorized decisions in the period (status before and after, actor, roles, quoted "
+         "evidence), pending approvals and reconsiderations opened or resolved, new risks, dependencies and "
+         "conflicts, and attempts the policy ignored, under a summary table. The period holds the events "
+         "after from_time, up to and including to_time. Same report as `orgmemory changes`."),
     ]
     for fn, title, description in tools:
         open_world = fn in (memfalsify_audit, memfalsify_diff) and allow_model_verifiers
