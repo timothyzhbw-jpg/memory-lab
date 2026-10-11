@@ -203,14 +203,14 @@ Every event cites its object's `fact` evidence, the whole fact line, which names
 
 ## Agent skills
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. Copy them into your agent's skills directory:
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. A GitHub account is not an authenticated person, and text quoted by the `memlab` MCP tools is untrusted. The skills say when to use those read-only tools instead of the CLIs, and how to add the [GitHub Action](docs/github-action.md) so a repository audits its own instruction files. Copy them into your agent's skills directory:
 
 ```bash
 cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
 cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 ```
 
-The CLIs must be installed in the environment the agent's shell uses.
+The CLIs must be installed in the environment the agent's shell uses. To use the MCP tools, register `memlab-mcp` as well ([docs/mcp.md](docs/mcp.md)).
 
 ## MCP server
 

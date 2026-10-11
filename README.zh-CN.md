@@ -203,14 +203,14 @@ Approved now that export waits for the billing migration.
 
 ## Agent 技能
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。把它们复制到 Agent 的技能目录即可：
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。GitHub 账号不是已认证的人，`memlab` MCP 工具引用的文件文本也不可信。技能里写了什么时候用这些只读工具、什么时候用命令行，以及怎样把 [GitHub Action](docs/github-action.md) 加到仓库里，让仓库核对自己的指令文件。把它们复制到 Agent 的技能目录即可：
 
 ```bash
 cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
 cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 ```
 
-命令行工具需要安装在 Agent 的 shell 所用的环境里。
+命令行工具需要安装在 Agent 的 shell 所用的环境里。要用 MCP 工具，还要单独注册 `memlab-mcp`（见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)）。
 
 ## MCP 服务器
 
