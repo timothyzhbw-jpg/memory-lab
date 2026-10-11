@@ -177,7 +177,7 @@ def _blocks(text: str) -> list[list[tuple[int, int, int]]]:
     """Runs of non-blank lines, as (line number, start, end); a whitespace-only line separates blocks."""
     blocks, current = [], []
     for number, (start, end) in enumerate(_lines(text), start=1):
-        if text[start:end].strip(" \t﻿"):
+        if text[start:end].strip(" \t\ufeff"):
             current.append((number, start, end))
         elif current:
             blocks.append(current)
@@ -195,7 +195,7 @@ def _note_binding(text: str, block: list[tuple[int, int, int]]) -> str | None:
     """The ``source_sha256`` recorded in a NOTE block, if any."""
     found = None
     for index, (number, start, end) in enumerate(block):
-        line = text[start:end].strip(" \t﻿")
+        line = text[start:end].strip(" \t\ufeff")
         if index == 0:
             line = line[4:].strip(" \t")  # after "NOTE"
         match = _BINDING.fullmatch(line)
@@ -225,7 +225,7 @@ def parse_transcript(fmt: str, text: str) -> Parsed:
         if not blocks or blocks[0][0][0] != 1:
             raise SidecarError("line 1 must be WEBVTT")
         number, start, end = blocks[0][0]
-        first = text[start:end].removeprefix("﻿")
+        first = text[start:end].removeprefix("\ufeff")
         if not (first == "WEBVTT" or first.startswith(("WEBVTT ", "WEBVTT\t"))):
             raise SidecarError("line 1 must be WEBVTT")
         for number, start, end in blocks[0][1:]:
@@ -236,7 +236,7 @@ def parse_transcript(fmt: str, text: str) -> Parsed:
     binding, units, cues = None, [], 0
     for block in blocks:
         number, start, end = block[0]
-        head = text[start:end].strip(" \t﻿")
+        head = text[start:end].strip(" \t\ufeff")
         if _is_note(head) and (fmt == "vtt" or cues == 0):
             found = _note_binding(text, block)
             if found is not None:
@@ -256,7 +256,7 @@ def parse_transcript(fmt: str, text: str) -> Parsed:
         else:
             raise SidecarError(f"line {number}: expected a cue timing line (start --> end)")
         number, start, end = block[cue]
-        match = timing.fullmatch(text[start:end].lstrip("﻿"))
+        match = timing.fullmatch(text[start:end].lstrip("\ufeff"))
         if match is None:
             raise SidecarError(f"line {number}: invalid cue timing")
         groups = match.groups()
@@ -366,7 +366,7 @@ def parse_ocr(text: str) -> Parsed:
     """An OCR sidecar (``memlab-ocr/1``): ``{"format", "source_sha256", "pages": [{"page", "lines": [{"text",
     "bbox": [x0, y0, x1, y1]}]}]}``, coordinates in pixels from the top left. A line whose text literal uses a
     JSON escape is left out (its quote could not be exact), and ``note`` says how many were."""
-    start = 1 if text.startswith("﻿") else 0
+    start = 1 if text.startswith("\ufeff") else 0
     document, end = _value(text, _ws(text, start), 0)
     if _ws(text, end) != len(text):
         raise SidecarError(f"invalid JSON: extra data at {_where(text, _ws(text, end))}")

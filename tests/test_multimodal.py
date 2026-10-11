@@ -185,9 +185,9 @@ def test_malformed_sidecars_are_rejected_with_a_reason(fmt, text, reason):
 
 
 ALPHABET = ["\n", "\r\n", "\r", " ", "\t", "-->", " --> ", ":", ".", ",", "0", "1", "5", "9", "00:00:01.000",
-            "00:00:01,000", "NOTE ", "NOTE source_sha256: ", HEX, "WEBVTT", "STYLE", "﻿", '"', "\\", "\\u0041",
+            "00:00:01,000", "NOTE ", "NOTE source_sha256: ", HEX, "WEBVTT", "STYLE", "\ufeff", '"', "\\", "\\u0041",
             "{", "}", "[", "]", '"text": ', '"bbox": [1, 2, 3, 4]', '"page": 1', "-", "e", "true", "null",
-            "下周", " ", "\x00", "<v A>"]
+            "下周", "\u2028", "\x00", "<v A>"]
 
 
 def mutate(rng: random.Random, text: str) -> str:

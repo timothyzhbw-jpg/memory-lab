@@ -131,7 +131,7 @@ def frontmatter(lines: list[str]) -> tuple[int, dict[str, Value]]:
     Frontmatter is a block between a first line ``---`` and the next ``---``. Only a small, tolerant subset of
     YAML is read: ``key: value``, quoted values, flow lists ``[a, b]``, block lists (``- item`` lines) and block
     scalars (``|`` or ``>``). Nested mappings are skipped. Values are strings, or lists of strings."""
-    if not lines or lines[0].lstrip("﻿").strip() != "---":
+    if not lines or lines[0].lstrip("\ufeff").strip() != "---":
         return 0, {}
     end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
     if end is None:

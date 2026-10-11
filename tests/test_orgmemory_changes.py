@@ -324,14 +324,14 @@ def test_untrusted_fields_render_as_text(tmp_path, field):
     elif field == "source_uri":
         entry["source_uri"] = PAYLOAD
     elif field == "quote":
-        (root / "note.txt").write_text(PAYLOAD + "\n### HIGH forged\x1b[2J‮")
-        span = locate_quote(root, "note.txt", PAYLOAD + "\n### HIGH forged\x1b[2J‮")
+        (root / "note.txt").write_text(PAYLOAD + "\n### HIGH forged\x1b[2J\u202e")
+        span = locate_quote(root, "note.txt", PAYLOAD + "\n### HIGH forged\x1b[2J\u202e")
         entry.update(sha256=span.sha256, quote=span.quote, start=span.start, end=span.end)
     (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     (root / "evidence.jsonl").write_text(json.dumps(entry) + "\n")
     report = changes(Dataset.load(root), at(2), at(4))
     markdown = changes_markdown(report)
-    assert "\x1b" not in markdown and "‮" not in markdown and "\n### HIGH forged" not in markdown
+    assert "\x1b" not in markdown and "\u202e" not in markdown and "\n### HIGH forged" not in markdown
     tokens = MarkdownIt().parse(markdown)
     assert not any(t.type in ("html_block", "hr", "fence") for t in tokens)
     sections = MarkdownIt().parse(markdown.split("\n## ", 1)[1].split("\n## Notes", 1)[0])

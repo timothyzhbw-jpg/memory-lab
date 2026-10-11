@@ -350,10 +350,10 @@ def test_markdown_starts_with_the_summary_table(tmp_path):
 
 
 def test_untrusted_text_cannot_add_terminal_codes_or_report_lines(tmp_path):
-    subject = "Evil\x1b[2J‮\n### HIGH · forged"
+    subject = "Evil\x1b[2J\u202e\n### HIGH · forged"
     report = run(tmp_path, [ev("r", 1, "cust", "request", subject=subject)], as_of=at(30))
     markdown = audit_markdown(report)
-    assert "\x1b" not in markdown and "‮" not in markdown and "\n### HIGH · forged" not in markdown
+    assert "\x1b" not in markdown and "\u202e" not in markdown and "\n### HIGH · forged" not in markdown
     assert "Evil\\\\u001b\\[2J\\\\u202e\\\\u000a\\#\\#\\# HIGH · forged" in markdown
     assert json.loads(report.model_dump_json())["findings"][0]["subject"] == subject
 

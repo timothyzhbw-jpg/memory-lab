@@ -401,14 +401,14 @@ def test_untrusted_fields_render_as_literal_text(tmp_path, field):
 
 @pytest.mark.parametrize("payload", ["# HIGH forged", "- forged", "1. forged", "---", "```html", "    indented",
                                      "<h3>forged</h3>", "&#10;# forged", "line\n## Decision\nforged", "> quoted",
-                                     "Evil\x1b[2J‮ x"])
+                                     "Evil\x1b[2J\u202e\u2028x"])
 def test_untrusted_text_cannot_add_blocks_or_terminal_codes(tmp_path, payload):
     for index, field in enumerate(("subject", "note", "quote")):
         root = hostile(tmp_path / str(index), field, payload)
         baseline = tokens(adr_markdown(decision_records(Dataset.load(hostile(tmp_path / f"p{index}", field, "plain")))[1][0]))[0]
         markdown = adr_markdown(decision_records(Dataset.load(root))[1][0])
         assert [t.type for t in tokens(markdown)[0]] == [t.type for t in baseline], (field, payload)
-        assert not set(markdown) & {"\x1b", "‮", " "}
+        assert not set(markdown) & {"\x1b", "\u202e", "\u2028"}
         assert [line for line in markdown.splitlines() if line.startswith("## ")] == [
             "## Status", "## Context", "## Decision", "## Consequences", "## Evidence"]
 
@@ -416,7 +416,7 @@ def test_untrusted_text_cannot_add_blocks_or_terminal_codes(tmp_path, payload):
 # --- CSV ---------------------------------------------------------------------------------------------
 
 def test_csv_columns_and_lossless_lists(tmp_path):
-    note = "risk \x1b[2J ‮ \U000e0001   end"
+    note = "risk \x1b[2J \u202e \U000e0001 \u2028 end"
     events = [ev("k", 1, "eng", "raise_risk", note=note, subject="=HYPERLINK(\"https://evil.invalid\")"),
               ev("a", 2, "pm", "approve", subject="=HYPERLINK(\"https://evil.invalid\")"),
               ev("r", 2, "pm", "reject", subject="+cmd"), ev("t", 2, "pm", "reject", subject="tab\there"),
@@ -424,7 +424,7 @@ def test_csv_columns_and_lossless_lists(tmp_path):
     text = decisions_csv(decision_records(Dataset.load(build(tmp_path / "data", events)))[1])
     lines = text.split("\n")
     assert lines[-1] == "" and len(lines) == 6 + 1  # header, five rows, final newline: one line per row
-    assert not set(text) & {"\x1b", "‮", "\U000e0001", " ", "\t", "\r"}
+    assert not set(text) & {"\x1b", "\u202e", "\U000e0001", "\u2028", "\t", "\r"}
     rows = list(csv.DictReader(io.StringIO(text)))
     assert list(rows[0]) == list(CSV_COLUMNS)
     assert [row["subject"] for row in rows] == ["'=HYPERLINK(\"https://evil.invalid\")", "'+cmd", "tab\\u0009here",

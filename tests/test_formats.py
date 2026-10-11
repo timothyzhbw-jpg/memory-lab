@@ -76,7 +76,7 @@ def test_without_frontmatter_nothing_is_skipped(lines):
 
 
 def test_frontmatter_tolerates_a_bom_and_caps_values():
-    end, fields = frontmatter(["﻿---", "globs: " + "x" * 1000, "paths: [" + ", ".join("p" for _ in range(80)) + "]",
+    end, fields = frontmatter(["\ufeff---", "globs: " + "x" * 1000, "paths: [" + ", ".join("p" for _ in range(80)) + "]",
                                "---"])
     assert end == 4
     assert fields["globs"] == "x" * MAX_VALUE + "…" and len(fields["paths"]) == 50
