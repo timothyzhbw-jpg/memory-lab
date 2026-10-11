@@ -11,6 +11,7 @@ import typer
 from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
+from memcore.jsonutil import loads_at
 
 from .audit import DEFAULT_STALE_DAYS, audit
 from .models import Event
@@ -110,7 +111,7 @@ def append_command(dataset: Path = DATASET,
     """Validate one new event against the existing log and append it. Existing lines are never rewritten."""
     data = _load(dataset)
     try:
-        new = Event.model_validate(json.loads(event))
+        new = Event.model_validate(loads_at("event", event))
         validate(data.events + [new], data.evidence)
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
@@ -160,13 +161,17 @@ def _github_result(summary, dry_run: bool) -> None:
 
 def _github_fail(exc: Exception) -> None:
     # Validation errors may embed raw API text or malformed existing records.
-    # Only known importer constants are safe to display.
+    # Only known importer constants, and duplicate-key errors that name a path and
+    # line but not the rejected document, are safe to display.
     from .github_fetch import GitHubError
+    message = str(exc)
     safe = {"another sync is running; delete the lock if not", "repository identity changed",
             "a cursor already exists; use --full or --issue", "save-capture path already exists",
             "invalid sync options: --full, --since and --issue cannot be combined",
             "content-addressed capture tamper conflict"}
-    _fail(str(exc) if str(exc) in safe or isinstance(exc, GitHubError)
+    duplicate = message.endswith(": invalid JSON: duplicate key") and not any(
+        ord(char) < 32 or ord(char) == 127 for char in message)
+    _fail(message if message in safe or duplicate or isinstance(exc, GitHubError)
           else "GitHub ingestion failed: invalid input, dataset or filesystem; nothing appended")
 
 

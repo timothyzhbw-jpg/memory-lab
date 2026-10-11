@@ -170,6 +170,82 @@ def test_append_validates_then_appends(org_demo):
     assert duplicate.exit_code == 2 and log.read_text().count("\n") == before.count("\n") + 1
 
 
+@pytest.mark.parametrize("line_text", [
+    # First actor is unauthorized; the last would be the product manager and would approve.
+    '{"id":"forged","timestamp":"2026-10-09T00:00:00Z","actor":"mallory","actor":"zhou",'
+    '"action":"approve","subject":"Feature A","evidence_ids":["wed"]}\n',
+    '{"id":"forged","timestamp":"2026-10-09T00:00:00Z","actor":"mallory","action":"approve",'
+    '"subject":"Feature A","evidence_ids":["wed"],"note":{"a":"1","a":"2"}}\n',
+])
+def test_duplicate_event_key_exits_2(org_demo, line_text):
+    path = org_demo / "events.jsonl"
+    before = path.read_bytes()
+    path.write_bytes(before + line_text.encode())
+    result = runner.invoke(app, ["validate", str(org_demo)])
+    assert result.exit_code == 2, result.output
+    assert f"{path}:{before.count(b'\n') + 1}: invalid JSON: duplicate key" in result.output
+    assert path.read_bytes() == before + line_text.encode()
+
+
+@pytest.mark.parametrize("body,line", [
+    (
+        '{\n'
+        '  "actors": {\n'
+        '    "zhou": ["product_manager"],\n'
+        '    "zhou": ["customer"]\n'
+        '  },\n'
+        '  "permissions": {"approve": ["product_manager"], "reject": ["product_manager"]}\n'
+        '}\n',
+        4,
+    ),
+    (
+        '{\n'
+        '  "actors": {\n'
+        '    "lin": {\n'
+        '      "role": "engineer",\n'
+        '      "role": "customer"\n'
+        '    }\n'
+        '  },\n'
+        '  "permissions": {"comment": ["engineer"]}\n'
+        '}\n',
+        5,
+    ),
+])
+def test_duplicate_policy_key_exits_2(org_demo, body, line):
+    path = org_demo / "policy.json"
+    path.write_bytes(body.encode())
+    result = runner.invoke(app, ["replay", str(org_demo)])
+    assert result.exit_code == 2, result.output
+    assert f"{path}:{line}: invalid JSON: duplicate key" in result.output
+    assert "current_status" not in result.output
+
+
+@pytest.mark.parametrize("line_text", [
+    '{"id":"x","id":"y"}\n',
+    '{"id":"x","meta":{"k":1,"k":2}}\n',
+])
+def test_duplicate_evidence_key_exits_2(org_demo, line_text):
+    path = org_demo / "evidence.jsonl"
+    before = path.read_bytes()
+    path.write_bytes(before + line_text.encode())
+    result = runner.invoke(app, ["replay", str(org_demo)])
+    assert result.exit_code == 2, result.output
+    assert f"{path}:{before.count(b'\n') + 1}: invalid JSON: duplicate key" in result.output
+
+
+@pytest.mark.parametrize("event,line", [
+    ('{"id":"x","id":"y"}', 1),
+    ('{\n  "id": "x",\n  "note": {"a": 1, "a": 2}\n}', 3),
+])
+def test_append_duplicate_key_exits_2(org_demo, event, line):
+    log = org_demo / "events.jsonl"
+    before = log.read_bytes()
+    result = runner.invoke(app, ["append", str(org_demo), "--event", event])
+    assert result.exit_code == 2, result.output
+    assert f"event:{line}: invalid JSON: duplicate key" in result.output
+    assert log.read_bytes() == before
+
+
 def test_evidence_add_requires_verbatim_quote(org_demo):
     manifest = (org_demo / "evidence.jsonl").read_text()
     result = runner.invoke(app, ["evidence", "add", str(org_demo), "--id", "fri",

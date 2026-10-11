@@ -124,7 +124,7 @@ The labels say what is true of the claim; `memfalsify`'s detectors are heuristic
 Before any verifier is built, every selected case is checked, and all problems of all cases are reported together (exit code 2):
 
 - `MEMORY.md`, `labels.jsonl`, `case.json` and `evidence/` exist; `case.json` has exactly `as_of` (a valid date) and `description`.
-- Every label line is valid JSON with exactly the six fields and allowed values.
+- Every label line is valid JSON with exactly the six fields and allowed values. A repeated key in `case.json` or in a label line is invalid, including inside a nested object. The error names `case.json:<line>` or `labels.jsonl:<line>`.
 - Every claim is labeled exactly once; no label text is missing from the claims (the error suggests the closest claim).
 - `contradicted` and `supported` labels name evidence as `path: quote`, the path stays inside `evidence/`, and the quote occurs verbatim in that file; `unsupported` labels have `"evidence": null`.
 

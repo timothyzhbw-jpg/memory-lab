@@ -205,6 +205,12 @@ Example: [`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-w
 
 ## Data formats
 
+A JSON object with a repeated key is invalid, including inside a nested object. This applies to
+`reviews.jsonl`, `events.jsonl`, `evidence.jsonl`, `github-sync.jsonl`, `policy.json`, `github.json`, a
+file passed to `orgmemory github convert`, benchmark `labels.jsonl` and `case.json`, and GitHub API
+responses. The command exits 2 and reports `<file>:<line>: invalid JSON: duplicate key`. Parsing does not
+keep the last value.
+
 **`reviews.jsonl`** (MemFalsify, optional): human-confirmed assertions.
 
 ```json
@@ -319,6 +325,7 @@ the claims it adds or changes.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
+- A repeated key in a JSON object is rejected, including in a nested object. Keeping the last value would let one `events.jsonl` line show one `actor` to a person reading the file and another to replay, and would let a `policy.json` that names an actor twice grant the second list of roles.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.

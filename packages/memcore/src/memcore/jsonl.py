@@ -5,17 +5,18 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
+from .jsonutil import loads
 from .reading import open_text
 
 
 def read_jsonl(path: Path) -> Iterator[tuple[int, dict]]:
-    """Yield (line number, object). Malformed lines raise ValueError naming the line."""
+    """Yield (line number, object). Malformed lines, including a repeated key, raise ValueError naming the line."""
     with open_text(path) as handle:
         for number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
             try:
-                record = json.loads(line)
+                record = loads(line)
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{number}: invalid JSON: {exc.msg}") from exc
             if not isinstance(record, dict):

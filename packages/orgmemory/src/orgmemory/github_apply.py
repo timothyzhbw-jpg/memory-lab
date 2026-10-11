@@ -13,6 +13,8 @@ from typing import Callable, Iterator
 
 from memcore import EvidenceSpan, ManifestEntry, append_jsonl, load_manifest, read_jsonl
 from memcore.evidence import resolve_inside, verify_entry
+from memcore.jsonutil import loads_at
+from memcore.reading import read_file_bytes
 
 from .github_fetch import Client, fetch
 from .github_map import GithubConfig, Plan, _int, _iso, _lower, _repo_ok, _ts, convert
@@ -95,7 +97,9 @@ def load_existing(dataset: Path) -> Existing:
 
 def load_config(dataset: Path) -> GithubConfig:
     path = _path(dataset, "github.json")
-    return GithubConfig.model_validate_json(path.read_bytes()) if path.exists() else GithubConfig()
+    if not path.exists():
+        return GithubConfig()
+    return GithubConfig.model_validate(loads_at(path, read_file_bytes(path)))
 
 
 def next_since(sync_log: list[dict], repo: str) -> datetime | None:
@@ -265,7 +269,7 @@ def run_convert(dataset: Path, capture_path: Path, *, dry_run: bool = False,
         existing, config = load_existing(dataset), load_config(dataset)
         if capture_path.resolve() == (dataset / "policy.json").resolve():
             raise ValueError("GitHub importer cannot open policy.json")
-        capture = json.loads(capture_path.read_bytes())
+        capture = loads_at(capture_path, read_file_bytes(capture_path))
         plan = convert(capture, {e.id: e for e in existing.events}, set(existing.spans), config)
         # Offline conversions use the recording time by default, making examples reproducible.
         return apply(dataset, existing, plan, capture, source="convert", dry_run=dry_run,

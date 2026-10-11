@@ -23,6 +23,8 @@ from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
 
 from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
+from memcore.jsonutil import loads
+
 API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 USER_AGENT = "orgmemory/0.2"
@@ -74,7 +76,7 @@ def _no_constant(name: str) -> Any:
 
 def _message(body: bytes) -> str:
     try:
-        data = json.loads(body, parse_constant=_no_constant)
+        data = loads(body, parse_constant=_no_constant)
     except ValueError:
         data = None
     message = data.get("message") if isinstance(data, dict) else None
@@ -365,7 +367,7 @@ class Client:
                 # saved captures, redirect paths or pagination URLs.
                 if self.token:
                     try:
-                        decoded = json.loads(body, parse_constant=_no_constant)
+                        decoded = loads(body, parse_constant=_no_constant)
                     except ValueError:
                         decoded = None
                     if self.token.encode("ascii") in body or _contains_token(decoded, self.token) \
@@ -409,7 +411,7 @@ class Client:
         if status != 200:
             raise GitHubError(f"GET {_path(url)}: {status} {_message(body)}", status)
         try:
-            return status, json.loads(body, parse_constant=_no_constant), headers
+            return status, loads(body, parse_constant=_no_constant), headers
         except ValueError:
             raise GitHubError(f"GET {_path(url)}: malformed JSON") from None
 

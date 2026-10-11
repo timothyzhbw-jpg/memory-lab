@@ -321,6 +321,20 @@ def test_cli_bad_reviews_exit_2(memfalsify_demo):
     assert result.exit_code == 2 and "invalid JSON" in result.output
 
 
+@pytest.mark.parametrize("line", [
+    b'{"memory_id": "m", "memory_id": "n"}\n',
+    b'{"memory_id": "m", "note": {"a": 1, "a": 2}}\n',
+])
+def test_duplicate_review_key_exits_2(memfalsify_demo, line):
+    path = memfalsify_demo / "reviews.jsonl"
+    before = path.read_bytes()
+    path.write_bytes(line)
+    result = runner.invoke(app, cli_args(memfalsify_demo))
+    assert result.exit_code == 2, result.output
+    assert f"{path}:1: invalid JSON: duplicate key" in result.output
+    path.write_bytes(before)
+
+
 def test_cli_claims_lists_ids(memfalsify_demo):
     result = runner.invoke(app, ["claims", str(memfalsify_demo / "MEMORY.md")])
     rows = [json.loads(line) for line in result.output.splitlines()]

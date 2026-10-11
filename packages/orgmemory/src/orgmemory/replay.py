@@ -6,11 +6,11 @@ decision is recorded as a reconsideration, not as a new decision.
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 
 from memcore import EvidenceError, EvidenceSpan, load_manifest, read_jsonl
+from memcore.jsonutil import loads_at
 from memcore.reading import read_file_text
 
 from .models import DECISIONS, Conflict, Decision, Event, PendingChange, Policy, ReplayResult, Risk, SubjectState, TrailEntry
@@ -31,7 +31,7 @@ class Dataset:
         policy = policy or directory / "policy.json"
         evidence = evidence or directory / "evidence.jsonl"
         parsed = load_events(events)
-        policy_model = Policy.model_validate(json.loads(read_file_text(policy)))
+        policy_model = Policy.model_validate(loads_at(policy, read_file_text(policy)))
         return cls(parsed, policy_model, load_manifest(evidence))
 
 

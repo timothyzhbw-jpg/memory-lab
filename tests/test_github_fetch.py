@@ -143,6 +143,8 @@ def test_repository_checks_fail_closed():
     {LISTING: [{"number": "1"}]},
     {LISTING: reply(b"<html>")},
     {LISTING: reply(b'[{"number": NaN}]')},
+    {LISTING: reply(b'[{"number": 1, "number": 2}]')},
+    {LISTING: reply(b'[{"number": 1, "user": {"login": "a", "login": "b"}}]')},
     {"GET /repos/acme/web/issues/5": {"number": 6}},
 ])
 def test_malformed_api_data_is_an_error(routes):

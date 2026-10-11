@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from conftest import requires_confinement
 from memcore import EvidenceError, append_jsonl, load_manifest, locate_quote, read_jsonl
+from memcore.jsonutil import loads, loads_at
 from memcore.reading import confined_reads, read_file_bytes
 
 
@@ -129,3 +130,88 @@ def test_confined_reads_accept_in_root_links_and_reset_after_failure(tmp_path):
             read_file_bytes(outside)
     # The context must not affect the existing CLI/library behavior.
     assert read_file_bytes(outside) == b"outside-sentinel"
+
+
+@pytest.mark.parametrize("text,line", [
+    ('{"a": 1, "a": 2}', 1),
+    ('{"": 1, "": 2}', 1),
+    ('{\n  "a": 1,\n  "a": 2\n}', 3),
+    ('{\n  "a": 1,\n  "\\u0061": 2\n}', 3),
+    ('{"a": {"b": 1, "b": 2}}', 1),
+    ('{\n  "a": {\n    "b": 1,\n    "b": 2\n  }\n}', 4),
+    ('[{"id": 1}, {"id": 1, "id": 2}]', 1),
+    ('[\n  {"id": 1},\n  {"id": 1, "id": 2}\n]', 3),
+    ('{\n  "a": "{\\"b\\": 1, \\"b\\": 2}",\n  "c": 1,\n  "c": 2\n}', 4),
+    ('{\n  "actor": {"id": "zhou"},\n  "actor": {"id": "mallory"}\n}', 3),
+])
+def test_duplicate_key_names_its_line(text, line):
+    with pytest.raises(json.JSONDecodeError) as caught:
+        loads(text)
+    assert caught.value.msg == "duplicate key" and caught.value.lineno == line
+    with pytest.raises(ValueError) as wrapped:
+        loads_at("policy.json", text)
+    assert str(wrapped.value) == f"policy.json:{line}: invalid JSON: duplicate key"
+
+
+def test_duplicate_key_line_in_crlf_bytes():
+    data = b'{\r\n  "a": 1,\r\n  "a": 2\r\n}\r\n'
+    with pytest.raises(json.JSONDecodeError) as caught:
+        loads(data)
+    assert caught.value.msg == "duplicate key" and caught.value.lineno == 3
+
+
+@pytest.mark.parametrize("text", [
+    "{}",
+    "[]",
+    "null",
+    "1",
+    '"a"',
+    '{"a": 1, "b": {"a": 2}}',
+    '{"a": "{\\"a\\": 1, \\"a\\": 2}"}',
+    '[{"a": 1}, {"a": 2}]',
+    '{\n  "a": {"id": 1},\n  "b": {"id": 1}\n}',
+])
+def test_unique_keys_parse_like_json(text):
+    assert loads(text) == json.loads(text)
+
+
+def test_parse_constant_still_rejects_nonstandard_numbers():
+    def no_constant(name):
+        raise ValueError(f"non-standard JSON constant {name}")
+
+    with pytest.raises(ValueError, match="NaN"):
+        loads('{"a": NaN}', parse_constant=no_constant)
+
+
+@pytest.mark.parametrize("body", [
+    b'\n{"a": 1, "a": 2}\n',
+    b'{"a": 1}\n{"note": {"a": 1, "a": 2}}\n',
+    b'{"a": 1}\r\n{"a": 1, "a": 2}\r\n',
+])
+def test_read_jsonl_rejects_duplicate_keys(tmp_path, body):
+    path = tmp_path / "log.jsonl"
+    path.write_bytes(body)
+    with pytest.raises(ValueError) as caught:
+        list(read_jsonl(path))
+    assert str(caught.value) == f"{path}:2: invalid JSON: duplicate key"
+
+
+def test_read_jsonl_allows_the_same_key_in_different_objects(tmp_path):
+    path = tmp_path / "log.jsonl"
+    path.write_text('{"actor": "a", "meta": {"actor": "b"}}\n', encoding="utf-8")
+    assert list(read_jsonl(path)) == [(1, {"actor": "a", "meta": {"actor": "b"}})]
+
+
+def test_manifest_rejects_duplicate_keys(tmp_path):
+    manifest = write_manifest(tmp_path)
+    original = manifest.read_text(encoding="utf-8")
+    manifest.write_text(original.replace('{"id":', '{"id": "shadow", "id":', 1), encoding="utf-8")
+    with pytest.raises(ValueError) as caught:
+        load_manifest(manifest)
+    assert str(caught.value) == f"{manifest}:1: invalid JSON: duplicate key"
+
+    body = original.rstrip("\n")
+    manifest.write_text(body[:-1] + ', "meta": {"k": 1, "k": 2}}\n', encoding="utf-8")
+    with pytest.raises(ValueError) as nested:
+        load_manifest(manifest)
+    assert str(nested.value) == f"{manifest}:1: invalid JSON: duplicate key"

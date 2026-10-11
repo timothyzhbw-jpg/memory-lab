@@ -256,6 +256,49 @@ def test_fails_closed(github_dataset,kind,tmp_path,monkeypatch):
         assert snapshot(github_dataset) == before
 
 
+@pytest.mark.parametrize('body,line', [
+    ('{"id": 1, "id": 2}\n', 1),
+    ('{\n  "repo": {\n    "id": 1,\n    "id": 2\n  }\n}\n', 4),
+])
+def test_duplicate_key_in_capture_exits_2(github_dataset, tmp_path, body, line):
+    path = tmp_path / 'capture.json'
+    path.write_bytes(body.encode())
+    before = snapshot(github_dataset)
+    result = RUNNER.invoke(app, ['github', 'convert', str(github_dataset), str(path)])
+    assert result.exit_code == 2, result.output
+    assert f'{path}:{line}: invalid JSON: duplicate key' in result.output
+    assert snapshot(github_dataset) == before
+
+
+@pytest.mark.parametrize('body,line', [
+    ('{"labels": {"approved": "approve", "approved": "reject"}}\n', 1),
+    ('{\n  "labels": {\n    "approved": {\n      "a": "approve",\n      "a": "reject"\n    }\n  }\n}\n', 5),
+])
+def test_duplicate_key_in_github_json_exits_2(github_dataset, body, line):
+    path = github_dataset / 'github.json'
+    path.write_bytes(body.encode())
+    before = snapshot(github_dataset)
+    result = RUNNER.invoke(app, ['github', 'convert', str(github_dataset), str(FIXTURES / 'capture-1.json')])
+    assert result.exit_code == 2, result.output
+    shown = path.resolve()
+    assert f'{shown}:{line}: invalid JSON: duplicate key' in result.output
+    assert snapshot(github_dataset) == before
+
+
+def test_duplicate_key_in_sync_log_exits_2(github_dataset, tmp_path):
+    converted(github_dataset, 1)
+    log = github_dataset / 'github-sync.jsonl'
+    text = log.read_bytes()
+    log.write_bytes(text + b'{"repo": "acme/web", "repo": "other"}\n')
+    before = snapshot(github_dataset)
+    path = tmp_path / 'capture.json'
+    path.write_bytes(b'{}\n')
+    result = RUNNER.invoke(app, ['github', 'convert', str(github_dataset), str(path)])
+    assert result.exit_code == 2, result.output
+    assert f'{log.resolve()}:{text.count(b"\n") + 1}: invalid JSON: duplicate key' in result.output
+    assert snapshot(github_dataset) == before
+
+
 def test_crash_between_evidence_and_events_recovers(github_dataset,monkeypatch):
     original = github_apply.append_jsonl
     def broken(path,record):

@@ -16,7 +16,14 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Security
+
+- A JSON object that repeats a key is rejected, including inside a nested object. `json.loads` kept the
+  last value, so a forged `events.jsonl` line could show one `actor` to a person reading the file and
+  another to replay, and a `policy.json` that listed an actor twice granted the second set of roles. The
+  same check covers evidence manifests, `reviews.jsonl`, `github.json`, `github-sync.jsonl`, GitHub
+  capture files, GitHub API responses, and benchmark `labels.jsonl` and `case.json`. The error is
+  `<file>:<line>: invalid JSON: duplicate key` and the commands exit 2.
 
 ## memlab-core
 

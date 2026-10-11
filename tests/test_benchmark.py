@@ -162,6 +162,33 @@ def test_validation_of_case_files_and_selection(tmp_path):
     assert "as_of: Input should be a valid date" in str(caught.value) and "x: Extra inputs" in str(caught.value)
 
 
+def test_duplicate_keys_in_case_and_labels_exit_2(cases):
+    root = cases / "tiny"
+    (root / "case.json").write_text(
+        '{\n  "as_of": "2026-10-10",\n  "description": "a",\n  "description": "b"\n}\n', encoding="utf-8")
+    result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
+    assert result.exit_code == 2, result.output
+    assert "case.json:4: invalid JSON: duplicate key" in result.output
+
+    (root / "case.json").write_text(
+        '{\n  "as_of": "2026-10-10",\n  "description": {"text": "a", "text": "b"}\n}\n', encoding="utf-8")
+    result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
+    assert result.exit_code == 2, result.output
+    assert "case.json:3: invalid JSON: duplicate key" in result.output
+
+    (root / "case.json").write_text(json.dumps({"as_of": "2026-10-10", "description": "tiny synthetic case"}),
+                                    encoding="utf-8")
+    (root / "labels.jsonl").write_text('{"text": "a", "text": "b"}\n', encoding="utf-8")
+    result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
+    assert result.exit_code == 2, result.output
+    assert "labels.jsonl:1: invalid JSON: duplicate key" in result.output
+
+    (root / "labels.jsonl").write_text('{"text": "a", "note": {"x": 1, "x": 2}}\n', encoding="utf-8")
+    result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
+    assert result.exit_code == 2, result.output
+    assert "labels.jsonl:1: invalid JSON: duplicate key" in result.output
+
+
 def test_unlabeled_and_unknown_claims_are_errors(tmp_path):
     write_case(tmp_path / "cases" / "partial", label_records(LABELS[:-1]))
     with pytest.raises(bench.BenchmarkError, match="claim has no label: 'Bulk export ships in November.'"):

@@ -24,6 +24,7 @@ import typer  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, ValidationError  # noqa: E402
 
 from memcore import EvidenceError, locate_quote, resolve_inside  # noqa: E402
+from memcore.jsonutil import loads  # noqa: E402
 from memfalsify import __version__, jev, llm  # noqa: E402
 from memfalsify.audit import AuditReport, Issue, audit  # noqa: E402
 from memfalsify.cli import MAX_JUDGED, VerifierChoice, build_verifier, preselection  # noqa: E402
@@ -108,10 +109,21 @@ def load_case(root: Path) -> Case:
     if problems:
         raise BenchmarkError(f"case {root.name}:\n" + "\n".join(f"  - {p}" for p in problems))
     info = None
+    case_text = (root / "case.json").read_text(encoding="utf-8")
+    # loads() rejects a repeated key. model_validate_json reports every other problem,
+    # and it is only called after that check, because it would keep the last value.
+    duplicate_case_key = False
     try:
-        info = CaseInfo.model_validate_json((root / "case.json").read_text(encoding="utf-8"))
-    except ValidationError as exc:
-        problems.append(f"case.json: {_errors(exc)}")
+        loads(case_text)
+    except json.JSONDecodeError as exc:
+        if exc.msg == "duplicate key":
+            problems.append(f"case.json:{exc.lineno}: invalid JSON: duplicate key")
+            duplicate_case_key = True
+    if not duplicate_case_key:
+        try:
+            info = CaseInfo.model_validate_json(case_text)
+        except ValidationError as exc:
+            problems.append(f"case.json: {_errors(exc)}")
     claims = [c.text for c in parse_memory(root / "MEMORY.md")[0]]
     labels: dict[str, Label] = {}
     anchors: dict[str, tuple[str, int, int]] = {}
@@ -119,6 +131,12 @@ def load_case(root: Path) -> Case:
         if not line.strip():
             continue
         where = f"labels.jsonl:{number}"
+        try:
+            loads(line)
+        except json.JSONDecodeError as exc:
+            if exc.msg == "duplicate key":
+                problems.append(f"{where}: invalid JSON: duplicate key")
+                continue
         try:
             label = Label.model_validate_json(line)
         except ValidationError as exc:
