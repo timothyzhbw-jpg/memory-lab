@@ -2,20 +2,20 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections import Counter
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable
 
 from memcore import EvidenceSpan, ManifestEntry, append_jsonl, load_manifest, read_jsonl
-from memcore.evidence import resolve_inside, verify_entry
+from memcore.evidence import verify_entry
 
 from .github_fetch import Client, fetch
 from .github_map import GithubConfig, Plan, _int, _iso, _lower, _repo_ok, _ts, convert
+from .ingest import create_only as _create
+from .ingest import dataset_path, importer_lock
 from .models import Event
 from .replay import load_events, validate
 
@@ -26,24 +26,12 @@ def _now() -> datetime:
 
 def _path(dataset: Path, relative: str) -> Path:
     """Refuse policy aliases as well as escapes, before opening anything."""
-    path = resolve_inside(dataset, relative)
-    if path == (dataset / "policy.json").resolve():
-        raise ValueError("GitHub importer cannot open policy.json")
-    return path
+    return dataset_path(dataset, relative, "GitHub")
 
 
-@contextmanager
-def lock(dataset: Path) -> Iterator[None]:
-    path = _path(dataset, ".github-sync.lock")
-    try:
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        raise ValueError("another sync is running; delete the lock if not") from None
-    os.close(fd)
-    try:
-        yield
-    finally:
-        path.unlink()
+def lock(dataset: Path) -> AbstractContextManager[None]:
+    """The GitHub importer's lock; it also waits for no other importer (see `ingest.importer_lock`)."""
+    return importer_lock(dataset, ".github-sync.lock", "GitHub")
 
 
 @dataclass
@@ -146,23 +134,6 @@ class Summary:
             "    " + (" ".join(sorted({e.actor for e in plan.events})) or "none"),
             "  cursor for next run: " + (_iso(self.cursor) if self.cursor else "none"),
         ]
-
-
-def _create(path: Path, data: bytes) -> None:
-    """Private create-only temporary file, then atomic rename under the dataset lock."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    temporary = Path(name)
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-        if path.exists():
-            if path.read_bytes() != data:
-                raise ValueError("content-addressed capture tamper conflict")
-        else:
-            os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _validate_plan(existing: Existing, plan: Plan) -> None:
