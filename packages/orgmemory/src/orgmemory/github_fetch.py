@@ -198,9 +198,13 @@ class PersistentTransport:
             raise ValueError("the GitHub transport is closed")
         if not PRINTABLE.fullmatch(url) or _origin(url) != API:
             raise GitHubError(f"refusing a request outside {API}")
+        parts = urlsplit(url)
+        if parts.path.startswith(("//", "/\\")):
+            raise GitHubError(f"refusing a request outside {API}: ambiguous path")
+        if any(name.lower() == "host" for name in headers):
+            raise GitHubError("refusing a request with a caller-supplied Host header")
         if self._fallback is not None:
             return self._fallback(url, headers)
-        parts = urlsplit(url)
         target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
         for attempt in range(2):
             received = False

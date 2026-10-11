@@ -251,6 +251,24 @@ def test_refuses_other_origins_before_connection_or_authorization(url):
     assert factory.calls == []
 
 
+@pytest.mark.parametrize("url", [f"{API}//evil.example/x", f"{API}/\\evil.example/x"])
+def test_refuses_network_path_targets(url):
+    factory = Connections()
+    with persistent(factory) as transport:
+        with pytest.raises(GitHubError, match="refusing a request"):
+            transport(url, {"Authorization": f"Bearer {TOKEN}"})
+    assert factory.calls == []
+
+
+@pytest.mark.parametrize("name", ["Host", "host", "HOST"])
+def test_refuses_caller_supplied_host_header(name):
+    factory = Connections()
+    with persistent(factory) as transport:
+        with pytest.raises(GitHubError, match="Host header"):
+            transport(URL, {name: "evil.example", "Authorization": f"Bearer {TOKEN}"})
+    assert factory.calls == []
+
+
 def test_redirect_policy_remains_in_client_and_never_sends_auth_elsewhere():
     sock = ScriptedSocket([wire(status=307, headers=b"Location: /repos/acme/next\r\n"), wire(),
                            wire(status=302, headers=b"Location: https://evil.example/steal\r\n")])
