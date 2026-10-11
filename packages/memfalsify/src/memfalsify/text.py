@@ -63,22 +63,33 @@ def _cjk_tokens(run: str) -> Iterator[str]:
             yield piece[i:i + 2]
 
 
-def features(text: str) -> tuple[frozenset[str], frozenset[str]]:
-    """Return (content tokens, numeric tokens)."""
-    words, numbers = set(), set()
+def _tokens(text: str) -> Iterator[tuple[bool, str]]:
+    """Yield (is_number, token) in text order: stemmed content words, CJK bigrams and numbers."""
     for match in TOKEN.finditer(text):
         token = match.group()
         if token[0].isdigit():
-            numbers.add(token)
+            yield True, token
         elif "㐀" <= token[0] <= "鿿":
-            words.update(_cjk_tokens(token))
+            yield from ((False, piece) for piece in _cjk_tokens(token))
         elif len(token) == 1 and token.isupper():
-            words.add(token)  # identifiers such as "Feature A"; lowercase "a" is a stopword
+            yield False, token  # identifiers such as "Feature A"; lowercase "a" is a stopword
         else:
             lower = token.lower().removesuffix("'s")
             if lower not in STOPWORDS and "'" not in lower:
-                words.add(stem(lower))
+                yield False, stem(lower)
+
+
+def features(text: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Return (content tokens, numeric tokens)."""
+    words, numbers = set(), set()
+    for is_number, token in _tokens(text):
+        (numbers if is_number else words).add(token)
     return frozenset(words), frozenset(numbers)
+
+
+def terms(text: str) -> list[str]:
+    """The tokens behind ``features``, in text order, for comparing two versions of a sentence."""
+    return [token for _, token in _tokens(text)]
 
 
 def has_negation(text: str) -> bool:

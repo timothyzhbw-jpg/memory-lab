@@ -200,22 +200,41 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
           max_judged: int | None = None, exclude: Iterable[str] = ()) -> AuditReport:
     """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees;
     ``exclude`` globs (relative to the evidence root) keep files out of the evidence."""
+    claims, files = parse_memory(memory_file, follow_links=follow_links)
+    base = Path(memory_file).resolve().parent
+    return audit_claims(claims, memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
+                        memory_paths=files, evidence_root=evidence_root, reviews=reviews, verifier=verifier,
+                        as_of=as_of, stale_days=stale_days, max_candidates=max_candidates,
+                        min_coverage=min_coverage, max_judged=max_judged, exclude=exclude)
+
+
+def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path],
+                 evidence_root: Path | None = None, reviews: Path | None = None, verifier: Verifier | None = None,
+                 as_of: date | None = None, stale_days: int = 180, max_candidates: int = 3,
+                 min_coverage: float = 0.5, max_judged: int | None = None, exclude: Iterable[str] = (),
+                 only: Iterable[str] | None = None) -> AuditReport:
+    """Audit already parsed claims. With ``only`` (claim IDs), findings cover just those claims, while
+    reviews and internal conflicts are still checked against every claim. ``memory_paths`` are kept out
+    of the evidence."""
     verifier = verifier or LexicalVerifier()
     as_of = as_of or date.today()
-    claims, files = parse_memory(memory_file, follow_links=follow_links)
     by_id = {c.id: c for c in claims}
+    selected = None if only is None else set(only)
+    targets = [c for c in claims if selected is None or c.id in selected]
     root = Path(evidence_root).resolve() if evidence_root else None
     if root is not None and not root.is_dir():
         raise EvidenceError(f"evidence root is not a directory: {evidence_root}")
     exclude = [p.strip() for p in exclude if p.strip()]
     if exclude and root is None:
         raise EvidenceError("--exclude requires --evidence: patterns are relative to the evidence root")
-    passages, skipped = scan(root, exclude=exclude, memory_files=files) if root else ([], [])
-    if claims and root is not None and exclude and not passages:
+    # When a selection is empty there is nothing to look up, so the evidence is not scanned.
+    scanned = root is not None and (selected is None or bool(targets))
+    passages, skipped = scan(root, exclude=exclude, memory_files=memory_paths) if scanned else ([], [])
+    if targets and root is not None and exclude and not passages:
         raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
     confirmed = load_reviews(reviews, root, by_id) if reviews else {}
     findings = []
-    for claim in claims:
+    for claim in targets:
         reviewed = confirmed.get(claim.id, [])
         evidence = reviewed + [c for c in candidates(claim, passages, verifier, max_candidates,
                                                      min_coverage, max_judged)
@@ -229,8 +248,7 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
                                 status=status, evidence=evidence, issues=issues, proposals=proposals))
     findings.sort(key=lambda f: SEVERITY.index(f.status))
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
-    base = Path(memory_file).resolve().parent
-    return AuditReport(memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
+    return AuditReport(memory_file=memory_file, files_read=files_read,
                        evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,
                        verifier=verifier.name, as_of=as_of, summary=summary, findings=findings,
                        skipped_evidence=skipped,

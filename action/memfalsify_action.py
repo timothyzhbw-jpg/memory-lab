@@ -1,8 +1,10 @@
 """Run step of the MemFalsify GitHub Action (action.yml).
 
 Audits each memory file that exists, writes the Markdown report to the job summary and to a file, and sets the
-``report`` and ``attention`` outputs. Inputs arrive as MEMFALSIFY_* environment variables, never as interpolated
-script text. Exit codes follow ``memfalsify audit --strict``: 1 when a memory needs attention, 2 on errors.
+``report`` and ``attention`` outputs. With a ``diff-base`` input, runs ``memfalsify diff`` instead, so only the
+claims added or changed since that revision are audited. Inputs arrive as MEMFALSIFY_* environment variables,
+never as interpolated script text. Exit codes follow ``memfalsify audit --strict``: 1 when a memory needs
+attention, 2 on errors.
 """
 from __future__ import annotations
 
@@ -17,7 +19,8 @@ from pathlib import Path
 
 from memfalsify.audit import ATTENTION, AuditReport
 from memfalsify.cli import app
-from memfalsify.corpus import REPORT_HEADER
+from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
+from memfalsify.history import DiffReport, HistoryError, diff_to_markdown, resolve_commit
 from memfalsify.report import to_markdown
 
 ERROR = 2
@@ -93,6 +96,15 @@ def main(env: dict[str, str] | None = None) -> int:
     if strict not in ("true", "false"):
         annotate("error", "the strict input must be true or false")
         return ERROR
+    base = None
+    if diff_base := env.get("MEMFALSIFY_DIFF_BASE", "").strip():
+        try:
+            # Refuses option-like values, then: git rev-parse --verify --end-of-options REV^{commit}
+            base = resolve_commit(Path.cwd(), diff_base)
+        except HistoryError as exc:
+            annotate("error", f"diff-base: {exc}. actions/checkout needs fetch-depth: 0 (or enough history "
+                              "to include the base commit)")
+            return ERROR
     out_dir = Path(env.get("RUNNER_TEMP") or tempfile.mkdtemp()) / "memfalsify"
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
@@ -105,23 +117,31 @@ def main(env: dict[str, str] | None = None) -> int:
         publish(env, report_path, f"{REPORT_HEADER}\n\n{message}\n", 0)
         return 0
     sections, codes, attention = [], [], 0
+    command = ["diff", f"--base={base}"] if base else ["audit"]
     for index, memory in enumerate(found):
         json_path = out_dir / f"report-{index}.json"
         json_path.unlink(missing_ok=True)
-        args = ["audit", "--no-follow-links", "--format=json", f"--output={json_path}", *options(env)]
+        args = [*command, "--no-follow-links", "--format=json", f"--output={json_path}", *options(env)]
         code = run_cli(args + (["--strict"] if strict == "true" else []) + ["--", memory])
         if code not in ((0, 1) if strict == "true" else (0,)) or not json_path.is_file():
             annotate("error", f"memfalsify could not audit {memory} (exit code {code}); see the step log")
-            sections.append(f"{REPORT_HEADER}\n\n- Memory: `{memory}`\n\n"
+            sections.append(f"{DIFF_HEADER if base else REPORT_HEADER}\n\n- Memory: `{memory}`\n\n"
                             f"**Audit failed** with exit code {code}; see the step log.\n")
             codes.append(ERROR)
             continue
-        report = AuditReport.model_validate_json(json_path.read_text(encoding="utf-8"))
-        count = sum(n for status, n in report.summary.items() if status in ATTENTION)
+        text = json_path.read_text(encoding="utf-8")
+        if base:
+            diff = DiffReport.model_validate_json(text)
+            count, total, what = diff.attention, len(diff.audit.findings), "added or changed memories"
+            sections.append(diff_to_markdown(diff))
+        else:
+            report = AuditReport.model_validate_json(text)
+            count = sum(n for status, n in report.summary.items() if status in ATTENTION)
+            total, what = len(report.findings), "memories"
+            sections.append(to_markdown(report))
         attention += count
         codes.append(code)
-        sections.append(to_markdown(report))
-        print(f"MemFalsify: {_log_text(memory)}: {count} of {len(report.findings)} memories need attention", flush=True)
+        print(f"MemFalsify: {_log_text(memory)}: {count} of {total} {what} need attention", flush=True)
     publish(env, report_path, "\n".join(sections), attention)
     if ERROR in codes:
         return ERROR

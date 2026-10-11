@@ -35,6 +35,14 @@ inputs:
       passages to the provider.
     required: false
     default: lexical
+  diff-base:
+    description: >-
+      Base revision for a diff-only check, for example github.event.pull_request.base.sha. When set, only
+      claims added or changed since this revision are audited, so a pull request is gated on the claims it
+      touches. Needs that commit in the checkout: use actions/checkout with fetch-depth: 0. Empty audits
+      every claim.
+    required: false
+    default: ""
   as-of:
     description: Reference date YYYY-MM-DD for staleness checks; empty means today.
     required: false
@@ -49,7 +57,9 @@ outputs:
     description: Path of the Markdown report (also written to the job summary).
     value: ${{ steps.audit.outputs.report }}
   attention:
-    description: Number of memories that are challenged, conflicted, disputed or have possible counterevidence.
+    description: >-
+      Number of memories (with diff-base, of added or changed memories) that are challenged, conflicted,
+      disputed or have possible counterevidence.
     value: ${{ steps.audit.outputs.attention }}
 
 runs:
@@ -97,4 +107,5 @@ runs:
         MEMFALSIFY_STRICT: ${{ inputs.strict }}
         MEMFALSIFY_VERIFIER: ${{ inputs.verifier }}
         MEMFALSIFY_AS_OF: ${{ inputs.as-of }}
+        MEMFALSIFY_DIFF_BASE: ${{ inputs.diff-base }}
       run: '"$MEMFALSIFY_PYTHON" -I -X utf8 "$GITHUB_ACTION_PATH/action/memfalsify_action.py"'

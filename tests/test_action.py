@@ -171,3 +171,53 @@ def test_action_external_cwd_and_option_shaped_filename(tmp_path, monkeypatch, r
     report = Path(outputs(runner_env)["report"]).read_text()
     assert "db.txt" in report and "--strict" in report
     assert sorted(p.name for p in consumer.iterdir()) == ["--strict", "db.txt"]
+
+
+requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+
+
+@requires_git
+def test_action_diff_base_gates_only_added_or_changed_claims(git_repo, monkeypatch, runner_env, capsys):
+    monkeypatch.chdir(git_repo.root)
+    base = git_repo.commit("base", {"AGENTS.md": "- The database runs PostgreSQL 15.\n",
+                                    "docs/db.md": "The database runs PostgreSQL 16.\n",
+                                    "docs/api.md": "The public API rate limit is 60 requests per minute.\n"})
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "AGENTS.md", "MEMFALSIFY_DIFF_BASE": base}
+    assert action.main(env) == 0  # the contradicted claim predates the base, so it is not gated
+    assert outputs(env)["attention"] == "0"
+    assert "nothing was audited" in Path(outputs(env)["report"]).read_text(encoding="utf-8")
+    git_repo.write({"AGENTS.md": "- The database runs PostgreSQL 15.\n"
+                                 "- The public API rate limit is 100 requests per minute.\n"})
+    assert action.main(env) == 1
+    assert outputs(env)["attention"] == "1"
+    report = Path(outputs(env)["report"]).read_text(encoding="utf-8")
+    assert report.startswith("# MemFalsify diff report") and "docs/api.md" in report and "docs/db.md" not in report
+    assert "1 of 1 added or changed memories need attention" in capsys.readouterr().out
+    assert action.main({**env, "MEMFALSIFY_STRICT": "false"}) == 0
+    assert action.main({**env, "MEMFALSIFY_DIFF_BASE": ""}) == 1 and outputs(env)["attention"] == "2"
+
+
+@requires_git
+@pytest.mark.parametrize("rev", ["-x", "--output=pwned.txt", "no-such-rev", "HEAD\n--all", "HEAD~5"])
+def test_action_diff_base_is_validated(git_repo, monkeypatch, runner_env, capsys, rev):
+    monkeypatch.chdir(git_repo.root)
+    git_repo.commit("base", {"AGENTS.md": "- The database runs PostgreSQL 15.\n"})
+    assert action.main({**runner_env, "MEMFALSIFY_MEMORY": "AGENTS.md", "MEMFALSIFY_DIFF_BASE": rev}) == 2
+    out = capsys.readouterr().out
+    assert "::error title=MemFalsify::diff-base:" in out and "fetch-depth: 0" in out
+    assert not (git_repo.root / "pwned.txt").exists()
+
+
+@requires_git
+def test_action_diff_base_outside_a_repository_fails(tmp_path, monkeypatch, runner_env):
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "AGENTS.md").write_bytes(b"- The database runs PostgreSQL 15.\n")
+    monkeypatch.chdir(work)
+    assert action.main({**runner_env, "MEMFALSIFY_MEMORY": "AGENTS.md", "MEMFALSIFY_DIFF_BASE": "HEAD"}) == 2
+
+
+def test_action_passes_diff_base_through_env():
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert "  diff-base:\n" in text and "MEMFALSIFY_DIFF_BASE: ${{ inputs.diff-base }}" in text

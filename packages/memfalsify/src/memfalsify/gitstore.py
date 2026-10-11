@@ -1,0 +1,290 @@
+"""Read memory files from git without checking anything out, and from the working tree.
+
+Git runs with argument lists (never a shell) and with config that could change its output pinned. Every
+user-supplied revision is validated and resolved to a commit ID first. File contents come from the object
+database through one ``git cat-file --batch`` process; trees are walked entry by entry, so symlinks and
+submodules in history are never followed.
+"""
+from __future__ import annotations
+
+import os
+import posixpath
+import re
+import shutil
+import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path, PureWindowsPath
+
+from memcore import EvidenceError, resolve_inside
+from memcore.reading import read_file_text
+
+from .memory import Claim, merge_duplicates, parse_text
+
+HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+# C0/C1 controls and the bidi, zero-width and line-separator characters that can disguise text.
+CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+# Global options: literal pathspecs (file names are not globs) and no config that changes what we parse.
+GIT_OPTIONS = ("--literal-pathspecs", "-c", "core.quotePath=false", "-c", "log.showSignature=false",
+               "-c", "log.follow=false")
+
+
+class HistoryError(ValueError):
+    """Git is missing, the memory is not in a work tree, or a revision or claim is unusable (exit 2)."""
+
+
+def printable(text: str) -> str:
+    """Untrusted text (git messages, commit subjects) on one line, without terminal or bidi controls."""
+    return CONTROL.sub("\ufffd", " ".join(text.split()))
+
+
+def check_revision(rev: str) -> str:
+    """Refuse revisions that git could read as an option or that cannot be shown safely."""
+    if not rev or rev.startswith("-") or CONTROL.search(rev):
+        raise HistoryError(f"invalid revision {printable(rev)!r}: it must be non-empty, must not start with '-' "
+                           "and must not contain control characters")
+    return rev
+
+
+def _env() -> dict[str, str]:
+    return {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+
+
+def _git_executable() -> str:
+    exe = shutil.which("git")
+    if exe is None:
+        raise HistoryError("git was not found on PATH; diff, history and rollback read memory from git")
+    return exe
+
+
+def _run(exe: str, directory: Path, args: list[str]) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run([exe, "-C", str(directory), *GIT_OPTIONS, *args], capture_output=True,
+                              env=_env(), check=False)
+    except OSError as exc:
+        raise HistoryError(f"cannot run git: {exc}") from exc
+
+
+def _failure(proc: subprocess.CompletedProcess) -> str:
+    return printable(proc.stderr.decode("utf-8", "replace")) or f"exit code {proc.returncode}"
+
+
+def _resolve(exe: str, directory: Path, rev: str) -> str:
+    check_revision(rev)
+    proc = _run(exe, directory, ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{commit}}"])
+    commit = proc.stdout.decode("ascii", "replace").strip()
+    if proc.returncode or not HEX.fullmatch(commit):
+        raise HistoryError(f"{printable(rev)!r} is not a commit in this repository "
+                           "(in a shallow clone, fetch more history)")
+    return commit
+
+
+def resolve_commit(directory: Path, rev: str) -> str:
+    """The commit ID ``rev`` names in the repository containing ``directory``
+    (``git rev-parse --verify --end-of-options REV^{commit}``, after refusing option-like revisions)."""
+    return _resolve(_git_executable(), Path(directory), rev)
+
+
+@dataclass
+class Snapshot:
+    """The claims of a memory file and the files it links to, at one revision or in the working tree."""
+    claims: list[Claim] = field(default_factory=list)
+    texts: dict[str, str] = field(default_factory=dict)  # path relative to the memory directory -> LF text
+    links: list[str] = field(default_factory=list)  # link targets referenced, whether or not they exist
+
+    @property
+    def files(self) -> list[str]:
+        return list(self.texts)
+
+
+def link_path(target: str) -> str | None:
+    """A linked file as a POSIX path relative to the memory directory, or None if it is not followed."""
+    if not target or "\\" in target or target.startswith("/") or PureWindowsPath(target).drive or CONTROL.search(target):
+        return None
+    normal = posixpath.normpath(target)
+    if normal in (".", "..") or normal.startswith(("../", "/")):
+        return None
+    return normal
+
+
+def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool) -> Snapshot:
+    """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``."""
+    snapshot = Snapshot()
+    text = read(name)
+    if text is None:
+        return snapshot
+    snapshot.texts[name] = text
+    claims, links = parse_text(text, name)
+    if follow_links:
+        for target in dict.fromkeys(links):
+            relative = link_path(target)
+            if relative is None or relative in snapshot.links:
+                continue
+            snapshot.links.append(relative)
+            if relative in snapshot.texts or (linked := read(relative)) is None:
+                continue
+            snapshot.texts[relative] = linked
+            claims += parse_text(linked, relative)[0]
+    snapshot.claims = merge_duplicates(claims)
+    return snapshot
+
+
+class Objects:
+    """One ``git cat-file --batch`` process for every tree and blob read of a command."""
+
+    def __init__(self, repo: "Repository"):
+        try:
+            self.proc = subprocess.Popen([repo.git, "-C", str(repo.root), *GIT_OPTIONS, "cat-file", "--batch"],
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                         env=_env())
+        except OSError as exc:
+            raise HistoryError(f"cannot run git: {exc}") from exc
+        self.trees: dict[tuple[str, str], dict[bytes, tuple[str, str]] | None] = {}
+        self.blobs: dict[str, bytes] = {}
+
+    def __enter__(self) -> "Objects":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
+        self.proc.stdout.close()
+
+    def _request(self, name: str) -> tuple[str, str, bytes] | None:
+        """(object ID, type, content), or None when git reports the object missing."""
+        try:
+            self.proc.stdin.write(name.encode("utf-8") + b"\n")
+            self.proc.stdin.flush()
+            header = self.proc.stdout.readline()
+        except OSError as exc:
+            raise HistoryError(f"git cat-file failed: {exc}") from exc
+        if not header.endswith(b"\n"):
+            raise HistoryError("git cat-file stopped unexpectedly")
+        parts = header[:-1].split(b" ")
+        if len(parts) != 3 or parts[1] not in (b"blob", b"tree", b"commit", b"tag") or not parts[2].isdigit():
+            return None
+        size = int(parts[2])
+        data = self.proc.stdout.read(size)
+        if len(data) != size or self.proc.stdout.read(1) != b"\n":
+            raise HistoryError("git cat-file returned a truncated object")
+        return parts[0].decode("ascii"), parts[1].decode("ascii"), data
+
+    def tree(self, commit: str, directory: str) -> dict[bytes, tuple[str, str]] | None:
+        key = (commit, directory)
+        if key not in self.trees:
+            found = self._request(f"{commit}:{directory}" if directory else f"{commit}^{{tree}}")
+            self.trees[key] = _tree_entries(found[2], len(commit) // 2) if found and found[1] == "tree" else None
+        return self.trees[key]
+
+    def file(self, commit: str, path: str) -> bytes | None:
+        """A regular file's bytes at ``commit``; None if absent, a symlink, a directory or a submodule.
+
+        Trees are looked up entry by entry, so a symlink anywhere on the path is never followed."""
+        directory, _, name = path.rpartition("/")
+        entries = self.tree(commit, directory)
+        entry = entries.get(name.encode("utf-8")) if entries else None
+        if entry is None or not entry[0].startswith("100"):
+            return None
+        mode, oid = entry
+        if oid not in self.blobs:
+            found = self._request(oid)
+            if found is None or found[1] != "blob":
+                raise HistoryError(f"git object {oid} ({printable(path)}) is missing from the repository")
+            self.blobs[oid] = found[2]
+        return self.blobs[oid]
+
+
+def _tree_entries(data: bytes, oid_bytes: int) -> dict[bytes, tuple[str, str]]:
+    """Parse a raw tree object: ``<mode> <name>\\0<binary object ID>`` repeated."""
+    entries, position = {}, 0
+    try:
+        while position < len(data):
+            space = data.index(b" ", position)
+            nul = data.index(b"\0", space)
+            oid = data[nul + 1:nul + 1 + oid_bytes]
+            entries[data[space + 1:nul]] = (data[position:space].decode("ascii"), oid.hex())
+            position = nul + 1 + oid_bytes
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise HistoryError("git returned a malformed tree object") from exc
+    return entries
+
+
+@dataclass
+class Repository:
+    git: str
+    root: Path  # top level of the work tree
+    prefix: str  # memory directory relative to the top level, POSIX, "" or ending in "/"
+    memory_dir: Path
+    memory_name: str
+
+    def run(self, *args: str) -> bytes:
+        proc = _run(self.git, self.root, list(args))
+        if proc.returncode:
+            raise HistoryError(f"git {args[0]} failed: {_failure(proc)}")
+        return proc.stdout
+
+    def resolve(self, rev: str) -> str:
+        return _resolve(self.git, self.root, rev)
+
+    def head(self) -> str | None:
+        """The HEAD commit, or None in a repository without commits."""
+        proc = _run(self.git, self.root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
+        commit = proc.stdout.decode("ascii", "replace").strip()
+        return commit if proc.returncode == 0 and HEX.fullmatch(commit) else None
+
+    def cut_off(self, commit: str) -> bool:
+        """True when ``commit`` has no parent only because the clone is shallow (it may be a real root)."""
+        if _run(self.git, self.root, ["rev-parse", "--verify", "--quiet", f"{commit}^1"]).returncode == 0:
+            return False
+        shallow = _run(self.git, self.root, ["rev-parse", "--is-shallow-repository"])
+        return shallow.returncode != 0 or shallow.stdout.strip() != b"false"
+
+    def at(self, objects: Objects, commit: str, follow_links: bool) -> Snapshot:
+        def read(relative: str) -> str | None:
+            data = objects.file(commit, self.prefix + relative)
+            if data is None:
+                return None
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise HistoryError(f"{printable(self.prefix + relative)} at {commit[:12]} is not UTF-8 text") from exc
+            return text.replace("\r\n", "\n").replace("\r", "\n")
+        return build_snapshot(read, self.memory_name, follow_links)
+
+    def worktree_path(self, relative: str) -> Path | None:
+        """A memory file in the working tree, confined to the memory directory like ``parse_memory``."""
+        try:
+            path = resolve_inside(self.memory_dir, relative)
+        except EvidenceError:
+            return None
+        return path if path.is_file() else None
+
+    def worktree(self, follow_links: bool) -> Snapshot:
+        def read(relative: str) -> str | None:
+            path = self.worktree_path(relative)
+            return read_file_text(path) if path else None
+        return build_snapshot(read, self.memory_name, follow_links)
+
+
+def open_repository(memory_file: Path) -> Repository:
+    exe = _git_executable()
+    memory = Path(memory_file).resolve()
+    if not memory.parent.is_dir():
+        raise HistoryError(f"directory not found: {memory.parent}")
+    proc = _run(exe, memory.parent, ["rev-parse", "--show-toplevel", "--show-prefix"])
+    if proc.returncode:
+        raise HistoryError(f"{printable(str(memory_file))} is not inside a git work tree ({_failure(proc)})")
+    try:
+        toplevel, prefix = proc.stdout.decode("utf-8").split("\n")[:2]
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise HistoryError("cannot read the repository location from git") from exc
+    if CONTROL.search(prefix + memory.name):
+        raise HistoryError("the memory path contains control characters, which git batch reads cannot carry")
+    return Repository(git=exe, root=Path(toplevel), prefix=prefix, memory_dir=memory.parent, memory_name=memory.name)

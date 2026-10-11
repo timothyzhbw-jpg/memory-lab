@@ -60,6 +60,37 @@ dependencies (pydantic, typer) from PyPI within the version ranges the package d
 This repository audits its own `AGENTS.md` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 (`uses: ./`).
 
+## Gate a pull request on the claims it changes
+
+A strict audit of the whole file fails every pull request until all old candidates are resolved. With
+`diff-base`, the action runs `memfalsify diff` instead: it compares each instruction file with its version at
+that revision, audits only the claims the pull request adds or changes, and fails only on those. Claims it
+leaves alone are not re-checked; keep a full audit on `push` or on a schedule for them.
+
+```yaml
+name: Agent instructions
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  memfalsify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the base commit must be in the checkout
+      - uses: timothyzhbw-jpg/memory-lab@<sha>
+        with:
+          diff-base: ${{ github.event.pull_request.base.sha }}
+```
+
+`actions/checkout` fetches a single commit by default, and then the base commit is missing: use
+`fetch-depth: 0`, or a depth that reaches the base. The value must name a commit: the action rejects anything
+that starts with `-`, verifies it with `git rev-parse --verify --end-of-options <rev>^{commit}`, and fails with
+exit 2 if that fails. On `push` events `github.event.before` is all zeros for a new branch, so prefer
+`pull_request`. The report lists each changed claim's old and new wording, the added and removed claims, and
+the audit of the added and changed ones; the `attention` output counts only those.
+
 ## Inputs
 
 | Input | Default | Meaning |
@@ -69,6 +100,7 @@ This repository audits its own `AGENTS.md` in [`.github/workflows/ci.yml`](../.g
 | `exclude` | none | Globs to leave out of the evidence, one per line (see Exclusions). |
 | `strict` | `"true"` | Fail when any instruction is challenged, conflicted, disputed or has possible counterevidence. |
 | `verifier` | `lexical` | `lexical`, `llm`, `jev`, `dual` or `cascade` (see Model verifiers). |
+| `diff-base` | none | Revision to diff against, for example `${{ github.event.pull_request.base.sha }}`. When set, only claims added or changed since then are audited and can fail the step (see above). Needs that commit in the checkout. |
 | `as-of` | today | Reference date `YYYY-MM-DD` for the staleness check. |
 | `python-version` | `3.12` | Python for an isolated install under `$RUNNER_TEMP`. The job's own Python and `PATH` are not changed. |
 
@@ -83,15 +115,16 @@ an unquoted backslash escapes the next character, even on Windows.
 | Output | Meaning |
 |---|---|
 | `report` | Path of the Markdown report under `$RUNNER_TEMP` (the same text is in the job summary). With several files, their reports are concatenated. |
-| `attention` | Number of instructions that are challenged, conflicted, disputed or have possible counterevidence. |
+| `attention` | Number of instructions (with `diff-base`: of added or changed instructions) that are challenged, conflicted, disputed or have possible counterevidence. |
 
 - With `strict: "true"`, the step fails (exit 1) when `attention` is above zero. NO EVIDENCE, POSSIBLE SUPPORT
   and wording issues never fail it.
 - With `strict: "false"`, the action always reports and emits a warning annotation when `attention` is above
   zero.
 - Errors fail the step with exit 2 whatever `strict` says: a missing evidence directory, an invalid `as-of`,
-  an unknown verifier, a model verifier without credentials, unreadable evidence, or exclusion patterns that
-  leave zero indexed passages while there are claims to audit.
+  an unknown verifier, a model verifier without credentials, unreadable evidence, exclusion patterns that
+  leave zero indexed passages while there are claims to audit, or a `diff-base` that is not a commit in the
+  checkout.
 
 A zero `attention` count means no contradiction was flagged. It does not guarantee that memory files exist
 or that their claims have support. Missing memory files still produce a notice and success; workflows that

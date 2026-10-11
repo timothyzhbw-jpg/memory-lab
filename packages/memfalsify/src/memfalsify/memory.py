@@ -50,8 +50,42 @@ def _local_md_targets(line: str) -> list[str]:
     return [t for t in targets if t.endswith(".md") and "://" not in t]
 
 
-def _parse_file(path: Path, display: str) -> tuple[list[Claim], list[str]]:
-    lines = read_file_text(path).split("\n")
+def _strip(pattern: re.Pattern, text: str, origin: list[int], keep_group: int | None) -> tuple[str, list[int]]:
+    """``pattern.sub`` that keeps only ``keep_group`` of each match and tracks each character's raw offset."""
+    out, where, last = [], [], 0
+    for match in pattern.finditer(text):
+        out.append(text[last:match.start()])
+        where += origin[last:match.start()]
+        if keep_group is not None:
+            start, end = match.span(keep_group)
+            out.append(text[start:end])
+            where += origin[start:end]
+        last = match.end()
+    out.append(text[last:])
+    where += origin[last:]
+    return "".join(out), where
+
+
+def sentences(raw: str) -> list[tuple[str, int, int]]:
+    """(claim text, raw start, raw end) for each claim-sized sentence of one memory line.
+
+    The text has links and emphasis removed; the raw span covers the same sentence with its markup.
+    """
+    cleaned, origin = _strip(LINK, raw, list(range(len(raw))), 1)
+    cleaned, origin = _strip(WIKILINK, cleaned, origin, 1)
+    cleaned, origin = _strip(EMPHASIS, cleaned, origin, None)
+    found = []
+    for start, end in sentence_spans(cleaned):
+        text = cleaned[start:end]
+        words, _ = features(text)
+        if len(words) >= 2:
+            found.append((text, origin[start], origin[end - 1] + 1))
+    return found
+
+
+def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
+    """Claims and local link targets of one memory file's text (newlines already normalized to LF)."""
+    lines = text.split("\n")
     claims, links, section, fenced = [], [], None, False
     for index in range(_strip_frontmatter(lines), len(lines)):
         raw = lines[index]
@@ -69,14 +103,24 @@ def _parse_file(path: Path, display: str) -> tuple[list[Claim], list[str]]:
             # An index entry ("- [Title](file.md) — hook") points at claims; it is not one itself.
             links.extend(targets)
             continue
-        cleaned = EMPHASIS.sub("", WIKILINK.sub(r"\1", LINK.sub(r"\1", raw)))
-        for start, end in sentence_spans(cleaned):
-            text = cleaned[start:end]
-            words, _ = features(text)
-            if len(words) >= 2:
-                claims.append(Claim(id=claim_id(text), text=text, path=display,
-                                    line=index + 1, section=section))
+        claims += [Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1, section=section)
+                   for sentence, _, _ in sentences(raw)]
     return claims, links
+
+
+def merge_duplicates(claims: list[Claim]) -> list[Claim]:
+    """One claim per ID, in first-seen order; later copies are listed in ``also_at``."""
+    unique: dict[str, Claim] = {}
+    for claim in claims:
+        if claim.id in unique:
+            unique[claim.id].also_at.append(claim.location)
+        else:
+            unique[claim.id] = claim
+    return list(unique.values())
+
+
+def _parse_file(path: Path, display: str) -> tuple[list[Claim], list[str]]:
+    return parse_text(read_file_text(path), display)
 
 
 def parse_memory(memory_file: Path, follow_links: bool = True) -> tuple[list[Claim], list[Path]]:
@@ -94,10 +138,4 @@ def parse_memory(memory_file: Path, follow_links: bool = True) -> tuple[list[Cla
             if path.is_file() and path not in files:
                 files.append(path)
                 claims.extend(_parse_file(path, path.relative_to(root).as_posix())[0])
-    unique: dict[str, Claim] = {}
-    for claim in claims:
-        if claim.id in unique:
-            unique[claim.id].also_at.append(claim.location)
-        else:
-            unique[claim.id] = claim
-    return list(unique.values()), files
+    return merge_duplicates(claims), files

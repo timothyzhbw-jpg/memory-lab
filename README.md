@@ -80,6 +80,22 @@ Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narr
 
 Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
 
+#### Review memory changes in git
+
+When `CLAUDE.md`, `AGENTS.md` or `MEMORY.md` is versioned, review what a commit or pull request changed and audit only that:
+
+```bash
+memfalsify diff CLAUDE.md --base main --evidence .        # vs. the working tree; add --head REV for two commits
+memfalsify history CLAUDE.md --max-commits 50              # the commits that introduced and last changed each claim
+memfalsify rollback CLAUDE.md --claim m-1a2b3c4d --to main -o restore.patch
+git apply restore.patch                                    # only after reviewing it, from the repository root
+```
+
+- `diff` reads both versions of the memory file and the files it links to with git (nothing is checked out) and lists claims as added, changed (old → new), removed or unchanged. It audits only the added and changed ones, against the evidence directory as it is now, and takes the `audit` options (`--evidence`, `--exclude`, `--reviews`, `--verifier`, `--format`, `--output`, `--strict`, ...). With `--strict` it exits 1 when an added or changed claim needs attention; git problems and unknown revisions exit 2.
+- A claim is identified by its ID, so case and whitespace edits count as unchanged. An edited claim is paired with its old version when both are in the same file and section (a heading that was renamed around unchanged claims counts as the same section) and their terms are at least 50% similar; otherwise the edit shows as removed plus added. Pairing is deterministic.
+- `history` follows the first-parent line of `HEAD`, so a change merged with a merge commit is attributed to that commit; it also lists claims removed within the scanned commits, and uncommitted edits as "uncommitted changes in the working tree". Claims older than the scanned commits (`--max-commits`, default 100, or the edge of a shallow clone) are reported as such, not attributed to the oldest commit. A renamed memory file is not followed.
+- `rollback` never applies anything: it prints a patch that restores the claim's wording as of `--to` (every copy of it, with the old markup), or re-adds a removed claim after the nearest surviving claim of its section. It accepts the current or the old claim ID. Use `-o` on Windows, where shell redirection can re-encode the patch.
+
 ### Organizational Memory: replay decisions
 
 ```bash
@@ -263,7 +279,9 @@ accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run
 
 The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files against repository
 evidence and puts the report in the job summary. Its default strict check fails on possible counterevidence;
-unsupported claims and wording issues remain review leads.
+unsupported claims and wording issues remain review leads. With `diff-base` (for example the pull request's base
+commit, and `fetch-depth: 0` on `actions/checkout`), it runs `memfalsify diff`, so a pull request is gated only on
+the claims it adds or changes.
 
 ## Trust boundaries and limitations
 
@@ -272,6 +290,7 @@ unsupported claims and wording issues remain review leads.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
+- `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
 - On public repositories anyone can open issues, comment, review pull requests and close their own issues. All of it is recorded under the real account and ignored by replay unless that account is mapped, so expect `unauthorized_change_attempts`. That is accurate, not a bug.

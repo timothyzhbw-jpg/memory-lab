@@ -78,6 +78,22 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 
 其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`--format json`、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
 
+#### 审查 git 里的记忆改动
+
+`CLAUDE.md`、`AGENTS.md`、`MEMORY.md` 放在 git 里时，可以只看某次提交或某个 PR 改了哪些记忆，并且只审计这些：
+
+```bash
+memfalsify diff CLAUDE.md --base main --evidence .        # 与工作区比较；加 --head REV 可比较两个提交
+memfalsify history CLAUDE.md --max-commits 50              # 每条记忆由哪个提交引入、最后由哪个提交修改
+memfalsify rollback CLAUDE.md --claim m-1a2b3c4d --to main -o restore.patch
+git apply restore.patch                                    # 先审阅补丁，再在仓库根目录应用
+```
+
+- `diff` 通过 git 读取两个版本的记忆文件及其链接的文件（不会检出任何东西），把记忆分为新增、修改（旧 → 新）、删除和未变。只审计新增和修改的记忆，证据目录按当前状态读取；`audit` 的选项都能用（`--evidence`、`--exclude`、`--reviews`、`--verifier`、`--format`、`--output`、`--strict` 等）。加 `--strict` 时，新增或修改的记忆需要关注就退出码为 1；git 出错或修订版本不存在时退出码为 2。
+- 记忆按 ID 识别，所以只改大小写或空白算作未变。修改过的记忆要和旧版本配对，两者须在同一文件、同一小节（未变记忆所在标题被改名时仍算同一小节），并且词项相似度至少 50%；否则显示为一条删除加一条新增。配对结果是确定的。
+- `history` 沿 `HEAD` 的第一父提交链追溯，所以通过合并提交并入的改动记在该合并提交名下；它还列出扫描范围内被删除的记忆，未提交的修改记为“uncommitted changes in the working tree”。早于扫描范围的记忆（受 `--max-commits` 限制，默认 100；或到了浅克隆的边界）会如实标为扫描范围之前，不会算到最早那个提交头上。记忆文件改名不会被追踪。
+- `rollback` 从不应用任何改动：它打印一个补丁，把这条记忆恢复成 `--to` 时的措辞（所有副本都恢复，并保留原来的 markdown 标记），或把已删除的记忆重新加到它所在小节里前面最近一条仍存在的记忆之后。当前 ID 和旧 ID 都可以用。在 Windows 上请用 `-o`，因为 shell 重定向可能改变补丁的编码。
+
 ### 组织记忆：回放决策
 
 ```bash
@@ -262,6 +278,8 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 
 [GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件与仓库证据核对，并把报告放入任务摘要。
 默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。
+设置 `diff-base`（例如 PR 的基准提交，并给 `actions/checkout` 加上 `fetch-depth: 0`）后，Action 改为运行
+`memfalsify diff`，PR 只会因为它新增或修改的记忆而失败。
 
 ## 信任边界与局限
 
@@ -270,6 +288,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
+- `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。
 - GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。
 - `policy.json` 是全局的：给一个 `gh:` 账号配置角色，等于在所有导入仓库的议题上都授予了这个角色。
 - 在公开仓库里，任何人都可以开 issue、评论、审查 PR、关闭自己的 issue。这些都会以真实账号记录下来，只要账号没有配置角色，回放就会忽略它们，所以会出现 `unauthorized_change_attempts`。这是如实记录，不是 bug。

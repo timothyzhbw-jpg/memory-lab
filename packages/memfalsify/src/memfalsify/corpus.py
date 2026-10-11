@@ -17,6 +17,11 @@ MEDIA = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".tiff", ".m
 SKIP_DIRS = {"node_modules", "__pycache__", "venv"}
 MAX_BYTES = 2_000_000
 REPORT_HEADER = "# MemFalsify audit report"
+DIFF_HEADER = "# MemFalsify diff report"
+HISTORY_HEADER = "# MemFalsify claim history"
+ROLLBACK_HEADER = "# MemFalsify rollback patch"
+# Anything MemFalsify prints quotes memory; none of it may count as evidence for that memory.
+OUTPUT_HEADERS = (REPORT_HEADER, DIFF_HEADER, HISTORY_HEADER, ROLLBACK_HEADER)
 
 
 class Passage(BaseModel):
@@ -93,7 +98,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
             except UnicodeDecodeError:
                 skipped.append(Skipped(path=relative, reason="not UTF-8 text"))
                 continue
-            if text.startswith(REPORT_HEADER) or text.lstrip().startswith('{\n  "tool": "memfalsify"'):
+            if text.startswith(OUTPUT_HEADERS) or text.lstrip().startswith('{\n  "tool": "memfalsify"'):
                 skipped.append(Skipped(path=relative, reason="MemFalsify report: a report cannot be its own evidence"))
                 continue
             digest = sha256_bytes(raw)
