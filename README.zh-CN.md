@@ -127,7 +127,7 @@ orgmemory append   <数据集> --event '{"id": ..., ...}'
 orgmemory audit <数据集> [--as-of ISO8601] [--stale-days 14] [--format markdown|json] [--strict]
 ```
 
-以 2026-10-31 为时间点审计示例数据（[完整报告](examples/orgmemory/audit-report.md)）：客户的“申请重新考虑”已经等了产品经理超过 14 天（`stale_reconsideration`，medium）；客户经理那次被忽略的“批准”列为 `unauthorized_attempts`（medium）。[GitHub 示例的审计报告](examples/orgmemory/github-acme-web/audit-report.md)按账号列出了长期无人处理的 issue 和 PR、被忽略的审查、标签和合并，以及一位先要求修改、后又批准的审查者。
+以 2026-10-31 为时间点审计示例数据（[完整报告](examples/orgmemory/audit-report.md)）：客户的“申请重新考虑”已经等了产品经理超过 14 天（`stale_reconsideration`，medium）；客户经理那次被忽略的“批准”列为 `unauthorized_attempts`（medium）。[GitHub 示例的审计报告](examples/orgmemory/github-acme-web/audit-report.md)按账号列出了长期等待权限策略下决定的请求、被忽略的审查、标签和合并，以及一位先要求修改、后又批准的审查者。等待批准反映的是权限策略下的回放结果，不是 GitHub 上的 issue 或 PR 是否仍然打开：例如，`acme/web#4` 因重复而关闭，但这次关闭记为 `comment`，请求仍在等待决定。
 
 | 类型 | 何时报告 | 严重程度 |
 |---|---|---|

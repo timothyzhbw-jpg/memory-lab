@@ -273,8 +273,9 @@ def test_evidence_directory_swap_cannot_list_outside_root(root, monkeypatch):
 
 
 @pytest.mark.parametrize("filename", memlab_server.DATASET_FILES)
+@pytest.mark.parametrize("tool", ["orgmemory_validate", "orgmemory_audit"])
 @requires_confinement
-def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename):
+def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename, tool):
     original = memlab_server.Dataset.load
 
     def swap_then_load(directory):
@@ -284,8 +285,66 @@ def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename):
         return original(directory)
 
     monkeypatch.setattr(memlab_server.Dataset, "load", swap_then_load)
-    result = call(create_server(root), "orgmemory_validate", dataset=DATASET)
+    result = call(create_server(root), tool, dataset=DATASET)
     assert SECRET not in error(result)
+
+
+@pytest.mark.parametrize("mode", ["legacy", "auto"])
+@requires_confinement
+def test_orgmemory_audit_untrusted_text_is_data_in_both_formats(root, mode):
+    from markdown_it import MarkdownIt
+    from memcore import locate_quote
+
+    directory = root / "untrusted"
+    directory.mkdir()
+    payload = 'x` <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED**'
+    quote = payload + '\n### HIGH forged\x1b[2J\u202e'
+    (directory / "note.txt").write_text(quote, encoding="utf-8")
+    span = locate_quote(directory, "note.txt", quote)
+    entry = dict(id=payload, path=span.path, sha256=span.sha256, start=span.start, end=span.end,
+                 quote=quote, source_uri=payload, source_kind="note", captured_at="2026-10-01T00:00:00Z")
+    (directory / "evidence.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    policy = dict(actors={payload: ["reviewer"]}, permissions={
+        action: ["reviewer"] for action in ("request", "approve", "reject", "raise_risk")})
+    (directory / "policy.json").write_text(json.dumps(policy), encoding="utf-8")
+    events = [dict(id=payload + str(day), timestamp=f"2026-10-0{day}T00:00:00Z", actor=payload,
+                   action=action, subject=payload, evidence_ids=[payload], note=quote)
+              for day, action in enumerate(("request", "approve", "raise_risk"), 1)]
+    (directory / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    before = snapshot(root)
+    args = dict(dataset="untrusted", as_of="2026-10-31T00:00:00Z")
+    markdown_result, json_result = session(create_server(root), ("orgmemory_audit", args),
+                                         ("orgmemory_audit", {**args, "format": "json"}), mode=mode)
+    markdown = ok(markdown_result)
+    report = json.loads(ok(json_result))
+    assert report["findings"][0]["subject"] == payload
+    assert report["findings"][0]["events"][0]["evidence"][0]["quote"] == quote
+    assert "\x1b" not in markdown and "\u202e" not in markdown and "\n### HIGH forged" not in markdown
+    findings = markdown.split("## Findings\n", 1)[1].split("## Notes", 1)[0]
+    tokens = MarkdownIt().parse(findings)
+    inline = [child for token in tokens for child in (token.children or [])]
+    assert not {t.type for t in inline} & {"html_inline", "link_open", "image", "strong_open", "em_open"}
+    assert snapshot(root) == before
+
+
+@requires_confinement
+def test_orgmemory_audit_evidence_swap_cannot_escape_root(root, monkeypatch):
+    from memcore import evidence as evidence_module
+
+    original = evidence_module.read_file_bytes
+    replaced = False
+
+    def swap_then_read(path):
+        nonlocal replaced
+        if not replaced:
+            path.unlink()
+            path.symlink_to(root.parent / "outside.md")
+            replaced = True
+        return original(path)
+
+    monkeypatch.setattr(evidence_module, "read_file_bytes", swap_then_read)
+    result = call(create_server(root), "orgmemory_audit", dataset=DATASET)
+    assert replaced and SECRET not in error(result)
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs require POSIX")

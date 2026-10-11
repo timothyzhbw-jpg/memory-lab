@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
+from html import escape
 from typing import Callable
 
 from memcore import EvidenceSpan
@@ -21,9 +23,11 @@ def _yaml_value(value) -> str:
     return json.dumps(value, ensure_ascii=False) if any(c in str(value) for c in ":#[]{},'\"") else str(value)
 
 
-def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = str) -> list[str]:
+def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = str,
+         code: Callable[[str], str] | None = None) -> list[str]:
     """One evidence citation: id, location, source, short hash, then the exact quote."""
-    return [f"{indent}- evidence `{clean(str(span.id))}` · `{clean(span.location)}` · {clean(str(span.source_uri))} "
+    code = code or (lambda value: f"`{clean(value)}`")
+    return [f"{indent}- evidence {code(str(span.id))} · {code(span.location)} · {clean(str(span.source_uri))} "
             f"· sha256 `{span.sha256[:12]}`",
             f"{indent}  > {clean(span.quote)}"]
 
@@ -79,10 +83,29 @@ def to_markdown(result: ReplayResult) -> str:
     return "\n".join(out)
 
 
-def _safe(text: str) -> str:
+def _one_line(text: str) -> str:
     """Untrusted text kept on one line: control, format (bidi, zero-width) and separator characters are escaped."""
     return "".join(c if unicodedata.category(c) not in ("Cc", "Cf", "Zl", "Zp")
                    else f"\\u{ord(c):04x}" if ord(c) <= 0xFFFF else f"\\U{ord(c):08x}" for c in text)
+
+
+def _safe(text: str) -> str:
+    """Literal Markdown text, including in headings and evidence blockquotes."""
+    text = escape(_one_line(text), quote=False)
+    text = re.sub(r"([\\`*_{}\[\]#|~])", r"\\\1", text)
+    # Block syntax can still be recognized at the start of a one-line quote/detail.
+    text = re.sub(r"^(\s*)([-+=])", r"\1\\\2", text)
+    return re.sub(r"^(\s*\d+)([.)])(?=\s)", r"\1\\\2", text)
+
+
+def _audit_code(text: str) -> str:
+    """Code spans need a delimiter longer than any backtick run in the data."""
+    text = _one_line(text)
+    fence = "`" * (1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
+    # Padding protects backticks at the edges and preserves significant edge spaces.
+    if "`" in text or (text.startswith(" ") and text.endswith(" ") and text.strip()):
+        return f"{fence} {text} {fence}"
+    return f"{fence}{text}{fence}"
 
 
 def _audit_finding(finding: AuditFinding) -> list[str]:
@@ -91,10 +114,10 @@ def _audit_finding(finding: AuditFinding) -> list[str]:
     for event in finding.events:
         where = f" on {_safe(event.subject)}" if event.subject != finding.subject else ""
         roles = ", ".join(event.roles) or "none"
-        out.append(f"- `{_safe(event.event_id)}`{where} at {event.timestamp.isoformat()}: {_safe(event.actor)} "
+        out.append(f"- {_audit_code(event.event_id)}{where} at {event.timestamp.isoformat()}: {_safe(event.actor)} "
                    f"(roles: {_safe(roles)}) · {event.action} · {event.outcome}")
         for span in event.evidence:
-            out += cite(span, clean=_safe)
+            out += cite(span, clean=_safe, code=_audit_code)
     out.append("")
     return out
 

@@ -127,7 +127,7 @@ orgmemory append   <dataset> --event '{"id": ..., ...}'
 orgmemory audit <dataset> [--as-of ISO8601] [--stale-days 14] [--format markdown|json] [--strict]
 ```
 
-On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.md)), the customer's reconsideration has waited more than 14 days for the product manager (`stale_reconsideration`, medium), and the account manager's ignored "approval" is an `unauthorized_attempts` finding (medium). The [GitHub example's audit](examples/orgmemory/github-acme-web/audit-report.md) lists stale open issues and pull requests, ignored reviews, labels and merges per account, and a reviewer who requested changes and then approved.
+On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.md)), the customer's reconsideration has waited more than 14 days for the product manager (`stale_reconsideration`, medium), and the account manager's ignored "approval" is an `unauthorized_attempts` finding (medium). The [GitHub example's audit](examples/orgmemory/github-acme-web/audit-report.md) lists stale requests awaiting a policy decision, ignored reviews, labels and merges per account, and a reviewer who requested changes and then approved. Pending approval reflects policy replay, not whether an issue or pull request is open on GitHub: for example, `acme/web#4` is closed as duplicate, a `comment` that leaves its request pending.
 
 | Kind | Reported when | Severity |
 |---|---|---|

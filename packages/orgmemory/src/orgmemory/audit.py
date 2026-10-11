@@ -70,7 +70,7 @@ def _duration(delta: timedelta) -> str:
 
 
 def _note(text: str) -> str:
-    """Risk notes are free text from the log: quote them so they cannot pass as report structure."""
+    """Quote free-text risk notes in the detail; the Markdown renderer also escapes their markup."""
     return json.dumps(text, ensure_ascii=False)
 
 
@@ -184,8 +184,8 @@ class _Auditor:
         own = [e.event_id for e in trail if e.outcome == "applied" and e.action in ("request", "reconsider")
                and e.actor == approval.actor and self.position[e.event_id] < self.position[approval.event_id]]
         if own:
-            self.add("self_approval", "low", f"{approval.actor} approved a subject they had also requested; "
-                     "the log records no decision by a second actor", [*own, approval.event_id],
+            self.add("self_approval", "low", f"{approval.actor} approved a subject they had also requested",
+                     [*own, approval.event_id],
                      subject=state.subject, actor=approval.actor)
 
     # --- requests still open ------------------------------------------------------------------------

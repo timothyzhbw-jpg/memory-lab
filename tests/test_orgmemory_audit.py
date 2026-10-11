@@ -1,5 +1,6 @@
 """`orgmemory audit`: every finding kind, severities, cutoffs, ordering, exit codes, and read-only behaviour."""
 import json
+import re
 from datetime import datetime, timezone
 from itertools import product
 
@@ -206,6 +207,45 @@ def test_open_periods_follow_replay():
     assert checked == 3 * 10 ** 3
 
 
+@pytest.mark.parametrize("day, pending_ids, reconsider_ids", [
+    (1, ["r"], []), (2, ["r", "rc"], ["rc"]), (3, ["r", "rc"], ["rc"]),
+    (4, [], []), (5, ["q"], ["q"]), (6, ["q", "v"], ["q"]),
+    (7, ["q", "v", "after"], ["q"]), (8, ["q", "v", "after"], ["q"]),
+    (9, ["q", "v", "after", "v2"], ["q"]),
+    (10, ["q", "v", "after", "v2", "rc2"], ["q", "rc2"]), (11, [], []),
+])
+def test_open_period_start_events_at_each_cutoff(tmp_path, day, pending_ids, reconsider_ids):
+    events = [ev("r", 1, "cust", "request"), ev("rc", 2, "sales", "reconsider"),
+              ev("ignored", 3, "sales", "approve"), ev("a", 4, "pm", "approve"),
+              ev("q", 5, "cust", "request"), ev("v", 6, "pm", "revoke", supersedes="a"),
+              ev("after", 7, "cust", "request"), ev("invalid", 8, "pm", "revoke", supersedes="a"),
+              ev("v2", 9, "pm", "revoke", supersedes="v"), ev("rc2", 10, "cust", "reconsider"),
+              ev("j", 11, "pm", "reject")]
+    data = Dataset.load(build(tmp_path / "data", list(reversed(events))))
+    result = replay(data, at(day))
+    pending, reconsider = open_periods(result.audit_log)
+    assert [e.event_id for e in pending] == pending_ids
+    assert [e.event_id for e in reconsider] == reconsider_ids
+    assert bool(pending) == bool(result.states["S"].pending_approval)
+    assert bool(reconsider) == result.states["S"].reconsideration_requested
+
+
+def test_pending_and_reconsideration_have_distinct_clocks(tmp_path):
+    events = [ev("r", 1, "cust", "request"), ev("rc", 10, "cust", "reconsider")]
+    assert run(tmp_path, events, as_of=at(20)).findings == []
+    finding, = run(tmp_path / "later", events, as_of=at(25)).findings
+    assert finding.kind == "stale_reconsideration" and finding.event_ids == ["rc"]
+    assert "since 2026-10-10" in finding.detail
+
+
+def test_invalid_supersession_does_not_cite_events_after_cutoff(tmp_path):
+    events = [ev("a", 1, "pm", "approve"), ev("x", 2, "pm", "revoke", supersedes="future"),
+              ev("future", 30, "pm", "reject")]
+    finding, = run(tmp_path, events, as_of=at(3)).findings
+    assert finding.kind == "invalid_supersession" and finding.event_ids == ["a", "x"]
+    assert "future" in finding.detail  # The attempted target is named, not replayed or cited.
+
+
 # --- approved subjects -------------------------------------------------------------------------------
 
 def test_risk_after_approval(tmp_path):
@@ -253,6 +293,14 @@ def test_self_approval(tmp_path):
         ("self_approval", "low", "S", "pm", ["r", "a"])
 
 
+def test_self_approval_does_not_deny_a_second_actors_decision(tmp_path):
+    report = run(tmp_path, [ev("r", 1, "pm", "request"), ev("other", 2, "pm2", "approve"),
+                            ev("a", 3, "pm", "approve")], as_of=at(4))
+    finding, = report.findings
+    assert (finding.kind, finding.severity, finding.event_ids) == ("self_approval", "low", ["r", "a"])
+    assert finding.detail == "pm approved a subject they had also requested"
+
+
 # --- ordering, output and the CLI ---------------------------------------------------------------
 
 MIXED = [
@@ -294,7 +342,7 @@ def test_markdown_starts_with_the_summary_table(tmp_path):
         "1 | 0 | 1 |", "0 | 0 | 0 |"])]
     assert lines[4 + len(KINDS)] == "| **Total** | 3 | 1 | 2 |"
     assert "### HIGH · unauthorized_attempts · actor sales" in lines
-    assert "- `s1` on Y at 2026-10-04T09:00:00+00:00: sales (roles: account_manager) · approve · unauthorized" in lines
+    assert "- `s1` on Y at 2026-10-04T09:00:00+00:00: sales (roles: account\\_manager) · approve · unauthorized" in lines
     assert "  - evidence `e` · `note.txt:1` · synthetic://note · sha256 `" in markdown and "    > Synthetic note" in lines
     assert markdown.endswith("\n") and not markdown.endswith("\n\n")
 
@@ -304,8 +352,72 @@ def test_untrusted_text_cannot_add_terminal_codes_or_report_lines(tmp_path):
     report = run(tmp_path, [ev("r", 1, "cust", "request", subject=subject)], as_of=at(30))
     markdown = audit_markdown(report)
     assert "\x1b" not in markdown and "‮" not in markdown and "\n### HIGH · forged" not in markdown
-    assert "Evil\\u001b[2J\\u202e\\u000a### HIGH · forged" in markdown
+    assert "Evil\\\\u001b\\[2J\\\\u202e\\\\u000a\\#\\#\\# HIGH · forged" in markdown
     assert json.loads(report.model_dump_json())["findings"][0]["subject"] == subject
+
+
+@pytest.mark.parametrize("field", ["subject", "actor", "note", "event_id", "evidence_id", "path",
+                                   "source_uri", "quote"])
+def test_untrusted_audit_fields_render_as_text(tmp_path, field):
+    from markdown_it import MarkdownIt
+
+    payload = 'x` <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED**'
+    root = build(tmp_path / "data", [ev("a", 1, "pm", "approve"),
+                                     ev("k", 2, "eng", "raise_risk", note="risk")])
+    events = [json.loads(line) for line in (root / "events.jsonl").read_text().splitlines()]
+    entry = json.loads((root / "evidence.jsonl").read_text())
+    if field in ("subject", "actor", "note"):
+        for event in events:
+            if field == "subject" or event["action"] == "raise_risk":
+                event[field] = payload
+        if field == "actor":
+            policy = json.loads((root / "policy.json").read_text())
+            policy["actors"][payload] = ["engineer"]
+            (root / "policy.json").write_text(json.dumps(policy))
+    elif field == "event_id":
+        events[-1]["id"] = payload
+    elif field == "evidence_id":
+        entry["id"] = payload
+        for event in events:
+            event["evidence_ids"] = [payload]
+    elif field == "path":
+        (root / "note.txt").rename(root / payload.replace("/", "_"))
+        entry["path"] = payload.replace("/", "_")
+    elif field == "source_uri":
+        entry["source_uri"] = payload
+    elif field == "quote":
+        (root / "note.txt").write_text(payload)
+        span = locate_quote(root, "note.txt", payload)
+        entry.update(sha256=span.sha256, quote=span.quote, start=span.start, end=span.end)
+    (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    (root / "evidence.jsonl").write_text(json.dumps(entry) + "\n")
+    report = audit(Dataset.load(root), at(3))
+    findings = audit_markdown(report).split("## Findings\n", 1)[1].split("## Notes", 1)[0]
+    tokens = MarkdownIt().parse(findings)
+    inline = [child for token in tokens for child in (token.children or [])]
+    assert not {t.type for t in inline} & {"html_inline", "link_open", "image", "strong_open", "em_open"}
+    assert not any(t.type == "html_block" for t in tokens)
+    literal = payload.replace("/", "_") if field == "path" else payload
+    assert any(literal in token.content for token in inline if token.type in ("text", "code_inline"))
+    # JSON retains original data; rendering protection must not mutate the report.
+    assert payload in report.model_dump_json() or field == "path"
+
+
+@pytest.mark.parametrize("payload", ["# HIGH forged", "- forged", "1. forged", "---", "```html",
+                                     "<h3>HIGH forged</h3>", "&#10;# HIGH forged"])
+def test_evidence_cannot_add_markdown_blocks(tmp_path, payload):
+    from markdown_it import MarkdownIt
+
+    report = run(tmp_path, [ev("a", 1, "pm", "approve"),
+                            ev("k", 2, "eng", "raise_risk", note="risk")], as_of=at(3))
+    baseline = MarkdownIt().parse(audit_markdown(report))
+    span = report.findings[0].events[0].evidence[0].model_copy(update={"quote": payload})
+    report.findings[0].events[0].evidence = [span]
+    tokens = MarkdownIt().parse(audit_markdown(report))
+    assert not {t.type for t in tokens} & {"hr", "fence", "html_block", "ordered_list_open"}
+    assert [t.type for t in tokens] == [t.type for t in baseline]
+    assert any(child.type == "text" and child.content == payload
+               for token in tokens for child in (token.children or []))
 
 
 def test_cli_strict_exit_codes(tmp_path):
@@ -329,7 +441,9 @@ def test_cli_strict_exit_codes(tmp_path):
 def test_cli_invalid_options_exit_2(tmp_path, args, message):
     root = build(tmp_path / "data", MIXED)
     result = runner.invoke(app, ["audit", str(root), *args])
-    assert result.exit_code == 2 and message in result.output.lower()
+    # Rich colors usage errors when it detects CI (e.g. GITHUB_ACTIONS); compare the plain text.
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert result.exit_code == 2 and message in plain.lower()
 
 
 def test_cli_invalid_dataset_exits_2_even_after_the_cutoff(tmp_path):
@@ -376,3 +490,22 @@ def test_feature_a_audit_over_the_week(org_demo):
                                              ("unauthorized_attempts", "medium", "wu")]
     result = runner.invoke(app, ["audit", str(org_demo), "--as-of", "2026-10-31T00:00:00Z", "--strict"])
     assert result.exit_code == 0 and "ev-thu-sales-approve" in result.output
+
+
+def test_github_findings_follow_policy_decisions_not_issue_lifecycle():
+    data = Dataset.load(EXAMPLES / "orgmemory" / "github-acme-web")
+    report = audit(data, at(31, 0))
+    assert report.summary == {"high": 0, "medium": 13, "low": 2}
+    pending = {f.subject for f in report.findings if f.kind == "stale_pending_approval"}
+    assert pending == {f"acme/web#{n}" for n in (4, 5, 8, 9, 10, 11, 13)}
+    assert {f.subject for f in report.findings if f.kind == "stale_reconsideration"} == {"acme/web#1"}
+    # Issue #4 is closed as duplicate on GitHub, but closes are comments in this policy log.
+    closed = next(e for e in data.events if e.id == "gh:acme/web#4/event/405")
+    assert closed.action == "comment" and closed.note == "GitHub issue closed as duplicate"
+    assert replay(data).states[closed.subject].pending_approval == ["product_manager"]
+    # Review changes requested -> approval is low; the subsequent merge is another approval.
+    reversal, = [f for f in report.findings if f.kind == "decision_reversed"]
+    assert (reversal.subject, reversal.severity, reversal.event_ids) == (
+        "acme/web#2", "low", ["gh:acme/web#2/review/203", "gh:acme/web#2/review/206"])
+    assert not any(f.kind in {"self_approval", "risk_after_approval", "unresolved_dependency"}
+                   for f in report.findings)

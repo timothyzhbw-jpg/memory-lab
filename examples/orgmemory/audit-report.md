@@ -21,9 +21,9 @@
 
 ### MEDIUM · stale_reconsideration · Feature A
 
-reconsideration awaiting a decision from product_manager since 2026-10-08T08:45:00+00:00 (status rejected): 22d 15h at 2026-10-31T00:00:00+00:00, more than 14 days
+reconsideration awaiting a decision from product\_manager since 2026-10-08T08:45:00+00:00 (status rejected): 22d 15h at 2026-10-31T00:00:00+00:00, more than 14 days
 
-- `ev-wed-reject` at 2026-10-07T15:30:00+00:00: zhou (roles: product_manager) · reject · applied
+- `ev-wed-reject` at 2026-10-07T15:30:00+00:00: zhou (roles: product\_manager) · reject · applied
   - evidence `wed` · `sources/2026-10-07-decision-log.txt:3` · synthetic://decision-log/2026-10-07 · sha256 `fb85f034a99f`
     > Feature A is rejected for the November release until the billing migration lands.
 - `ev-thu-request` at 2026-10-08T08:45:00+00:00: buyer@acme (roles: customer) · request · applied
@@ -32,9 +32,9 @@ reconsideration awaiting a decision from product_manager since 2026-10-08T08:45:
 
 ### MEDIUM · unauthorized_attempts · actor wu
 
-1 attempt(s) the policy ignored (approve ×1) on 1 subject(s): Feature A; roles: account_manager
+1 attempt(s) the policy ignored (approve ×1) on 1 subject(s): Feature A; roles: account\_manager
 
-- `ev-thu-sales-approve` on Feature A at 2026-10-08T11:20:00+00:00: wu (roles: account_manager) · approve · unauthorized
+- `ev-thu-sales-approve` on Feature A at 2026-10-08T11:20:00+00:00: wu (roles: account\_manager) · approve · unauthorized
   - evidence `thu-sales` · `sources/2026-10-08-sales-chat.txt:3` · synthetic://chat/sales/2026-10-08 · sha256 `ae8240ffb8d4`
     > I told Acme Feature A is approved, let's just ship it.
 
