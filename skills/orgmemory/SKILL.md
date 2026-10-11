@@ -52,7 +52,7 @@ orgmemory policy revoke <dataset> --id <id> --timestamp <ISO time with timezone>
 ```
 
 1. Register the source that records the change first, with `orgmemory evidence add`, and cite it with `--evidence-id` (repeatable).
-2. `--timestamp` is when the change takes effect. It applies to events at and after that time; earlier events keep their outcome.
+2. `--timestamp` is when the change takes effect. It applies to events at and after that time; events before that effective time keep their outcome. A backdated append can change already recorded event outcomes, even for a past `--as-of`; that cutoff uses the current log, not what was known then. Make this consequence clear when the requested change is backdated.
 3. The command checks the whole `policy-log.jsonl` with the new entry, then appends it. The `--actor` must hold a role allowed to `manage_roles` at that time. Exit code 2 means nothing was written: report the error, and do not work around it by editing `policy.json` or `policy-log.jsonl`.
 
 ## Ingesting GitHub (only when the user asks)

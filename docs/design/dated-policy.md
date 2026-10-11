@@ -21,7 +21,8 @@ every decision they made becomes an ignored attempt. Neither is what happened.
   {"id": "pl-zhou-leaves", "timestamp": "2026-10-12T09:00:00Z", "actor": "chen", "action": "revoke_role", "subject_actor": "zhou", "role": "product_manager", "evidence_ids": ["org-zhou"], "note": "moved to the platform team"}
   ```
 
-  `timestamp` is the effective time and needs a timezone. `actor` is who made the change. `subject_actor`
+  `timestamp` is the effective time: an ISO 8601 datetime with a timezone, never epoch seconds or
+  milliseconds (including numeric strings). `actor` is who made the change. `subject_actor`
   is whose roles change. `evidence_ids` (at least one) name records in `evidence.jsonl`, as events do.
   `note` is optional free text. Unknown fields are rejected.
 - **Who may change roles.** A new permission, `manage_roles`, in `policy.json` `permissions` lists the
@@ -56,6 +57,13 @@ every decision they made becomes an ignored attempt. Neither is what happened.
    `orgmemory policy revoke` check the log with the new entry before appending. A backdated entry that
    would make a later one unauthorized (for example removing a manager's role before a change they made)
    is refused. `orgmemory append` checks a new event's ID against the log as well.
+6. **Backdating is retrospective.** Appending a change with an earlier effective time can change outcomes
+   of events already in the dataset, including replays with a past `--as-of`. For example, an approval on
+   October 8 that was unauthorized becomes authorized if a manager later appends a grant effective on
+   October 7. A backdated revocation can likewise invalidate an existing decision. Validation preserves
+   the validity of later *policy changes*, not the previous outcomes of events. There is no recorded-at
+   time: `--as-of` asks what is effective by the cutoff under the entire current log, not what entries
+   were known when that cutoff occurred. Only events before a change's effective time keep their outcomes.
 
 ## What uses it
 
@@ -108,8 +116,8 @@ line and an empty "Role changes" section.
 ## Limitations
 
 - Identities are not authenticated: a change's `actor` is as trustworthy as the person who appended it.
-- There is no correction entry. A later `grant` or `revoke_role` changes roles from then on. To correct
-  the past, the user edits `policy-log.jsonl` by hand (it is their configuration), and `orgmemory validate`
-  checks the result.
+- There is no correction entry or immutable historical snapshot. A `grant` or `revoke_role` changes roles
+  from its effective time on, even when appended later. A user can correct the past with a valid backdated
+  append, or edit `policy-log.jsonl` by hand (it is their configuration); validation checks the result.
 - Self-grants by a manager are allowed and not flagged. The policy decides who may manage roles.
 - The GitHub importer never reads or writes the policy log, as it never reads or writes `policy.json`.

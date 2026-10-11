@@ -153,6 +153,7 @@ orgmemory policy revoke <数据集> --id pl-zhou-leaves --timestamp 2026-10-12T0
 - 变更按生效时间排序；生效时间相同的变更按文件顺序应用。在 T 时刻生效的变更，对 T 时刻的事件同样适用。`--as-of` 会应用截止时间之前（含截止时间）的变更。
 - 变更的 `--actor` 在变更生效时，必须持有 `policy.json` 中 `manage_roles` 权限所列的某个角色。最初的管理者就是 `policy.json` 里列出的那些人。`grant` 授予的角色必须在 `policy.json` 中出现过，且对方当时尚未持有；`revoke` 移除对方当时持有的角色。
 - `orgmemory policy grant` 和 `orgmemory policy revoke` 会连同新条目一起校验整个日志（这样，补记的早期条目不会让后面的条目失效），通过后才追加。日志不成立的数据集会被 `validate`、`replay`、`explain` 和 `audit` 拒绝。
+- 补记较早生效的条目可以改变已记录事件的结果，包括使用过去的 `--as-of` 截止时间回放的结果。校验保护的是后续角色变更条目的有效性，不是原来的事件结果。截止时间依据当前日志中的生效时间，不会还原当时已知哪些条目。
 - `permissions` 不分时间。既没有 `policy-log.jsonl` 也没有 `as_of` 的数据集，回放结果和以前完全相同。设计说明：[docs/design/dated-policy.md](docs/design/dated-policy.md)。
 
 #### 审计决策流程

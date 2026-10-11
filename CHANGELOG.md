@@ -43,6 +43,10 @@ Release 0.3 contains:
   lists actors the log grants a role as actors without any role. `append` refuses an event ID that a
   policy-log entry uses.
 - `unauthorized_attempts` names the roles held at each attempt when they differ.
+- Policy baseline and role-change timestamps require ISO 8601 datetimes with timezones; numeric epochs
+  and numeric strings are rejected rather than guessing seconds or milliseconds.
+- GitHub capture destinations reserve `policy-log.jsonl` even when absent, and importer inputs refuse
+  aliases of either policy file before opening them.
 - Datasets without `policy-log.jsonl` and `as_of` are unaffected: their reports and JSON are byte-identical,
   and they do not list the new finding kind.
 

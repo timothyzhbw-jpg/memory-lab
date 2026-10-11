@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional, Union
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
 
 from memcore import EvidenceSpan
 
@@ -14,6 +14,23 @@ MANAGE_ROLES = "manage_roles"
 # Permissions name event actions, plus manage_roles: who may record a role change in policy-log.jsonl.
 PolicyAction = Union[Action, Literal["manage_roles"]]
 RoleAction = Literal["grant", "revoke_role"]
+
+
+def _policy_time(value):
+    """Policy dates have explicit units and zones; never infer epoch seconds or milliseconds."""
+    if isinstance(value, datetime):
+        return value  # Library callers may supply datetimes; AwareDatetime still checks the timezone.
+    if isinstance(value, str):
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+        else:
+            return value
+    raise ValueError("expected an ISO 8601 datetime with a timezone")
+
+
+PolicyTime = Annotated[AwareDatetime, BeforeValidator(_policy_time)]
 
 
 class Event(BaseModel):
@@ -52,7 +69,7 @@ class Policy(BaseModel):
 
     actors: dict[str, list[str]]
     permissions: dict[PolicyAction, list[str]]
-    as_of: Optional[AwareDatetime] = Field(
+    as_of: Optional[PolicyTime] = Field(
         default=None, description="When the roles in 'actors' took effect; before it no actor holds a role")
 
     def roles(self, actor: str) -> list[str]:
@@ -81,7 +98,7 @@ class PolicyChange(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str = Field(min_length=1)
-    timestamp: AwareDatetime = Field(description="When the change took effect, with timezone")
+    timestamp: PolicyTime = Field(description="When the change took effect, with timezone")
     actor: str = Field(min_length=1, description="Who made the change; must hold a role permitted to manage_roles")
     action: RoleAction
     subject_actor: str = Field(min_length=1, description="Whose roles change")

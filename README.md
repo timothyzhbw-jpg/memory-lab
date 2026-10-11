@@ -153,6 +153,7 @@ Each event is then judged by the roles its actor held at its effective time. In 
 - Changes apply in effective-time order. Changes with the same time apply in file order. A change effective at T applies to events at T. `--as-of` applies the changes up to and including the cutoff.
 - A change's `--actor` must hold, at that time, a role listed under the `manage_roles` permission in `policy.json`. The first managers are the ones `policy.json` names. A grant names a role `policy.json` mentions and the subject does not hold yet; `revoke` removes a role the subject holds.
 - `orgmemory policy grant` and `orgmemory policy revoke` check the whole log with the new entry, so a backdated entry cannot invalidate a later one, and only then append. `validate`, `replay`, `explain` and `audit` reject a dataset whose log does not hold.
+- A backdated append can change outcomes of events already recorded, including replays with a past `--as-of`. Validation protects later policy entries, not previous event outcomes. The cutoff uses effective times in the current log; it does not reconstruct which entries were known then.
 - `permissions` are not dated. A dataset with neither `policy-log.jsonl` nor `as_of` replays exactly as before. Design: [docs/design/dated-policy.md](docs/design/dated-policy.md).
 
 #### Audit the decision process

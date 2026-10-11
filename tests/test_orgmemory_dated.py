@@ -1,8 +1,10 @@
 """Effective-dated roles: policy-log.jsonl, policy.json as_of, and how replay, explain, audit and the CLI use them."""
+import hashlib
 import json
 import re
 import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -28,6 +30,7 @@ POLICY = {
                     "manage_roles": ["org_admin"]},
 }
 DATED_EXAMPLE = EXAMPLES / "orgmemory" / "feature-a-dated"
+UNDATED_CLI = json.loads((Path(__file__).parent / "fixtures/orgmemory/undated-cli-main.json").read_text())
 
 
 def t(day, hour=9):
@@ -81,6 +84,15 @@ def outcomes(result):
 
 
 # --- backward compatibility -------------------------------------------------------------------------
+
+@pytest.mark.parametrize("case", UNDATED_CLI["cases"], ids=lambda c: c["dataset"] + " " + " ".join(c["args"]))
+def test_undated_cli_bytes_match_main(case):
+    """Digests captured by running origin/main (revision in the fixture), not the new implementation."""
+    args = case["args"]
+    result = runner.invoke(app, [args[0], str(EXAMPLES / "orgmemory" / case["dataset"]), *args[1:]])
+    assert result.exit_code == case["exit_code"]
+    assert hashlib.sha256(result.stdout_bytes).hexdigest() == case["sha256"]
+
 
 @pytest.mark.parametrize("name, replay_golden, audit_golden", [
     ("feature-a", "replay-report.md", "audit-report.md"),
@@ -232,6 +244,33 @@ def test_policy_baseline_as_of(tmp_path):
 def test_policy_as_of_needs_a_timezone(tmp_path):
     with pytest.raises(ValidationError):
         Policy.model_validate({**POLICY, "as_of": "2026-10-03T00:00:00"})
+
+
+@pytest.mark.parametrize("value", [0, 20_000_000_001, 1_790_000_000.5, "20000000001"])
+@pytest.mark.parametrize("field", ["timestamp", "as_of"])
+def test_dated_policy_times_refuse_implicit_epoch_units(tmp_path, value, field):
+    """Pydantic's seconds/milliseconds heuristic must not silently backdate authority."""
+    events = [ev("x", 4, "sales", "approve")]
+    changes = [grant("g", 3, "sales", timestamp=value)] if field == "timestamp" else []
+    policy = {**POLICY, "as_of": value} if field == "as_of" else POLICY
+    root = build(tmp_path / "data", events, changes, policy)
+    before = snapshot(root)
+    result = runner.invoke(app, ["replay", str(root), "--as-of", t(4)])
+    assert result.exit_code == 2 and "ISO 8601" in result.output
+    assert snapshot(root) == before
+
+
+def test_policy_times_accept_aware_library_datetimes():
+    assert Policy.model_validate({**POLICY, "as_of": at(3)}).as_of == at(3)
+    assert PolicyChange.model_validate(grant("g", 3, "sales", timestamp=at(3))).timestamp == at(3)
+
+
+def test_policy_command_refuses_numeric_timestamp_without_writing(tmp_path):
+    root = build(tmp_path / "data", [ev("a", 4, "sales", "approve")])
+    before = snapshot(root)
+    result = policy_cli("grant", root, grant("g", 3, "sales", timestamp="20000000001"))
+    assert result.exit_code == 2 and "ISO 8601" in result.output
+    assert snapshot(root) == before
 
 
 # --- validation fails closed --------------------------------------------------------------------------
@@ -467,3 +506,100 @@ def test_policy_log_is_not_an_event_log(tmp_path):
         Event.model_validate(grant("g", 3, "sales"))
     with pytest.raises(ValidationError):
         PolicyChange.model_validate(ev("r", 1, "cust", "request"))
+
+
+# --- adversarial authority review --------------------------------------------------------------------
+
+@pytest.mark.parametrize("role", ["org_admin", "product_manager"])
+def test_non_manager_cannot_self_grant_any_authority(tmp_path, role):
+    with pytest.raises(ValueError, match="eng .*may not manage_roles"):
+        load(tmp_path, [ev("a", 3, "eng", "approve")],
+             [grant("self", 2, "eng", role=role, actor="eng")])
+
+
+def test_circular_and_future_manager_grants_cannot_bootstrap(tmp_path):
+    for name, changes in [
+        ("circular", [grant("g1", 2, "sales", role="org_admin", actor="eng"),
+                      grant("g2", 2, "eng", role="org_admin", actor="sales")]),
+        ("future", [grant("self", 2, "eng", actor="eng"),
+                    grant("manager", 3, "eng", role="org_admin")]),
+    ]:
+        with pytest.raises(ValueError, match="eng .*may not manage_roles"):
+            load(tmp_path / name, [ev("a", 4, "eng", "approve")], changes)
+
+
+def test_manager_self_grant_is_the_documented_permission(tmp_path):
+    data = load(tmp_path, [ev("a", 3, "admin", "approve")], [grant("self", 3, "admin")])
+    assert outcomes(replay(data))["a"] == ("applied", ["org_admin", "product_manager"])
+    assert replay(data).dated_policy.role_changes[0].actor_roles == ["org_admin"]
+
+
+def test_self_revocation_prevents_self_restoration_at_the_same_instant(tmp_path):
+    changes = [revoke("v", 3, "admin", role="org_admin")]
+    data = load(tmp_path / "ok", [ev("a", 3, "admin", "approve")], changes)
+    assert outcomes(replay(data))["a"] == ("unauthorized", [])
+    with pytest.raises(ValueError, match="restore .*admin .*may not manage_roles"):
+        load(tmp_path / "bad", [], [*changes, grant("restore", 3, "admin", role="org_admin")])
+
+
+def test_revoked_manager_cannot_use_final_same_time_roles_to_authorize_a_change(tmp_path):
+    g = grant("g", 3, "eng")
+    v = revoke("v", 3, "admin", role="org_admin")
+    with pytest.raises(ValueError, match="g .*admin .*may not manage_roles"):
+        load(tmp_path / "bad", [], [v, g])
+    data = load(tmp_path / "ok", [ev("a", 3, "eng", "approve")], [g, v])
+    assert outcomes(replay(data))["a"][0] == "applied"
+    assert data.authority.roles("admin", at(3)) == []
+
+
+def test_offset_equivalent_ties_and_subsecond_cutoffs(tmp_path):
+    changes = [grant("manager", 3, "sales", role="org_admin"),
+               grant("approval", 3, "eng", actor="sales", timestamp="2026-10-03T04:00:00-05:00"),
+               revoke("v", 3, "eng", timestamp="2026-10-03T18:00:00.000001+09:00")]
+    events = [ev("a", 3, "eng", "approve", timestamp="2026-10-03T18:00:00+09:00"),
+              ev("x", 3, "eng", "reject", timestamp="2026-10-03T09:00:00.000001Z")]
+    data = load(tmp_path, events, changes)
+    just_before = replay(data, at(3).replace(hour=8, minute=59, second=59, microsecond=999999))
+    assert just_before.events_replayed == 0 and just_before.dated_policy.role_changes == []
+    exact = replay(data, at(3))
+    assert outcomes(exact)["a"] == ("applied", ["engineer", "product_manager"])
+    assert [c.change_id for c in exact.dated_policy.role_changes] == ["manager", "approval"]
+    full = replay(data, at(3).replace(microsecond=1))
+    assert outcomes(full)["x"] == ("unauthorized", ["engineer"])
+    assert full.states["S"].last_authorized_decision.event_id == "a"
+
+
+@pytest.mark.parametrize("action, fields", [
+    ("request", {}), ("reconsider", {}), ("approve", {}), ("reject", {}), ("revoke", {"supersedes": "a"}),
+    ("raise_risk", {"note": "crafted risk"}), ("dependency", {"dependency": "T"}), ("comment", {}),
+])
+def test_no_action_can_mutate_authorized_state_after_same_time_role_revocation(tmp_path, action, fields):
+    data = load(tmp_path, [ev("a", 2, "pm", "approve"), ev("x", 3, "pm", action, **fields)],
+                [revoke("v", 3, "pm")])
+    result = replay(data)
+    assert outcomes(result)["x"] == ("unauthorized", [])
+    state = result.states["S"]
+    assert state.current_status == "approved" and state.last_authorized_decision.event_id == "a"
+    assert state.last_applied_event == "a" and state.decision_history == ["a"]
+    assert not state.reconsideration_requested and not state.pending_approval
+    assert not state.risks and not state.dependencies
+
+
+def test_revoke_cannot_target_a_policy_change_id(tmp_path):
+    with pytest.raises(ValueError, match="supersedes unknown event g"):
+        load(tmp_path, [ev("x", 4, "pm", "revoke", supersedes="g")], [grant("g", 3, "sales")])
+
+
+@pytest.mark.parametrize("command, actor, original, changed", [
+    ("grant", "sales", "unauthorized", "applied"), ("revoke", "pm", "applied", "unauthorized"),
+])
+def test_backdated_appends_recompute_past_outcomes_and_past_cutoffs(tmp_path, command, actor, original, changed):
+    root = build(tmp_path / "data", [ev("a", 4, actor, "approve")])
+    before = snapshot(root)
+    assert outcomes(replay(Dataset.load(root), at(4)))["a"][0] == original
+    change = grant("backdated", 3, actor) if command == "grant" else revoke("backdated", 3, actor)
+    assert policy_cli(command, root, change).exit_code == 0
+    result = replay(Dataset.load(root), at(4))
+    assert outcomes(result)["a"][0] == changed
+    assert (result.states["S"].current_status == "approved") == (changed == "applied")
+    assert {p: b for p, b in snapshot(root).items() if p.name != POLICY_LOG} == before
