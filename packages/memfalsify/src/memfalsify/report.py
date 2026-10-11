@@ -27,6 +27,7 @@ def _finding(f: Finding) -> list[str]:
         for e in f.evidence:
             who = f"confirmed by {e.reviewer}" if e.confirmed else "candidate, unconfirmed"
             out.append(f"- {e.relation} ({who}) · `{e.span.location}` · sha256 `{e.span.sha256[:12]}` · {e.rationale}")
+            out += [f"  - {o.verifier}: {o.relation} · {o.rationale}" for o in e.opinions]
             out.append(f"  > {e.span.quote}")
         out.append("")
     if f.issues:

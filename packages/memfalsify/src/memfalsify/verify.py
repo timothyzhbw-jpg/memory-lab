@@ -1,8 +1,8 @@
 """Pluggable verifiers. A verifier judges one claim against one passage; it never edits memory.
 
-The built-in LexicalVerifier needs no model or API key. An LLM or a structured
-judge (e.g. Jev) can implement the same ``Verifier`` protocol; ``DualVerifier``
-combines two of them and keeps their disagreement visible instead of picking a winner.
+The built-in LexicalVerifier needs no model or API key. ``llm.LLMVerifier`` (Claude) and
+``jev.JevVerifier`` (a dedicated NLI judgment model) implement the same ``Verifier`` protocol;
+``DualVerifier`` combines two of them and keeps their disagreement visible instead of picking a winner.
 """
 from __future__ import annotations
 
@@ -19,7 +19,12 @@ class Judgment(BaseModel):
     relation: Relation
     rationale: str
     verifier: str
+    confidence: float | None = None
     opinions: list["Judgment"] = []
+
+
+class VerifierError(RuntimeError):
+    """A model verifier could not produce a judgment (missing dependency, API failure, bad labels)."""
 
 
 class Verifier(Protocol):

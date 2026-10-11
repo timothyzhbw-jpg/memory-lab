@@ -13,7 +13,7 @@ It contains two independent tools that share one evidence core:
 | Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail |
 | Writes | Nothing (only the report you ask for) | Nothing on replay; `append` only appends |
 
-Everything runs offline with no API keys. Python 3.10+, Apache-2.0.
+By default everything runs offline with no API keys; optional model verifiers (Claude, or a local judgment model) can be switched on. Python 3.10+, Apache-2.0.
 
 ```text
         Claude Code / Codex / other agents  (skills/)
@@ -65,7 +65,7 @@ Every quote carries `path:line`, character offsets and the SHA-256 of the file i
 | Status | Meaning |
 |---|---|
 | `supported` / `challenged` / `conflicted` | Human-confirmed evidence in `reviews.jsonl` supports / contradicts / does both |
-| `candidate_counterevidence` | The verifier found a passage that may contradict the memory: opposing terms (*approved* / *rejected*), different numbers, or negation |
+| `candidate_counterevidence` | The verifier found a passage that may contradict the memory (lexically: opposing terms such as *approved* / *rejected*, different numbers, or negation) |
 | `disputed` | Two verifiers disagree (see *Verifier backends*) |
 | `candidate_support` | A passage that restates the memory |
 | `insufficient_evidence` | Nothing found. That means unverified, not false |
@@ -143,28 +143,46 @@ cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 
 The CLIs must be installed in the environment the agent's shell uses.
 
-## Verifier backends (LLM, Jev)
+## Verifier backends: lexical, LLM, Jev
 
-A verifier judges one claim against one passage and returns `supports`, `contradicts` or `unrelated` with a rationale. The built-in `LexicalVerifier` is deterministic and explainable, but it only sees words: it misses paraphrases and can be fooled by context. To plug in a model, implement the protocol and wrap two verifiers in `DualVerifier`. Where they disagree, the result is `disputed`, so a human sees both opinions.
+A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Three backends ship, and `dual` runs two of them side by side:
+
+| `--verifier` | Who judges | Needs | Trade-off |
+|---|---|---|---|
+| `lexical` (default) | Term overlap, opposing terms, numbers, negation | Nothing | Offline, deterministic, explainable; misses paraphrases |
+| `llm` | Claude reads the passage and explains its verdict (`--llm-model`, default `claude-opus-5-5`) | `pip install 'memfalsify[llm]'` and Anthropic credentials | Understands paraphrase and context; costs API calls and **sends memory and evidence text to the API** |
+| `jev` | A judgment model: an NLI cross-encoder scores entailment / neutral / contradiction (`--jev-model`, default the multilingual `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`) | `pip install 'memfalsify[jev]'` (torch + transformers; the model downloads on first use) | Local and repeatable, reports a probability; no explanation beyond the scores |
+| `dual` | `llm` and `jev`, independently | Both | Agreement passes through; disagreement becomes `disputed`, and the report shows both opinions |
+
+```bash
+memfalsify audit MEMORY.md --evidence evidence --verifier dual
+```
+
+The two model backends work differently on purpose: one generates a reasoned verdict, the other classifies. When they disagree, a human reads the evidence.
+
+**Which passages a model sees.** The term index still pre-selects passages. Model verifiers use a looser threshold (`--min-coverage`, default 0.2 instead of 0.5) so paraphrases are judged, and only the best `--max-judged` passages per memory (default 8) are sent. That bounds cost at *memories × max-judged* calls per model. A passage that shares no terms with a memory is never judged.
+
+The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). An API failure stops the audit with exit code 2 rather than producing a partial report.
+
+From Python:
 
 ```python
 from memfalsify.audit import audit
-from memfalsify.verify import DualVerifier, Judgment, LexicalVerifier
+from memfalsify.jev import JevVerifier
+from memfalsify.llm import LLMVerifier
+from memfalsify.verify import DualVerifier
 
-class MyLLMVerifier:
-    name = "my-llm"
-    def judge(self, claim: str, passage: str) -> Judgment:
-        ...  # call your model; return Judgment(relation=..., rationale=..., verifier=self.name)
-
-report = audit("MEMORY.md", "evidence", verifier=DualVerifier(MyLLMVerifier(), LexicalVerifier()))
+report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), JevVerifier()),
+               min_coverage=0.2, max_judged=8)
 ```
 
-Model judgments stay candidates: they never replace the human review step.
+Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a verifier, so other models plug in the same way. Model judgments stay candidates: they never replace the human review step.
 
 ## Trust boundaries and limitations
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
-- Lexical candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
+- Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
+- `--verifier llm` and `dual` send memory claims and evidence passages to the Anthropic API. Use them only on material you are allowed to send there.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - This is a research MVP, not production infrastructure.
@@ -174,7 +192,7 @@ Model judgments stay candidates: they never replace the human review step.
 | | MemFalsify | Organizational Memory |
 |---|---|---|
 | **v0.1** (this release) | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
-| v0.2 | LLM + Jev dual verification | GitHub Issues / PR ingestion |
+| **v0.2** (MemFalsify part done) | LLM + Jev dual verification ✓ | GitHub Issues / PR ingestion |
 | v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit |
 | v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |

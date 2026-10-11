@@ -10,9 +10,11 @@ from typing import Optional
 import typer
 from pydantic import ValidationError
 
+from . import jev, llm
 from .audit import ATTENTION, audit
 from .memory import parse_memory
 from .report import to_markdown
+from .verify import DualVerifier, LexicalVerifier, Verifier, VerifierError
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="Audit agent memory against evidence. Never modifies memory.")
@@ -21,6 +23,24 @@ app = typer.Typer(no_args_is_help=True, add_completion=False,
 class Format(str, Enum):
     markdown = "markdown"
     json = "json"
+
+
+class VerifierChoice(str, Enum):
+    lexical = "lexical"
+    llm = "llm"
+    jev = "jev"
+    dual = "dual"
+
+
+def build_verifier(choice: VerifierChoice, llm_model: str, jev_model: str) -> Verifier:
+    """Model backends import their heavy dependencies only when constructed."""
+    if choice is VerifierChoice.lexical:
+        return LexicalVerifier()
+    if choice is VerifierChoice.llm:
+        return llm.LLMVerifier(llm_model)
+    if choice is VerifierChoice.jev:
+        return jev.JevVerifier(jev_model)
+    return DualVerifier(llm.LLMVerifier(llm_model), jev.JevVerifier(jev_model))
 
 
 def _fail(message: str) -> None:
@@ -40,12 +60,25 @@ def audit_command(
     stale_days: int = typer.Option(180, help="Dated claims older than this are flagged possibly_stale"),
     follow_links: bool = typer.Option(True, help="Also audit local .md files linked from MEMORY.md"),
     strict: bool = typer.Option(False, help="Exit 1 if any memory is challenged, conflicted or has counterevidence"),
+    verifier: VerifierChoice = typer.Option(VerifierChoice.lexical, "--verifier",
+                                            help="lexical (offline), llm (Claude), jev (NLI judgment model), "
+                                                 "or dual (llm + jev; disagreements become disputed)"),
+    llm_model: str = typer.Option(llm.DEFAULT_MODEL, help="Claude model for --verifier llm/dual"),
+    jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="Hugging Face NLI model for --verifier jev/dual"),
+    max_judged: int = typer.Option(8, min=1, help="Model verifiers: passages judged per memory (bounds API calls)"),
+    min_coverage: Optional[float] = typer.Option(
+        None, min=0.0, max=1.0,
+        help="Share of a memory's terms a passage must contain to be judged (default 0.5 lexical, 0.2 models)"),
 ) -> None:
     """Audit MEMORY.md and print an evidence-cited report with proposed (unapplied) actions."""
+    lexical = verifier is VerifierChoice.lexical
     try:
         reference = date.fromisoformat(as_of) if as_of else None
-        report = audit(memory, evidence, reviews, as_of=reference, stale_days=stale_days, follow_links=follow_links)
-    except (ValidationError, ValueError, OSError) as exc:
+        report = audit(memory, evidence, reviews, verifier=build_verifier(verifier, llm_model, jev_model),
+                       as_of=reference, stale_days=stale_days, follow_links=follow_links,
+                       min_coverage=min_coverage if min_coverage is not None else 0.5 if lexical else 0.2,
+                       max_judged=None if lexical else max_judged)
+    except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
     text = to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n"
     if output:

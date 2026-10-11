@@ -39,6 +39,7 @@ class EvidenceFinding(BaseModel):
     confirmed: bool
     rationale: str
     reviewer: str | None = None
+    opinions: list[Judgment] = []
     span: EvidenceSpan
 
 
@@ -80,8 +81,10 @@ class AuditReport(BaseModel):
     limitations: list[str]
 
 
+LEXICAL_NOTE = "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
+MODEL_NOTE = ("Unconfirmed matches are model judgments on passages pre-selected by term overlap; "
+              "passages that share too few terms with a memory are never judged, and models can be wrong.")
 LIMITATIONS = [
-    "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context.",
     "Only human reviews (reviews.jsonl) can mark a memory supported or challenged.",
     "Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.",
     "Missing evidence means unverified, not false. No memory was modified.",
@@ -104,20 +107,27 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
     return confirmed
 
 
-def candidates(claim: Claim, passages: list[Passage], verifier: Verifier, limit: int) -> list[EvidenceFinding]:
+def candidates(claim: Claim, passages: list[Passage], verifier: Verifier, limit: int,
+               min_coverage: float = 0.5, max_judged: int | None = None) -> list[EvidenceFinding]:
+    """Pre-select passages by term overlap, ask the verifier about the best ``max_judged`` of them."""
     words, _ = features(claim.text)
     if not words:
         return []
-    scored = []
+    shortlist = []
     for passage in passages:
         shared = len(words & passage.words)
-        if shared == 0 or coverage(claim.text, passage.span.quote) < 0.5:
-            continue
+        score = coverage(claim.text, passage.span.quote) if shared else 0.0
+        if shared and score >= min_coverage:
+            shortlist.append((-score, -shared, passage.span.location, passage))
+    shortlist.sort(key=lambda item: item[:3])
+    scored = []
+    for _, negative_shared, location, passage in shortlist[:max_judged]:
         judgment: Judgment = verifier.judge(claim.text, passage.span.quote)
         if judgment.relation != "unrelated":
-            scored.append((judgment.relation != "contradicts", -shared, passage.span.location, judgment, passage))
+            scored.append((judgment.relation != "contradicts", negative_shared, location, judgment, passage))
     scored.sort(key=lambda item: item[:3])
-    return [EvidenceFinding(relation=j.relation, confirmed=False, rationale=j.rationale, span=p.span)
+    return [EvidenceFinding(relation=j.relation, confirmed=False, rationale=j.rationale, opinions=j.opinions,
+                            span=p.span)
             for *_, j, p in scored[:limit]]
 
 
@@ -184,7 +194,9 @@ ISSUE_PROPOSALS = {
 
 def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | None = None,
           verifier: Verifier | None = None, as_of: date | None = None, stale_days: int = 180,
-          follow_links: bool = True, max_candidates: int = 3) -> AuditReport:
+          follow_links: bool = True, max_candidates: int = 3, min_coverage: float = 0.5,
+          max_judged: int | None = None) -> AuditReport:
+    """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees."""
     verifier = verifier or LexicalVerifier()
     as_of = as_of or date.today()
     claims, files = parse_memory(memory_file, follow_links=follow_links)
@@ -197,7 +209,8 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
     findings = []
     for claim in claims:
         reviewed = confirmed.get(claim.id, [])
-        evidence = reviewed + [c for c in candidates(claim, passages, verifier, max_candidates)
+        evidence = reviewed + [c for c in candidates(claim, passages, verifier, max_candidates,
+                                                     min_coverage, max_judged)
                                if not any(_overlaps(c.span, r.span) for r in reviewed)]
         status = status_of(evidence)
         issues = issues_for(claim, claims, as_of, stale_days)
@@ -212,4 +225,5 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
     return AuditReport(memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
                        evidence_root=str(evidence_root) if evidence_root else None, verifier=verifier.name,
                        as_of=as_of, summary=summary, findings=findings, skipped_evidence=skipped,
-                       limitations=LIMITATIONS)
+                       limitations=[LEXICAL_NOTE if isinstance(verifier, LexicalVerifier) else MODEL_NOTE,
+                                    *LIMITATIONS])

@@ -1,9 +1,9 @@
 # memory-lab
 
-Monorepo with three Python packages (Python 3.11+):
+Monorepo with three Python packages (Python 3.10+):
 
 - `packages/memcore` — shared evidence core (models, JSONL store, retrieval)
-- `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory
+- `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory. Verifier backends: `verify.py` (lexical, `DualVerifier`), `llm.py` (Claude, extra `[llm]`), `jev.py` (NLI judgment model, extra `[jev]`)
 - `packages/orgmemory` — `orgmemory` CLI: event replay, permissions, state machine, decision provenance
 
 Skills live in `skills/`, example inputs and generated reports in `examples/`.
@@ -16,4 +16,5 @@ Skills live in `skills/`, example inputs and generated reports in `examples/`.
 ## Conventions
 
 - CLIs use Typer, data models use Pydantic, storage is JSONL.
+- Model backends import `anthropic` / `torch` lazily; the default path must keep working without them. Tests use fake clients, never the network.
 - License is Apache-2.0.
