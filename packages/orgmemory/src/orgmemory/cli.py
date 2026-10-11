@@ -1,5 +1,4 @@
-"""orgmemory command line. Replay and audit are read-only; `append`, `evidence add` and `policy grant|revoke`
-only ever append lines."""
+"""orgmemory command line. Replay, explain, validate and audit are read-only; every other command only appends."""
 from __future__ import annotations
 
 import json
@@ -310,6 +309,36 @@ def github_convert(dataset: Path = DATASET,
     except (ValueError, OSError) as exc:
         _github_fail(exc)
     _github_result(summary, dry_run)
+
+
+jira_app = typer.Typer(no_args_is_help=True, help="Import Jira Cloud issues from a saved search capture.")
+app.add_typer(jira_app, name="jira")
+
+
+@jira_app.command("convert")
+def jira_convert(dataset: Path = DATASET,
+                 capture_json: Path = typer.Argument(..., exists=True, dir_okay=False,
+                                                     help="Saved GET /rest/api/3/search?expand=changelog pages"),
+                 dry_run: bool = typer.Option(False, help="Print planned JSONL without writing anything")) -> None:
+    """Apply a saved Jira Cloud search capture offline. Exit 3 when the capture is incomplete."""
+    from .ingest import LOCK_HELD
+    from .jira_apply import run_convert
+    from .jira_map import JiraCaptureError
+    try:
+        summary = run_convert(dataset, capture_json, dry_run=dry_run)
+    except JiraCaptureError as exc:
+        _fail(str(exc))
+    except (ValueError, OSError, RecursionError) as exc:
+        # Other messages may embed capture or dataset text; only importer constants are shown.
+        safe = {LOCK_HELD, "content-addressed capture tamper conflict"}
+        _fail(str(exc) if str(exc) in safe else "Jira import failed: invalid input, dataset or filesystem")
+    for line in summary.lines():
+        typer.echo(line)
+    if dry_run:
+        for event in summary.plan.events:
+            typer.echo(json.dumps(event.model_dump(mode="json", exclude_none=True), ensure_ascii=True))
+    if not summary.plan.complete:
+        raise typer.Exit(3)
 
 
 def main() -> None:

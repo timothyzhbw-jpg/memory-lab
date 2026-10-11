@@ -1,0 +1,210 @@
+{
+  "jira_capture": 1,
+  "site": "https://acme.atlassian.net",
+  "captured_at": "2026-10-12T00:00:00Z",
+  "pages": [
+    {
+      "expand": "schema,names",
+      "startAt": 0,
+      "maxResults": 3,
+      "total": 4,
+      "issues": [
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10008",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10008",
+          "key": "ACME-8",
+          "fields": {
+            "summary": "Dark mode",
+            "description": null,
+            "created": "2026-10-11T09:00:00.000+0000",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+              "accountId": "5f8e7d6c5b4a39281706f5e4",
+              "displayName": "Lin (Engineering)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+              "accountId": "5f8e7d6c5b4a39281706f5e4",
+              "displayName": "Lin (Engineering)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10000",
+              "description": "",
+              "name": "To Do",
+              "id": "10000"
+            },
+            "comment": {
+              "comments": [],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10008/comment",
+              "maxResults": 0,
+              "total": 0,
+              "startAt": 0
+            }
+          }
+        },
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10009",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10009",
+          "key": "ACME-9",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 100,
+            "total": 120,
+            "histories": [
+              {
+                "id": "20901",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-11T10:00:00.000+0000",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10002",
+                    "fromString": "In Review",
+                    "to": "10003",
+                    "toString": "Approved"
+                  }
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "summary": "Audit log export",
+            "description": null,
+            "created": "2026-10-11T09:30:00.000+0000",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+              "accountId": "5f8e7d6c5b4a39281706f5e4",
+              "displayName": "Lin (Engineering)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+              "accountId": "5f8e7d6c5b4a39281706f5e4",
+              "displayName": "Lin (Engineering)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10003",
+              "description": "",
+              "name": "Approved",
+              "id": "10003"
+            },
+            "comment": {
+              "comments": [],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10009/comment",
+              "maxResults": 0,
+              "total": 0,
+              "startAt": 0
+            }
+          }
+        },
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10010",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10010",
+          "key": "ACME-10",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 0,
+            "total": 0,
+            "histories": []
+          },
+          "fields": {
+            "summary": "Keyboard shortcuts",
+            "description": null,
+            "created": "2026-10-11T11:00:00.000+0000",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "displayName": "Buyer (Acme Retail)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "customer"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "displayName": "Buyer (Acme Retail)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "customer"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10000",
+              "description": "",
+              "name": "To Do",
+              "id": "10000"
+            },
+            "comment": {
+              "comments": [
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10010/comment/11000",
+                  "id": "11000",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                    "accountId": "5f8e7d6c5b4a39281706f5e4",
+                    "displayName": "Lin (Engineering)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Seems reasonable."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                    "accountId": "5f8e7d6c5b4a39281706f5e4",
+                    "displayName": "Lin (Engineering)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "created": "2026-10-11T12:00:00.000+0000",
+                  "updated": "2026-10-11T12:00:00.000+0000",
+                  "jsdPublic": true
+                }
+              ],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10010/comment",
+              "maxResults": 1,
+              "total": 1,
+              "startAt": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

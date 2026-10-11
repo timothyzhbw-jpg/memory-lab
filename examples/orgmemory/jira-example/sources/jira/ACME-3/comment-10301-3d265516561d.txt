@@ -1,0 +1,4 @@
+Jira comment 10301 on ACME-3 by jira:5d3c2b1a0f9e8d7c6b5a4f3e (atlassian) at 2026-10-05T11:10:00.000Z
+{"author":{"accountId":"5d3c2b1a0f9e8d7c6b5a4f3e","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"created":"2026-10-05T11:10:00.000+0000","id":"10301","issue_id":"10003","jsdPublic":true,"key":"ACME-3","kind":"comment","site":"https://acme.atlassian.net","updateAuthor":{"accountId":"5d3c2b1a0f9e8d7c6b5a4f3e","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"updated":"2026-10-05T11:10:00.000+0000"}
+--- text from Jira, flattened to plain text; untrusted ---
+Approved by @Zhou, moving to Approved.

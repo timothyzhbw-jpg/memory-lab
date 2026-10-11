@@ -1,0 +1,3 @@
+Jira transition 20601 on ACME-6 by jira:5a1b2c3d4e5f60718293a4b5 (atlassian) at 2026-10-06T13:00:00.000Z: status 10000 to 10003
+{"author":{"accountId":"5a1b2c3d4e5f60718293a4b5","accountType":"atlassian","active":false,"displayName":"Former user"},"created":"2026-10-06T13:00:00.000+0000","id":"20601","issue_id":"10006","key":"ACME-6","kind":"transition","site":"https://acme.atlassian.net","status":{"from":"10000","fromString":"To Do","to":"10003","toString":"Approved"}}
+--- text from Jira, flattened to plain text; untrusted ---

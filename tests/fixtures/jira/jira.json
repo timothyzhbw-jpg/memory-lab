@@ -1,0 +1,8 @@
+{
+  "statuses": {
+    "10003": "approve",
+    "10004": "reject",
+    "10005": "revoke",
+    "10007": "reconsider"
+  }
+}

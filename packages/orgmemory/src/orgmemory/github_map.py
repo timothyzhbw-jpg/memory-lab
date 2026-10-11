@@ -17,6 +17,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, TypeAdapter, Validati
 
 from memcore import EvidenceSpan, ManifestEntry, make_span, sha256_bytes
 
+from . import ingest
+from .ingest import SURROGATE, UNSAFE, Capture, text_span  # noqa: F401  (re-exported for callers and tests)
 from .models import Event
 
 REPO = re.compile(r"[a-z0-9][a-z0-9_-]{0,99}/[a-z0-9._-]{1,100}")
@@ -26,8 +28,6 @@ SHA = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
 SKIP_REASON = re.compile(r"(issue|timeline) [0-9]{3}")
 COMMENT_ID = re.compile(r"gh:(.+)/comment/([0-9]+)")
-UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff\ufff9-\ufffb]")
-SURROGATE = re.compile(r"[\ud800-\udfff]")
 TYPES = {"User", "Bot", "Organization", "Mannequin", "Enterprise"}
 SEP = "--- verbatim from GitHub; untrusted ---"
 DEC = {"approve", "reject"}
@@ -55,14 +55,6 @@ class GithubConfig(BaseModel):
                 if key.casefold() == name.casefold():
                     return key
         return None
-
-
-@dataclass(frozen=True)
-class Capture:
-    """One rendered source file and the manifest entries that quote it."""
-    path: str
-    data: bytes
-    entries: tuple[ManifestEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -217,28 +209,8 @@ def actor(user: dict | None, *, app: dict | None = None, intent: object = None) 
 
 
 def render(fact: str, record: dict, verbatim: str) -> tuple[str, int]:
-    """Capture text: fact line, ASCII JSON record, separator, verbatim section. Returns (text, verbatim offset)."""
-    if not fact.isascii() or "\n" in fact:
-        raise ValueError("a fact line must be a single ASCII line")
-    clean = SURROGATE.sub("\ufffd", verbatim)
-    if clean != verbatim:
-        record = {**record, "lossy": True}
-    head = f"{fact}\n{json.dumps(record, sort_keys=True, ensure_ascii=True, separators=(',', ':'))}\n{SEP}\n"
-    return head + clean, len(head)
-
-
-def text_span(verbatim: str) -> tuple[int, int] | None:
-    """Offsets of the first meaningful line, trimmed and capped at 200 characters; None if unsafe to quote."""
-    pos = 0
-    for line in verbatim.split("\n"):
-        body = line.strip()
-        if body and not body.startswith("<!--"):
-            if UNSAFE.search(line.removesuffix("\r")):
-                return None
-            start = pos + len(line) - len(line.lstrip())
-            return start, start + len(body[:200].rstrip())
-        pos += len(line) + 1
-    return None
+    """Capture text with the GitHub separator (see `ingest.render`)."""
+    return ingest.render(fact, record, verbatim, SEP)
 
 
 class Ctx:

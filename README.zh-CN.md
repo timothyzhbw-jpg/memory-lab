@@ -13,7 +13,7 @@
 | 回答的问题 | 这条记忆有证据支撑吗？ | 这是当前的、经过授权的状态吗？ |
 | 输入 | `MEMORY.md` 或各家 Agent 的指令文件（`CLAUDE.md`、`AGENTS.md`、Cursor、Copilot、Gemini、Windsurf）+ 一个证据文件目录 | 事件日志 + 角色权限策略 + 证据清单 |
 | 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹、决策流程审计 |
-| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 只追加 |
+| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 和 GitHub、Jira 导入工具只追加 |
 
 默认完全离线运行，不需要任何 API key；可以选择开启模型验证（Claude 和 TypeSafe AI 的 Jev）。需要 Python 3.10+，许可证 Apache-2.0。
 
@@ -276,6 +276,79 @@ orgmemory explain        <数据集> "acme/web#12"
 
 示例：[`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-web/) 是用 `orgmemory github convert` 从 `acme/web` 的两份合成抓取结果（在 `tests/fixtures/github/` 里）生成的，附有[回放报告](examples/orgmemory/github-acme-web/replay-report.md)。其中 `acme/web#1` 就是 GitHub 上的功能A故事：产品经理以“不计划做”关闭了 issue，客户经理加上了 `approved` 标签，客户又重新打开了它。这个 issue 仍是 `rejected`，`reconsideration_requested: true`，`pending_approval: [product_manager]`；标签和重新打开带来的 `revoke` 都列为被忽略的越权尝试。
 
+#### 导入 Jira issue
+
+`orgmemory jira convert` 把一次保存下来的 Jira Cloud 搜索结果转换成数据集里的事件、证据和存档文件。每个 issue 是一个议题（subject），用它的 key 表示，例如 `ACME-12`。它完全离线：只读取你保存的文件，从不连接 Jira。导入过程是确定性的，不使用任何模型。设计和权限规则见 [docs/design/jira-import.md](docs/design/jira-import.md)（英文）。
+
+```bash
+orgmemory jira convert <数据集> capture.json [--dry-run]
+orgmemory explain      <数据集> "ACME-12"
+```
+
+**保存抓取结果。** 抓取结果是一次 `GET /rest/api/3/search?expand=changelog`（使用下面固定的字段列表）返回的全部分页，原样保留，外面再包上站点地址和开始抓取的时间。在一个空目录里运行（需要 `curl` 和 `jq`）：
+
+```bash
+SITE=https://acme.atlassian.net                  # 你的 Jira Cloud 站点
+JQL='project = ACME ORDER BY key ASC'            # 固定排序，结果不会在分页之间移动
+FIELDS=summary,description,created,creator,reporter,status,comment
+AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# ~/.jira-netrc，只有你自己可读：machine acme.atlassian.net login you@example.com password <API token>
+start=0; total=1
+while [ "$start" -lt "$total" ]; do
+  curl -sS --fail --netrc-file ~/.jira-netrc -H 'Accept: application/json' -G "$SITE/rest/api/3/search" \
+    --data-urlencode "jql=$JQL" --data-urlencode "fields=$FIELDS" --data-urlencode expand=changelog \
+    --data-urlencode maxResults=100 --data-urlencode "startAt=$start" -o "page-$start.json" || break
+  total=$(jq .total "page-$start.json"); count=$(jq '.issues | length' "page-$start.json")
+  [ "$count" -gt 0 ] || break
+  start=$((start + count))
+done
+jq -s --arg site "$SITE" --arg at "$AT" '{jira_capture: 1, site: $site, captured_at: $at, pages: .}' \
+  page-*.json > capture.json
+```
+
+得到的文件是这样的结构。分页的顺序无关紧要；同一页保存了两次会被忽略，但同一个 issue 内容不同（来自两次不同的抓取）会被拒绝。
+
+```json
+{"jira_capture": 1, "site": "https://acme.atlassian.net", "captured_at": "2026-10-09T12:00:00Z",
+ "pages": [{"startAt": 0, "maxResults": 100, "total": 230, "issues": [{"id": "10001", "key": "ACME-1", "self": "https://acme.atlassian.net/rest/api/3/issue/10001", "fields": {"...": "..."}, "changelog": {"startAt": 0, "total": 4, "histories": ["..."]}}]}]}
+```
+
+- 退出码：`0` 表示完整；`2` 表示出错，没有追加任何内容；`3` 表示抓取结果不完整，完整的 issue 已经写入。以下情况算不完整：分页没有覆盖全部结果；某个 issue 的变更历史（changelog）或评论缺失或被截断（搜索接口每个 issue 只返回有限条变更历史）；某个 issue 的状态变更串不到它的当前状态。这样的 issue 整个都不导入，因为只导入一部分历史，回放出来的状态是错的。重新保存后再转换一次即可。
+- `--dry-run` 打印摘要和计划写入的事件，不写入任何东西。再次转换同一份或有重叠的抓取结果，只会追加新内容。
+- 数据集目录必须已存在。`events.jsonl` 和 `evidence.jsonl` 会在第一次写入时创建。导入不需要 `policy.json`。一个数据集只导入一个 Jira 站点。
+
+**只有你在 `jira.json` 里按状态 id 列出的状态转换（transition）才会成为决定：**
+
+```json
+{"statuses": {"10003": "approve", "10004": "reject", "10005": "revoke", "10007": "reconsider"}}
+```
+
+状态 id 可以用 `GET /rest/api/3/status` 查，也可以看摘要里 `status ids in transitions` 那一行，以及存档文件里的 `toString` 名称。不接受状态名：状态改名后 id 不变，而且两个工作流可以各有一个叫 “Done” 的状态。没有 `jira.json` 时，任何转换都不是决定。
+
+**导入工具从不读取或写入 `policy.json`：`jira:<accountId>` 形式的参与者 ID 对应什么角色，由你自己配置。** accountId 是不透明的字符串。请在 Jira 里核实每个账号（`GET /rest/api/3/user?accountId=...`），不要按显示名判断，因为任何人都可以把显示名改成任何内容。
+
+| Jira | 事件 |
+|---|---|
+| 创建 issue | `creator`（不是 reporter）的 `request` |
+| 评论 | 评论作者的 `comment` |
+| 转换到列为 `approve`、`reject` 或 `reconsider` 的状态 | 对应的动作，参与者是变更历史的作者 |
+| 转换到列为 `revoke` 的状态 | 撤销这个 issue 上最近一次记为 `approve` 或 `reject` 的转换；没有的话记为 `comment` |
+| 其他状态转换 | `comment` |
+| 应用（Automation for Jira 等）或类型未知的账号做的任何操作 | 只记为 `comment` |
+| 没有作者的变更（系统、匿名或无法使用的账号 id） | 不产生事件，列为跳过（skipped） |
+| 其他变更项（经办人、解决结果、优先级、自定义字段，包括名叫 “status” 的自定义字段）、链接、编辑 | 不产生事件 |
+
+文本从不被解析：评论里的 “/approve”“我们 PM 已经批准了” 或对产品经理的 @提及，都只是作者的一条 `comment`。编辑只会增加一个新的证据版本，不产生事件；被删除的评论仍保留在数据集里，并报告为已消失（gone）。已停用或已删除的账号仍保留原来的 accountId，所以它过去的操作仍然归属于这个账号，算不算数由权限策略决定。被移动的 issue（key 变了）会被跳过并报告。
+
+示例：[`examples/orgmemory/jira-example`](examples/orgmemory/jira-example/) 是用 `orgmemory jira convert` 从两份合成抓取结果（在 `tests/fixtures/jira/` 里）生成的，附有[回放报告](examples/orgmemory/jira-example/replay-report.md)和[审计报告](examples/orgmemory/jira-example/audit-report.md)。`ACME-1` 就是 Jira 上的功能A故事：
+
+1. 产品经理把 issue 转到 Rejected。
+2. 客户经理把它拖到 Approved，这次操作被忽略。
+3. 客户把它转到 “Reconsideration requested”。
+4. 两天后产品经理批准了它，记为同一个人推翻自己的决定（`decision_reversed`）。
+
+在 `ACME-3` 里，一个把显示名改成和产品经理一样的账号发了 “/approve”，还修改了一个名叫 “status” 的自定义字段，这些都不构成决定。在 `ACME-2` 里，Automation for Jira 转到 Approved 只是一条评论，产品经理的批准才是决定。
+
 ### HTML 报告
 
 `memfalsify audit`、`memfalsify diff`、`orgmemory replay` 和 `orgmemory audit` 都支持 `--format html`，输出一个自包含的网页，方便分享给不运行这些工具的人：用浏览器打开、作为邮件或工单附件，或作为 CI 产物上传。
@@ -338,9 +411,30 @@ Approved now that export waits for the billing migration.
 
 `<th12>` 只取原文文本的 SHA-256 前 12 位，所以编辑会产生新的证据版本，而改登录名不会。登录名改名或被他人重新注册后，会得到一个新的参与者 ID，没有任何角色。
 
+**Jira 导入相关文件**（在同一个数据集目录里）：
+
+- `jira.json`（可选，归你所有；导入工具只读取它）：`{"statuses": {"<状态 id>": "approve" | "reject" | "revoke" | "reconsider"}}`，键是状态 id。修改它只影响尚未写入日志的事件；已有事件如果按新配置会得到不同结果，会被报告为漂移（drift），但绝不会被改写。
+- `jira-sync.jsonl`：每次实际写入的运行追加一行（`--dry-run` 不写），字段有 `site`、`source`（`convert`）、`captured_at`、`finished_at`（为了可重复生成，取抓取时间）、`complete`、`pages`、`issues`、`total`、`duplicates`、`events_appended`、`evidence_appended`、`skipped`、`incomplete`、`gone`、`drift` 和 `importer`。记录下来的 `site` 把数据集锁定在一个 Jira 站点上。
+- `sources/jira/<KEY>/<对象>-<hash12>.txt`：每个 issue 和每条评论的每个版本各一个文件，每次状态转换也各一个，只创建、不修改；`<对象>` 是 `issue-<issue id>`、`comment-<id>` 或 `transition-<变更历史 id>`。格式与 GitHub 的相同：ASCII 事实行；白名单字段组成的 JSON 记录（非 ASCII 字符全部转义，其中包括账号类型、是否启用和显示名，只供审计参考）；分隔行 `--- text from Jira, flattened to plain text; untrusted ---`；然后是标题和描述，或评论正文。富文本（Atlassian Document Format）会被展开成纯文本：文字、提及、表情和链接地址，每个块一行。示例里 `ACME-1` 的转换 20102：
+
+```text
+Jira transition 20102 on ACME-1 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-07T15:00:00.000Z: status 10002 to 10004
+{"author":{"accountId":"61a0c3e5f2b1d40069a1b2c3","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},...,"status":{"from":"10002","fromString":"In Review","to":"10004","toString":"Rejected"}}
+--- text from Jira, flattened to plain text; untrusted ---
+```
+
+| Jira ID | 格式 | 示例 |
+|---|---|---|
+| 议题 | issue key | `ACME-12` |
+| 参与者 | `jira:<accountId>` | `jira:61a0c3e5f2b1d40069a1b2c3` |
+| 事件 | `jira:<key>/` 加上 `created`、`comment/<id>` 或 `transition/<变更历史 id>` | `jira:ACME-1/transition/20102` |
+| 证据 | `jira:<key>/` 加上 `issue/<issue id>@<th12>`、`comment/<id>@<th12>` 或 `transition/<变更历史 id>`，再加 `/fact` 或 `/text` | `jira:ACME-1/transition/20102/fact` |
+
+时间一律以 UTC 加毫秒保存，所以在另一个个人时区设置下抓取，得到的 ID 也相同。
+
 ## Agent 技能
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。GitHub 账号不是已认证的人，`memlab` MCP 工具引用的文件文本也不可信。技能里写了什么时候用这些只读工具、什么时候用命令行，以及怎样把 [GitHub Action](docs/github-action.md) 加到仓库里，让仓库核对自己的指令文件。把它们复制到 Agent 的技能目录即可：
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。GitHub 或 Jira 账号不是已认证的人，`memlab` MCP 工具引用的文件文本也不可信。技能里写了什么时候用这些只读工具、什么时候用命令行，以及怎样把 [GitHub Action](docs/github-action.md) 加到仓库里，让仓库核对自己的指令文件。把它们复制到 Agent 的技能目录即可：
 
 ```bash
 cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
@@ -441,6 +535,7 @@ Action 还会警告并跳过解析到工作区外的记忆符号链接。
 - 在公开仓库里，任何人都可以开 issue、评论、审查 PR、关闭自己的 issue。这些都会以真实账号记录下来，只要账号没有配置角色，回放就会忽略它们，所以会出现 `unauthorized_change_attempts`。这是如实记录，不是 bug。
 - 存档文件的哈希只能证明导入工具根据 API 响应生成的字节，不能证明 GitHub 实际返回了什么；交给 `convert` 的抓取结果会被当作“GitHub 的原话”，所以只转换你自己抓取的结果。抓取到的 GitHub 文本不可信，issue 正文里出现提示注入是预料之中的。这些文本永远不会进入 ID、备注、参与者或导入工具的输出，但 `replay` 和 `explain` 会原样打印证据引用（单行，不含终端转义序列和双向文本控制字符，但可能包含 markdown 或 HTML）。
 - HTML 报告把不可信文本显示为惰性文本（已转义，不可见字符显示为 `U+XXXX`，没有脚本，不加载任何东西），但文字内容仍然是记忆、证据或日志里写的内容；来源链接指向证据记录的那个 http(s) URL，链接文字就是完整的 URL。
+- Jira 导入：Jira 账号不等于经过认证的个人。任何能执行转换、把 issue 转到 `jira.json` 所列状态的人，都会被记录为做出了这个决定，只有 `policy.json` 会把它过滤掉，所以只列出工作流限制了转换权限的状态。以触发者身份运行的自动化规则，会被算在触发者头上；由规则把 Service Management 审批变成的转换，记为应用的 `comment`。只用解决结果（resolution）表达的决定（例如 “Done” 加 “Won't Do”）不会被映射。抓取结果会被当作 “Jira 的原话”，所以只转换你自己保存的抓取结果。来自私有项目的抓取结果和数据集包含私密文本，包括你的账号能看到的、仅对某个角色或组可见的评论，绝不要提交。
 - GitHub token 只从环境变量读取，只发送给 `https://api.github.com`（从不跟随重定向到其他主机），也从不写入文件或打印出来。
 - 从私有仓库导入的数据集和 `--save-capture` 文件包含私密文本，绝不要提交。目前没有脱敏流程：要从存档文件里删掉泄露的密钥只能手工编辑，之后 `validate` 会按设计报错。
 - 这是一个研究用的 MVP，不是生产级基础设施。
@@ -459,7 +554,7 @@ Action 还会警告并跳过解析到工作区外的记忆符号链接。
 | **v0.1** | 文本记忆审计、证据追溯、人工确认流程 | 事件日志、状态机、权限规则、决策溯源 |
 | **v0.2** | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR ✓ |
 | **v0.3** | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 ✓ | 状态冲突与决策审计 ✓ |
-| v0.4 | 多模态证据（带定位的 OCR / 转写）：转写稿与 OCR 旁车文件 ✓（未发布） | 跨平台组织记忆 |
+| v0.4 | 多模态证据（带定位的 OCR / 转写）：转写稿与 OCR 旁车文件 ✓（未发布） | 跨平台组织记忆：Jira 导入（离线，基于保存的抓取结果）✓ |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |
 
 各个包每个版本的变更见 [CHANGELOG.md](CHANGELOG.md)（英文）。

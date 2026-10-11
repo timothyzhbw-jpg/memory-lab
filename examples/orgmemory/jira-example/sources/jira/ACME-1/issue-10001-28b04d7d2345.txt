@@ -1,0 +1,8 @@
+Jira issue ACME-1 (id 10001) created by jira:qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b (customer) at 2026-10-05T09:00:00.000Z
+{"created":"2026-10-05T09:00:00.000+0000","creator":{"accountId":"qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b","accountType":"customer","active":true,"displayName":"Buyer (Acme Retail)"},"issue_id":"10001","key":"ACME-1","kind":"issue","reporter":{"accountId":"qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b","accountType":"customer","active":true,"displayName":"Buyer (Acme Retail)"},"site":"https://acme.atlassian.net"}
+--- text from Jira, flattened to plain text; untrusted ---
+Feature A: CSV export for the quarterly report
+We need CSV export before the Q4 board meeting.
+all invoices
+one row per line item
+Please prioritise.

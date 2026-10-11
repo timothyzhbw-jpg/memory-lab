@@ -1,0 +1,5 @@
+Jira issue ACME-2 (id 10002) created by jira:5f8e7d6c5b4a39281706f5e4 (atlassian) at 2026-10-05T10:00:00.000Z
+{"created":"2026-10-05T10:00:00.000+0000","creator":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"issue_id":"10002","key":"ACME-2","kind":"issue","reporter":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"site":"https://acme.atlassian.net"}
+--- text from Jira, flattened to plain text; untrusted ---
+Bulk export API
+Expose the export as an API for the billing team.

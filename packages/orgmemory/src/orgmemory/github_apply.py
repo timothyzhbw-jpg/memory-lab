@@ -2,23 +2,23 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections import Counter
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable
 
 from memcore import EvidenceSpan, ManifestEntry, append_jsonl, load_manifest, read_jsonl
-from memcore.evidence import resolve_inside, verify_entry
+from memcore.evidence import verify_entry
 from memcore.jsonutil import loads_at
 from memcore.reading import read_file_bytes
 
 from .authority import POLICY_LOG
 from .github_fetch import Client, fetch
 from .github_map import GithubConfig, Plan, _int, _iso, _lower, _repo_ok, _ts, convert
+from .ingest import create_only as _create
+from .ingest import dataset_path, importer_lock, policy_alias
 from .models import Event
 from .replay import load_events, validate
 
@@ -28,58 +28,18 @@ def _now() -> datetime:
 
 
 def _refuse_policy_alias(dataset: Path, path: Path) -> None:
-    for name in ("policy.json", POLICY_LOG):
-        if path.resolve() == (dataset / name).resolve():
-            raise ValueError(f"GitHub importer cannot open {name}")
+    if name := policy_alias(dataset, path):
+        raise ValueError(f"GitHub importer cannot open {name}")
 
 
 def _path(dataset: Path, relative: str) -> Path:
     """Refuse policy aliases as well as escapes, before opening anything."""
-    path = resolve_inside(dataset, relative)
-    _refuse_policy_alias(dataset, path)
-    return path
+    return dataset_path(dataset, relative, "GitHub")
 
 
-@contextmanager
-def lock(dataset: Path) -> Iterator[None]:
-    dataset = Path(dataset).resolve()
-    path = dataset / ".github-sync.lock"
-    directory_fd, fd = None, None
-    try:
-        if os.name == "posix":
-            import fcntl
-            # Lock the directory inode: deleting/replacing the marker cannot admit a second writer.
-            directory_fd = os.open(dataset, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                fcntl.flock(directory_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                raise ValueError("another sync is running; delete the lock if not") from None
-        try:
-            fd = os.open(path.name if directory_fd is not None else path,
-                         os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600,
-                         **({"dir_fd": directory_fd} if directory_fd is not None else {}))
-        except FileExistsError:
-            raise ValueError("another sync is running; delete the lock if not") from None
-        # On Windows, retaining this descriptor prevents deletion of the marker.
-        yield
-    finally:
-        try:
-            if fd is not None:
-                held = os.fstat(fd)
-                os.close(fd)
-                try:
-                    current = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False) \
-                        if directory_fd is not None else path.lstat()
-                    if os.path.samestat(current, held):
-                        if directory_fd is not None:
-                            os.unlink(path.name, dir_fd=directory_fd)
-                        else:
-                            path.unlink(missing_ok=True)
-                except FileNotFoundError:
-                    pass
-        finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
+def lock(dataset: Path) -> AbstractContextManager[None]:
+    """The GitHub importer's lock; it also waits for no other importer (see `ingest.importer_lock`)."""
+    return importer_lock(dataset, ".github-sync.lock", "GitHub")
 
 
 @dataclass
@@ -189,23 +149,6 @@ class Summary:
         ]
 
 
-def _create(path: Path, data: bytes) -> None:
-    """Private create-only temporary file, then atomic rename under the dataset lock."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    temporary = Path(name)
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-        if path.exists():
-            if path.read_bytes() != data:
-                raise ValueError("content-addressed capture tamper conflict")
-        else:
-            os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
 def _validate_plan(existing: Existing, plan: Plan) -> None:
     """Check references and primary fact attribution before any run output is written."""
     validate(existing.events + plan.events, {**existing.spans, **plan.spans})
@@ -280,10 +223,12 @@ def run_sync(dataset: Path, repo: str, client: Client, *, full: bool = False, si
             saved = save_capture.resolve()
             managed = {dataset.resolve() / name for name in
                        ("policy.json", POLICY_LOG, "github.json", "events.jsonl", "evidence.jsonl",
-                        "github-sync.jsonl", ".github-sync.lock")}
+                        "github-sync.jsonl", ".github-sync.lock", "jira.json", "jira-sync.jsonl",
+                        ".jira-sync.lock")}
             managed |= {path.resolve() for path in managed}
+            sources = dataset.resolve() / "sources"
             if save_capture.absolute() in managed or saved in managed \
-                    or saved.is_relative_to(dataset.resolve() / "sources" / "github"):
+                    or saved.is_relative_to(sources / "github") or saved.is_relative_to(sources / "jira"):
                 raise ValueError("save-capture path overlaps managed dataset files")
         if save_capture is not None and (save_capture.exists() or save_capture.is_symlink()):
             raise ValueError("save-capture path already exists")
