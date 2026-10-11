@@ -1,4 +1,8 @@
-"""Split MEMORY.md (and the local .md files it links to) into individually auditable claims."""
+"""Split a memory or agent instruction file (and the local .md files it links to) into auditable claims.
+
+MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md and the Cursor, Copilot and Windsurf rule files are all Markdown
+once their frontmatter is removed (see ``formats``); the fields a format documents become claim metadata.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -10,12 +14,16 @@ from pydantic import BaseModel
 from memcore import EvidenceError, resolve_inside
 from memcore.reading import read_file_text
 
+from .formats import MARKDOWN, MemoryFormat, Value, detect, frontmatter, metadata_of
 from .text import features, sentence_spans
 
 LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 EMPHASIS = re.compile(r"\*\*|__|`")
 FENCE = re.compile(r"^\s*(```|~~~)")
+CODE_SPAN = re.compile(r"`+[^`]*`+")
+# An ``@path.md`` import (Claude Code, Gemini CLI): at the start of a line or after whitespace, outside code spans.
+IMPORT = re.compile(r"(?<!\S)@([^\s`]+?\.md)(?=$|[\s,;:!?)\]]|\.(?:\s|$))")
 
 
 class Claim(BaseModel):
@@ -25,10 +33,19 @@ class Claim(BaseModel):
     line: int
     section: str | None = None
     also_at: list[str] = []
+    metadata: dict[str, Value] = {}  # the frontmatter fields of the claim's file that its format documents
 
     @property
     def location(self) -> str:
         return f"{self.path}:{self.line}"
+
+
+def claim_record(claim: Claim) -> dict:
+    """What ``memfalsify claims`` prints for one claim; ``metadata`` only when its file has some."""
+    record = {"memory_id": claim.id, "location": claim.location, "text": claim.text}
+    if claim.metadata:
+        record["metadata"] = claim.metadata
+    return record
 
 
 def claim_id(text: str) -> str:
@@ -37,16 +54,9 @@ def claim_id(text: str) -> str:
     return "m-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:8]
 
 
-def _strip_frontmatter(lines: list[str]) -> int:
-    if lines and lines[0].strip() == "---":
-        for index in range(1, len(lines)):
-            if lines[index].strip() == "---":
-                return index + 1
-    return 0
-
-
 def _local_md_targets(line: str) -> list[str]:
     targets = [m.group(2).split("#")[0] for m in LINK.finditer(line)]
+    targets += [m.group(1) for m in IMPORT.finditer(CODE_SPAN.sub(" ", line))]
     return [t for t in targets if t.endswith(".md") and "://" not in t]
 
 
@@ -110,11 +120,16 @@ def sentences(raw: str) -> list[tuple[str, int, int]]:
             for i, (text, start, end) in enumerate(found)]
 
 
-def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
-    """Claims and local link targets of one memory file's text (newlines already normalized to LF)."""
+def parse_text(text: str, display: str, fmt: MemoryFormat = MARKDOWN) -> tuple[list[Claim], list[str]]:
+    """Claims and local link targets of one memory file's text (newlines already normalized to LF).
+
+    Frontmatter is skipped, but lines are numbered from the top of the file, so ``path:line`` points at
+    the claim in the file as it is."""
     lines = text.split("\n")
+    start, fields = frontmatter(lines)
+    metadata = metadata_of(fmt, fields)
     claims, links, section, fenced = [], [], None, False
-    for index in range(_strip_frontmatter(lines), len(lines)):
+    for index in range(start, len(lines)):
         raw = lines[index]
         if FENCE.match(raw):
             fenced = not fenced
@@ -127,10 +142,11 @@ def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
             continue
         targets = _local_md_targets(raw)
         if targets:
-            # An index entry ("- [Title](file.md) — hook") points at claims; it is not one itself.
+            # An index entry ("- [Title](file.md) — hook", "@notes.md") points at claims; it is not one itself.
             links.extend(targets)
             continue
-        claims += [Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1, section=section)
+        claims += [Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1, section=section,
+                         metadata=dict(metadata))
                    for sentence, _, _ in sentences(raw)]
     return claims, links
 
@@ -147,11 +163,12 @@ def merge_duplicates(claims: list[Claim]) -> list[Claim]:
 
 
 def _parse_file(path: Path, display: str) -> tuple[list[Claim], list[str]]:
-    return parse_text(read_file_text(path), display)
+    return parse_text(read_file_text(path), display, detect(path))
 
 
 def parse_memory(memory_file: Path, follow_links: bool = True) -> tuple[list[Claim], list[Path]]:
-    """Return (claims, files read). Links are followed one level deep and never outside the memory directory."""
+    """Return (claims, files read). Links and ``@file.md`` imports are followed one level deep and never
+    outside the memory directory."""
     memory_file = Path(memory_file).resolve()
     root = memory_file.parent
     claims, links = _parse_file(memory_file, memory_file.name)

@@ -28,7 +28,7 @@ from memfalsify.audit import audit
 from memfalsify.cli import VerifierChoice, build_verifier, preselection
 from memfalsify.gitstore import GitError, HistoryError
 from memfalsify.history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
-from memfalsify.memory import parse_memory
+from memfalsify.memory import claim_record, parse_memory
 from memfalsify.report import to_markdown as audit_markdown
 from memfalsify.rollback import rollback_patch
 from memfalsify.verify import VerifierError
@@ -54,7 +54,8 @@ REVISION = ("Branch, tag or commit; it must not start with '-' or contain contro
 
 INSTRUCTIONS = """\
 Read-only tools for Memory Lab.
-- memfalsify_*: audit an agent memory file (MEMORY.md, CLAUDE.md, AGENTS.md, ...) against a directory of \
+- memfalsify_*: audit an agent memory or instruction file (MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, \
+.cursor/rules/*.mdc, .github/copilot-instructions.md, ...) against a directory of \
 evidence files. The audit cites exact quotes and proposes actions; it never changes the memory. For memory \
 kept in git, memfalsify_diff audits only the claims a revision added or changed, memfalsify_history shows \
 which commits introduced and last changed each claim, and memfalsify_rollback returns (never applies) a \
@@ -249,8 +250,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
             claims, _ = parse_memory(path)
         except (ValueError, OSError) as exc:
             raise ToolError(ws.failure(exc)) from None
-        return json.dumps([{"memory_id": c.id, "location": c.location, "text": c.text} for c in claims],
-                          ensure_ascii=False, indent=2)
+        return json.dumps([claim_record(c) for c in claims], ensure_ascii=False, indent=2)
 
     memory_help = "Memory file to audit, e.g. MEMORY.md. " + PATHS
     git_memory_help = "Memory file in a git work tree, e.g. MEMORY.md. " + PATHS + " " + GIT_ROOT

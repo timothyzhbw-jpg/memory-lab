@@ -12,6 +12,7 @@ from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
 
 from . import __version__
 from .corpus import Passage, Skipped, scan
+from .formats import Value
 from .memory import Claim, parse_memory
 from .text import ABSOLUTE, HEDGE, RELATIVE_TIME, explicit_dates, features
 from .verify import Judgment, LexicalVerifier, Verifier, coverage
@@ -61,6 +62,7 @@ class Finding(BaseModel):
     text: str
     location: str
     section: str | None
+    metadata: dict[str, Value] = {}  # frontmatter fields of the claim's file, e.g. a Cursor rule's globs
     status: Status
     evidence: list[EvidenceFinding]
     issues: list[Issue]
@@ -245,6 +247,7 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
         actions += [ISSUE_PROPOSALS[i.kind] for i in issues]
         proposals = [Proposal(action=a, reason=r) for a, r in dict.fromkeys(actions)]
         findings.append(Finding(memory_id=claim.id, text=claim.text, location=claim.location, section=claim.section,
+                                metadata=claim.metadata,
                                 status=status, evidence=evidence, issues=issues, proposals=proposals))
     findings.sort(key=lambda f: SEVERITY.index(f.status))
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}

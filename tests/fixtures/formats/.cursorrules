@@ -1,0 +1,3 @@
+# Fixture: legacy Cursor rules for memfalsify format tests (not instructions for this repository)
+
+The cache uses Redis for sessions.

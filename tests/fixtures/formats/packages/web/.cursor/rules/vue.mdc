@@ -1,0 +1,7 @@
+---
+globs: "*.vue"
+---
+
+# Fixture: nested Cursor rule for memfalsify format tests (not instructions for this repository)
+
+- Fixture Vue components use the composition API.

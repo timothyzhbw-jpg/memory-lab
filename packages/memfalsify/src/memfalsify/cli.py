@@ -14,13 +14,17 @@ from pydantic import ValidationError
 from . import jev, llm
 from .audit import ATTENTION, audit
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
-from .memory import parse_memory
+from .memory import claim_record, parse_memory
 from .report import to_markdown
 from .rollback import rollback_patch
 from .verify import CascadeVerifier, DualVerifier, LexicalVerifier, Verifier, VerifierError
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
-                  help="Audit agent memory against evidence. Never modifies memory.")
+                  help="Audit agent memory and instruction files against evidence. Never modifies memory.")
+
+# Memory files are Markdown: MEMORY.md and the agents' instruction files (see formats.py).
+MEMORY_KINDS = ("a memory or agent instruction file: MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, "
+                ".cursor/rules/*.mdc, .github/copilot-instructions.md, ...")
 
 
 class Format(str, Enum):
@@ -73,7 +77,8 @@ def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "re
 
 
 # Options shared by `audit` and `diff`.
-MEMORY_ARG = typer.Argument(..., exists=True, dir_okay=False, help="MEMORY.md to audit")
+MEMORY_ARG = typer.Argument(..., exists=True, dir_okay=False, help="File to audit, " + MEMORY_KINDS)
+GIT_MEMORY_ARG = typer.Argument(..., exists=True, dir_okay=False, help="In a git work tree, " + MEMORY_KINDS)
 EVIDENCE = typer.Option(None, "--evidence", "-e", help="Directory of evidence files")
 EXCLUDE = typer.Option(
     None, "--exclude", "-x", metavar="GLOB",
@@ -84,7 +89,7 @@ FORMAT = typer.Option(Format.markdown, "--format", "-f")
 OUTPUT = typer.Option(None, "--output", "-o", help="Write the report here instead of stdout")
 AS_OF = typer.Option(None, help="Reference date YYYY-MM-DD for staleness (default: today)")
 STALE_DAYS = typer.Option(180, help="Dated claims older than this are flagged possibly_stale")
-FOLLOW_LINKS = typer.Option(True, help="Also audit local .md files linked from MEMORY.md")
+FOLLOW_LINKS = typer.Option(True, help="Also audit local .md files the memory file links to or @-imports")
 VERIFIER = typer.Option(VerifierChoice.lexical, "--verifier",
                         help="lexical (offline), llm (Claude), jev (TypeSafe Jev judgment model), "
                              "dual (llm + jev; disagreements become disputed), "
@@ -117,7 +122,7 @@ def audit_command(
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
 ) -> None:
-    """Audit MEMORY.md and print an evidence-cited report with proposed (unapplied) actions."""
+    """Audit a memory or instruction file and print an evidence-cited report with proposed (unapplied) actions."""
     try:
         reference = date.fromisoformat(as_of) if as_of else None
         report = audit(memory, evidence, reviews, verifier=build_verifier(verifier, llm_model, jev_model, accept_at),
@@ -136,7 +141,7 @@ def audit_command(
 
 @app.command("diff")
 def diff_command(
-    memory: Path = typer.Argument(..., exists=True, dir_okay=False, help="MEMORY.md in a git work tree"),
+    memory: Path = GIT_MEMORY_ARG,
     base: str = typer.Option(..., "--base", help="Revision to compare against (branch, tag or commit), "
                                                  "e.g. main or the pull request's base commit"),
     head: Optional[str] = typer.Option(None, "--head", help="Revision to compare (default: the working tree)"),
@@ -147,7 +152,8 @@ def diff_command(
     output: Optional[Path] = OUTPUT,
     as_of: Optional[str] = AS_OF,
     stale_days: int = STALE_DAYS,
-    follow_links: bool = typer.Option(True, help="Also compare local .md files linked from MEMORY.md"),
+    follow_links: bool = typer.Option(True, help="Also compare local .md files the memory file links to or "
+                                                 "@-imports"),
     strict: bool = typer.Option(False, help="Exit 1 if an added or changed memory is challenged, conflicted, "
                                             "disputed or has counterevidence"),
     verifier: VerifierChoice = VERIFIER,
@@ -178,10 +184,11 @@ def diff_command(
 
 @app.command("history")
 def history_command(
-    memory: Path = typer.Argument(..., exists=True, dir_okay=False, help="MEMORY.md in a git work tree"),
+    memory: Path = GIT_MEMORY_ARG,
     max_commits: int = typer.Option(100, min=1, help="Read at most this many commits that touched the memory"),
     fmt: Format = FORMAT,
-    follow_links: bool = typer.Option(True, help="Also trace local .md files linked from MEMORY.md"),
+    follow_links: bool = typer.Option(True, help="Also trace local .md files the memory file links to or "
+                                                 "@-imports"),
 ) -> None:
     """For each claim, the commits that introduced and last changed it; plus the claims removed, and when."""
     try:
@@ -194,11 +201,12 @@ def history_command(
 
 @app.command("rollback")
 def rollback_command(
-    memory: Path = typer.Argument(..., exists=True, dir_okay=False, help="MEMORY.md in a git work tree"),
+    memory: Path = GIT_MEMORY_ARG,
     claim: str = typer.Option(..., "--claim", help="Claim ID (from `claims`, `diff` or `history`)"),
     to: str = typer.Option(..., "--to", help="Revision whose wording of the claim to restore"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Write the patch here instead of stdout"),
-    follow_links: bool = typer.Option(True, help="Also look in local .md files linked from MEMORY.md"),
+    follow_links: bool = typer.Option(True, help="Also look in local .md files the memory file links to or "
+                                                 "@-imports"),
 ) -> None:
     """Print (never apply) a patch restoring a claim's text as of a revision, or re-adding a removed claim."""
     try:
@@ -215,14 +223,13 @@ def rollback_command(
 
 @app.command("claims")
 def claims_command(
-    memory: Path = typer.Argument(..., exists=True, dir_okay=False),
+    memory: Path = typer.Argument(..., exists=True, dir_okay=False, help="File to split, " + MEMORY_KINDS),
     follow_links: bool = typer.Option(True),
 ) -> None:
-    """List extracted claims and their IDs (use the IDs in reviews.jsonl)."""
+    """List extracted claims and their IDs (use the IDs in reviews.jsonl), plus frontmatter metadata."""
     claims, _ = parse_memory(memory, follow_links=follow_links)
     for claim in claims:
-        typer.echo(json.dumps({"memory_id": claim.id, "location": claim.location, "text": claim.text},
-                              ensure_ascii=False))
+        typer.echo(json.dumps(claim_record(claim), ensure_ascii=False))
 
 
 def main() -> None:

@@ -1,0 +1,10 @@
+---
+description: Rate limits and validation for the fixture API
+globs: src/api/**/*.ts
+alwaysApply: false
+---
+
+# Fixture: Cursor rule for memfalsify format tests (not instructions for this repository)
+
+- The public API rate limit is 100 requests per minute.
+- Validate request bodies with a schema before using them.

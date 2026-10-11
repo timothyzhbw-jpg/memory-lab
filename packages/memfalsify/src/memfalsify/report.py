@@ -1,8 +1,11 @@
 """Render an AuditReport as a Markdown document a reviewer can read top to bottom."""
 from __future__ import annotations
 
+import re
+
 from .audit import AuditReport, Finding
 from .corpus import REPORT_HEADER
+from .formats import Value
 from .gitstore import show_text
 
 LABELS = {
@@ -22,12 +25,29 @@ def _quote(text: str, *, scrub: bool = False) -> str:
     return "> " + text.replace("\n", "\n> ")
 
 
+def _code(text: str) -> str:
+    """Untrusted text as one Markdown code span, whatever backticks it contains."""
+    text = " ".join(show_text(text).split())
+    fence = "`" * (max((len(run) for run in re.findall("`+", text)), default=0) + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
+
+
+def metadata_line(metadata: dict[str, Value]) -> str:
+    """Frontmatter fields as one line, e.g. ``Frontmatter: `globs: src/**` · `alwaysApply: false` ``."""
+    shown = [_code(f"{key}: {', '.join(value) if isinstance(value, list) else value}")
+             for key, value in metadata.items()]
+    return "Frontmatter: " + " · ".join(shown)
+
+
 def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
     def show(text: str) -> str:
         return show_text(text) if scrub else text
 
     where = f"`{show(f.location)}`" + (f" · {show(f.section)}" if f.section else "")
     out = [f"### {LABELS[f.status]} · `{f.memory_id}`", "", _quote(f.text, scrub=scrub), "", where, ""]
+    if f.metadata:
+        out += [metadata_line(f.metadata), ""]
     if f.evidence:
         out.append("**Evidence**")
         for e in f.evidence:

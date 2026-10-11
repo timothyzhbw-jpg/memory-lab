@@ -18,11 +18,12 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePath, PureWindowsPath
 
 from memcore import EvidenceError, resolve_inside
 from memcore.reading import confinement_root, read_file_text
 
+from .formats import detect
 from .memory import Claim, merge_duplicates, parse_text
 
 HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -139,14 +140,17 @@ def link_path(target: str) -> str | None:
     return normal
 
 
-def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool) -> Snapshot:
-    """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``."""
+def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool,
+                   directory: PurePath = PurePath()) -> Snapshot:
+    """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``.
+
+    ``directory`` is where the memory file lives; with the names, it gives each file's format."""
     snapshot = Snapshot()
     text = read(name)
     if text is None:
         return snapshot
     snapshot.texts[name] = text
-    claims, links = parse_text(text, name)
+    claims, links = parse_text(text, name, detect(directory / name))
     if follow_links:
         for target in dict.fromkeys(links):
             relative = link_path(target)
@@ -156,7 +160,7 @@ def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: b
             if relative in snapshot.texts or (linked := read(relative)) is None:
                 continue
             snapshot.texts[relative] = linked
-            claims += parse_text(linked, relative)[0]
+            claims += parse_text(linked, relative, detect(directory / relative))[0]
     snapshot.claims = merge_duplicates(claims)
     return snapshot
 
@@ -303,7 +307,7 @@ class Repository:
             except UnicodeDecodeError as exc:
                 raise HistoryError(f"{printable(self.prefix + relative)} at {commit[:12]} is not UTF-8 text") from exc
             return text.replace("\r\n", "\n").replace("\r", "\n")
-        return build_snapshot(read, self.memory_name, follow_links)
+        return build_snapshot(read, self.memory_name, follow_links, self.memory_dir)
 
     def worktree_path(self, relative: str) -> Path | None:
         """A memory file in the working tree, confined to the memory directory like ``parse_memory``."""
@@ -317,7 +321,7 @@ class Repository:
         def read(relative: str) -> str | None:
             path = self.worktree_path(relative)
             return read_file_text(path) if path else None
-        return build_snapshot(read, self.memory_name, follow_links)
+        return build_snapshot(read, self.memory_name, follow_links, self.memory_dir)
 
 
 OUTSIDE = ("the memory file's git repository is not inside the server root: its work tree, git directory, "

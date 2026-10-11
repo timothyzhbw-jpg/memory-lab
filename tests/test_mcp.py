@@ -121,6 +121,14 @@ def test_claims_match_the_library(root):
 
 
 @requires_confinement
+def test_claims_carry_rule_frontmatter(root):
+    shutil.copytree(REPO / "tests" / "fixtures" / "formats", root / "formats")
+    claims = json.loads(ok(call(create_server(root), "memfalsify_claims", memory_file="formats/.cursor/rules/api.mdc")))
+    assert [(c["location"], c["metadata"]["globs"]) for c in claims] == [("api.mdc:9", "src/api/**/*.ts"),
+                                                                         ("api.mdc:10", "src/api/**/*.ts")]
+
+
+@requires_confinement
 def test_audit_matches_the_library_and_hides_the_root(root):
     server = create_server(root)
     arguments = dict(memory_file=MEMORY, evidence_dir=EVIDENCE, reviews_file=REVIEWS, as_of="2026-10-10")
