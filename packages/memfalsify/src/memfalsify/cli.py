@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from . import jev, llm
 from .audit import ATTENTION, audit
+from .discover import discover, discovery_to_markdown
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
 from .memory import claim_record, parse_memory
 from .report import to_markdown
@@ -22,9 +23,9 @@ from .verify import CascadeVerifier, DualVerifier, LexicalVerifier, Verifier, Ve
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="Audit agent memory and instruction files against evidence. Never modifies memory.")
 
-# Memory files are Markdown: MEMORY.md and the agents' instruction files (see formats.py).
+# Memory files are Markdown: MEMORY.md and the instruction files `discover` lists.
 MEMORY_KINDS = ("a memory or agent instruction file: MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, "
-                ".cursor/rules/*.mdc, .github/copilot-instructions.md, ...")
+                ".cursor/rules/*.mdc, .github/copilot-instructions.md, ... (see `memfalsify discover`)")
 
 
 class Format(str, Enum):
@@ -230,6 +231,27 @@ def claims_command(
     claims, _ = parse_memory(memory, follow_links=follow_links)
     for claim in claims:
         typer.echo(json.dumps(claim_record(claim), ensure_ascii=False))
+
+
+@app.command("discover")
+def discover_command(
+    directory: Path = typer.Argument(Path("."), exists=True, file_okay=False,
+                                     help="Repository or directory to search (default: the current directory)"),
+    exclude: Optional[list[str]] = typer.Option(
+        None, "--exclude", "-x", metavar="GLOB",
+        help="Leave matching files out (fnmatch on paths relative to DIRECTORY, e.g. 'tests/fixtures/**'); "
+             "repeatable"),
+    fmt: Format = FORMAT,
+) -> None:
+    """List every supported agent's instruction files (Claude Code, Codex, Cursor, Copilot, Gemini, Windsurf).
+
+    Reads directory listings only, never file contents."""
+    try:
+        report = discover(directory, exclude=exclude or ())
+    except (ValueError, OSError) as exc:
+        _fail(str(exc))
+    typer.echo(discovery_to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
+               nl=False)
 
 
 def main() -> None:
