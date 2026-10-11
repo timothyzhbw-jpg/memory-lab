@@ -1,6 +1,7 @@
 """`orgmemory audit`: every finding kind, severities, cutoffs, ordering, exit codes, and read-only behaviour."""
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from itertools import product
 
@@ -356,7 +357,8 @@ def test_untrusted_text_cannot_add_terminal_codes_or_report_lines(tmp_path):
     assert json.loads(report.model_dump_json())["findings"][0]["subject"] == subject
 
 
-@pytest.mark.parametrize("field", ["subject", "actor", "note", "event_id", "evidence_id", "path",
+@pytest.mark.parametrize("field", ["subject", "actor", "note", "event_id", "evidence_id", pytest.param("path", marks=pytest.mark.skipif(
+                             sys.platform == "win32", reason="the hostile file name uses characters Windows forbids")),
                                    "source_uri", "quote"])
 def test_untrusted_audit_fields_render_as_text(tmp_path, field):
     from markdown_it import MarkdownIt
