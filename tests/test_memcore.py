@@ -62,6 +62,39 @@ def test_naive_capture_time_rejected(tmp_path):
         load_manifest(write_manifest(tmp_path, captured_at="2026-10-07T00:00:00"))
 
 
+def test_manifest_reads_a_repeated_path_once(tmp_path, monkeypatch):
+    import memcore.evidence as evidence
+    from memcore import ManifestEntry, sha256_bytes
+    from memcore.evidence import verify_entry
+
+    text = "alpha quote one\nbeta quote two\n"
+    (tmp_path / "src.txt").write_bytes(text.encode("utf-8"))
+    digest = sha256_bytes(text.encode("utf-8"))
+    entries = []
+    for index, quote in enumerate(("alpha quote one", "beta quote two"), start=1):
+        start = text.index(quote)
+        entries.append({"id": f"e{index}", "path": "src.txt", "sha256": digest, "quote": quote, "start": start,
+                        "end": start + len(quote), "source_uri": "synthetic://t", "source_kind": "test",
+                        "captured_at": "2026-10-07T00:00:00Z"})
+    manifest = tmp_path / "evidence.jsonl"
+    manifest.write_bytes("".join(json.dumps(entry) + "\n" for entry in entries).encode("utf-8"))
+    expected = {entry["id"]: verify_entry(ManifestEntry.model_validate(entry), tmp_path) for entry in entries}
+    calls = []
+    real = evidence.read_text
+
+    def counting(root, relative):
+        calls.append(relative)
+        return real(root, relative)
+
+    monkeypatch.setattr(evidence, "read_text", counting)
+    assert load_manifest(manifest) == expected
+    assert calls == ["src.txt"]
+    entries[1]["sha256"] = "0" * 64
+    manifest.write_bytes("".join(json.dumps(entry) + "\n" for entry in entries).encode("utf-8"))
+    with pytest.raises(EvidenceError, match="hash mismatch: e2"):
+        load_manifest(manifest)
+
+
 def test_duplicate_evidence_id_rejected(tmp_path):
     manifest = write_manifest(tmp_path)
     manifest.write_text(manifest.read_text() * 2, encoding="utf-8")

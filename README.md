@@ -135,6 +135,8 @@ orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri 
 orgmemory append   <dataset> --event '{"id": ..., ...}'
 ```
 
+`validate`, `replay`, `explain` and `audit` return the same reports on large logs, with less repeated hashing, policy lookup and trail scanning. Measurements: [benchmarks/perf](benchmarks/perf/README.md).
+
 #### Audit the decision process
 
 `replay` says what the state is; `audit` says where the decision process needs attention. It replays the log under the same rules, read-only, and reports findings. Each finding has a `kind`, a `severity` (`high`, `medium` or `low`), the `subject` it is about (or, for a finding about one actor, the `actor`), the `subjects` and `event_ids` involved (event IDs in replay order), a `detail` line, and every cited event with its evidence quotes, as `explain` cites them. The audit adds no event semantics: it only restates what replay, its conflicts and its audit trail already contain.

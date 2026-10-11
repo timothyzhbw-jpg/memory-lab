@@ -16,7 +16,14 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Changed
+
+- `orgmemory validate`, `replay`, `explain` and `audit` do less repeated work on large logs and return the
+  same reports. `load_manifest` reads and hashes each distinct evidence path once per load and checks later
+  entries against those bytes. Replay resolves each actor's permissions once, creates each subject state
+  once, and sorts that subject's dependencies once at the end. Audit indexes applied dependencies and
+  requests during its trail walk. The Markdown renderer keeps the previous escaping for any line that needs
+  it. Measurements are in `benchmarks/perf/README.md`.
 
 ## memlab-core
 

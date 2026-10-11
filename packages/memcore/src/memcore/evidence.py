@@ -106,8 +106,16 @@ class ManifestEntry(BaseModel):
     captured_at: AwareDatetime
 
 
-def verify_entry(entry: ManifestEntry, root: Path) -> EvidenceSpan:
-    digest, text = read_text(root, entry.path)
+def verify_entry(entry: ManifestEntry, root: Path, cache: dict[str, tuple[str, str]] | None = None) -> EvidenceSpan:
+    """Check one manifest entry. ``cache`` stores (sha256, text) for paths already read in this load."""
+    if cache is None:
+        digest, text = read_text(root, entry.path)
+    else:
+        cached = cache.get(entry.path)
+        if cached is None:
+            cached = read_text(root, entry.path)
+            cache[entry.path] = cached
+        digest, text = cached
     if digest != entry.sha256:
         raise EvidenceError(f"evidence hash mismatch: {entry.id}")
     if entry.end <= entry.start or text[entry.start:entry.end] != entry.quote:
@@ -118,12 +126,17 @@ def verify_entry(entry: ManifestEntry, root: Path) -> EvidenceSpan:
 
 
 def load_manifest(manifest: Path) -> dict[str, EvidenceSpan]:
-    """Load and verify every entry; paths are relative to the manifest's directory."""
+    """Load and verify every entry; paths are relative to the manifest's directory.
+
+    A path is read and hashed once. Later entries for that same path are checked
+    against those bytes, still in manifest order.
+    """
     manifest = Path(manifest)
     spans: dict[str, EvidenceSpan] = {}
+    cache: dict[str, tuple[str, str]] = {}
     for number, record in read_jsonl(manifest):
         entry = ManifestEntry.model_validate(record)
         if entry.id in spans:
             raise EvidenceError(f"{manifest}:{number}: duplicate evidence id {entry.id}")
-        spans[entry.id] = verify_entry(entry, manifest.parent)
+        spans[entry.id] = verify_entry(entry, manifest.parent, cache)
     return spans

@@ -135,6 +135,8 @@ orgmemory evidence add <数据集> --id ... --path ... --quote "..." --source-ur
 orgmemory append   <数据集> --event '{"id": ..., ...}'
 ```
 
+在大日志上，`validate`、`replay`、`explain` 和 `audit` 的报告与原来一致，同时减少重复的证据哈希、权限查找和轨迹扫描。测量见 [benchmarks/perf](benchmarks/perf/README.md)。
+
 #### 审计决策流程
 
 `replay` 回答“现在是什么状态”，`audit` 回答“决策流程哪里需要关注”。它用同样的规则只读地回放日志，然后列出发现项。每个发现项包含 `kind`（类型）、`severity`（严重程度：`high`、`medium` 或 `low`）、所涉及的议题 `subject`（如果是针对某个参与者的发现项，则为 `actor`）、涉及的 `subjects` 和 `event_ids`（事件 ID 按回放顺序排列）、一行说明 `detail`，以及每个被引用的事件及其证据原文，引用方式与 `explain` 相同。审计不引入任何新的事件语义：它只复述回放结果、回放记录的冲突和审计轨迹里已有的内容。
