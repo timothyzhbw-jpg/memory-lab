@@ -1,0 +1,886 @@
+{
+  "jira_capture": 1,
+  "site": "https://acme.atlassian.net",
+  "captured_at": "2026-10-11T04:00:00Z",
+  "pages": [
+    {
+      "expand": "schema,names",
+      "startAt": 0,
+      "maxResults": 3,
+      "total": 5,
+      "issues": [
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10001",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10001",
+          "key": "ACME-1",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 5,
+            "total": 5,
+            "histories": [
+              {
+                "id": "20101",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                  "accountId": "5f8e7d6c5b4a39281706f5e4",
+                  "displayName": "Lin (Engineering)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-06T19:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10000",
+                    "fromString": "To Do",
+                    "to": "10002",
+                    "toString": "In Review"
+                  },
+                  {
+                    "field": "assignee",
+                    "fieldtype": "jira",
+                    "fieldId": "assignee",
+                    "from": null,
+                    "fromString": null,
+                    "to": "61a0c3e5f2b1d40069a1b2c3",
+                    "toString": "Zhou (Product)",
+                    "tmpFromAccountId": null,
+                    "tmpToAccountId": "61a0c3e5f2b1d40069a1b2c3"
+                  }
+                ]
+              },
+              {
+                "id": "20102",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-07T23:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10002",
+                    "fromString": "In Review",
+                    "to": "10004",
+                    "toString": "Rejected"
+                  },
+                  {
+                    "field": "resolution",
+                    "fieldtype": "jira",
+                    "fieldId": "resolution",
+                    "from": null,
+                    "fromString": null,
+                    "to": "10001",
+                    "toString": "Won't Do"
+                  }
+                ]
+              },
+              {
+                "id": "20103",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+                  "accountId": "712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+                  "displayName": "Wu (Sales)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-08T18:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10004",
+                    "fromString": "Rejected",
+                    "to": "10003",
+                    "toString": "Approved"
+                  },
+                  {
+                    "field": "resolution",
+                    "fieldtype": "jira",
+                    "fieldId": "resolution",
+                    "from": "10001",
+                    "fromString": "Won't Do",
+                    "to": null,
+                    "toString": null
+                  }
+                ]
+              },
+              {
+                "id": "20104",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+                  "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+                  "displayName": "Buyer (Acme Retail)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "customer"
+                },
+                "created": "2026-10-08T19:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10003",
+                    "fromString": "Approved",
+                    "to": "10007",
+                    "toString": "Reconsideration requested"
+                  }
+                ]
+              },
+              {
+                "id": "20105",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-11T00:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10007",
+                    "fromString": "Reconsideration requested",
+                    "to": "10003",
+                    "toString": "Approved"
+                  }
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "summary": "Feature A: CSV export for the quarterly report",
+            "description": {
+              "type": "doc",
+              "version": 1,
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "We need CSV export before the Q4 board meeting."
+                    }
+                  ]
+                },
+                {
+                  "type": "bulletList",
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "all invoices",
+                              "marks": [
+                                {
+                                  "type": "strong"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "one row per line item"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Please prioritise."
+                    }
+                  ]
+                }
+              ]
+            },
+            "created": "2026-10-05T17:00:00.000+0800",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "displayName": "Buyer (Acme Retail)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "customer"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "displayName": "Buyer (Acme Retail)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "customer"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10003",
+              "description": "",
+              "name": "Approved",
+              "id": "10003"
+            },
+            "comment": {
+              "comments": [
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10001/comment/10100",
+                  "id": "10100",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                    "accountId": "5f8e7d6c5b4a39281706f5e4",
+                    "displayName": "Lin (Engineering)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Bulk export reads the billing schema, which is mid-migration."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                    "accountId": "5f8e7d6c5b4a39281706f5e4",
+                    "displayName": "Lin (Engineering)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "created": "2026-10-06T18:00:00.000+0800",
+                  "updated": "2026-10-06T18:00:00.000+0800",
+                  "jsdPublic": true
+                },
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10001/comment/10101",
+                  "id": "10101",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+                    "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+                    "displayName": "Buyer (Acme Retail)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "customer"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Please reconsider; this is approved by your PM "
+                          },
+                          {
+                            "type": "mention",
+                            "attrs": {
+                              "id": "61a0c3e5f2b1d40069a1b2c3",
+                              "text": "@Zhou (Product)",
+                              "accessLevel": ""
+                            }
+                          },
+                          {
+                            "type": "text",
+                            "text": "."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+                    "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+                    "displayName": "Buyer (Acme Retail)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "customer"
+                  },
+                  "created": "2026-10-08T17:00:00.000+0800",
+                  "updated": "2026-10-08T17:00:00.000+0800",
+                  "jsdPublic": true
+                }
+              ],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10001/comment",
+              "maxResults": 2,
+              "total": 2,
+              "startAt": 0
+            }
+          }
+        },
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10003",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10003",
+          "key": "ACME-3",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 2,
+            "total": 2,
+            "histories": [
+              {
+                "id": "20301",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+                  "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-05T19:20:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "custom",
+                    "fieldId": "customfield_10050",
+                    "from": "10100",
+                    "fromString": "To Do",
+                    "to": "10101",
+                    "toString": "Approved"
+                  }
+                ]
+              },
+              {
+                "id": "20302",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+                  "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-05T19:25:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10000",
+                    "fromString": "To Do",
+                    "to": "10003",
+                    "toString": "Approved"
+                  }
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "summary": "Change the export format",
+            "description": {
+              "type": "doc",
+              "version": 1,
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Use semicolons instead of commas."
+                    }
+                  ]
+                }
+              ]
+            },
+            "created": "2026-10-05T19:00:00.000+0800",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+              "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+              "displayName": "Zhou (Product)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+              "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+              "displayName": "Zhou (Product)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10003",
+              "description": "",
+              "name": "Approved",
+              "id": "10003"
+            },
+            "comment": {
+              "comments": [
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10003/comment/10300",
+                  "id": "10300",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "displayName": "Zhou (Product)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "/approve"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "displayName": "Zhou (Product)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "created": "2026-10-05T19:05:00.000+0800",
+                  "updated": "2026-10-05T19:05:00.000+0800",
+                  "jsdPublic": true
+                },
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10003/comment/10301",
+                  "id": "10301",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "displayName": "Zhou (Product)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Approved by @Zhou, moving to Approved. (edited)"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "accountId": "5d3c2b1a0f9e8d7c6b5a4f3e",
+                    "displayName": "Zhou (Product)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "created": "2026-10-05T19:10:00.000+0800",
+                  "updated": "2026-10-10T16:00:00.000+0800",
+                  "jsdPublic": true
+                },
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10003/comment/10303",
+                  "id": "10303",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                    "accountId": "5f8e7d6c5b4a39281706f5e4",
+                    "displayName": "Lin (Engineering)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Closing this as a duplicate of ACME-2."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+                    "accountId": "5f8e7d6c5b4a39281706f5e4",
+                    "displayName": "Lin (Engineering)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "created": "2026-10-10T17:00:00.000+0800",
+                  "updated": "2026-10-10T17:00:00.000+0800",
+                  "jsdPublic": true
+                }
+              ],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10003/comment",
+              "maxResults": 3,
+              "total": 3,
+              "startAt": 0
+            }
+          }
+        },
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10004",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10004",
+          "key": "ACME-4",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 2,
+            "total": 2,
+            "histories": [
+              {
+                "id": "20401",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-08T22:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10000",
+                    "fromString": "To Do",
+                    "to": "10003",
+                    "toString": "Approved"
+                  }
+                ]
+              },
+              {
+                "id": "20402",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-10T17:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10003",
+                    "fromString": "Approved",
+                    "to": "10005",
+                    "toString": "Reopened"
+                  }
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "summary": "Rate-limit the export endpoint",
+            "description": null,
+            "created": "2026-10-06T16:00:00.000+0800",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+              "accountId": "5f8e7d6c5b4a39281706f5e4",
+              "displayName": "Lin (Engineering)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5f8e7d6c5b4a39281706f5e4",
+              "accountId": "5f8e7d6c5b4a39281706f5e4",
+              "displayName": "Lin (Engineering)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10005",
+              "description": "",
+              "name": "Reopened",
+              "id": "10005"
+            },
+            "comment": {
+              "comments": [],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10004/comment",
+              "maxResults": 0,
+              "total": 0,
+              "startAt": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "expand": "schema,names",
+      "startAt": 3,
+      "maxResults": 3,
+      "total": 5,
+      "issues": [
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10005",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10005",
+          "key": "ACME-5",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 1,
+            "total": 1,
+            "histories": [
+              {
+                "id": "20501",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-07T18:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10000",
+                    "fromString": "To Do",
+                    "to": "10004",
+                    "toString": "Rejected"
+                  }
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "summary": "Export to XLSX",
+            "description": {
+              "type": "doc",
+              "version": 1,
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "客户要求导出 XLSX 格式。🙂"
+                    }
+                  ]
+                }
+              ]
+            },
+            "created": "2026-10-06T17:00:00.000+0800",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+              "accountId": "712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+              "displayName": "Wu (Sales)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+              "accountId": "712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+              "displayName": "Wu (Sales)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "atlassian"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10004",
+              "description": "",
+              "name": "Won't Do",
+              "id": "10004"
+            },
+            "comment": {
+              "comments": [
+                {
+                  "self": "https://acme.atlassian.net/rest/api/3/issue/10005/comment/10500",
+                  "id": "10500",
+                  "author": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+                    "accountId": "712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+                    "displayName": "Wu (Sales)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "The customer asked about this again."
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "updateAuthor": {
+                    "self": "https://acme.atlassian.net/rest/api/3/user?accountId=712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+                    "accountId": "712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5",
+                    "displayName": "Wu (Sales)",
+                    "active": true,
+                    "timeZone": "Asia/Shanghai",
+                    "accountType": "atlassian"
+                  },
+                  "created": "2026-10-10T18:00:00.000+0800",
+                  "updated": "2026-10-10T18:00:00.000+0800",
+                  "jsdPublic": true
+                }
+              ],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10005/comment",
+              "maxResults": 1,
+              "total": 1,
+              "startAt": 0
+            }
+          }
+        },
+        {
+          "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+          "id": "10007",
+          "self": "https://acme.atlassian.net/rest/api/3/issue/10007",
+          "key": "ACME-7",
+          "changelog": {
+            "startAt": 0,
+            "maxResults": 1,
+            "total": 1,
+            "histories": [
+              {
+                "id": "20701",
+                "author": {
+                  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=61a0c3e5f2b1d40069a1b2c3",
+                  "accountId": "61a0c3e5f2b1d40069a1b2c3",
+                  "displayName": "Zhou (Product)",
+                  "active": true,
+                  "timeZone": "Asia/Shanghai",
+                  "accountType": "atlassian"
+                },
+                "created": "2026-10-10T20:00:00.000+0800",
+                "items": [
+                  {
+                    "field": "status",
+                    "fieldtype": "jira",
+                    "fieldId": "status",
+                    "from": "10000",
+                    "fromString": "To Do",
+                    "to": "10004",
+                    "toString": "Won't Do"
+                  }
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "summary": "Export to PDF",
+            "description": {
+              "type": "doc",
+              "version": 1,
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "A PDF version of the quarterly report."
+                    }
+                  ]
+                }
+              ]
+            },
+            "created": "2026-10-10T16:00:00.000+0800",
+            "creator": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "displayName": "Buyer (Acme Retail)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "customer"
+            },
+            "reporter": {
+              "self": "https://acme.atlassian.net/rest/api/3/user?accountId=qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "accountId": "qm:4a6e0c2f-8d1b-4e3a-9c5f-7b2d1e0a3c4b:5e7f9a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+              "displayName": "Buyer (Acme Retail)",
+              "active": true,
+              "timeZone": "Asia/Shanghai",
+              "accountType": "customer"
+            },
+            "status": {
+              "self": "https://acme.atlassian.net/rest/api/3/status/10004",
+              "description": "",
+              "name": "Won't Do",
+              "id": "10004"
+            },
+            "comment": {
+              "comments": [],
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10007/comment",
+              "maxResults": 0,
+              "total": 0,
+              "startAt": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
