@@ -1,14 +1,17 @@
 import json
+import shutil
 from datetime import date
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from conftest import snapshot
+from conftest import EXAMPLES, snapshot
 from memcore import EvidenceError
 from memfalsify.audit import audit
 from memfalsify.cli import app
 from memfalsify.memory import claim_id, parse_memory
+from memfalsify.report import to_markdown
 from memfalsify.verify import DualVerifier, Judgment, LexicalVerifier
 
 runner = CliRunner()
@@ -217,3 +220,19 @@ def test_cli_claims_lists_ids(memfalsify_demo):
     rows = [json.loads(line) for line in result.output.splitlines()]
     assert {"memory_id": claim_id("Priya owns the payments integration."), "location": "MEMORY.md:15",
             "text": "Priya owns the payments integration."} in rows
+
+
+def test_chinese_example(tmp_path, monkeypatch):
+    monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify-zh", tmp_path / "zh"))
+    report = audit(Path("MEMORY.md"), Path("evidence"), as_of=AS_OF)
+    found = {f.text: (f.status, sorted(i.kind for i in f.issues)) for f in report.findings}
+    assert found == {
+        "功能A（批量导出）已批准，随11月版本发布。": ("candidate_counterevidence", []),
+        "公开 API 的限流是每分钟 100 次请求。": ("candidate_counterevidence", []),
+        "部署总是先经过预发环境。": ("candidate_counterevidence", ["overgeneralization"]),
+        "批量导出下周上线。": ("insufficient_evidence", ["relative_time"]),
+        "2026年3月2日：功能B推迟到第三季度。": ("insufficient_evidence", ["possibly_stale"]),
+        "我们可能使用 squash 合并 PR。": ("insufficient_evidence", ["inference_marker"]),
+        "主数据库使用 PostgreSQL 16。": ("candidate_support", []),
+    }
+    assert Path("report.md").read_text(encoding="utf-8") == to_markdown(report)  # committed report is current

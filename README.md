@@ -1,5 +1,7 @@
 # Memory Lab: Verified Memory Infrastructure for AI Agents
 
+English | [中文](README.zh-CN.md)
+
 Agent memory tools mostly store and retrieve. This project is about **keeping what an agent remembers true**: every memory should have evidence, a place in time, and a traceable origin, and information without authority should not be able to change the current state.
 
 `Remember → Verify → Challenge → Resolve → Evolve`
@@ -59,6 +61,8 @@ The example memory holds ten claims about a fictional service. The audit ([full 
 | Bulk export depends on the billing schema migration. | **supported**, duplicate | Confirmed by a reviewer; stated in two files |
 
 Every quote carries `path:line`, character offsets and the SHA-256 of the file it came from. A whiteboard photo in the evidence folder is listed as skipped, not guessed at.
+
+Chinese memories work too (word bigrams, Chinese negation, antonym pairs such as 批准/拒绝, dates like 2026年3月2日, and wording such as 总是, 下周, 可能): see [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
 
 **How status is decided.** MemFalsify nominates evidence by itself, but only a human review can settle a memory:
 
@@ -185,7 +189,7 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
-- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` sends them to both. Use them only on material you are allowed to send there.
+- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - This is a research MVP, not production infrastructure.
@@ -194,8 +198,8 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 
 | | MemFalsify | Organizational Memory |
 |---|---|---|
-| **v0.1** (this release) | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
-| **v0.2** (MemFalsify part done) | LLM + Jev dual verification ✓ | GitHub Issues / PR ingestion |
+| **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
+| **v0.2** (in progress) | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion (in development) |
 | v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit |
 | v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
@@ -204,7 +208,7 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 
 ```bash
 pip install pytest
-pytest          # runs against packages/*/src, no install needed
+python -m pytest   # runs against packages/*/src, no install needed
 ```
 
 Layout: `packages/memcore` (evidence integrity, JSONL), `packages/memfalsify`, `packages/orgmemory`, `skills/`, `examples/`, `tests/`. Contributions should include a minimal synthetic reproduction. Never commit private evidence or credentials.
