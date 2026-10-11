@@ -83,9 +83,13 @@ def to_markdown(result: ReplayResult) -> str:
     return "\n".join(out)
 
 
+# Control, format (bidi, zero-width) and line/paragraph separator characters.
+UNSAFE_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
+
+
 def _one_line(text: str) -> str:
     """Untrusted text kept on one line: control, format (bidi, zero-width) and separator characters are escaped."""
-    return "".join(c if unicodedata.category(c) not in ("Cc", "Cf", "Zl", "Zp")
+    return "".join(c if unicodedata.category(c) not in UNSAFE_CATEGORIES
                    else f"\\u{ord(c):04x}" if ord(c) <= 0xFFFF else f"\\U{ord(c):08x}" for c in text)
 
 
@@ -93,6 +97,8 @@ def _safe(text: str) -> str:
     """Literal Markdown text, including in headings and evidence blockquotes."""
     text = escape(_one_line(text), quote=False)
     text = re.sub(r"([\\`*_{}\[\]#|~])", r"\\\1", text)
+    # Leading spaces would make an evidence blockquote an indented code block: keep them as references.
+    text = re.sub(r"^ +", lambda spaces: "&#32;" * len(spaces.group()), text)
     # Block syntax can still be recognized at the start of a one-line quote/detail.
     text = re.sub(r"^(\s*)([-+=])", r"\1\\\2", text)
     return re.sub(r"^(\s*\d+)([.)])(?=\s)", r"\1\\\2", text)
