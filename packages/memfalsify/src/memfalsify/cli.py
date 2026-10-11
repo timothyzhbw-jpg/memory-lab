@@ -85,7 +85,8 @@ def audit_command(
     jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual/cascade"),
     accept_at: float = typer.Option(0.8, min=0.0, max=1.0,
                                     help="--verifier cascade: accept Jev at this confidence, else ask the LLM"),
-    max_judged: int = typer.Option(MAX_JUDGED, min=1, help="Model verifiers: passages judged per memory (bounds API calls)"),
+    max_judged: int = typer.Option(MAX_JUDGED, min=1,
+                                   help="Model verifiers: passages judged per memory (bounds API calls)"),
     min_coverage: Optional[float] = typer.Option(
         None, min=0.0, max=1.0,
         help="Share of a memory's terms a passage must contain to be judged (default 0.5 lexical, 0.2 models)"),

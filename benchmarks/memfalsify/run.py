@@ -115,7 +115,7 @@ def load_case(root: Path) -> Case:
     claims = [c.text for c in parse_memory(root / "MEMORY.md")[0]]
     labels: dict[str, Label] = {}
     anchors: dict[str, tuple[str, int, int]] = {}
-    for number, line in enumerate((root / "labels.jsonl").read_text(encoding="utf-8").splitlines(), start=1):
+    for number, line in enumerate((root / "labels.jsonl").read_text(encoding="utf-8").split("\n"), start=1):
         if not line.strip():
             continue
         where = f"labels.jsonl:{number}"
@@ -205,7 +205,8 @@ def predict(case: Case, report: AuditReport) -> list[Prediction]:
             status=finding.status, tags=label.tags, issues=label.issues,
             predicted_issues=list(dict.fromkeys(i.kind for i in finding.issues)), cites_labeled_passage=cites,
             evidence=[{"relation": e.relation, "location": e.span.location, "quote": e.span.quote,
-                       "rationale": e.rationale} for e in finding.evidence]))
+                       "rationale": e.rationale, "opinions": [o.model_dump(exclude={"opinions"}) for o in e.opinions]}
+                      for e in finding.evidence]))
     return out
 
 
@@ -343,7 +344,8 @@ def to_markdown(result: dict) -> str:
                    f"{_num(cm['support']['precision'])} / {_num(cm['support']['recall'])} | {x['judge_calls']} |")
     wrong = [p for p in result["predictions"] if p["predicted"] != p["truth"]]
     if wrong:
-        out += ["", "## Misclassified claims", "", "| Case | Label | Predicted | Tags | Claim |", "|---|---|---|---|---|"]
+        out += ["", "## Misclassified claims", "", "| Case | Label | Predicted | Tags | Claim |",
+                "|---|---|---|---|---|"]
         out += [f"| {p['case']} | {p['truth']} | {p['predicted']} | {', '.join(p['tags'])} | {_cell(p['text'])} |"
                 for p in wrong]
     return "\n".join(out) + "\n"
@@ -355,7 +357,8 @@ app = typer.Typer(add_completion=False, help="Score memfalsify verifiers on the 
 @app.command()
 def main(
     verifier: VerifierChoice = typer.Option(VerifierChoice.lexical, "--verifier",
-                                            help="lexical (offline), llm, jev, dual (llm + jev) or cascade (jev > llm)"),
+                                            help="lexical (offline), llm, jev, dual (llm + jev) "
+                                                 "or cascade (jev, escalating to llm)"),
     llm_model: str = typer.Option(llm.DEFAULT_MODEL, help="Claude model for --verifier llm/dual/cascade"),
     jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual/cascade"),
     accept_at: float = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence"),
