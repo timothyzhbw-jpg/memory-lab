@@ -35,6 +35,19 @@ Release 0.3 contains:
   capture files, GitHub API responses, and benchmark `labels.jsonl` and `case.json`. The error is
   `<file>:<line>: invalid JSON: duplicate key` and the commands exit 2.
 
+### Added
+
+- Explicit package-root Python APIs for `memcore`, `memfalsify`, `orgmemory`, and `memlab_mcp`,
+  including evidence reading, memory audits and Git history, organizational replay and GitHub ingestion,
+  and MCP server construction. Existing module import paths remain available.
+- Public signature annotations and wheel-included `py.typed` markers in all four packages.
+- English and Chinese API references, a 1.0 stability and deprecation policy, and pinned export tests.
+
+### Changed
+
+- MCP, Action, benchmark, and README library imports use the public package roots where possible,
+  with no behavior changes. CLI configuration and report-header helpers remain internal.
+
 ## memlab-core
 
 ### 0.2.0 - 2026-10-11

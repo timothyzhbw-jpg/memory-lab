@@ -18,11 +18,11 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from memcore.paths import InputPathError, input_path
-from memfalsify.audit import ATTENTION, AuditReport
+from memfalsify import ATTENTION, AuditReport
 from memfalsify.cli import app
 from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
-from memfalsify.history import DiffReport, HistoryError, diff_to_markdown, resolve_commit
-from memfalsify.report import to_markdown
+from memfalsify import DiffReport, HistoryError, diff_to_markdown, resolve_commit
+from memfalsify import to_markdown
 
 ERROR = 2
 SUMMARY_LIMIT = 1_000_000  # GitHub rejects step summaries over 1 MiB.

@@ -9,9 +9,11 @@ from __future__ import annotations
 import errno
 import os
 import stat
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
+from typing import TextIO
 
 from .paths import InputPathError, input_path
 
@@ -48,7 +50,7 @@ def _directory(parts: tuple[str, ...], start: int) -> int:
 
 
 @contextmanager
-def confined_reads(root: Path):
+def confined_reads(root: Path) -> Iterator[None]:
     """Bind confinement to this execution context; no process-wide patches or disk copies."""
     if not confinement_supported():
         raise ValueError("confined reads require POSIX O_NOFOLLOW and dir_fd support")
@@ -135,7 +137,7 @@ def read_input_text(root: Path, path: Path, encoding: str = "utf-8") -> str:
     return read_input_bytes(root, path).decode(encoding).replace("\r\n", "\n").replace("\r", "\n")
 
 
-def open_text(path: Path, encoding: str = "utf-8"):
+def open_text(path: Path, encoding: str = "utf-8") -> AbstractContextManager[TextIO]:
     return _open(path, encoding)
 
 
@@ -190,7 +192,8 @@ def _walk_directory(path: Path, descriptor: int, onerror):
             os.close(child)
 
 
-def walk_files(path: Path, onerror=None):
+def walk_files(path: Path, onerror: Callable[[OSError], None] | None = None
+               ) -> Iterator[tuple[str | Path, list[str], list[str]]]:
     """Walk from a pinned descriptor so directory swaps cannot disclose outside filenames."""
     root = _ROOT.get()
     if root is None:

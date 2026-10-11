@@ -1,5 +1,6 @@
 """Real stdlib HTTP parsing over injected sockets: no DNS, network, TLS peer or proxy needed."""
 import http.client
+import inspect
 import io
 import ssl
 from urllib.error import URLError
@@ -324,6 +325,19 @@ def test_empty_proxy_settings_keep_direct_connection():
     with PersistentTransport(connection_factory=factory, env={"HTTPS_PROXY": "", "ALL_PROXY": ""}) as transport:
         assert transport(URL, {})[0] == 200
     assert len(factory.calls) == 1
+
+
+def test_omitted_env_reads_process_environment_without_capturing_it(monkeypatch):
+    for name in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    with PersistentTransport(connection_factory=Connections()) as transport:
+        assert transport._fallback is None
+    monkeypatch.setenv("https_proxy", "http://proxy.invalid")
+    with PersistentTransport(connection_factory=Connections(), env=None) as transport:
+        assert transport._fallback is not None
+    default = inspect.signature(PersistentTransport.__init__).parameters["env"].default
+    assert default is None
+    assert "proxy.invalid" not in str(inspect.signature(PersistentTransport.__init__))
 
 
 def test_context_manager_closes_on_error():

@@ -36,7 +36,7 @@ class LLMVerifier:
     """Ask Claude for a structured verdict on one claim/passage pair."""
 
     def __init__(self, model: str = DEFAULT_MODEL, client: Any = None, effort: str = "low",
-                 fallbacks: bool | None = None):
+                 fallbacks: bool | None = None) -> None:
         try:
             import anthropic
             self._api_error: type[Exception] | tuple = anthropic.APIError

@@ -57,7 +57,7 @@ class LexicalVerifier:
     """Term overlap plus opposing terms, negation and numeric mismatches. Fast, explainable, shallow."""
     name = "lexical"
 
-    def __init__(self, related: float = 0.6, support: float = 0.75):
+    def __init__(self, related: float = 0.6, support: float = 0.75) -> None:
         self.related = related
         self.support = support
 
@@ -86,7 +86,7 @@ class LexicalVerifier:
 class DualVerifier:
     """Ask two verifiers; agreement passes through, disagreement becomes ``disputed``."""
 
-    def __init__(self, first: Verifier, second: Verifier):
+    def __init__(self, first: Verifier, second: Verifier) -> None:
         self.first, self.second = first, second
         self.name = f"{first.name}+{second.name}"
 
@@ -106,7 +106,7 @@ class CascadeVerifier:
     The escalated result keeps both opinions, so the report shows what the first verifier thought.
     """
 
-    def __init__(self, first: Verifier, second: Verifier, accept_at: float = 0.8):
+    def __init__(self, first: Verifier, second: Verifier, accept_at: float = 0.8) -> None:
         self.first, self.second, self.accept_at = first, second, accept_at
         self.name = f"{first.name}>{second.name}"
 

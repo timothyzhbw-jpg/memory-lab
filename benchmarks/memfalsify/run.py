@@ -26,10 +26,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError  # noqa: E402
 from memcore import EvidenceError, locate_quote, resolve_inside  # noqa: E402
 from memcore.jsonutil import loads  # noqa: E402
 from memfalsify import __version__, jev, llm  # noqa: E402
-from memfalsify.audit import AuditReport, Issue, audit  # noqa: E402
+from memfalsify import AuditReport, Issue, audit  # noqa: E402
 from memfalsify.cli import MAX_JUDGED, VerifierChoice, build_verifier, preselection  # noqa: E402
-from memfalsify.memory import parse_memory  # noqa: E402
-from memfalsify.verify import CascadeVerifier, Judgment, Verifier, VerifierError  # noqa: E402
+from memfalsify import parse_memory  # noqa: E402
+from memfalsify import CascadeVerifier, Judgment, Verifier, VerifierError  # noqa: E402
 
 CASES = Path(__file__).resolve().parent / "cases"
 Truth = Literal["contradicted", "supported", "unsupported"]

@@ -5,3 +5,7 @@ Shared evidence core of [Memory Lab](https://github.com/timothyzhbw-jpg/memory-l
 manifests, append-only JSONL storage that rejects a repeated object key, and the confined readers used by the MCP server. MemFalsify and
 orgmemory depend on it. See the root README for usage and the
 [changelog](https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.md) for changes.
+
+The typed public Python API is documented in the
+[API reference](https://github.com/timothyzhbw-jpg/memory-lab/blob/main/docs/api.md).
+Import library symbols from the package root; `__all__` defines the supported surface.

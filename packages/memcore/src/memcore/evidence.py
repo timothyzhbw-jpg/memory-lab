@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
@@ -77,12 +78,12 @@ def line_of(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
-def make_span(relative: str, digest: str, text: str, start: int, end: int, **provenance) -> EvidenceSpan:
+def make_span(relative: str, digest: str, text: str, start: int, end: int, **provenance: Any) -> EvidenceSpan:
     return EvidenceSpan(path=relative, sha256=digest, start=start, end=end,
                         quote=text[start:end], line=line_of(text, start), **provenance)
 
 
-def locate_quote(root: Path, relative: str, quote: str, **provenance) -> EvidenceSpan:
+def locate_quote(root: Path, relative: str, quote: str, **provenance: Any) -> EvidenceSpan:
     """Find the first exact occurrence of ``quote``; fail closed if it is absent."""
     digest, text = read_text(root, relative)
     start = text.find(quote) if quote else -1
