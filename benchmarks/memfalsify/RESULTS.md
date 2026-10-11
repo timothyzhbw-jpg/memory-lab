@@ -26,8 +26,9 @@ Elapsed time below is the local audit duration, excluding installation and label
 
 The lexical verifier now reads Chinese numerals, units, percentages and dates as numbers, folds
 full-width forms, measures a Chinese claim's coverage per character through bigrams and trigrams,
-reads negation per clause (skipping words such as 未来, 非常 and 无论) and compares modality (所有 against
-仅, 必须 against 无需). Text without CJK characters is read exactly as before. The labels did not change.
+reads negation per clause (skipping words such as 未来, 非常 and 无论, and a clause-final 非…不可) and
+compares modality (所有 against 仅, 必须 against 无需). A year or year-month agrees with a longer calendar
+date in that period, in both languages. The labels did not change.
 
 "Before" is the previous `results-lexical.json` (MemFalsify 0.3.0 without these rules, which scored
 the same as 0.1.0); "after" is the file linked above. English is the `en-*` and `repo-*` cases,
@@ -41,8 +42,11 @@ metrics from the JSON. False flags are flagged claims among those not labeled co
 | Chinese | before | 51 | 0.25 | 2/19 | 0.15 | n/a | 0/15 | 6/32 | 0.33 (17/51) | 32 |
 | Chinese | after | 51 | 0.56 | 5/19 | 0.36 | 0.75 | 3/15 | 4/32 | 0.43 (22/51) | 39 |
 
-Every English prediction, rationale and cited passage is identical to the previous run. Two more
-`internal_conflict` issues are found, both between Chinese claims (8 of 18 labeled, was 6; 13 reported, was 11).
+Every English contradiction and support prediction, rationale and cited passage is identical to the
+previous run. `internal_conflict` finds 7 of 18 labeled issues (6 before these rules). 12 are reported
+(11 before). The English issue that a bare year no longer flags is "shut down at the end of June 2026"
+against the 2026-02-10 decision: `2026` agrees with `2026-02-10`. The two Chinese issues added by clause
+negation and modality remain.
 
 What changed for Chinese claims:
 
@@ -101,7 +105,7 @@ Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 
 | relative_time | 13 | 9 | 1.00 | 0.69 |
 | possibly_stale | 6 | 6 | 1.00 | 1.00 |
 | inference_marker | 10 | 11 | 0.91 | 1.00 |
-| internal_conflict | 18 | 13 | 0.62 | 0.44 |
+| internal_conflict | 18 | 12 | 0.58 | 0.39 |
 | duplicate | 7 | 5 | 1.00 | 0.71 |
 
 ## By tag

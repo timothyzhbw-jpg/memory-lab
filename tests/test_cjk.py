@@ -6,7 +6,7 @@ import pytest
 from conftest import EXAMPLES
 from memfalsify.memory import parse_memory
 from memfalsify.text import (CJK, explicit_dates, features, fold_width, has_negation, modality_conflict, negation,
-                             normalize, terms, zh_numeral)
+                             normalize, number_sets_conflict, terms, zh_numeral)
 from memfalsify.verify import LexicalVerifier, coverage
 
 judge = LexicalVerifier().judge
@@ -84,7 +84,12 @@ def test_digit_by_digit_numerals_only_for_years():
     ("百分之 30 的用户", {"30"}),
     ("百分之百的用户", {"100"}),
     ("一成的网页端用户", {"10"}),
+    ("两成的用户", {"20"}),
+    ("九成五的用户", {"95"}),
+    ("一成五的用户", {"15"}),
+    ("十成的用户", {"100"}),
     ("观察半小时", {"0.5"}),
+    ("观察半年", {"0.5"}),
     ("半个月后", {"0.5"}),
     ("一年半", {"1.5"}),
     ("两个半小时", {"2.5"}),
@@ -99,6 +104,7 @@ def test_chinese_quantities_become_numbers(text, expected):
 @pytest.mark.parametrize("text", [
     "新服务一律接入统一 API 网关", "第三方插件市场", "这一点十分重要", "三四个人", "万一失败", "千万不要上线",
     "下半年研发预算", "一半的用户", "进一步优化", "占三分之一", "一起上线", "2026年半年度报告",
+    "半年报", "半年刊", "九成功",
 ])
 def test_words_with_numeral_characters_stay_words(text):
     assert numbers(text) <= {"2026"}
@@ -106,9 +112,28 @@ def test_words_with_numeral_characters_stay_words(text):
 
 def test_quarters_read_like_english():
     assert features("数据库切换在第四季度")[0] >= {"q4"} and numbers("今年四季度") == set()
+    assert "q4" in features("在四季度")[0] and "q1" in features("第1季度")[0]
+    assert "q1" in features("第一季度")[0] and "q1" in features("到一季度")[0]
     assert judge("数据库切换在第四季度。", "数据库切换在 Q4。").relation == "supports"
     # Q4 against Q1 is a different term, not a different number; nor does it support the claim.
     assert judge("数据库切换在第四季度。", "数据库切换推迟到第一季度。").relation == "unrelated"
+
+
+@pytest.mark.parametrize("text, token", [
+    ("下一季度", "nextq"), ("上一季度", "prevq"), ("这一季度", "thisq"), ("前一季度", "priorq"),
+    ("后一季度", "laterq"), ("最后一季度", "lastq"),
+])
+def test_relative_quarters_are_not_the_first_quarter(text, token):
+    words = features(text)[0]
+    assert "q1" not in words and token in words
+    judgment = judge(f"数据库切换在{text}。", "数据库切换在第一季度。")
+    assert judgment.relation == "unrelated"
+
+
+def test_every_quarter_stays_a_quantifier():
+    # 每 already blocked Q1. Rewriting it away would hide the modality cue 每一.
+    assert "q1" not in features("每一季度")[0] and "eachq" not in features("每一季度")[0]
+    assert modality_conflict("每一季度都要评审。", "仅第一季度要评审。") == ("每一", "仅")
 
 
 @pytest.mark.parametrize("claim, passage, relation", [
@@ -120,12 +145,34 @@ def test_quarters_read_like_english():
     ("协作空间在2026年10月11日发布。", "协作空间已于 2026-10-12 发布。", "contradicts"),
     ("应用日志保存三个月。", "应用日志保存 6 个月。", "contradicts"),
     ("灰度观察半小时。", "灰度观察 0.5 小时。", "supports"),
+    ("新版首页向九成五的用户开放。", "新版首页向95%的用户开放。", "supports"),
+    ("新版首页向九成五的用户开放。", "新版首页向90%的用户开放。", "contradicts"),
+    ("协作空间在2026年10月发布。", "协作空间已于 2026-10-11 发布。", "supports"),
+    ("协作空间在2026年10月发布。", "协作空间已于 2026-11-02 发布。", "contradicts"),
+    ("协作空间在2026年发布。", "协作空间已于2026年10月11日发布。", "supports"),
+    ("协作空间在2026年发布。", "协作空间已于2027年1月发布。", "contradicts"),
+    ("2026年10月预算为1200万元。", "2026-10-11预算为1500万元。", "contradicts"),
+    ("2026年10月有5个版本。", "2026-10-11发布了版本。", "contradicts"),
 ])
 def test_numeric_conflicts_across_notations(claim, passage, relation):
     judgment = judge(claim, passage)
     assert judgment.relation == relation
     if relation == "contradicts":
         assert judgment.rationale.startswith("different values")
+
+
+def test_calendar_prefix_does_not_use_a_raw_string_prefix():
+    assert number_sets_conflict(frozenset({"2026-1"}), frozenset({"2026-10"}))
+    assert number_sets_conflict(frozenset({"10"}), frozenset({"100"}))
+    assert number_sets_conflict(frozenset({"2026-10-11"}), frozenset({"2026-10-12"}))
+    assert number_sets_conflict(frozenset({"2026-10", "12000000"}), frozenset({"2026-10-11", "15000000"}))
+    assert number_sets_conflict(frozenset({"2026-10", "5"}), frozenset({"2026-10-11"}))
+    assert not number_sets_conflict(frozenset({"2026-10"}), frozenset({"2026-10-11"}))
+    # One shared exact value still suppresses the check.
+    assert not number_sets_conflict(frozenset({"2026-10-11", "5"}), frozenset({"2026-10-11"}))
+    assert judge("The release is in 2026.", "The release was on 2026-10-11.").relation == "supports"
+    mismatch = judge("Shipped on 2026-02-10.", "Shipped on 2026-06-24.")
+    assert mismatch.relation == "contradicts" and mismatch.rationale.startswith("different values")
 
 
 # --- terms and coverage -----------------------------------------------------------------------------------
@@ -208,6 +255,67 @@ def test_opposite_modality_contradicts(claim, passage, cues):
 ])
 def test_same_or_unrelated_modality_does_not_contradict(claim, passage):
     assert modality_conflict(claim, passage) is None
+
+
+@pytest.mark.parametrize("claim, passage, cues", [
+    ("只有管理员可以导出报表。", "不只有管理员可以导出报表。", ("只有", "不只有")),
+    ("只能管理员可以导出报表。", "不只能管理员可以导出报表。", ("只能", "不只能")),
+    ("仅仅管理员可以导出报表。", "不仅仅管理员可以导出报表。", ("仅仅", "不仅仅")),
+])
+def test_negated_only_is_the_opposite_of_only(claim, passage, cues):
+    assert modality_conflict(claim, passage) == cues
+    judgment = judge(claim, passage)
+    assert judgment.relation == "contradicts"
+    assert judgment.rationale == f"opposite modality: claim '{cues[0]}' vs source '{cues[1]}'"
+
+
+def test_not_only_and_all_are_the_same_pole():
+    assert modality_conflict("所有成员可以导出报表。", "不仅仅管理员可以导出报表。") is None
+
+
+def test_correlative_not_only_is_not_a_modality_cue():
+    claim = "支付服务对所有接口都会重试。"
+    passage = "支付服务不仅会对接口重试，还会告警。"
+    assert modality_conflict(claim, passage) is None
+    assert "仅" not in (modality_conflict(passage, claim) or ())
+    assert judge(claim, passage).relation != "contradicts"
+    # 归还 does not start the next clause, so it is not the correlative 还.
+    assert modality_conflict("只有管理员可以归还报表。", "不只有管理员可以归还报表。") == ("只有", "不只有")
+
+
+def test_freeze_claim_stays_one_sided_negation():
+    claim = "封版期间上线不仅要是 P0 修复，而且要 CTO 审批。"
+    passage = "期间仅允许 P0 级修复上线，由当周值班经理审批即可，无需 CTO 签字。"
+    assert modality_conflict(claim, passage) is None
+    judgment = judge(claim, passage)
+    assert judgment.relation == "contradicts"
+    assert judgment.rationale == "same subject, but only one side is negated"
+
+
+def test_fei_buke_followed_by_a_word_still_negates():
+    passage = "非技术人员不可进入机房。"
+    assert has_negation(passage)
+    assert modality_conflict("必须进入机房。", passage) is None
+    judgment = judge("技术人员可以进入机房。", passage)
+    assert judgment.relation == "contradicts"
+    assert judgment.rationale == "same subject, but only one side is negated"
+    # Clause-final 非…不可 still obliges, and the cue does not repeat the interior.
+    assert not has_negation("上线前非通过不可。")
+    assert modality_conflict("上线前不必评审。", "上线前非通过不可。") == ("不必", "非…不可")
+    # 非技术人员 shares the n-grams of 技术人员. With 不可进入 read as negation, this is a candidate
+    # contradiction. No dictionary treats the 非 prefix as "non-".
+    residual = judge("必须进入机房。", "非技术人员不可进入机房。")
+    assert residual.relation == "contradicts"
+    assert residual.rationale == "same subject, but only one side is negated"
+
+
+def test_fei_buke_cue_drops_untrusted_interior():
+    # The controls sit in the idiom, and the two sides still share enough terms to be judged.
+    passage = "上线前非完成隐私评审\u202e\x1b不可。"
+    judgment = judge("上线前不必完成隐私评审。", passage)
+    assert judgment.relation == "contradicts"
+    assert judgment.rationale == "opposite modality: claim '不必' vs source '非…不可'"
+    assert "\u202e" not in judgment.rationale and "\x1b" not in judgment.rationale
 
 
 # --- claims and the examples ------------------------------------------------------------------------------

@@ -11,7 +11,8 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
-from .text import CJK, char_coverage, features, modality_conflict, negation, opposing_terms
+from .text import (CJK, char_coverage, features, modality_conflict, negation, number_sets_conflict,
+                    opposing_terms)
 
 Relation = Literal["supports", "contradicts", "unrelated", "disputed"]
 
@@ -75,7 +76,7 @@ class LexicalVerifier:
                             rationale=f"opposing terms: claim '{opposed[0]}…' vs source '{opposed[1]}…'")
         _, claim_numbers = features(claim)
         _, passage_numbers = features(passage)
-        if claim_numbers and passage_numbers and not claim_numbers & passage_numbers:
+        if number_sets_conflict(claim_numbers, passage_numbers):
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale=f"different values: claim {sorted(claim_numbers)} vs source {sorted(passage_numbers)}")
         modal = modality_conflict(claim, passage)

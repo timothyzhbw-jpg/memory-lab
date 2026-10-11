@@ -9,7 +9,7 @@
   "cost": {
     "judge_calls": 136,
     "escalations": null,
-    "seconds": 0.059
+    "seconds": 0.058
   },
   "metrics": {
     "claims": 139,
@@ -93,12 +93,12 @@
         "f1": 0.9523809523809523
       },
       "internal_conflict": {
-        "tp": 8,
+        "tp": 7,
         "fp": 5,
-        "fn": 10,
-        "precision": 0.6153846153846154,
-        "recall": 0.4444444444444444,
-        "f1": 0.5161290322580645
+        "fn": 11,
+        "precision": 0.5833333333333334,
+        "recall": 0.3888888888888889,
+        "f1": 0.4666666666666667
       },
       "duplicate": {
         "tp": 5,
@@ -675,12 +675,12 @@
             "f1": 1.0
           },
           "internal_conflict": {
-            "tp": 2,
+            "tp": 1,
             "fp": 3,
-            "fn": 0,
-            "precision": 0.4,
-            "recall": 1.0,
-            "f1": 0.5714285714285714
+            "fn": 1,
+            "precision": 0.25,
+            "recall": 0.5,
+            "f1": 0.3333333333333333
           },
           "duplicate": {
             "tp": 0,
@@ -3128,9 +3128,7 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
     },

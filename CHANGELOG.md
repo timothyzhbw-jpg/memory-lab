@@ -20,21 +20,27 @@ Release 0.3 contains:
 
 #### Changed
 
-- Lexical judging of Chinese text, with no new dependency. Text without CJK characters is read exactly as
-  before: the English golden reports and every English benchmark prediction are unchanged.
+- Lexical judging of Chinese text, with no new dependency. English golden reports are unchanged, and so
+  is every English contradiction and support prediction. A year or year-month agrees with a longer
+  calendar date in that period, in Chinese and in English. That drops one English `internal_conflict`
+  that compared a bare year with a date inside it (7 of 18 labeled, was 8 before that rule).
   - Full-width digits, letters and punctuation are read as ASCII (`１２０`, `ＡＰＩ`, `，`).
   - Chinese numerals before a measure word (`三个月`, `两名`), `万`/`亿`/`千` amounts (`1200万`,
-    `一千二百万`), `百分之` and `成` percentages, `半` halves (`半小时`, `一年半`) and dates
-    (`2026年10月11日`) are compared as numbers, so `三秒` against `2秒` is a different value. `第四季度`
-    reads as `Q4`, as in English.
+    `一千二百万`), `百分之` and `成` percentages (`一成` is 10%, `九成五` is 95%, `两成` is 20%),
+    `半` halves (`半小时`, `一年半`; `半年报` is not half a year) and dates (`2026年10月11日`) are
+    compared as numbers, so `三秒` against `2秒` is a different value. `第四季度` reads as `Q4`, as in
+    English. `下一季度` is next quarter, not Q1.
   - CJK runs yield character trigrams as well as bigrams. A Chinese claim's term coverage counts
     characters: a character is found when a bigram or trigram containing it occurs in the passage, so word
     boundaries need not line up. A Latin-script term in a Chinese claim weighs two characters.
   - Negation cues (`不`, `没有`, `未`, `无`, `非`, `别`, `勿`, `不再`, `禁止`, `不得`) count only in a
-    clause that shares a term with the other side. Words such as `未来`, `非常`, `无论`, `不仅` and `级别`,
-    and double negatives (`非…不可`, `不得不`), are not negations.
-  - New rationale `opposite modality`: all (`所有`, `任何`, `一律`) against only (`仅`, `只有`), or must
-    (`必须`, `非…不可`) against need not (`无需`, `不必`).
+    clause that shares a term with the other side. Words such as `未来`, `非常`, `无论`, `不仅` and `级别`
+    are not negations. A clause-final `非…不可`, and `不得不`, are not negations; `不可` followed by more
+    words (`不可进入`) still negates.
+  - New rationale `opposite modality`: all (`所有`, `任何`, `一律`) against only (`仅`, `只有`).
+    `不只有` and `不仅仅` are the opposite of `仅`, not examples of it. `不仅…而且` is not a cue. Must
+    (`必须`, a clause-final `非…不可`) against need not (`无需`, `不必`). The `非…不可` cue is that fixed
+    label, never the text between the two ends.
   - A bare quantity such as `三个月。` is no longer a claim, as with `3 months.`; `memfalsify diff` pairs
     edited Chinese claims by bigram and trigram similarity.
   - On the benchmark, Chinese contradiction recall rises from 2/19 to 5/19 and precision from 0.25 to

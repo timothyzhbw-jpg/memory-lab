@@ -65,9 +65,9 @@ Every quote carries `path:line`, character offsets and the SHA-256 of the file i
 Chinese memories work too, without a segmentation dictionary or any extra dependency:
 
 - Chinese text is matched by overlapping character pairs and triples, and a Chinese claim's coverage counts characters, so the claim and the source need not split words the same way.
-- Quantities are compared as numbers: Chinese numerals before a measure word (三个月, 两名), 万/亿/千 amounts (1200万, 一千二百万), percentages (百分之十, 一成), halves (半小时, 一年半), dates such as 2026年3月2日, and full-width digits and punctuation (１２０，ＡＰＩ). 第四季度 reads as Q4, as in English. So 三秒 against 2秒 is a "different values" candidate.
-- Negation (不, 没有, 未, 无, 非, 别, 勿, 不再, 禁止, 不得) counts only in a clause that shares a term with the other side, and words such as 未来, 非常, 无论 or 级别, and double negatives such as 非…不可, are not negations.
-- Opposite modality is a candidate contradiction: all (所有, 任何, 一律) against only (仅, 只有), or must (必须) against need not (无需, 不必).
+- Quantities are compared as numbers: Chinese numerals before a measure word (三个月, 两名), 万/亿/千 amounts (1200万, 一千二百万), percentages (百分之十, 一成 is 10%, 九成五 is 95%, 两成 is 20%), halves (半小时, 一年半; 半年报 is a report, not half a year), dates such as 2026年3月2日, and full-width digits and punctuation (１２０，ＡＰＩ). A year or year-month agrees with a longer calendar date in that period (2026年10月 with 2026-10-11); a different month or day does not. 第四季度 reads as Q4, as in English. 下一季度 is next quarter, not Q1. So 三秒 against 2秒 is a "different values" candidate.
+- Negation (不, 没有, 未, 无, 非, 别, 勿, 不再, 禁止, 不得) counts only in a clause that shares a term with the other side. Words such as 未来, 非常, 无论 or 级别 are not negations. A clause-final 非…不可 is not one either; 不可 followed by more words (不可进入) still negates.
+- Opposite modality is a candidate contradiction: all (所有, 任何, 一律) against only (仅, 只有). 不只有 and 不仅仅 are the opposite of 仅, not examples of it, and 不仅…而且 is not a modality cue. Must (必须, a clause-final 非…不可) against need not (无需, 不必). The 非…不可 cue is that fixed label.
 - Antonym pairs such as 批准/拒绝 and wording such as 总是, 下周 and 可能 are recognized.
 
 On the benchmark this finds 5 of 19 Chinese contradictions, against 11 of 29 English ones. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).

@@ -84,17 +84,25 @@ _NUMERAL = "".join(ZH_DIGITS) + "".join(ZH_UNITS)
 # elsewhere 一, 三 and friends are usually part of a word (统一, 一律, 一起, 第三方, 十分).
 ZH_MEASURE = ("(?:小时|钟头|分钟|毫秒|星期|工作日|百分点|公里|公斤|副本|"
               "[个位名人次家条项件台种天日周月年号秒倍元份张笔套轮期批版页层级岁遍趟章款组辆座米%])")
-_QUARTER = re.compile(rf"(?<![\d每{_NUMERAL}])第?\s?([一二三四1-4])\s?季度")  # 第四季度, 四季度 -> Q4, as in English
+# 下一季度 is next quarter, not Q1. 这/那 are stop characters, so leaving 一季度 would match 第一季度.
+# 每一季度 stays text: 每一 is the quantifier "every". 最后 is rewritten apart from 后一季度.
+_RELATIVE_QUARTER = re.compile(r"最后\s?一\s?季度|(?<!最)([这那上下前后])\s?一\s?季度")
+_RELATIVE_QUARTER_TOKEN = {"这": "thisq", "那": "thatq", "上": "prevq", "下": "nextq", "前": "priorq", "后": "laterq"}
+# 第四季度 / 四季度 -> Q4. The lookbehind is a backstop for a relative form the rewrite missed.
+_QUARTER = re.compile(rf"(?<![\d每这那上下前后{_NUMERAL}])第?\s?([一二三四1-4])\s?季度")
 # An ASCII comma between digits groups thousands; a full-width one only between full-width digits (１，２４０),
 # since between ASCII digits it separates list items (20，30).
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))|(?<=[０-９])，(?=[０-９]{3}(?![０-９]))")
 _PERCENT = re.compile(rf"百分之\s?(?:(\d+(?:\.\d+)?)|([{_NUMERAL}]+)(?:点([{''.join(ZH_DIGITS)}]+))?)")
-_TENTHS = re.compile(rf"(?<![{_NUMERAL}])([一二三四五六七八九十])成(?![为功本员果熟立长绩交品型就效])")
+# 九成五 is 95, not 90 with a stray 五; 两成 is 20. 十成 is 100. 成功/成员/成本 stay words.
+_TENTHS = re.compile(rf"(?<![{_NUMERAL}])(?:([一二三四五六七八九两])成([一二三四五六七八九])?|(十)成)"
+                     rf"(?![为功本员果熟立长绩交品型就效])")
 _ZH_NUMBER = re.compile(rf"(?<![{_NUMERAL}])[{_NUMERAL}]+")
 _AFTER_NUMBER = re.compile(rf"\s?{ZH_MEASURE}")
 _MULTIPLIED = re.compile(r"(\d+(?:\.\d+)?)\s?(千万|百万|万|亿|千)(?![米克瓦])")
 _HALF_AFTER = re.compile(rf"(\d+(?:\.\d+)?)({ZH_MEASURE})半")
-_HALF = re.compile(rf"(?<![上下前后大多一过减对折])半(?!年度)(?=个?{ZH_MEASURE})")  # 半年度: semi-annual
+# 半年度 / 半年报 / 半年刊 are compounds, not "0.5 year". 下半年 is excluded by the lookbehind.
+_HALF = re.compile(rf"(?<![上下前后大多一过减对折])半(?!年(?:度|报|刊))(?=个?{ZH_MEASURE})")
 _ZH_FULL_DATE = re.compile(r"(\d{4})\s?年\s?(\d{1,2})\s?月(?:\s?(\d{1,2})\s?[日号])?")
 
 
@@ -142,6 +150,13 @@ def _zh_number(match: re.Match) -> str:
     return numeral
 
 
+def _tenths(match: re.Match) -> str:
+    if match.group(3):
+        return "100%"
+    extra = ZH_DIGITS[match.group(2)] if match.group(2) else 0
+    return f"{ZH_DIGITS[match.group(1)] * 10 + extra}%"
+
+
 def _percent(match: re.Match) -> str:
     arabic, numeral, decimals = match.groups()
     if arabic:
@@ -160,6 +175,10 @@ def _and_a_half(match: re.Match) -> str:
     return _number(Decimal(number) + Decimal("0.5")) + measure
 
 
+def _relative_quarter(match: re.Match) -> str:
+    return "lastq" if match.group(1) is None else _RELATIVE_QUARTER_TOKEN[match.group(1)]
+
+
 def _date(match: re.Match) -> str:
     year, month, day = (int(g) if g else None for g in match.groups())
     try:
@@ -175,17 +194,19 @@ def normalize(text: str) -> str:
     """The text the term extractors read.
 
     Full-width forms are folded to ASCII. In text with CJK ideographs, thousands separators are dropped and
-    Chinese quantities are rewritten as Arabic numbers: quarters (``第四季度`` -> ``Q4``, as in English),
-    numerals before a measure word (``三个月`` -> ``3个月``),
-    multipliers (``1200万`` -> ``12000000``), percentages (``百分之十``, ``一成`` -> ``10%``), halves
-    (``半小时`` -> ``0.5小时``, ``一年半`` -> ``1.5年``) and dates (``2026年10月11日`` -> ``2026-10-11``).
+    Chinese quantities are rewritten as Arabic numbers: quarters (``第四季度`` -> ``Q4``, as in English;
+    ``下一季度`` -> ``nextq``, not Q1), numerals before a measure word (``三个月`` -> ``3个月``),
+    multipliers (``1200万`` -> ``12000000``), percentages (``百分之十``, ``一成`` -> ``10%``,
+    ``九成五`` -> ``95%``, ``两成`` -> ``20%``), halves (``半小时`` -> ``0.5小时``, ``一年半`` -> ``1.5年``;
+    ``半年报`` stays a word) and dates (``2026年10月11日`` -> ``2026-10-11``).
     """
     if not CJK.search(text):
         return fold_width(text)
     text = fold_width(_THOUSANDS.sub("", text))
+    text = _RELATIVE_QUARTER.sub(_relative_quarter, text)
     text = _QUARTER.sub(lambda m: f"Q{zh_numeral(m.group(1)) if m.group(1) in ZH_DIGITS else m.group(1)}", text)
     text = _PERCENT.sub(_percent, text)
-    text = _TENTHS.sub(lambda m: f"{zh_numeral(m.group(1)) * 10}%", text)
+    text = _TENTHS.sub(_tenths, text)
     text = _ZH_NUMBER.sub(_zh_number, text)
     text = _MULTIPLIED.sub(lambda m: _number(Decimal(m.group(1)) * {"千万": 10 ** 7, "百万": 10 ** 6, "万": 10 ** 4,
                                                                     "亿": 10 ** 8, "千": 1000}[m.group(2)]), text)
@@ -245,6 +266,46 @@ def features(text: str) -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(words), frozenset(numbers)
 
 
+_CALENDAR = re.compile(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?\Z")
+
+
+def _calendar_parts(token: str) -> tuple[int, ...] | None:
+    """(year,) / (year, month) / (year, month, day) for a zero-padded real calendar token, else None."""
+    match = _CALENDAR.fullmatch(token)
+    if not match:
+        return None
+    parts = tuple(int(group) for group in match.groups() if group is not None)
+    year, month, day = (parts + (1, 1))[:3]
+    try:
+        date(year, month, day)
+    except ValueError:
+        return None
+    return parts
+
+
+def _same_calendar(left: str, right: str) -> bool:
+    """True when one token extends the other (``2026-10`` and ``2026-10-11``), not when they merely share a prefix string."""
+    a, b = _calendar_parts(left), _calendar_parts(right)
+    if not a or not b or len(a) == len(b):
+        return False
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    return long[:len(short)] == short
+
+
+def number_sets_conflict(claim: frozenset[str], passage: frozenset[str]) -> bool:
+    """True when both sides name numbers and some value is not the other's exact value or calendar extension.
+
+    One shared exact value still suppresses the check. ``2026-1`` is not ``2026-10``: months and days are zero-padded.
+    """
+    if not claim or not passage or claim & passage:
+        return False
+
+    def explained(side: frozenset[str], other: frozenset[str]) -> bool:
+        return all(any(item == peer or _same_calendar(item, peer) for peer in other) for item in side)
+
+    return not (explained(claim, passage) and explained(passage, claim))
+
+
 def terms(text: str) -> list[str]:
     """The tokens behind ``features``, in text order, for comparing two versions of a sentence."""
     return [token for _, token in _tokens(text)]
@@ -300,15 +361,19 @@ ZH_NOT_NEGATION = ("不仅", "不但", "不只", "不光", "不断", "不过", "
                    "派别", "别处", "有别", "不得不", "非得", "无不")
 _CLAUSE = re.compile(r"[,;:。!?()\[\]\n]")
 _IN_CLAUSE = r"[^,;:。!?()\[\]\n]{0,20}?"
-_ZH_NOT_NEGATION = re.compile(f"非得?{_IN_CLAUSE}不可|" + "|".join(sorted(ZH_NOT_NEGATION, key=len, reverse=True)))
+# 非…不可 obliges only when 不可 ends the idiom. 非技术人员不可进入 keeps 不, because a word follows 不可.
+_FEI_BUKE = rf"非得?{_IN_CLAUSE}不可(?![㐀-鿿])"
+_ZH_NOT_NEGATION = re.compile(_FEI_BUKE + "|" + "|".join(sorted(ZH_NOT_NEGATION, key=len, reverse=True)))
 _ZH_NEGATION = re.compile("|".join(ZH_NEGATION_CUES))
-# Two modality scales; one side at each end of a scale is a contradiction.
-ZH_MODALITY = (
-    ("scope", re.compile("所有|任何|一律|全部|凡是|每个|每一|一切|全体|无论|不论|不管"),
-     re.compile("只有|只能|只对|只在|只允许|只限|仅|唯有")),
-    ("obligation", re.compile(f"必须|务必|必需|(?<![无毋必])须(?!知)|非得|不得不|非{_IN_CLAUSE}不可"),
-     re.compile("无需|无须|毋须|不必|不用|不需要?|不强制|可选|自愿|免于")),
-)
+# All against only. 不仅/不只 contain 仅/只 but are not the low pole. 不只有/不仅仅 are the high pole
+# unless the side is the correlative 不仅…而且 / 不只…还.
+_SCOPE_HIGH = re.compile("所有|任何|一律|全部|凡是|每个|每一|一切|全体|无论|不论|不管")
+_SCOPE_LOW = re.compile("仅仅|只有|只能|只对|只在|只允许|只限|仅|唯有")
+_NOT_ONLY = re.compile("不仅仅|不只有|不只能|不只对|不只在|不只允许|不只限")
+_CORRELATIVE = re.compile("不仅|不只")
+_ALSO_IN_CLAUSE = re.compile("而且|并且")
+_OBLIGATION_HIGH = re.compile(rf"必须|务必|必需|(?<![无毋必])须(?!知)|非得|不得不|{_FEI_BUKE}")
+_OBLIGATION_LOW = re.compile("无需|无须|毋须|不必|不用|不需要?|不强制|可选|自愿|免于")
 
 
 def _clauses(text: str, other: str | None) -> list[str]:
@@ -326,7 +391,8 @@ def negation(text: str, other: str | None = None) -> str | None:
 
     Text without CJK is negated by any cue anywhere in it. In CJK text a cue counts only in a clause that
     shares a content term with ``other`` (when given), so a negation about something else in a long Chinese
-    sentence does not count; words such as 未来, 非常 and 级别, and double negatives such as 非…不可, are not cues.
+    sentence does not count. Words such as 未来, 非常 and 级别, and a clause-final 非…不可, are not cues.
+    不可 followed by more text (非技术人员不可进入) still is.
     """
     if not CJK.search(text):
         match = NEGATION.search(text)
@@ -341,22 +407,81 @@ def has_negation(text: str) -> bool:
     return negation(text) is not None
 
 
+def _cue(match: re.Match) -> str:
+    """A modality cue safe to quote. The interior of 非…不可 is untrusted and is never the cue."""
+    text = match.group()
+    if text.startswith("非") and text.endswith("不可") and len(text) > 3:
+        return "非…不可"
+    return text
+
+
+def _covered(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
+    return any(start <= span[0] and span[1] <= end for start, end in spans)
+
+
+def _correlative(clauses: list[str]) -> bool:
+    """不仅/不只 followed by 而且/并且, or by a later clause starting with 还/也/而且/并且.
+
+    还 inside 归还 does not count: only a clause that starts with it does. Read on every clause of the
+    side, because 而且 is often the next clause and shares no term with the other side.
+    """
+    seen = False
+    for clause in clauses:
+        body = clause.lstrip()
+        if seen and body.startswith(("还", "也", "而且", "并且")):
+            return True
+        match = _CORRELATIVE.search(body)
+        if match and _ALSO_IN_CLAUSE.search(body, match.end()):
+            return True
+        if match:
+            seen = True
+    return False
+
+
+def _scope_cues(clauses: list[str], correlative: bool) -> list[tuple[re.Pattern, str]]:
+    found = []
+    for clause in clauses:
+        masked = [item.span() for item in _NOT_ONLY.finditer(clause)]
+        masked += [item.span() for item in _CORRELATIVE.finditer(clause)]
+        hits = []
+        if not correlative:
+            hits += [(_SCOPE_HIGH, item.start(), item.group()) for item in _NOT_ONLY.finditer(clause)]
+        hits += [(_SCOPE_HIGH, item.start(), item.group()) for item in _SCOPE_HIGH.finditer(clause)
+                 if not _covered(item.span(), masked)]
+        hits += [(_SCOPE_LOW, item.start(), item.group()) for item in _SCOPE_LOW.finditer(clause)
+                 if not _covered(item.span(), masked)]
+        hits.sort(key=lambda item: item[1])
+        found.extend((pattern, cue) for pattern, _, cue in hits)
+    return found
+
+
+def _one_end(found: list[tuple[re.Pattern, str]]) -> tuple[re.Pattern, str] | None:
+    ends = {pattern for pattern, _ in found}
+    return found[0] if len(ends) == 1 else None
+
+
 def modality_conflict(claim: str, passage: str) -> tuple[str, str] | None:
-    """(claim cue, passage cue) when Chinese text puts the two sides at opposite ends of a modality scale:
-    all (所有, 任何, 一律) against only (仅, 只有), or must (必须, 非…不可) against need not (无需, 不必).
-    Only clauses that share a content term with the other side are read."""
+    """(claim cue, passage cue) when Chinese text puts the two sides at opposite ends of a modality scale.
+
+    All (所有, 任何, 一律) against only (仅, 只有). Not-only (不只有, 不仅仅) is the all end. The
+    correlative 不仅…而且 is neither end, so it is not read as 仅. Must (必须, clause-final 非…不可)
+    against need not (无需, 不必). Only clauses that share a content term with the other side are scored.
+    A 非…不可 cue is the fixed label ``非…不可`` and never the text between the two ends.
+    """
     if not (CJK.search(claim) or CJK.search(passage)):
         return None
-    sides = (_clauses(claim, passage), _clauses(passage, claim))
-    for _, high, low in ZH_MODALITY:
-        cues = []
-        for clauses in sides:
-            found = [(pattern, match.group()) for clause in clauses for pattern in (high, low)
-                     if (match := pattern.search(clause))]
-            ends = {pattern for pattern, _ in found}
-            cues.append(found[0] if len(ends) == 1 else None)
-        if cues[0] and cues[1] and cues[0][0] is not cues[1][0]:
-            return cues[0][1], cues[1][1]
+    shared = (_clauses(claim, passage), _clauses(passage, claim))
+    correlative = (_correlative(_clauses(claim, None)), _correlative(_clauses(passage, None)))
+    cues = [_one_end(_scope_cues(clauses, flag)) for clauses, flag in zip(shared, correlative)]
+    if cues[0] and cues[1] and cues[0][0] is not cues[1][0]:
+        return cues[0][1], cues[1][1]
+    found_sides = []
+    for clauses in shared:
+        found = [(pattern, _cue(match)) for clause in clauses for pattern in (_OBLIGATION_HIGH, _OBLIGATION_LOW)
+                 if (match := pattern.search(clause))]
+        found_sides.append(_one_end(found))
+    if found_sides[0] and found_sides[1] and found_sides[0][0] is not found_sides[1][0]:
+        return found_sides[0][1], found_sides[1][1]
     return None
 
 
