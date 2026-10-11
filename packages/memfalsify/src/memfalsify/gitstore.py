@@ -20,10 +20,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
-from memcore import EvidenceError, resolve_inside
-from memcore.reading import confinement_root, read_file_text
+from memcore.paths import InputPathError, component_skip_reason, input_path
+from memcore.reading import confinement_root, read_input_text
 
 from .memory import Claim, merge_duplicates, parse_text
+from .corpus import Skipped
 
 HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # C0/C1 controls and the bidi, zero-width and line-separator characters that can disguise text.
@@ -123,6 +124,7 @@ class Snapshot:
     claims: list[Claim] = field(default_factory=list)
     texts: dict[str, str] = field(default_factory=dict)  # path relative to the memory directory -> LF text
     links: list[str] = field(default_factory=list)  # link targets referenced, whether or not they exist
+    skipped: list[Skipped] = field(default_factory=list)
 
     @property
     def files(self) -> list[str]:
@@ -136,12 +138,18 @@ def link_path(target: str) -> str | None:
     normal = posixpath.normpath(target)
     if normal in (".", "..") or normal.startswith(("../", "/")):
         return None
+    if component_skip_reason(Path(target)):
+        return None
     return normal
 
 
-def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool) -> Snapshot:
+def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool, *,
+                   skipped: list[Skipped] | None = None) -> Snapshot:
     """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``."""
-    snapshot = Snapshot()
+    snapshot = Snapshot(skipped=skipped if skipped is not None else [])
+    if reason := component_skip_reason(Path(name)):
+        snapshot.skipped.append(Skipped(path=name, reason=reason + " in walked path"))
+        return snapshot
     text = read(name)
     if text is None:
         return snapshot
@@ -149,6 +157,9 @@ def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: b
     claims, links = parse_text(text, name)
     if follow_links:
         for target in dict.fromkeys(links):
+            if reason := component_skip_reason(Path(target)):
+                snapshot.skipped.append(Skipped(path=target, reason=reason + " in walked path"))
+                continue
             relative = link_path(target)
             if relative is None or relative in snapshot.links:
                 continue
@@ -308,16 +319,21 @@ class Repository:
     def worktree_path(self, relative: str) -> Path | None:
         """A memory file in the working tree, confined to the memory directory like ``parse_memory``."""
         try:
-            path = resolve_inside(self.memory_dir, relative)
-        except EvidenceError:
+            path = input_path(self.memory_dir, self.memory_dir / relative)
+        except InputPathError:
             return None
         return path if path.is_file() else None
 
     def worktree(self, follow_links: bool) -> Snapshot:
+        skipped = []
         def read(relative: str) -> str | None:
-            path = self.worktree_path(relative)
-            return read_file_text(path) if path else None
-        return build_snapshot(read, self.memory_name, follow_links)
+            try:
+                path = input_path(self.memory_dir, self.memory_dir / relative)
+                return read_input_text(self.memory_dir, path) if path.is_file() else None
+            except InputPathError as exc:
+                skipped.append(Skipped(path=relative, reason=str(exc)))
+                return None
+        return build_snapshot(read, self.memory_name, follow_links, skipped=skipped)
 
 
 OUTSIDE = ("the memory file's git repository is not inside the server root: its work tree, git directory, "
@@ -360,7 +376,13 @@ def _confine(root: Path, toplevel: Path, git_dir: Path, common_dir: Path) -> tup
 
 def open_repository(memory_file: Path) -> Repository:
     exe = _git_executable()
-    memory = Path(memory_file).resolve()
+    original = Path(memory_file).absolute()
+    directory = original.parent.resolve()
+    try:
+        input_path(directory, directory / original.name)
+    except InputPathError as exc:
+        raise HistoryError(f"memory skipped: {exc}") from None
+    memory = directory / original.name
     if not memory.parent.is_dir():
         raise HistoryError(f"directory not found: {memory.parent}")
     proc = _run(exe, memory.parent, ["rev-parse", "--show-toplevel", "--show-prefix", "--absolute-git-dir",

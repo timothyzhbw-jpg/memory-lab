@@ -18,6 +18,16 @@ Release 0.3 contains:
 
 ### Security
 
+- MemFalsify applies one shared path policy to memory, linked memory and evidence inputs (including
+  review evidence), and MCP path resolution: both the walked and resolved paths must stay inside their
+  root and contain no hidden component or skipped directory. Rejected inputs carry a skip reason;
+  descriptor-confined reads prevent symlink swaps on supported platforms.
+- The GitHub Action warns and skips memory paths resolving outside the workspace or into hidden/skipped
+  components, preventing checkout credentials from being quoted in job summaries. Workflow examples
+  recommend `persist-credentials: false`, and the CI dogfood checkout sets it.
+- JSONL append refuses symlinks and non-regular files and uses one descriptor for separator checks and
+  writes. The GitHub sync lock retains its descriptor through the write; POSIX directory locking keeps
+  writers excluded even if the marker is deleted, and cleanup tolerates a missing marker.
 - A JSON object that repeats a key is rejected, including inside a nested object. `json.loads` kept the
   last value, so a forged `events.jsonl` line could show one `actor` to a person reading the file and
   another to replay, and a `policy.json` that listed an actor twice granted the second set of roles. The

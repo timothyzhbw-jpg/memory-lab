@@ -312,6 +312,21 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 设置 `diff-base`（例如 PR 的基准提交，并给 `actions/checkout` 加上 `fetch-depth: 0`）后，Action 改为运行
 `memfalsify diff`，PR 只会因为它新增或修改的记忆而失败。
 
+建议给 checkout 设置 `persist-credentials: false`，避免把任务 token 留在 `.git/config` 中：
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+    with:
+      persist-credentials: false
+  - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
+    with:
+      memory: CLAUDE.md AGENTS.md
+```
+
+记忆和证据文件的原始路径、符号链接解析后的路径都不能包含隐藏组件或忽略目录；被跳过的输入会注明原因。
+Action 还会警告并跳过解析到工作区外的记忆符号链接。
+
 ## 信任边界与局限
 
 - 哈希只能证明某段引用确实存在于特定的字节里，不能证明来源是真实的，也不能证明这段话的意思就是某人所说的那样。

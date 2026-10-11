@@ -189,14 +189,14 @@ def test_symlinked_directories_are_reported_unless_excluded(memfalsify_demo, tmp
 
 def test_unreadable_evidence_fails_closed(memfalsify_demo, monkeypatch):
     import memfalsify.corpus as corpus
-    original = corpus.read_file_bytes
+    original = corpus.read_input_bytes
 
-    def read(path):
+    def read(root, path):
         if Path(path).name == "api.md":
             raise PermissionError("cannot read api.md")
-        return original(path)
+        return original(root, path)
 
-    monkeypatch.setattr(corpus, "read_file_bytes", read)
+    monkeypatch.setattr(corpus, "read_input_bytes", read)
     result = runner.invoke(app, cli_args(memfalsify_demo))
     assert result.exit_code == 2 and "cannot read api.md" in result.output
 

@@ -182,6 +182,9 @@ def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow
                           memory_paths=memory_paths, evidence_root=evidence_root, reviews=reviews,
                           verifier=verifier, as_of=as_of, stale_days=stale_days, min_coverage=min_coverage,
                           max_judged=max_judged, exclude=exclude, only=touched)
+    rejected = {(s.path, s.reason): s for s in old.skipped + new.skipped}
+    report.skipped_evidence[:0] = [s.model_copy(update={"reason": "memory skipped: " + s.reason})
+                                  for s in rejected.values()]
     status = {f.memory_id: f.status for f in report.findings}
     entries = [ClaimChange(change=c.kind, old=ClaimVersion.of(c.old) if c.old else None,
                            new=ClaimVersion.of(c.new) if c.new else None, similarity=c.similarity,
@@ -393,7 +396,9 @@ def memory_history(memory_file: Path, max_commits: int = 100, follow_links: bool
               for c in current.claims]
     return HistoryReport(memory_file=str(memory_file), files=current.files, head=head,
                          commits_scanned=len(commits), max_commits=max_commits, complete=complete, shallow=shallow,
-                         claims=claims, removed=list(reversed(latest.values())), limitations=HISTORY_LIMITATIONS)
+                         claims=claims, removed=list(reversed(latest.values())),
+                         limitations=HISTORY_LIMITATIONS + [f"Memory skipped: {s.path}: {s.reason}"
+                                                            for s in current.skipped])
 
 
 def _commit(info: CommitInfo | None) -> str:

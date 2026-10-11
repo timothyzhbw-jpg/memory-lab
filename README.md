@@ -318,6 +318,21 @@ unsupported claims and wording issues remain review leads. With `diff-base` (for
 commit, and `fetch-depth: 0` on `actions/checkout`), it runs `memfalsify diff`, so a pull request is gated only on
 the claims it adds or changes.
 
+Set `persist-credentials: false` on checkout to keep the job token out of `.git/config`. For example:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+    with:
+      persist-credentials: false
+  - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
+    with:
+      memory: CLAUDE.md AGENTS.md
+```
+
+Memory and evidence inputs skip hidden components and ignored directories in both their original paths
+and resolved symlink targets. The action also warns and skips memory symlinks that leave the workspace.
+
 ## Trust boundaries and limitations
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.

@@ -36,16 +36,44 @@ def _path(dataset: Path, relative: str) -> Path:
 
 @contextmanager
 def lock(dataset: Path) -> Iterator[None]:
-    path = _path(dataset, ".github-sync.lock")
+    dataset = Path(dataset).resolve()
+    path = dataset / ".github-sync.lock"
+    directory_fd, fd = None, None
     try:
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        raise ValueError("another sync is running; delete the lock if not") from None
-    os.close(fd)
-    try:
+        if os.name == "posix":
+            import fcntl
+            # Lock the directory inode: deleting/replacing the marker cannot admit a second writer.
+            directory_fd = os.open(dataset, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                fcntl.flock(directory_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError("another sync is running; delete the lock if not") from None
+        try:
+            fd = os.open(path.name if directory_fd is not None else path,
+                         os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600,
+                         **({"dir_fd": directory_fd} if directory_fd is not None else {}))
+        except FileExistsError:
+            raise ValueError("another sync is running; delete the lock if not") from None
+        # On Windows, retaining this descriptor prevents deletion of the marker.
         yield
     finally:
-        path.unlink()
+        try:
+            if fd is not None:
+                held = os.fstat(fd)
+                os.close(fd)
+                try:
+                    current = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False) \
+                        if directory_fd is not None else path.lstat()
+                    if os.path.samestat(current, held):
+                        if directory_fd is not None:
+                            os.unlink(path.name, dir_fd=directory_fd)
+                        else:
+                            path.unlink(missing_ok=True)
+                except FileNotFoundError:
+                    pass
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
 
 
 @dataclass

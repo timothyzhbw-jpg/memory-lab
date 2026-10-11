@@ -45,6 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: timothyzhbw-jpg/memory-lab@main
         with:
           exclude: |
@@ -59,6 +61,11 @@ dependencies (pydantic, typer) from PyPI within the version ranges the package d
 
 This repository audits its own `AGENTS.md` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 (`uses: ./`).
+
+Set `persist-credentials: false` on checkout so its job token is not stored in `.git/config` while the
+audit runs. The action skips memory symlinks that leave the workspace or resolve into hidden or skipped
+directories, with a warning annotation. Memory, linked memory and evidence inputs are checked against
+both their original paths and resolved targets; a harmless filename cannot expose `.git/config`.
 
 ## Gate a pull request on the claims it changes
 
@@ -79,6 +86,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # the base commit must be in the checkout
+          persist-credentials: false
       - uses: timothyzhbw-jpg/memory-lab@<sha>
         with:
           diff-base: ${{ github.event.pull_request.base.sha }}
@@ -166,8 +174,10 @@ Exclude what is not a statement about the repository as it is now: test fixtures
 vendored code, generated files, changelogs and archived notes (historical statements contradict current ones
 by design).
 
-Always left out without configuration: hidden files and directories (`.git/`, `.github/`, ...),
-`node_modules/`, `__pycache__/` and `venv/`, the instruction file being audited, and earlier MemFalsify reports.
+Always skipped with a reason: hidden files and directories (`.git/`, `.github/`, ...), `node_modules/`,
+`__pycache__/`, `venv/`, and earlier MemFalsify reports. The instruction files actually read are silently
+excluded from evidence. Hidden/skipped components in resolved symlink targets are rejected too. Skipped
+memory inputs also appear in the report's skip list, with reasons prefixed by `memory skipped`.
 Media files, files over 2 MB, non-UTF-8 files, broken or cyclic file symlinks and untraversed directory symlinks
 are listed under "Skipped evidence". File symlinks escaping the evidence root are also skipped; inaccessible
 files or directory traversal errors fail the audit. When both `CLAUDE.md` and `AGENTS.md` are audited as distinct
