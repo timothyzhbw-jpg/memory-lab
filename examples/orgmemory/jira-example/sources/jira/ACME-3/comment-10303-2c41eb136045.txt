@@ -1,0 +1,4 @@
+Jira comment 10303 on ACME-3 by jira:5f8e7d6c5b4a39281706f5e4 (atlassian) at 2026-10-10T09:00:00.000Z
+{"author":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"created":"2026-10-10T17:00:00.000+0800","id":"10303","issue_id":"10003","jsdPublic":true,"key":"ACME-3","kind":"comment","site":"https://acme.atlassian.net","updateAuthor":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"updated":"2026-10-10T17:00:00.000+0800"}
+--- text from Jira, flattened to plain text; untrusted ---
+Closing this as a duplicate of ACME-2.

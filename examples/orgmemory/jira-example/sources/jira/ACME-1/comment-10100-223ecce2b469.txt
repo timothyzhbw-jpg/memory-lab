@@ -1,0 +1,4 @@
+Jira comment 10100 on ACME-1 by jira:5f8e7d6c5b4a39281706f5e4 (atlassian) at 2026-10-06T10:00:00.000Z
+{"author":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"created":"2026-10-06T10:00:00.000+0000","id":"10100","issue_id":"10001","jsdPublic":true,"key":"ACME-1","kind":"comment","site":"https://acme.atlassian.net","updateAuthor":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"updated":"2026-10-06T10:00:00.000+0000"}
+--- text from Jira, flattened to plain text; untrusted ---
+Bulk export reads the billing schema, which is mid-migration.

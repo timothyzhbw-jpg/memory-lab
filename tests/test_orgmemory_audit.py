@@ -479,6 +479,7 @@ def test_audit_writes_nothing(tmp_path):
 @pytest.mark.parametrize("dataset, golden", [
     ("feature-a", "audit-report.md"),
     ("github-acme-web", "github-acme-web/audit-report.md"),
+    ("jira-example", "jira-example/audit-report.md"),
 ])
 def test_example_audits_match_their_reports(dataset, golden):
     report = audit(Dataset.load(EXAMPLES / "orgmemory" / dataset), datetime(2026, 10, 31, tzinfo=timezone.utc))

@@ -1,0 +1,5 @@
+Jira issue ACME-3 (id 10003) created by jira:5d3c2b1a0f9e8d7c6b5a4f3e (atlassian) at 2026-10-05T11:00:00.000Z
+{"created":"2026-10-05T11:00:00.000+0000","creator":{"accountId":"5d3c2b1a0f9e8d7c6b5a4f3e","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"issue_id":"10003","key":"ACME-3","kind":"issue","reporter":{"accountId":"5d3c2b1a0f9e8d7c6b5a4f3e","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"site":"https://acme.atlassian.net"}
+--- text from Jira, flattened to plain text; untrusted ---
+Change the export format
+Use semicolons instead of commas.

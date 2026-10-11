@@ -1,0 +1,3 @@
+Jira transition 20204 on ACME-2 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-07T09:00:00.000Z: status 10002 to 10003
+{"author":{"accountId":"61a0c3e5f2b1d40069a1b2c3","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"created":"2026-10-07T09:00:00.000+0000","id":"20204","issue_id":"10002","key":"ACME-2","kind":"transition","site":"https://acme.atlassian.net","status":{"from":"10002","fromString":"In Review","to":"10003","toString":"Approved"}}
+--- text from Jira, flattened to plain text; untrusted ---

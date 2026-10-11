@@ -1,0 +1,6 @@
+Jira comment 10302 on ACME-3 by jira:5d3c2b1a0f9e8d7c6b5a4f3e (atlassian) at 2026-10-05T11:15:00.000Z
+{"author":{"accountId":"5d3c2b1a0f9e8d7c6b5a4f3e","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"created":"2026-10-05T11:15:00.000+0000","id":"10302","issue_id":"10003","jsdPublic":true,"key":"ACME-3","kind":"comment","site":"https://acme.atlassian.net","updateAuthor":{"accountId":"5d3c2b1a0f9e8d7c6b5a4f3e","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},"updated":"2026-10-05T11:15:00.000+0000"}
+--- text from Jira, flattened to plain text; untrusted ---
+Jira transition 20204 on ACME-2 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-07T09:00:00.000Z: status 10002 to 10003
+--- text from Jira, flattened to plain text; untrusted ---
+LGTM, ship it

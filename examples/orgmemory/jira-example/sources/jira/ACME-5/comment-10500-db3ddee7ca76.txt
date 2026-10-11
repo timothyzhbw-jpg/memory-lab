@@ -1,0 +1,4 @@
+Jira comment 10500 on ACME-5 by jira:712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5 (atlassian) at 2026-10-10T10:00:00.000Z
+{"author":{"accountId":"712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5","accountType":"atlassian","active":true,"displayName":"Wu (Sales)"},"created":"2026-10-10T18:00:00.000+0800","id":"10500","issue_id":"10005","jsdPublic":true,"key":"ACME-5","kind":"comment","site":"https://acme.atlassian.net","updateAuthor":{"accountId":"712020:3c9d1e2f-4a5b-4c6d-8e7f-90a1b2c3d4e5","accountType":"atlassian","active":true,"displayName":"Wu (Sales)"},"updated":"2026-10-10T18:00:00.000+0800"}
+--- text from Jira, flattened to plain text; untrusted ---
+The customer asked about this again.

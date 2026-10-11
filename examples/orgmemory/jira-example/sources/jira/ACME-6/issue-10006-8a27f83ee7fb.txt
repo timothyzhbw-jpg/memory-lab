@@ -1,0 +1,5 @@
+Jira issue ACME-6 (id 10006) created by jira:5f8e7d6c5b4a39281706f5e4 (atlassian) at 2026-10-06T12:00:00.000Z
+{"created":"2026-10-06T12:00:00.000+0000","creator":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"issue_id":"10006","key":"ACME-6","kind":"issue","reporter":{"accountId":"5f8e7d6c5b4a39281706f5e4","accountType":"atlassian","active":true,"displayName":"Lin (Engineering)"},"site":"https://acme.atlassian.net"}
+--- text from Jira, flattened to plain text; untrusted ---
+Archive old reports
+Move reports older than two years to cold storage.

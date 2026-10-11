@@ -175,6 +175,7 @@ def test_cli_help_index_sees_shipped_commands(index):
     assert ("evidence", "add") in index["orgmemory"].commands
     assert ("github", "sync") in index["orgmemory"].commands
     assert ("github", "convert") in index["orgmemory"].commands
+    assert ("jira", "convert") in index["orgmemory"].commands
     assert "--save-capture" in index["orgmemory"].flags
     assert "--dry-run" in index["orgmemory"].flags
     assert index["memlab-mcp"].commands == {()}

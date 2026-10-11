@@ -1,0 +1,4 @@
+Jira comment 10600 on ACME-6 by jira:5a1b2c3d4e5f60718293a4b5 (atlassian) at 2026-10-06T12:30:00.000Z
+{"author":{"accountId":"5a1b2c3d4e5f60718293a4b5","accountType":"atlassian","active":false,"displayName":"Former user"},"created":"2026-10-06T12:30:00.000+0000","id":"10600","issue_id":"10006","jsdPublic":true,"key":"ACME-6","kind":"comment","site":"https://acme.atlassian.net","updateAuthor":{"accountId":"5a1b2c3d4e5f60718293a4b5","accountType":"atlassian","active":false,"displayName":"Former user"},"updated":"2026-10-06T12:30:00.000+0000"}
+--- text from Jira, flattened to plain text; untrusted ---
+Looks fine to me.
