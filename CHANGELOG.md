@@ -16,7 +16,69 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+Multimodal evidence through transcript and OCR sidecars (roadmap v0.4). See
+[docs/multimodal.md](docs/multimodal.md). memfalsify and orgmemory use new memlab-core API, so at release
+memlab-core needs a minor version and their pins must move to it.
+
+### memlab-core
+
+#### Added
+
+- `memcore.sidecar`: parsers for WebVTT (`.vtt`) and SubRip (`.srt`) transcripts and for OCR JSON
+  (`.ocr.json`, format `memlab-ocr/1`: pages, lines, text and pixel bounding boxes). Each cue or OCR line
+  is an exact `[start, end)` range of the sidecar's own text with a locator in the media file:
+  `t=START,END` in seconds, or `page=N&xywh=X,Y,W,H`. Malformed input raises `SidecarError`, never
+  anything else. An OCR line written with JSON escape sequences is left out, since its quote could not be
+  exact. hOCR is not supported.
+- `load_sidecar` binds a sidecar to the media file next to it (`clip.mp4.vtt`, `clip.vtt`, `clip.en.vtt`,
+  `scan.pdf.ocr.json`). When the media file is present, its SHA-256 must equal the `source_sha256` the
+  sidecar records (a `NOTE source_sha256: <hex>` block in a transcript); otherwise the sidecar is stale or
+  unbound.
+- `MediaRef` and `EvidenceSpan.media` (kind, media path, locator, media SHA-256), and
+  `EvidenceSpan.citation` (`clip.mp4#t=12.5,17` for a sidecar quote, else `path:line`).
+- `ManifestEntry.locator` (optional). `verify_entry` checks a recorded locator and the sidecar's binding to
+  its media file on every load. Entries without a locator serialize exactly as before.
+- `memcore.reading.file_sha256` (hashes in chunks, confined like every other read) and `list_files`.
+
+#### Changed
+
+- `locate_quote(root, path, quote, locator=None)`: in a sidecar, the quote must lie inside one cue or OCR
+  line (the one at `locator`, if given), and the span carries its media position.
+
+### memfalsify
+
+#### Added
+
+- The evidence scan indexes each cue or OCR line of a sidecar as a passage. Markdown reports cite the media
+  file and position (`clip.mp4#t=12.5,17 (00:00:12.500-00:00:17.000)`), then the sidecar line and its
+  hash, then the media file's hash or that it was not present. JSON spans carry `media`. When a report
+  uses sidecar evidence, its limitations say that a transcript or OCR is someone's reading of the media.
+- Reviews may cite a sidecar. The quote must lie inside one cue or line; an optional `locator` picks which.
+- Example: `examples/memfalsify-media`.
+
+#### Changed
+
+- A media file is listed as skipped only when no sidecar was indexed for it, with the reason "no usable
+  transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it". Malformed, stale, unbound and ambiguous
+  sidecars are listed as skipped with the reason.
+- `.vtt`, `.srt` and `.ocr.json` files are parsed as sidecars instead of being indexed as plain text, so a
+  malformed one is now skipped rather than read line by line.
+- JSON reports have a `media` field (null for text files) on every evidence span.
+
+### orgmemory
+
+#### Added
+
+- `orgmemory evidence add` on a transcript or OCR sidecar records the cue's or line's `locator`;
+  `--locator` picks it when the quote occurs more than once. The sidecar must match its media file.
+- `replay`, `explain` and `audit` cite sidecar evidence by media file and position, and print each line
+  of a multi-line cue as quoted text.
+
+### memlab-mcp
+
+No code change. Through the libraries, `memfalsify_audit`, `memfalsify_diff` and the orgmemory tools read
+sidecars and hash media files with the same confined reads as other evidence, so a media file swapped for
+a symlink out of the root is never read.
 
 ## memlab-core
 

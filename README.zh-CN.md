@@ -60,7 +60,7 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 
 每条引用都带 `路径:行号`、字符偏移量和来源文件的 SHA-256。
 
-中文支持是内置的：中文按相邻两个汉字切分匹配（字符二元组，不做词典分词，例如“批量导出”切成“批量”“量导”“导出”）；识别中文反义词对（批准/拒绝、启用/禁用、允许/禁止……）、`2026年3月2日` 这样的中文日期，以及绝对化（总是、所有、一定）、相对时间（下周、最近、目前）和推测性（可能、大概、好像）措辞。否定按单字匹配（不、没、未、无、非、别、勿），所以“未来”“非常”里的字也会被当成否定，可能产生误报的“可能有反证”。英文示例在 [`examples/memfalsify`](examples/memfalsify/)，其中还演示了人工确认（`reviews.jsonl`）和被跳过的图片证据。
+中文支持是内置的：中文按相邻两个汉字切分匹配（字符二元组，不做词典分词，例如“批量导出”切成“批量”“量导”“导出”）；识别中文反义词对（批准/拒绝、启用/禁用、允许/禁止……）、`2026年3月2日` 这样的中文日期，以及绝对化（总是、所有、一定）、相对时间（下周、最近、目前）和推测性（可能、大概、好像）措辞。否定按单字匹配（不、没、未、无、非、别、勿），所以“未来”“非常”里的字也会被当成否定，可能产生误报的“可能有反证”。英文示例在 [`examples/memfalsify`](examples/memfalsify/)，其中还演示了人工确认（`reviews.jsonl`）和被跳过的图片证据；媒体文件只有配上转写稿或 OCR 旁车文件才算证据（见下文“转写稿与 OCR”）。
 
 **状态是怎么定的。** MemFalsify 会自己找候选证据，但只有人工确认才能给一条记忆下结论：
 
@@ -77,6 +77,22 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 `verify_counterevidence`、`add_absolute_date`、`narrow_scope` 这类操作只是建议，不会自动执行。`replacement` 字段永远是空的：MemFalsify 从不替你编写事实。
 
 其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`--format json`、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
+
+#### 转写稿与 OCR
+
+MemFalsify 自己不做语音转写，也不做 OCR。把你自己的转写或 OCR 结果作为“旁车文件”（sidecar）放在媒体文件旁边，每个字幕条目（cue）或每一行 OCR 文本就成为一段证据，引用时标出媒体文件和其中的位置：
+
+| 旁车文件 | 每段证据对应 | 引用形式 |
+|---|---|---|
+| `clip.mp4.vtt` 或 `clip.vtt`（WebVTT）、`clip.srt`（SubRip） | 一个字幕条目 | `clip.mp4#t=12.5,17`（00:00:12.500-00:00:17.000） |
+| `scan.pdf.ocr.json`（`memlab-ocr/1`：页、行、文本、边框） | 一行文本 | `scan.pdf#page=2&xywh=40,120,570,38` |
+
+```bash
+cd examples/memfalsify-media
+memfalsify audit MEMORY.md --evidence evidence --reviews reviews.jsonl --as-of 2026-10-10
+```
+
+旁车文件要记录媒体文件的 SHA-256（转写稿里写一个 `NOTE source_sha256: <hex>` 块，OCR JSON 里写 `"source_sha256"` 字段）。媒体文件在场时，两者必须一致，否则旁车文件会作为“过期”（stale）或“未绑定”跳过；媒体文件不在时，旁车文件照常使用，报告会注明没有核对绑定。引用依然逐字精确：每条引用都是旁车文件字节中、位于同一个字幕条目或同一行内的一段区间，像其他证据文件一样计算哈希。格式不对的旁车文件会带着原因列为跳过。[示例报告](examples/memfalsify-media/report.md)里，站会转写稿反驳了记忆中的限流数值，白板 OCR 的一行与“已批准”相矛盾，而一份根据录像旧导出版本做的复盘转写稿被判为过期并跳过。格式、命名规则和局限见 [docs/multimodal.md](docs/multimodal.md)（英文）；暂不支持 hOCR。
 
 #### 审查 git 里的记忆改动
 
@@ -211,13 +227,13 @@ orgmemory explain        <数据集> "acme/web#12"
 {"memory_id": "m-54b237eb", "relation": "contradicts", "path": "记录/2026-10-07-决策记录.md", "quote": "产品经理拒绝了功能A（批量导出），不随11月版本发布。", "reviewer": "张三", "note": "可选"}
 ```
 
-`memory_id` 由记忆的规范化文本生成。记忆一旦被修改，ID 就会变；`reviews.jsonl` 里仍指向旧 ID 的确认会让审计直接报错（`unknown memory_id`，退出码 2），需要重新确认并更新或删除那一行。`quote` 必须逐字出现在 `path` 指向的文件中，`path` 相对于证据目录。
+`memory_id` 由记忆的规范化文本生成。记忆一旦被修改，ID 就会变；`reviews.jsonl` 里仍指向旧 ID 的确认会让审计直接报错（`unknown memory_id`，退出码 2），需要重新确认并更新或删除那一行。`quote` 必须逐字出现在 `path` 指向的文件中，`path` 相对于证据目录。对转写稿或 OCR 旁车文件，引用必须落在同一个字幕条目或同一行内，可选的 `"locator": "t=12.5,17"` 指定是哪一个。
 
 **组织数据集**：一个包含三个文件的目录。
 
 - `events.jsonl`：每行一个事件，只追加。字段：`id`、`timestamp`（带时区，表示生效时间）、`actor`、`action`、`subject`、`evidence_ids`（至少一个），以及 `note`（动作为 `raise_risk` 时必填）、`dependency`（动作为 `dependency` 时必填）、`supersedes`（动作为 `revoke` 时必填，且必须指向当前生效的决定）。动作：`request`、`reconsider`、`raise_risk`、`dependency`、`approve`、`reject`、`revoke`、`comment`。
 - `policy.json`：`{"actors": {人: [角色]}, "permissions": {动作: [角色]}}`。不在名单里的人没有任何角色。`pending_approval` 列出既能批准又能拒绝的角色。
-- `evidence.jsonl`：`id`、`path`、原始字节的 `sha256`、逐字的 `quote` 及其 `[start, end)` 字符区间、`source_uri`、`source_kind`、`captured_at`。请用 `orgmemory evidence add` 生成，不要手算哈希。
+- `evidence.jsonl`：`id`、`path`、原始字节的 `sha256`、逐字的 `quote` 及其 `[start, end)` 字符区间、`source_uri`、`source_kind`、`captured_at`；只有引用来自转写稿或 OCR 旁车文件时才有 `locator`（例如 `t=12.5,17`，每次加载都会重新核对它以及旁车文件与媒体文件的绑定）。请用 `orgmemory evidence add` 生成，不要手算哈希；对旁车文件它会记录 locator，`--locator` 可以指定字幕条目或行。
 
 回放规则：事件按生效时间排序，时间相同时保持文件顺序。回放前会校验整个日志，包括 `--as-of` 之后的事件。有权限的 `approve` / `reject` 会设定状态，并清除“申请重新考虑”、待审批和被忽略的越权尝试。决定被推翻或同一时刻出现相互冲突的决定时，都会记录在 `conflicts` 中。
 
@@ -317,7 +333,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
 - `orgmemory audit` 的发现项只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
-- 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
+- 证据是 UTF-8 文本。图片、音频、视频和 PDF 只能通过你提供的转写稿或 OCR 旁车文件成为证据，而旁车文件只是某人（或某个模型）对媒体内容的读取结果：`source_sha256` 一致只说明它描述的是哪份字节，不说明它准确。没有可用旁车文件的媒体会在报告的 `Skipped evidence` 部分列为跳过。
 - `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。
 - GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。
 - `policy.json` 是全局的：给一个 `gh:` 账号配置角色，等于在所有导入仓库的议题上都授予了这个角色。
@@ -334,7 +350,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 | **v0.1** | 文本记忆审计、证据追溯、人工确认流程 | 事件日志、状态机、权限规则、决策溯源 |
 | **v0.2** | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR ✓ |
 | **v0.3** | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 ✓ | 状态冲突与决策审计 ✓ |
-| v0.4 | 多模态证据（带定位的 OCR / 转写） | 跨平台组织记忆 |
+| v0.4 | 多模态证据（带定位的 OCR / 转写）：转写稿与 OCR 旁车文件 ✓（未发布） | 跨平台组织记忆 |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |
 
 各个包每个版本的变更见 [CHANGELOG.md](CHANGELOG.md)（英文）。

@@ -60,7 +60,7 @@ The example memory holds ten claims about a fictional service. The audit ([full 
 | We probably use squash merges for pull requests. | possible support, inference marker | `CONTRIBUTING.md` agrees, but the memory is phrased as a guess |
 | Bulk export depends on the billing schema migration. | **supported**, duplicate | Confirmed by a reviewer; stated in two files |
 
-Every quote carries `path:line`, character offsets and the SHA-256 of the file it came from. A whiteboard photo in the evidence folder is listed as skipped, not guessed at.
+Every quote carries `path:line`, character offsets and the SHA-256 of the file it came from. A whiteboard photo in the evidence folder is listed as skipped, not guessed at: media counts as evidence only through a transcript or OCR sidecar you provide (see [*Transcripts and OCR*](#transcripts-and-ocr)).
 
 Chinese memories work too: Chinese text is matched by overlapping character pairs (no dictionary segmentation), with antonym pairs such as 批准/拒绝, dates like 2026年3月2日, and wording such as 总是, 下周 and 可能. Chinese negation is matched per character (不, 没, 未, 无, 非, 别, 勿), so words like 未来 or 非常 can trigger a false "only one side is negated" candidate. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
 
@@ -79,6 +79,22 @@ Independent of evidence, each memory is checked for `overgeneralization` (always
 Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
 Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
+
+#### Transcripts and OCR
+
+MemFalsify does not transcribe or OCR anything. Put your own speech-to-text or OCR output next to the media file, and each cue or line becomes evidence, cited by media file and position:
+
+| Sidecar | One passage per | Cited as |
+|---|---|---|
+| `clip.mp4.vtt` or `clip.vtt` (WebVTT), `clip.srt` (SubRip) | cue | `clip.mp4#t=12.5,17` (00:00:12.500-00:00:17.000) |
+| `scan.pdf.ocr.json` (`memlab-ocr/1`: pages, lines, text, bounding boxes) | line | `scan.pdf#page=2&xywh=40,120,570,38` |
+
+```bash
+cd examples/memfalsify-media
+memfalsify audit MEMORY.md --evidence evidence --reviews reviews.jsonl --as-of 2026-10-10
+```
+
+A sidecar records the SHA-256 of its media file (a `NOTE source_sha256: <hex>` block in a transcript, `"source_sha256"` in OCR JSON). When the media file is present, the hashes must match, or the sidecar is skipped as stale or unbound. Without the media file, the sidecar is used and the report says the binding was not checked. Quotes stay exact: each is a range of the sidecar's bytes inside one cue or line, hashed like any evidence file. Malformed sidecars are skipped with a reason. In the [example report](examples/memfalsify-media/report.md), a standup transcript challenges the remembered rate limit, a whiteboard OCR line contradicts an approval, and a retro transcript made from an earlier export of its recording is skipped as stale. Formats, naming and limits are in [docs/multimodal.md](docs/multimodal.md); hOCR is not supported yet.
 
 #### Review memory changes in git
 
@@ -211,13 +227,13 @@ Example: [`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-w
 {"memory_id": "m-27e874e0", "relation": "contradicts", "path": "notes/2026-10-07-decision-log.md", "quote": "Product manager rejects Feature A (bulk export) for the November release.", "reviewer": "demo-reviewer", "note": "optional"}
 ```
 
-`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes, and a review line that still names the old ID stops the audit with an `unknown memory_id` error (exit code 2) until the memory is re-reviewed and that line updated or removed. `quote` must appear verbatim in `path`, which is relative to the evidence directory.
+`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes, and a review line that still names the old ID stops the audit with an `unknown memory_id` error (exit code 2) until the memory is re-reviewed and that line updated or removed. `quote` must appear verbatim in `path`, which is relative to the evidence directory. In a transcript or OCR sidecar, the quote must lie inside one cue or line, and an optional `"locator": "t=12.5,17"` says which one.
 
 **Organizational dataset**: a directory with three files.
 
 - `events.jsonl`: one event per line, append-only. Fields: `id`, `timestamp` (with timezone; it is the effective time), `actor`, `action`, `subject`, `evidence_ids` (at least one), plus `note` (required for `raise_risk`), `dependency` (required for `dependency`) and `supersedes` (required for `revoke`, which must target the current decision). Actions: `request`, `reconsider`, `raise_risk`, `dependency`, `approve`, `reject`, `revoke`, `comment`.
 - `policy.json`: `{"actors": {actor: [roles]}, "permissions": {action: [roles]}}`. Unknown actors have no roles. `pending_approval` lists the roles that can both approve and reject.
-- `evidence.jsonl`: `id`, `path`, `sha256` of the raw bytes, exact `quote` and its `[start, end)` character span, `source_uri`, `source_kind`, `captured_at`. Use `orgmemory evidence add` instead of hashing by hand.
+- `evidence.jsonl`: `id`, `path`, `sha256` of the raw bytes, exact `quote` and its `[start, end)` character span, `source_uri`, `source_kind`, `captured_at`, and `locator` only for a quote from a transcript or OCR sidecar (for example `t=12.5,17`; every load checks it and the sidecar's binding to its media file again). Use `orgmemory evidence add` instead of hashing by hand; for a sidecar it records the locator, and `--locator` picks the cue or line.
 
 Replay rules: events are ordered by effective time, and ties keep file order. The whole log is validated before replay, including events after `--as-of`. An authorized `approve` / `reject` sets the status and clears reconsideration, pending approval and ignored attempts. Reversals and same-time conflicting decisions are recorded under `conflicts`.
 
@@ -319,7 +335,7 @@ the claims it adds or changes.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
-- Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
+- Evidence is UTF-8 text. Images, audio, video and PDF count only through transcript and OCR sidecars you provide, which are someone's reading of the media: a matching `source_sha256` shows which bytes a sidecar describes, not that it is accurate. Media without a usable sidecar is reported as skipped.
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
@@ -336,7 +352,7 @@ the claims it adds or changes.
 | **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
 | **v0.2** | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion ✓ |
 | **v0.3** | Git history of memory: diff, review, rollback; cross-agent skill polish ✓ | State conflicts and decision audit ✓ |
-| v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
+| v0.4 | Multimodal evidence (OCR / transcription with locators): transcript and OCR sidecars ✓ (unreleased) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
 
 What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
