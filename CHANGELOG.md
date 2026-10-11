@@ -74,6 +74,9 @@ No package changes yet.
   checked claim is challenged, conflicted, disputed or has possible counterevidence. The hook install is
   the repository-root project `memory-lab-pre-commit`, which bundles the memfalsify and memcore sources
   from that commit.
+- MemFalsify benchmark cases `en-units-scope`, `zh-units-negation` and `es-operacion-alcance`: 63 labeled
+  claims for paraphrased support and contradiction, unit conflicts, date and version arithmetic, scope swaps
+  between services, and negation and modality. The lexical baseline was measured again on all 202 claims.
 
 ### Changed
 

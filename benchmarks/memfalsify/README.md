@@ -2,7 +2,7 @@
 
 Labeled cases for measuring how well each `memfalsify` verifier judges remembered claims against evidence. Each case is a `MEMORY.md`, an evidence directory and one label per claim. `run.py` audits every case the way `memfalsify audit` would and scores the resulting statuses against the labels.
 
-The [lexical results](RESULTS.md) record the offline baseline after independent label audits and lead adjudication.
+The [lexical results](RESULTS.md) record the offline lexical baseline. The original eight cases were labeled after independent audits and lead adjudication. The three cases added later received an [independent Codex audit](../../AUDIT_CODEX.md) of all 63 claims, with judgments made from the evidence before opening their labels; RESULTS.md identifies the cases.
 
 It answers four questions per verifier (`lexical`, `llm`, `jev`, `dual`, `cascade`):
 

@@ -1,8 +1,10 @@
 # MemFalsify lexical results
 
-Measured locally on 2026-10-11 after independent Qwen/Grok label audits and lead adjudication,
-using MemFalsify 0.3.0 with the Chinese lexical rules (unreleased, see the [changelog](../../CHANGELOG.md)).
-Reproduce from the repository root:
+Measured locally on 2026-10-11 with MemFalsify 0.3.0. The original eight cases keep the labels from the
+independent Qwen/Grok audits and lead adjudication. The three cases added after that
+(`en-units-scope`, `zh-units-negation`, `es-operacion-alcance`) received an independent Codex audit
+of all 63 claims before this run: it added 12 missing `internal_conflict` tags and clarified 6 ambiguous
+claims together with their labels; no verdict was changed for the verifier's sake. Reproduce from the repository root:
 
 ```bash
 .venv/bin/python benchmarks/memfalsify/run.py --json benchmarks/memfalsify/results-lexical.json
@@ -10,60 +12,22 @@ Reproduce from the repository root:
 
 [Complete predictions and exact numbers](results-lexical.json) · [Cases and metric definitions](README.md)
 
-These 139 synthetic claims comprise 48 contradicted, 44 supported and 47 unsupported labels.
+These 202 synthetic claims comprise 81 contradicted, 72 supported and 49 unsupported labels.
 They exercise known failure modes; the scores do not estimate accuracy on real repositories.
 Truth labels are based only on case evidence. Wording labels describe semantic issues independently
 of the detectors (including paraphrase duplicates). This is an offline lexical run only.
 The benchmark follows linked memory files by default; the GitHub Action audits only explicitly named files.
 
-Contradiction recall is 16/48 and support recall is 7/44. Chinese contradiction recall is 5/19;
-negation traps falsely flag 3/30 claims. Two of the 16 correct contradiction flags do not cite the
+Contradiction recall is 29/81 and support recall is 12/72. Chinese contradiction recall is 7/29;
+negation traps falsely flag 6/40 claims. Three of the 29 correct contradiction flags do not cite the
 labeled passage, so a correct flag still needs a human read. Sentence splitting and term preselection
-limit what the verifier sees, especially for paraphrases and conclusions requiring multiple sentences.
+limit what the verifier sees, especially for paraphrases, unit changes that keep the same digits, and
+conclusions that need more than one sentence.
 Elapsed time below is the local audit duration, excluding installation and label validation.
 
-## Chinese lexical rules: before and after
-
-The lexical verifier now reads Chinese numerals, units, percentages and dates as numbers, folds
-full-width forms, measures a Chinese claim's coverage per character through bigrams and trigrams,
-reads negation per clause (skipping words such as 未来, 非常 and 无论) and compares modality (所有 against
-仅, 必须 against 无需). Text without CJK characters is read exactly as before. The labels did not change.
-
-"Before" is the previous `results-lexical.json` (MemFalsify 0.3.0 without these rules, which scored
-the same as 0.1.0); "after" is the file linked above. English is the `en-*` and `repo-*` cases,
-Chinese the `zh-*` cases (the claims tagged `chinese`); each row sums that language's per-case
-metrics from the JSON. False flags are flagged claims among those not labeled contradicted.
-
-| Language | Run | Claims | Contradiction P | Contradiction R | Contradiction F1 | Support P | Support R | False flags | 3-way accuracy | judge() calls |
-|---|---|---|---|---|---|---|---|---|---|---|
-| English | before | 88 | 0.85 | 11/29 | 0.52 | 0.44 | 4/29 | 2/59 | 0.50 (44/88) | 97 |
-| English | after | 88 | 0.85 | 11/29 | 0.52 | 0.44 | 4/29 | 2/59 | 0.50 (44/88) | 97 |
-| Chinese | before | 51 | 0.25 | 2/19 | 0.15 | n/a | 0/15 | 6/32 | 0.33 (17/51) | 32 |
-| Chinese | after | 51 | 0.56 | 5/19 | 0.36 | 0.75 | 3/15 | 4/32 | 0.43 (22/51) | 39 |
-
-Every English prediction, rationale and cited passage is identical to the previous run. Two more
-`internal_conflict` issues are found, both between Chinese claims (8 of 18 labeled, was 6; 13 reported, was 11).
-
-What changed for Chinese claims:
-
-- Newly flagged, correctly: 新服务一律要接入统一 API 网关 (the source's 暂不强制 clause is about services),
-  封版期间禁止任何上线 (禁止 against 允许, now inside the coverage threshold) and the CTO-approval claim
-  (无需 CTO 签字; 不仅 is no longer read as a negation).
-- Newly supported, correctly: the 8-second timeout, 一成 matched to 10%, and 免费用户也可以使用基础模板,
-  which 无论 no longer flags as negated. The NPS claim is no longer flagged because of 非常.
-- 报表首屏加载的目标是三秒以内 stays flagged, now for the right reason (3 against 2 seconds) instead of
-  the 未 in 未来.
-- Two unsupported distractors moved the wrong way. 企业版月费将上调到 399 元 is newly flagged: the
-  专业版 price passage shares 版月费 and 上调, and 399 differs from 129, the same mistake an English
-  claim would get. 免费版的存储额度会提高到 5GB is now predicted supported instead of flagged: the
-  passage's 没有形成结论 sits in a clause that shares no term with the claim.
-
-Most remaining Chinese errors are paraphrases (获批 for 已采纳, 冻结招聘 for 不招), multi-sentence evidence and
-superseded plans, which no lexical rule reads.
-
 - Verifier: `lexical` · min_coverage 0.5 · max_judged unbounded
-- Cases: 8 (en-decisions-platform, en-decisions-product, en-decisions-security, repo-instructions-cli, repo-instructions-sdk, zh-decisions-platform, zh-decisions-process, zh-decisions-roadmap) · claims: 139
-- Cost: 136 judge() calls · 0.1 s
+- Cases: 11 (en-decisions-platform, en-decisions-product, en-decisions-security, en-units-scope, es-operacion-alcance, repo-instructions-cli, repo-instructions-sdk, zh-decisions-platform, zh-decisions-process, zh-decisions-roadmap, zh-units-negation) · claims: 202
+- Cost: 236 judge() calls · 0.3 s
 
 ## Contradiction detection
 
@@ -71,7 +35,7 @@ Flagged = predicted contradicted or disputed (the statuses that fail `--strict`)
 
 | Precision | Recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|
-| 0.73 | 0.33 | 0.46 | 16 | 6 | 32 |
+| 0.76 | 0.36 | 0.49 | 29 | 9 | 52 |
 
 Disputed predictions by label: contradicted 0, supported 0, unsupported 0 (total 0)
 
@@ -79,45 +43,45 @@ Disputed predictions by label: contradicted 0, supported 0, unsupported 0 (total
 
 | Precision | Recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|
-| 0.54 | 0.16 | 0.25 | 7 | 6 | 37 |
+| 0.50 | 0.17 | 0.25 | 12 | 12 | 60 |
 
 ## 3-way accuracy
 
-0.47 (66/139; disputed counts as wrong)
+0.43 (86/202; disputed counts as wrong)
 
 | Label \ predicted | contradicted | supported | unsupported | disputed |
 |---|---|---|---|---|
-| contradicted | 16 | 4 | 28 | 0 |
-| supported | 4 | 7 | 33 | 0 |
-| unsupported | 2 | 2 | 43 | 0 |
+| contradicted | 29 | 10 | 42 | 0 |
+| supported | 7 | 12 | 53 | 0 |
+| unsupported | 2 | 2 | 45 | 0 |
 
-Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 (1.00)
+Detections citing the labeled passage: contradicted 26/29 (0.90), supported 12/12 (1.00)
 
 ## Issue detection
 
 | Issue | Labeled | Predicted | Precision | Recall |
 |---|---|---|---|---|
-| overgeneralization | 16 | 15 | 0.87 | 0.81 |
-| relative_time | 13 | 9 | 1.00 | 0.69 |
-| possibly_stale | 6 | 6 | 1.00 | 1.00 |
-| inference_marker | 10 | 11 | 0.91 | 1.00 |
-| internal_conflict | 18 | 13 | 0.62 | 0.44 |
-| duplicate | 7 | 5 | 1.00 | 0.71 |
+| overgeneralization | 19 | 17 | 0.88 | 0.79 |
+| relative_time | 14 | 10 | 1.00 | 0.71 |
+| possibly_stale | 8 | 8 | 1.00 | 1.00 |
+| inference_marker | 11 | 12 | 0.92 | 1.00 |
+| internal_conflict | 47 | 36 | 0.61 | 0.47 |
+| duplicate | 15 | 5 | 1.00 | 0.33 |
 
 ## By tag
 
 | Tag | Claims | Contradiction recall | Support recall | False flags |
 |---|---|---|---|---|
-| paraphrase | 52 | 2/12 (0.17) | 5/40 (0.12) | 2/40 (0.05) |
-| numeric | 44 | 5/18 (0.28) | 3/18 (0.17) | 1/26 (0.04) |
-| antonym | 8 | 4/8 (0.50) | – | – |
-| negation | 14 | 6/14 (0.43) | – | – |
-| negation_trap | 30 | – | 1/16 (0.06) | 3/30 (0.10) |
-| distractor | 56 | 4/16 (0.25) | 1/1 (1.00) | 2/40 (0.05) |
-| temporal | 18 | 3/13 (0.23) | 1/5 (0.20) | 2/5 (0.40) |
-| chinese | 51 | 5/19 (0.26) | 3/15 (0.20) | 4/32 (0.12) |
-| repo | 47 | 3/14 (0.21) | 2/17 (0.12) | 2/33 (0.06) |
-| multi_sentence | 13 | 1/2 (0.50) | 1/11 (0.09) | 0/11 (0.00) |
+| paraphrase | 78 | 1/12 (0.08) | 10/66 (0.15) | 5/66 (0.08) |
+| numeric | 90 | 18/47 (0.38) | 5/35 (0.14) | 2/43 (0.05) |
+| antonym | 8 | 3/8 (0.38) | – | – |
+| negation | 17 | 7/17 (0.41) | – | – |
+| negation_trap | 40 | – | 3/24 (0.12) | 6/40 (0.15) |
+| distractor | 75 | 15/33 (0.45) | 0/1 (0.00) | 3/42 (0.07) |
+| temporal | 29 | 5/17 (0.29) | 2/12 (0.17) | 2/12 (0.17) |
+| chinese | 71 | 7/29 (0.24) | 2/24 (0.08) | 6/42 (0.14) |
+| repo | 47 | 3/14 (0.21) | 1/17 (0.06) | 2/33 (0.06) |
+| multi_sentence | 21 | 1/5 (0.20) | 1/16 (0.06) | 0/16 (0.00) |
 
 ## By case
 
@@ -126,11 +90,14 @@ Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 
 | en-decisions-platform | 17 | 0.47 | 1.00 / 0.43 | 0.00 / 0.00 | 19 |
 | en-decisions-product | 17 | 0.41 | 0.75 / 0.50 | 0.00 / 0.00 | 27 |
 | en-decisions-security | 16 | 0.75 | 1.00 / 0.50 | 0.60 / 0.60 | 14 |
+| en-units-scope | 23 | 0.43 | 0.89 / 0.62 | 0.67 / 0.20 | 45 |
+| es-operacion-alcance | 20 | 0.35 | 1.00 / 0.30 | 0.50 / 0.44 | 38 |
 | repo-instructions-cli | 21 | 0.48 | 0.67 / 0.33 | n/a / 0.00 | 16 |
 | repo-instructions-sdk | 17 | 0.41 | 1.00 / 0.17 | 1.00 / 0.17 | 21 |
-| zh-decisions-platform | 16 | 0.44 | 0.50 / 0.17 | 1.00 / 0.25 | 10 |
-| zh-decisions-process | 17 | 0.53 | 0.60 / 0.43 | n/a / 0.00 | 11 |
-| zh-decisions-roadmap | 18 | 0.33 | 0.50 / 0.17 | 0.67 / 0.29 | 18 |
+| zh-decisions-platform | 16 | 0.31 | 0.00 / 0.00 | n/a / 0.00 | 9 |
+| zh-decisions-process | 17 | 0.41 | 0.33 / 0.14 | n/a / 0.00 | 8 |
+| zh-decisions-roadmap | 18 | 0.28 | 0.25 / 0.17 | n/a / 0.00 | 15 |
+| zh-units-negation | 20 | 0.40 | 1.00 / 0.50 | 0.50 / 0.22 | 24 |
 
 ## Misclassified claims
 
@@ -159,6 +126,32 @@ Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 
 | en-decisions-security | contradicted | supported | paraphrase, multi_sentence | SAML SSO is mandatory for every Enterprise workspace. |
 | en-decisions-security | contradicted | supported | antonym, distractor | SCIM provisioning was approved for the Business plan. |
 | en-decisions-security | supported | unsupported | paraphrase, numeric | Cancelling the Geoloom contract requires 60 days' notice. |
+| en-units-scope | supported | unsupported | paraphrase, numeric | Search p99 must stay within a quarter of a second. |
+| en-units-scope | supported | unsupported | paraphrase, numeric | The search latency budget at the 99th percentile is 250 milliseconds. |
+| en-units-scope | contradicted | unsupported | numeric, distractor | The billing service's p99 latency budget is a quarter of a second. |
+| en-units-scope | contradicted | unsupported | numeric | A checkout write may take up to 2 minutes to return. |
+| en-units-scope | contradicted | unsupported | numeric, multi_sentence | The billing service is probably allowed a smaller share of failed requests each month than search. |
+| en-units-scope | supported | unsupported | paraphrase, numeric | The hot tier holds half a tebibyte of search indexes. |
+| en-units-scope | supported | unsupported | paraphrase, numeric | Search indexes on the hot tier take up 512 GiB. |
+| en-units-scope | contradicted | supported | numeric | The billing archive holds 500 GiB. |
+| en-units-scope | supported | unsupported | numeric, temporal, multi_sentence | 105 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0. |
+| en-units-scope | contradicted | unsupported | numeric, temporal, multi_sentence | Only 30 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0. |
+| en-units-scope | supported | contradicted | paraphrase, negation_trap | A search query that returned HTTP 200 must not be retried. |
+| en-units-scope | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence | On 2026-07-22, ADR-030 was accepted with a rule forbidding clients to retry search queries after HTTP 200. |
+| en-units-scope | supported | unsupported | paraphrase | Retrying a billing invoice render is permitted solely when the first try responded with HTTP 503. |
+| es-operacion-alcance | supported | unsupported | paraphrase, numeric | La latencia p99 de la búsqueda tiene que mantenerse dentro de un cuarto de segundo. |
+| es-operacion-alcance | contradicted | unsupported | numeric, distractor | El presupuesto p99 de facturación es un cuarto de segundo. |
+| es-operacion-alcance | contradicted | unsupported | numeric | La confirmación de un pedido puede tardar hasta 2 minutos. |
+| es-operacion-alcance | supported | unsupported | paraphrase, numeric | El presupuesto mensual de errores de la búsqueda es una décima parte del uno por ciento. |
+| es-operacion-alcance | contradicted | unsupported | numeric, distractor | La búsqueda puede fallar en el 1 por ciento de las peticiones cada mes. |
+| es-operacion-alcance | contradicted | supported | numeric | Los índices de búsqueda ocupan 512 GB en el nivel caliente. |
+| es-operacion-alcance | contradicted | supported | numeric | El archivo de facturas ocupa 500 GiB. |
+| es-operacion-alcance | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence | El 2026-07-22 se aceptó la ADR-015 con una regla que prohíbe reintentar consultas de búsqueda después de un HTTP 200. |
+| es-operacion-alcance | supported | unsupported | paraphrase | Reintentar el renderizado de una factura está permitido únicamente cuando el primer intento contestó con HTTP 503. |
+| es-operacion-alcance | unsupported | supported | negation_trap, distractor | El turno de búsqueda no debe reconocer una alerta de facturación. |
+| es-operacion-alcance | contradicted | supported | distractor | Cualquier persona del turno de búsqueda puede silenciar una alerta de búsqueda. |
+| es-operacion-alcance | supported | unsupported | numeric, temporal, multi_sentence | Pasaron 105 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0. |
+| es-operacion-alcance | contradicted | unsupported | numeric, temporal, multi_sentence | Solo pasaron 30 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0. |
 | repo-instructions-cli | contradicted | unsupported | repo, numeric | Fernhook requires Python 3.11 or newer. |
 | repo-instructions-cli | supported | unsupported | repo, numeric, paraphrase | Python 3.10 is the oldest version fernhook supports. |
 | repo-instructions-cli | contradicted | unsupported | repo, distractor | just test runs ruff and pyright before the test suite. |
@@ -185,7 +178,9 @@ Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 
 | zh-decisions-platform | unsupported | contradicted | distractor, repo, chinese | 订单服务的数据库连接池上限是 80。 |
 | zh-decisions-platform | supported | unsupported | paraphrase, numeric, negation_trap, repo, chinese | 生产发布先切 5% 流量，观察半小时没问题再全量。 |
 | zh-decisions-platform | contradicted | unsupported | antonym, temporal, distractor, chinese | 生产环境出错时会自动回滚。 |
+| zh-decisions-platform | contradicted | unsupported | negation, chinese | 新服务一律要接入统一 API 网关。 |
 | zh-decisions-platform | supported | unsupported | paraphrase, negation_trap, chinese | 这次支付超时事故没有造成资金损失。 |
+| zh-decisions-platform | supported | unsupported | paraphrase, numeric, repo, chinese | 事故后支付接口超时放宽到了 8 秒，为的是降低误判超时的可能性。 |
 | zh-decisions-platform | contradicted | unsupported | numeric, temporal, repo, chinese | 支付接口的超时时间是 3 秒。 |
 | zh-decisions-platform | contradicted | unsupported | negation, repo, chinese | 支付服务对所有接口都会重试两次。 |
 | zh-decisions-platform | contradicted | unsupported | numeric, paraphrase, chinese | 应用日志只保存三个月。 |
@@ -193,6 +188,8 @@ Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 
 | zh-decisions-process | contradicted | unsupported | negation, paraphrase, chinese | 提交采购申请时要附三家供应商的报价。 |
 | zh-decisions-process | contradicted | unsupported | numeric, paraphrase, distractor, chinese | 代码合并前至少需要两人审查。 |
 | zh-decisions-process | supported | unsupported | paraphrase, negation_trap, multi_sentence, chinese | 改动支付模块的代码非得两个人评审通过才能合并。 |
+| zh-decisions-process | contradicted | unsupported | antonym, chinese | 封版期间禁止任何上线。 |
+| zh-decisions-process | contradicted | unsupported | negation, paraphrase, chinese | 封版期间上线不仅要是 P0 修复，而且要 CTO 审批。 |
 | zh-decisions-process | supported | contradicted | paraphrase, negation_trap, chinese | 第四季度不招前端了。 |
 | zh-decisions-process | contradicted | unsupported | negation, paraphrase, chinese | 远程办公的日子可以自己选，没有固定的到岗日。 |
 | zh-decisions-process | supported | contradicted | numeric, temporal, chinese | 2025年12月18日：2026年研发预算定为1200万元。 |
@@ -201,11 +198,24 @@ Detections citing the labeled passage: contradicted 14/16 (0.88), supported 7/7 
 | zh-decisions-roadmap | supported | unsupported | paraphrase, negation_trap, multi_sentence, chinese | 批量导出上线前需要先过隐私评审。 |
 | zh-decisions-roadmap | supported | unsupported | paraphrase, temporal, chinese | 2026年3月2日：协作空间推迟到第三季度。 |
 | zh-decisions-roadmap | contradicted | unsupported | negation, temporal, chinese | 协作空间目前还在内测，尚未正式发布。 |
+| zh-decisions-roadmap | supported | unsupported | paraphrase, numeric, chinese | 新版首页已经向一成的网页端用户开放。 |
 | zh-decisions-roadmap | contradicted | unsupported | distractor, negation, numeric, chinese | 新版首页的移动端灰度比例是 10%。 |
 | zh-decisions-roadmap | supported | unsupported | paraphrase, negation_trap, chinese | 断网的时候也能新建报表草稿。 |
 | zh-decisions-roadmap | contradicted | unsupported | paraphrase, numeric, distractor, chinese | 老客户从2026年11月1日起也要按 129 元付费。 |
-| zh-decisions-roadmap | unsupported | contradicted | distractor, negation_trap, chinese | 企业版月费将上调到 399 元。 |
-| zh-decisions-roadmap | unsupported | supported | distractor, negation_trap, chinese | 免费版的存储额度会提高到 5GB。 |
+| zh-decisions-roadmap | supported | contradicted | paraphrase, negation_trap, distractor, chinese | 免费用户也可以使用基础模板。 |
+| zh-decisions-roadmap | unsupported | contradicted | distractor, negation_trap, chinese | 免费版的存储额度会提高到 5GB。 |
 | zh-decisions-roadmap | supported | unsupported | paraphrase, negation_trap, chinese | 接下来两个季度的工作重点是报表加载性能。 |
 | zh-decisions-roadmap | contradicted | unsupported | antonym, chinese | 路线图评审批准了第三方插件市场。 |
-| zh-decisions-roadmap | supported | unsupported | paraphrase, numeric, negation_trap, chinese | 客户对新版筛选器的评价很好，NPS 涨到了 42。 |
+| zh-decisions-roadmap | supported | contradicted | paraphrase, numeric, negation_trap, chinese | 客户对新版筛选器的评价很好，NPS 涨到了 42。 |
+| zh-units-negation | supported | unsupported | paraphrase, numeric, chinese | 检索的九九分位时延必须压在四分之一秒以内。 |
+| zh-units-negation | contradicted | unsupported | numeric, distractor, chinese | 账单服务的 p99 时延预算是四分之一秒。 |
+| zh-units-negation | contradicted | unsupported | numeric, chinese | 下单接口的返回时限是 2 分钟。 |
+| zh-units-negation | supported | unsupported | paraphrase, numeric, chinese | 检索服务每月的错误预算是请求量的千分之一。 |
+| zh-units-negation | contradicted | unsupported | numeric, distractor, chinese | 检索服务每个月允许百分之一的请求失败。 |
+| zh-units-negation | supported | unsupported | paraphrase, numeric, chinese | 检索索引的热数据有半个太比字节。 |
+| zh-units-negation | supported | unsupported | paraphrase, numeric, chinese | 检索索引的热数据占用五百一十二吉比字节。 |
+| zh-units-negation | contradicted | supported | numeric, chinese | 检索索引的热数据占了 512 GB。 |
+| zh-units-negation | contradicted | supported | numeric, chinese | 账单归档有 500 GiB。 |
+| zh-units-negation | supported | unsupported | paraphrase, temporal, numeric, chinese | 2026年3月2日容量组曾打算让检索热数据保留三十天。 |
+| zh-units-negation | supported | unsupported | paraphrase, negation_trap, chinese | 已经返回 HTTP 200 的检索查询不得再发一次。 |
+| zh-units-negation | supported | unsupported | paraphrase, negation_trap, temporal, multi_sentence, chinese | 2026年7月22日，ADR-011 获得通过，其中规定返回 HTTP 200 的检索查询不得重试。 |

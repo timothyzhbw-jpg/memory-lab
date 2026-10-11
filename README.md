@@ -581,10 +581,10 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
 
 ## Benchmark and GitHub Action
 
-The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 139 labeled English and Chinese claims across
-eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
-precision 0.73, recall 0.33 and 3-way accuracy 0.47, with per-language results; these cases exercise failure
-modes rather than estimate accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
+The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 202 labeled English, Chinese and Spanish claims
+across eleven synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
+precision 0.71, recall 0.33 and 3-way accuracy 0.42; these cases exercise failure modes rather than estimate
+accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
 
 The [Organizational Memory benchmark](benchmarks/orgmemory/README.md) has ten labeled datasets with 233 labels
 (598 checks) on final states at chosen times, audit-trail outcomes, audit findings and validation errors. The cases
