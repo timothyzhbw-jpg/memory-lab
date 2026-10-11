@@ -1,0 +1,33 @@
+# List recipes
+default:
+    @just --list
+
+# Create .venv with the dev dependency group
+setup:
+    uv sync
+
+# Run the test suite; extra arguments go to pytest
+test *args:
+    uv run pytest {{args}}
+
+# Re-record HTTP cassettes against a local Fernwiki (needs FERNWIKI_URL)
+record *args:
+    uv run pytest --record-mode=rewrite {{args}}
+
+lint:
+    uv run ruff check src tests
+    uv run ruff format --check src tests
+
+fmt:
+    uv run ruff format src tests
+    uv run ruff check --fix src tests
+
+types:
+    uv run pyright
+
+# Everything CI runs, in the same order
+ci: lint types test
+
+# Serve the docs locally on http://127.0.0.1:8000
+docs:
+    uv run --group docs mkdocs serve

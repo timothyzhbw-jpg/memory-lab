@@ -1,0 +1,43 @@
+image: python:3.12-slim
+
+definitions:
+  caches:
+    uv: ~/.cache/uv
+  steps:
+    - step: &checks
+        name: Lint, types and tests (Python 3.12)
+        caches: [uv]
+        script:
+          - pip install uv==0.4.20 rust-just==1.36.0
+          - just setup
+          - just ci
+    - step: &oldest
+        name: Tests (Python 3.10)
+        image: python:3.10-slim
+        caches: [uv]
+        script:
+          - pip install uv==0.4.20
+          - uv sync
+          - uv run pytest
+
+pipelines:
+  pull-requests:
+    "**":
+      - parallel:
+          - step: *checks
+          - step: *oldest
+  branches:
+    main:
+      - parallel:
+          - step: *checks
+          - step: *oldest
+  tags:
+    "v*":
+      - step: *checks
+      - step:
+          name: Publish to PyPI
+          deployment: production
+          script:
+            - pip install uv==0.4.20
+            - uv build
+            - uv publish --token "$PYPI_TOKEN"
