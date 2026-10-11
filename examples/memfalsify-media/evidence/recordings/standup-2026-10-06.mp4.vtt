@@ -1,0 +1,16 @@
+WEBVTT
+
+NOTE source_sha256: 4c4369d2dc7b32e51f731a2c608d75ef6955a7bc8452967823c1f054518575c7
+
+1
+00:00:12.500 --> 00:00:17.000
+<v Priya>The public API rate limit is 60 requests
+per minute per key.
+
+2
+00:00:17.500 --> 00:00:21.250
+<v Sam>Bulk export waits for the billing schema migration.
+
+3
+00:00:21.500 --> 00:00:24.000
+<v Priya>Nobody has estimated it yet.

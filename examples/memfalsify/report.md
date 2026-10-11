@@ -159,7 +159,7 @@
 
 ## Skipped evidence
 
-- `media/whiteboard.png`: media file: multimodal extraction not implemented
+- `media/whiteboard.png`: media file: no usable transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it
 
 ## Limitations
 

@@ -1,19 +1,25 @@
-"""Index a directory of evidence files into exact, hashed sentence spans."""
+"""Index a directory of evidence files into exact, hashed spans.
+
+Text files become sentence spans. Transcript and OCR sidecars (``memcore.sidecar``) become one span per cue
+or OCR line, which also records its position in the media file. Media files themselves are never read as
+text: they are hashed only to check the sidecars that describe them.
+"""
 from __future__ import annotations
 
 from collections.abc import Iterable
 from fnmatch import fnmatchcase
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from pydantic import BaseModel
 
-from memcore import EvidenceSpan, make_span, sha256_bytes
+from memcore import EvidenceSpan, MediaRef, SidecarError, load_sidecar, make_span, sha256_bytes, sidecar_format
 from memcore.reading import read_file_bytes, walk_files
+from memcore.sidecar import LABELS, MEDIA_SUFFIXES
 
 from .text import features, sentence_spans
 
-MEDIA = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".tiff", ".mp3", ".wav", ".m4a",
-         ".flac", ".ogg", ".mp4", ".mov", ".webm", ".mkv", ".pdf"}
+MEDIA = MEDIA_SUFFIXES
+NO_SIDECAR = "media file: no usable transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it"
 SKIP_DIRS = {"node_modules", "__pycache__", "venv"}
 MAX_BYTES = 2_000_000
 REPORT_HEADER = "# MemFalsify audit report"
@@ -41,13 +47,26 @@ def _matches(relative: str, patterns: list[str], directory: bool = False) -> boo
     return any(fnmatchcase(name, pattern) for name in names for pattern in patterns)
 
 
+def _passage(relative: str, digest: str, text: str, start: int, end: int,
+             media: MediaRef | None = None) -> Passage | None:
+    words, numbers = features(text[start:end])
+    if not words:
+        return None
+    span = make_span(relative, digest, text, start, end, source_kind="file", media=media)
+    return Passage(span=span, words=words, numbers=numbers)
+
+
 def scan(root: Path, exclude: Iterable[str] = (),
          memory_files: Iterable[Path] = ()) -> tuple[list[Passage], list[Skipped]]:
-    """Index ``root``. Files matching an ``exclude`` glob and the memory files themselves are silently left out."""
+    """Index ``root``. Files matching an ``exclude`` glob and the memory files themselves are silently left out.
+
+    A media file is listed as skipped unless a sidecar bound to it was indexed. Sidecars that cannot be used
+    (malformed, stale, unbound or ambiguous) are listed as skipped with the reason."""
     root = Path(root).resolve()
     patterns = [p.strip().removeprefix("./") for p in exclude if p.strip()]
     excluded = {Path(p).resolve() for p in memory_files}
     passages, skipped = [], []
+    hashes: dict[Path, str] = {}
 
     def walk_error(error: OSError) -> None:
         # An inaccessible subtree may contain counterevidence: fail closed.
@@ -61,6 +80,10 @@ def scan(root: Path, exclude: Iterable[str] = (),
             if (Path(directory) / name).is_symlink():
                 skipped.append(Skipped(path=(base / name).as_posix(), reason="symlinked directory not followed"))
                 dirnames.remove(name)
+        # Media files are decided after their directory's sidecars, so entries stay in name order.
+        local: list[Skipped] = []
+        media: dict[str, str] = {}  # media file name -> relative path
+        bound: set[str] = set()  # names of media files a sidecar was checked against and indexed for
         for name in sorted(filenames):
             if name.startswith("."):
                 continue
@@ -73,39 +96,52 @@ def scan(root: Path, exclude: Iterable[str] = (),
             except (OSError, RuntimeError):
                 if not path.is_symlink():
                     raise
-                skipped.append(Skipped(path=relative, reason="broken or cyclic symlink"))
+                local.append(Skipped(path=relative, reason="broken or cyclic symlink"))
                 continue
             if resolved in excluded:
                 continue
             if not resolved.is_relative_to(root):
-                skipped.append(Skipped(path=relative, reason="symlink escapes evidence root"))
+                local.append(Skipped(path=relative, reason="symlink escapes evidence root"))
                 continue
             if not resolved.is_file():
                 broken = path.is_symlink() and not resolved.exists()
-                skipped.append(Skipped(path=relative, reason="broken or cyclic symlink" if broken else "not a regular file"))
+                local.append(Skipped(path=relative, reason="broken or cyclic symlink" if broken else "not a regular file"))
                 continue
             if path.suffix.lower() in MEDIA:
-                skipped.append(Skipped(path=relative, reason="media file: multimodal extraction not implemented"))
+                media[name] = relative
+                local.append(Skipped(path=relative, reason=NO_SIDECAR))
                 continue
             raw = read_file_bytes(resolved)
             if len(raw) > MAX_BYTES:
-                skipped.append(Skipped(path=relative, reason="larger than 2 MB"))
+                local.append(Skipped(path=relative, reason="larger than 2 MB"))
                 continue
             try:
                 if b"\x00" in raw:
                     raise UnicodeDecodeError("utf-8", raw, 0, 1, "binary")
                 text = raw.decode("utf-8")
             except UnicodeDecodeError:
-                skipped.append(Skipped(path=relative, reason="not UTF-8 text"))
+                local.append(Skipped(path=relative, reason="not UTF-8 text"))
                 continue
             if text.startswith(OUTPUT_HEADERS) or text.lstrip().startswith('{\n  "tool": "memfalsify"'):
-                skipped.append(Skipped(path=relative, reason="MemFalsify report: a report cannot be its own evidence"))
+                local.append(Skipped(path=relative, reason="MemFalsify report: a report cannot be its own evidence"))
                 continue
             digest = sha256_bytes(raw)
-            for start, end in sentence_spans(text):
-                words, numbers = features(text[start:end])
-                if words:
-                    passages.append(Passage(span=make_span(relative, digest, text, start, end,
-                                                           source_kind="file"),
-                                            words=words, numbers=numbers))
+            fmt = sidecar_format(name)
+            if fmt is not None:
+                try:
+                    sidecar = load_sidecar(root, relative, text, siblings=filenames, hashes=hashes)
+                except SidecarError as exc:
+                    local.append(Skipped(path=relative, reason=f"{LABELS[fmt]}: {exc}"))
+                    continue
+                if sidecar.parsed.note:
+                    local.append(Skipped(path=relative, reason=f"{LABELS[fmt]}: {sidecar.parsed.note}"))
+                if sidecar.media_sha256 is not None:
+                    bound.add(PurePath(sidecar.media).name)
+                passages += [p for unit in sidecar.units
+                             if (p := _passage(relative, digest, text, unit.start, unit.end, sidecar.ref(unit)))]
+                continue
+            passages += [p for start, end in sentence_spans(text)
+                         if (p := _passage(relative, digest, text, start, end))]
+        covered = {media[name] for name in bound if name in media}
+        skipped += [s for s in local if not (s.reason == NO_SIDECAR and s.path in covered)]
     return passages, skipped
