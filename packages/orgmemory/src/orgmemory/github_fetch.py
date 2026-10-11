@@ -6,9 +6,11 @@ and redirects are never followed automatically.
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import os
 import re
+import ssl
 import sys
 import time
 import urllib.request
@@ -124,6 +126,114 @@ def urllib_transport(opener: urllib.request.OpenerDirector | None = None, timeou
             raise URLError(exc) from exc
 
     return transport
+
+
+class _ResponseReader(io.RawIOBase):
+    """Count socket bytes before buffering, including an incomplete status line before a timeout."""
+
+    def __init__(self, raw, received: Callable[[], None]):
+        self.raw, self.received = raw, received
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer):
+        count = self.raw.readinto(buffer)
+        if count:
+            self.received()
+        return count
+
+    def close(self) -> None:
+        try:
+            self.raw.close()
+        finally:
+            super().close()
+
+
+class _ResponseSocket:
+    """HTTPResponse only needs makefile; keep its usual buffering over a byte-counting reader."""
+
+    def __init__(self, sock, received: Callable[[], None]):
+        self.sock, self.received = sock, received
+
+    def makefile(self, mode):
+        return io.BufferedReader(_ResponseReader(self.sock.makefile(mode, buffering=0), self.received))
+
+
+class PersistentTransport:
+    """Serial API-only GET transport with one verified HTTPS connection per run.
+
+    HTTPS_PROXY/https_proxy or ALL_PROXY/all_proxy select urllib instead (no custom CONNECT tunnel).
+    Only a failure before any response bytes gets one immediate reconnect; Client owns all other retries.
+    Close explicitly or use as a context manager. The connection factory is injectable for offline tests.
+    """
+
+    def __init__(self, timeout: float = 30, *, connection_factory: Callable[..., Any] | None = None,
+                 env: Mapping[str, str] = os.environ):
+        self.timeout = timeout
+        self._factory = connection_factory or http.client.HTTPSConnection
+        self._connection = None
+        self._closed = False
+        self._fallback = urllib_transport(timeout=timeout) if any(
+            env.get(name) for name in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")) else None
+        self._context = ssl.create_default_context()
+
+    def _disconnect(self) -> None:
+        connection, self._connection = self._connection, None
+        if connection is not None:
+            connection.close()
+
+    def close(self) -> None:
+        self._closed = True
+        self._disconnect()
+
+    def __enter__(self) -> PersistentTransport:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
+    def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]:
+        if self._closed:
+            raise ValueError("the GitHub transport is closed")
+        if not PRINTABLE.fullmatch(url) or _origin(url) != API:
+            raise GitHubError(f"refusing a request outside {API}")
+        if self._fallback is not None:
+            return self._fallback(url, headers)
+        parts = urlsplit(url)
+        target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+        for attempt in range(2):
+            received = False
+
+            def note_bytes() -> None:
+                nonlocal received
+                received = True
+
+            def response_class(sock, *args, **kwargs):
+                return http.client.HTTPResponse(_ResponseSocket(sock, note_bytes), *args, **kwargs)
+
+            try:
+                if self._connection is None:
+                    self._connection = self._factory("api.github.com", timeout=self.timeout, context=self._context)
+                connection = self._connection
+                connection.timeout = self.timeout
+                if connection.sock is not None:
+                    connection.sock.settimeout(self.timeout)
+                connection.response_class = response_class
+                connection.request("GET", target, headers=headers)
+                with connection.getresponse() as response:
+                    result = response.status, _lower(response.headers), response.read()
+                    if response.will_close:
+                        self._disconnect()
+                    return result
+            except (OSError, http.client.HTTPException) as exc:
+                self._disconnect()
+                if received or attempt:
+                    raise URLError(exc) from exc
+            except BaseException:
+                self._disconnect()
+                raise
+        raise AssertionError("unreachable")
 
 
 def _lower(headers) -> dict[str, str]:

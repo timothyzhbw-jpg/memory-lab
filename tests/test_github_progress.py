@@ -190,7 +190,7 @@ def test_cli_progress_and_sleep_leave_stdout_bytes_unchanged(tmp_path, monkeypat
                                sleep=clock.sleep, progress=kwargs["progress"])
 
         monkeypatch.setattr(github_fetch, "Client", make_client)
-        monkeypatch.setattr(github_fetch, "urllib_transport", lambda: transport)
+        monkeypatch.setattr(github_fetch, "PersistentTransport", lambda: transport)
         monkeypatch.setattr(github_fetch, "FetchProgress", lambda: reporter(clock=clock.clock) if enabled else None)
         root = tmp_path / str(enabled)
         root.mkdir()
