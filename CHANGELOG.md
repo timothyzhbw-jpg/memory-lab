@@ -16,7 +16,9 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Changed
+
+- memfalsify `audit` and `diff` find internal conflicts from an inverted index of normalized terms and reuse each claim's lexical features. Reports stay byte-identical; large memories are much faster. Timings are in `benchmarks/perf/`.
 
 ## memlab-core
 

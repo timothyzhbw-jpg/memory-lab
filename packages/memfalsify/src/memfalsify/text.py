@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from datetime import date
+from functools import lru_cache
 
 STOPWORDS = frozenset("""
 a an the is are was were be been being am to of in on at by for with and or but as it its this that these
@@ -79,19 +80,27 @@ def _tokens(text: str) -> Iterator[tuple[bool, str]]:
                 yield False, stem(lower)
 
 
+# Bounded: audit text is untrusted, so a memory cannot grow this without bound.
+@lru_cache(maxsize=32768)
+def _analyzed(text: str) -> tuple[tuple[bool, str], ...]:
+    """Tokenize once. ``features`` and ``terms`` are asked for the same sentences over and over."""
+    return tuple(_tokens(text))
+
+
 def features(text: str) -> tuple[frozenset[str], frozenset[str]]:
     """Return (content tokens, numeric tokens)."""
     words, numbers = set(), set()
-    for is_number, token in _tokens(text):
+    for is_number, token in _analyzed(text):
         (numbers if is_number else words).add(token)
     return frozenset(words), frozenset(numbers)
 
 
 def terms(text: str) -> list[str]:
     """The tokens behind ``features``, in text order, for comparing two versions of a sentence."""
-    return [token for _, token in _tokens(text)]
+    return [token for _, token in _analyzed(text)]
 
 
+@lru_cache(maxsize=32768)
 def has_negation(text: str) -> bool:
     return bool(NEGATION.search(text))
 
