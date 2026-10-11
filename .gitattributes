@@ -5,6 +5,8 @@
 # Git newline conversion for data (even intentionally CRLF data) on every host.
 examples/** -text
 benchmarks/memfalsify/cases/** -text
+benchmarks/orgmemory/cases/** -text
 tests/fixtures/** -text
 benchmarks/memfalsify/results-*.json -text
 benchmarks/memfalsify/RESULTS.md -text
+benchmarks/orgmemory/RESULTS.md -text
