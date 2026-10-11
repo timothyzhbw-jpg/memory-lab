@@ -16,7 +16,26 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### orgmemory
+
+#### Added
+
+- `orgmemory jira convert DATASET CAPTURE [--dry-run]` imports a saved Jira Cloud search offline. A capture
+  is every page of `GET /rest/api/3/search?expand=changelog` with a fixed field list, wrapped with the site
+  and capture time; the README has the curl and jq recipe. Each issue is a subject (its key). Creation is a
+  `request` by the creator, and comments are `comment`. A status transition is `approve`, `reject`,
+  `revoke` or `reconsider` only when `jira.json` maps its target status id; any other transition is a
+  `comment`. Actors are `jira:<accountId>`. App accounts are comment-only, and acts without an author are
+  skipped and reported. Pages merge in any order, and identical duplicates are ignored. A capture that
+  misses pages, or an issue whose changelog or comments are missing or truncated, is incomplete (exit 3),
+  and that issue is not imported. Re-imports are idempotent and report drift, gone comments and moved
+  issues. A dataset imports one site, and the importer never reads `policy.json`. See
+  [docs/design/jira-import.md](docs/design/jira-import.md) and `examples/orgmemory/jira-example`.
+
+#### Changed
+
+- The GitHub and Jira importers share their capture machinery (`orgmemory.ingest`). Neither starts while
+  the other's lock (`.github-sync.lock`, `.jira-sync.lock`) exists. GitHub output is unchanged.
 
 ## memlab-core
 

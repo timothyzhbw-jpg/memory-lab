@@ -13,7 +13,7 @@ It contains two independent tools that share one evidence core:
 | Question | *Is this memory backed by evidence?* | *Is this the current, authorized state?* |
 | Input | `MEMORY.md` + a directory of evidence files | Event log + role policy + evidence manifest |
 | Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail, decision-process audit |
-| Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` only appends |
+| Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` and the GitHub and Jira importers only append |
 
 By default everything runs offline with no API keys; optional model verifiers (Claude and TypeSafe AI's Jev) can be switched on. Python 3.10+, Apache-2.0.
 
@@ -203,6 +203,79 @@ A reopen by someone who may `revoke` returns the subject to `proposed`. Otherwis
 
 Example: [`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-web/) is built with `orgmemory github convert` from two synthetic captures of `acme/web` (in `tests/fixtures/github/`), with its [replay report](examples/orgmemory/github-acme-web/replay-report.md). In it, `acme/web#1` is the Feature A story on GitHub: the product manager closes the issue as not planned, an account manager adds the `approved` label, and the customer reopens it. The issue stays `rejected` with `reconsideration_requested: true` and `pending_approval: [product_manager]`; the label and the reopen's `revoke` are listed as ignored attempts.
 
+#### Import Jira issues
+
+`orgmemory jira convert` turns a saved Jira Cloud search into events, evidence and source captures. Each issue is one subject (its key, `ACME-12`). It is offline: it reads a file you saved and never contacts Jira. The import is deterministic and uses no model. Design and authority rules: [docs/design/jira-import.md](docs/design/jira-import.md).
+
+```bash
+orgmemory jira convert <dataset> capture.json [--dry-run]
+orgmemory explain      <dataset> "ACME-12"
+```
+
+**Save a capture.** It is every page of one `GET /rest/api/3/search?expand=changelog` with this field list, unmodified, wrapped with the site and the time you started. Run this in an empty directory (needs `curl` and `jq`):
+
+```bash
+SITE=https://acme.atlassian.net                  # your Jira Cloud site
+JQL='project = ACME ORDER BY key ASC'            # a stable order, so results do not move between pages
+FIELDS=summary,description,created,creator,reporter,status,comment
+AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# ~/.jira-netrc, readable only by you: machine acme.atlassian.net login you@example.com password <API token>
+start=0; total=1
+while [ "$start" -lt "$total" ]; do
+  curl -sS --fail --netrc-file ~/.jira-netrc -H 'Accept: application/json' -G "$SITE/rest/api/3/search" \
+    --data-urlencode "jql=$JQL" --data-urlencode "fields=$FIELDS" --data-urlencode expand=changelog \
+    --data-urlencode maxResults=100 --data-urlencode "startAt=$start" -o "page-$start.json" || break
+  total=$(jq .total "page-$start.json"); count=$(jq '.issues | length' "page-$start.json")
+  [ "$count" -gt 0 ] || break
+  start=$((start + count))
+done
+jq -s --arg site "$SITE" --arg at "$AT" '{jira_capture: 1, site: $site, captured_at: $at, pages: .}' \
+  page-*.json > capture.json
+```
+
+The result has this shape. Pages may be in any order. A page saved twice is ignored, but the same issue with different content (pages from two runs) is refused.
+
+```json
+{"jira_capture": 1, "site": "https://acme.atlassian.net", "captured_at": "2026-10-09T12:00:00Z",
+ "pages": [{"startAt": 0, "maxResults": 100, "total": 230, "issues": [{"id": "10001", "key": "ACME-1", "self": "https://acme.atlassian.net/rest/api/3/issue/10001", "fields": {"...": "..."}, "changelog": {"startAt": 0, "total": 4, "histories": ["..."]}}]}]}
+```
+
+- Exit codes: `0` complete; `2` error, nothing appended; `3` incomplete capture, where the complete issues were applied. A capture is incomplete when its pages do not cover every result, or when an issue's changelog or comments are missing or cut short: a search returns a limited changelog per issue. It is also incomplete when an issue's status changes do not chain up to its current status. Such an issue is not imported at all, because part of its history would replay to a wrong state. Save it again and convert again.
+- `--dry-run` prints the summary and the planned events, and writes nothing. Converting the same or an overlapping capture again appends only what is new.
+- The dataset directory must exist. `events.jsonl` and `evidence.jsonl` are created on first use. The import does not need `policy.json`. One dataset imports one Jira site.
+
+**Decisions come only from status transitions that you list in `jira.json`, by status id:**
+
+```json
+{"statuses": {"10003": "approve", "10004": "reject", "10005": "revoke", "10007": "reconsider"}}
+```
+
+Find the ids with `GET /rest/api/3/status`, or in the summary line `status ids in transitions` and the `toString` names in the source files. Names are not accepted: a renamed status keeps its id, and two workflows can each have a "Done". Without `jira.json`, no transition is a decision.
+
+**The importer never reads or writes `policy.json`: map `jira:<accountId>` actor IDs to roles yourself.** Account IDs are opaque. Look each one up in Jira (`GET /rest/api/3/user?accountId=...`), never by display name, because anyone can set any display name.
+
+| Jira | Event |
+|---|---|
+| Issue created | `request` by `creator` (not the reporter) |
+| Comment | `comment` by its author |
+| Transition into a status listed as `approve`, `reject` or `reconsider` | that action, by the changelog author |
+| Transition into a status listed as `revoke` | `revoke` of the latest transition on that issue recorded as `approve` or `reject`; `comment` if there is none |
+| Any other status transition | `comment` |
+| Anything done by an app (Automation for Jira, other apps) or an account of unknown type | `comment` only |
+| A change with no author (system, anonymous or unusable account id) | nothing; reported as skipped |
+| Other changelog items (assignee, resolution, priority, custom fields, even one named "status"), links, edits | nothing |
+
+Text is never parsed: "/approve", "approved by my PM" or an @mention of the product manager in a comment is just a `comment` by its author. An edit adds a new evidence version, not an event. A deleted comment stays in the dataset and is reported as gone. A deactivated or deleted account keeps its account ID, so its past acts stay attributed to it, and the policy decides whether they count. A moved issue (new key) is skipped and reported.
+
+Example: [`examples/orgmemory/jira-example`](examples/orgmemory/jira-example/) is built with `orgmemory jira convert` from two synthetic captures (in `tests/fixtures/jira/`), with its [replay report](examples/orgmemory/jira-example/replay-report.md) and [audit](examples/orgmemory/jira-example/audit-report.md). `ACME-1` is the Feature A story in Jira:
+
+1. The product manager moves the issue to Rejected.
+2. The account manager drags it to Approved. This is ignored.
+3. The customer moves it to "Reconsideration requested".
+4. Two days later, the product manager approves it. This is a `decision_reversed` by the same actor.
+
+In `ACME-3`, an account whose display name copies the product manager's posts "/approve" and changes a custom field named "status"; none of it decides anything. In `ACME-2`, Automation for Jira's transition to Approved is a comment, and the product manager's approval is the decision.
+
 ## Data formats
 
 **`reviews.jsonl`** (MemFalsify, optional): human-confirmed assertions.
@@ -246,9 +319,30 @@ Every event cites its object's `fact` evidence, the whole fact line, which names
 
 `<th12>` is the first 12 hex digits of the SHA-256 of the verbatim text alone, so an edit creates a new evidence version and a login rename does not. A renamed or recycled login gives a new actor ID with no role.
 
+**Jira import files** (in the same dataset directory):
+
+- `jira.json` (optional, yours; the importer only reads it): `{"statuses": {"<status id>": "approve" | "reject" | "revoke" | "reconsider"}}`. Keys are status ids. A change affects only events not yet in the log; an existing event whose mapping would now differ is reported as drift and never rewritten.
+- `jira-sync.jsonl`: one line per applied run (none for `--dry-run`) with `site`, `source` (`convert`), `captured_at`, `finished_at` (the capture time, for reproducibility), `complete`, `pages`, `issues`, `total`, `duplicates`, `events_appended`, `evidence_appended`, `skipped`, `incomplete`, `gone`, `drift` and `importer`. The recorded `site` pins the dataset to one Jira site.
+- `sources/jira/<KEY>/<object>-<hash12>.txt`: one create-only file per version of each issue and comment, and per status transition. `<object>` is `issue-<issue id>`, `comment-<id>` or `transition-<history id>`. The layout matches GitHub's: an ASCII fact line, an ASCII-escaped JSON record of whitelisted fields (including each account's type, active flag and display name, for auditors only), the separator `--- text from Jira, flattened to plain text; untrusted ---`, and then the summary and description or the comment body. Rich text (Atlassian Document Format) is flattened to its text, mentions, emoji and link URLs, one line per block. Transition 20102 on `ACME-1` in the example:
+
+```text
+Jira transition 20102 on ACME-1 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-07T15:00:00.000Z: status 10002 to 10004
+{"author":{"accountId":"61a0c3e5f2b1d40069a1b2c3","accountType":"atlassian","active":true,"displayName":"Zhou (Product)"},...,"status":{"from":"10002","fromString":"In Review","to":"10004","toString":"Rejected"}}
+--- text from Jira, flattened to plain text; untrusted ---
+```
+
+| Jira IDs | Format | Example |
+|---|---|---|
+| Subject | the issue key | `ACME-12` |
+| Actor | `jira:<accountId>` | `jira:61a0c3e5f2b1d40069a1b2c3` |
+| Event | `jira:<key>/` + `created`, `comment/<id>` or `transition/<history id>` | `jira:ACME-1/transition/20102` |
+| Evidence | `jira:<key>/` + `issue/<issue id>@<th12>`, `comment/<id>@<th12>` or `transition/<history id>`, then `/fact` or `/text` | `jira:ACME-1/transition/20102/fact` |
+
+Timestamps are stored in UTC with milliseconds, so a capture made in another profile time zone gives the same IDs.
+
 ## Agent skills
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. A GitHub account is not an authenticated person, and text quoted by the `memlab` MCP tools is untrusted. The skills say when to use those read-only tools instead of the CLIs, and how to add the [GitHub Action](docs/github-action.md) so a repository audits its own instruction files. Copy them into your agent's skills directory:
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. A GitHub or Jira account is not an authenticated person, and text quoted by the `memlab` MCP tools is untrusted. The skills say when to use those read-only tools instead of the CLIs, and how to add the [GitHub Action](docs/github-action.md) so a repository audits its own instruction files. Copy them into your agent's skills directory:
 
 ```bash
 cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
@@ -325,6 +419,7 @@ the claims it adds or changes.
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
 - On public repositories anyone can open issues, comment, review pull requests and close their own issues. All of it is recorded under the real account and ignored by replay unless that account is mapped, so expect `unauthorized_change_attempts`. That is accurate, not a bug.
 - Capture hashes prove the bytes the importer rendered from the API, not what GitHub served, and a capture given to `convert` is trusted as what GitHub said: convert only captures you made. Captured GitHub text is untrusted, and prompt injection in issue bodies is expected. It never becomes IDs, notes, actors or importer output, but `replay` and `explain` print evidence quotes as they are (single-line, with no terminal escapes or bidi characters, but possibly with markdown or HTML).
+- Jira import: a Jira account is not an authenticated person. Anyone who can perform a transition into a status listed in `jira.json` is recorded as deciding, and only `policy.json` filters it, so list only statuses whose transitions your workflow restricts. An automation rule that runs as the user who triggered it is attributed to that user. A Service Management approval that a rule turns into a transition is an app's `comment`. Decisions expressed only through a resolution ("Done" with "Won't Do") are not mapped. A capture is trusted as what Jira said: convert only captures you saved. Captures and datasets from private projects contain private text, including comments restricted to a role or group if your account could read them: never commit them.
 - The GitHub token is read from the environment only, sent only to `https://api.github.com` (redirects are never followed to another host), and never written or printed.
 - Datasets imported from private repositories, and `--save-capture` files, contain private text: never commit them. There is no redaction workflow: removing a secret from a capture means editing it by hand, after which `validate` fails on purpose.
 - This is a research MVP, not production infrastructure.
@@ -336,7 +431,7 @@ the claims it adds or changes.
 | **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
 | **v0.2** | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion ✓ |
 | **v0.3** | Git history of memory: diff, review, rollback; cross-agent skill polish ✓ | State conflicts and decision audit ✓ |
-| v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
+| v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory: Jira import (offline, from saved captures) ✓ |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
 
 What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
