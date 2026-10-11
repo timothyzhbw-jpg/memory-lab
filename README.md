@@ -11,7 +11,7 @@ It contains two independent tools that share one evidence core:
 | | **MemFalsify** | **Verified Organizational Memory** (`orgmemory`) |
 |---|---|---|
 | Question | *Is this memory backed by evidence?* | *Is this the current, authorized state?* |
-| Input | `MEMORY.md` + a directory of evidence files | Event log + role policy + evidence manifest |
+| Input | `MEMORY.md` or an agent's instruction files (`CLAUDE.md`, `AGENTS.md`, Cursor, Copilot, Gemini, Windsurf) + a directory of evidence files | Event log + role policy + evidence manifest |
 | Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail, decision-process audit |
 | Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` only appends |
 
@@ -78,7 +78,31 @@ Independent of evidence, each memory is checked for `overgeneralization` (always
 
 Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
-Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
+Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `memfalsify discover` lists a repository's agent instruction files (below); `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
+
+#### Instruction files of other agents
+
+Every command also takes the instruction files of other coding agents. Each format was checked against the agent's documentation (October 2026; the sources are listed in [`formats.py`](packages/memfalsify/src/memfalsify/formats.py)):
+
+| Agent | Files | Frontmatter fields kept |
+|---|---|---|
+| Claude Code | `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/rules/**/*.md` | `paths` |
+| Codex and other `AGENTS.md` readers | `AGENTS.md`, `AGENTS.override.md` | |
+| Cursor | `.cursor/rules/**/*.mdc`; legacy `.cursorrules` | `description`, `globs`, `alwaysApply` |
+| GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md` | `applyTo`, `excludeAgent` |
+| Gemini CLI | `GEMINI.md` | |
+| Windsurf (now Devin Desktop) | `.windsurf/rules/*.md`, `.devin/rules/*.md`; legacy `.windsurfrules` | `trigger`, `globs`, `description` |
+
+```bash
+memfalsify discover                                  # list them: a table, or --format json; --exclude 'tests/fixtures/**'
+memfalsify audit .cursor/rules/api.mdc --evidence .  # claims, diff and history take them too
+```
+
+- Frontmatter is never a claim. The fields in the table are attached to each claim of the file, as `metadata` in JSON and a `Frontmatter:` line in reports, so a finding shows where the instruction applies. Frontmatter is read as written, with a small YAML subset (`globs: **/*.ts` is kept although strict YAML rejects it); other fields are ignored.
+- `diff` lists unchanged claims whose frontmatter changed under "Frontmatter changed" (they are not audited), and `history` counts that as the latest change of each claim of the file.
+- `@file.md` imports (Claude Code, Gemini CLI) are followed like local Markdown links: one level deep and inside the file's directory. A line that imports is not a claim.
+- Locations are `path:line`, relative to the audited file's directory, with lines counted from the top of the file, frontmatter included.
+- `discover` reads file names only. It finds `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and the rule directories in any directory, and `.cursorrules`, `.windsurfrules` and `.github/` at the top only. It does not search other hidden directories, `node_modules/`, `__pycache__/` or `venv/`, lists nested git repositories as skipped, follows a symlink only to a regular file inside the directory, and lists a file reachable under two names once (`same_as`). An unreadable directory exits 2. Files outside the repository (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, Windsurf's global rules) and names configured in an agent's settings are not searched.
 
 #### Review memory changes in git
 
@@ -306,8 +330,9 @@ eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RES
 precision 0.62, recall 0.27 and 3-way accuracy 0.44; these cases exercise failure modes rather than estimate
 accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
 
-The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files against repository
-evidence and puts the report in the job summary. Its default strict check fails on possible counterevidence;
+The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files, or with
+`memory: auto` every one that `memfalsify discover` finds, against repository evidence and puts the report in
+the job summary. Its default strict check fails on possible counterevidence;
 unsupported claims and wording issues remain review leads. With `diff-base` (for example the pull request's base
 commit, and `fetch-depth: 0` on `actions/checkout`), it runs `memfalsify diff`, so a pull request is gated only on
 the claims it adds or changes.

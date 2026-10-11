@@ -11,7 +11,7 @@
 | | **MemFalsify** | **可验证的组织记忆**（`orgmemory`） |
 |---|---|---|
 | 回答的问题 | 这条记忆有证据支撑吗？ | 这是当前的、经过授权的状态吗？ |
-| 输入 | `MEMORY.md` + 一个证据文件目录 | 事件日志 + 角色权限策略 + 证据清单 |
+| 输入 | `MEMORY.md` 或各家 Agent 的指令文件（`CLAUDE.md`、`AGENTS.md`、Cursor、Copilot、Gemini、Windsurf）+ 一个证据文件目录 | 事件日志 + 角色权限策略 + 证据清单 |
 | 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹、决策流程审计 |
 | 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 只追加 |
 
@@ -76,7 +76,31 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 
 `verify_counterevidence`、`add_absolute_date`、`narrow_scope` 这类操作只是建议，不会自动执行。`replacement` 字段永远是空的：MemFalsify 从不替你编写事实。
 
-其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`--format json`、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
+其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`memfalsify discover` 列出仓库里各家 Agent 的指令文件（见下）；`--format json`、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
+
+#### 其他 Agent 的指令文件
+
+所有命令同样接受其他编程 Agent 的指令文件。每种格式都对照过该 Agent 的官方文档（2026 年 10 月；出处列在 [`formats.py`](packages/memfalsify/src/memfalsify/formats.py)）：
+
+| Agent | 文件 | 保留的 frontmatter 字段 |
+|---|---|---|
+| Claude Code | `CLAUDE.md`、`CLAUDE.local.md`、`.claude/CLAUDE.md`、`.claude/rules/**/*.md` | `paths` |
+| Codex 及其他读取 `AGENTS.md` 的 Agent | `AGENTS.md`、`AGENTS.override.md` | |
+| Cursor | `.cursor/rules/**/*.mdc`；旧式的 `.cursorrules` | `description`、`globs`、`alwaysApply` |
+| GitHub Copilot | `.github/copilot-instructions.md`、`.github/instructions/**/*.instructions.md` | `applyTo`、`excludeAgent` |
+| Gemini CLI | `GEMINI.md` | |
+| Windsurf（现名 Devin Desktop） | `.windsurf/rules/*.md`、`.devin/rules/*.md`；旧式的 `.windsurfrules` | `trigger`、`globs`、`description` |
+
+```bash
+memfalsify discover                                  # 列出这些文件：表格，或 --format json；可加 --exclude 'tests/fixtures/**'
+memfalsify audit .cursor/rules/api.mdc --evidence .  # claims、diff、history 也都能用
+```
+
+- frontmatter 永远不算记忆。表中的字段会附在该文件的每条记忆上：JSON 里是 `metadata`，报告里是一行 `Frontmatter:`，这样每条发现都能看出这条指令作用于哪些文件。frontmatter 按原样读取，只支持一个小的 YAML 子集（`globs: **/*.ts` 在严格 YAML 下不合法，但会原样保留）；其他字段忽略。
+- `diff` 把 frontmatter 改了、措辞没变的记忆列在 “Frontmatter changed” 下（不审计它们）；`history` 把这种改动算作该文件每条记忆的最近一次修改。
+- `@file.md` 导入（Claude Code、Gemini CLI）和本地 Markdown 链接一样会被跟进：只跟一层，且不出该文件所在目录。含导入的行不算记忆。
+- 位置写作 `path:line`，路径相对于被审计文件所在目录，行号从文件第一行算起（包括 frontmatter）。
+- `discover` 只读取文件名。`AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 和各类规则目录在任何目录下都会找；`.cursorrules`、`.windsurfrules` 和 `.github/` 只在顶层找。它不进入其他隐藏目录以及 `node_modules/`、`__pycache__/`、`venv/`；嵌套的 git 仓库列为已跳过；符号链接只有指向本目录内的普通文件时才会列出；同一个文件有两个名字时只列一次（`same_as`）。目录不可读时退出码为 2。仓库之外的文件（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、Windsurf 的全局规则）以及在 Agent 设置里另行配置的文件名不在搜索范围内。
 
 #### 审查 git 里的记忆改动
 
@@ -305,7 +329,8 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 [实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.62、召回率为 0.27，三分类准确率为 0.44。
 这些案例用于检验已知失败模式，不能代表真实记忆的准确率。运行 `python benchmarks/memfalsify/run.py` 即可离线评测。
 
-[GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件与仓库证据核对，并把报告放入任务摘要。
+[GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件（设为 `memory: auto` 时则是 `memfalsify discover`
+找到的全部指令文件）与仓库证据核对，并把报告放入任务摘要。
 默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。
 设置 `diff-base`（例如 PR 的基准提交，并给 `actions/checkout` 加上 `fetch-depth: 0`）后，Action 改为运行
 `memfalsify diff`，PR 只会因为它新增或修改的记忆而失败。

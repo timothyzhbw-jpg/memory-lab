@@ -16,7 +16,56 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### memfalsify
+
+#### Added
+
+- Instruction files of other agents. `claims`, `audit`, `diff`, `history` and `rollback` take them like
+  `MEMORY.md`. Each format was checked against the agent's documentation (sources in
+  `packages/memfalsify/src/memfalsify/formats.py`):
+  - Claude Code: `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/rules/**/*.md` (`paths`).
+  - Codex and other `AGENTS.md` readers: `AGENTS.md`, `AGENTS.override.md`.
+  - Cursor: `.cursor/rules/**/*.mdc` (`description`, `globs`, `alwaysApply`) and the legacy `.cursorrules`.
+  - GitHub Copilot: `.github/copilot-instructions.md` and `.github/instructions/**/*.instructions.md`
+    (`applyTo`, `excludeAgent`).
+  - Gemini CLI: `GEMINI.md`.
+  - Windsurf (now Devin Desktop): `.windsurf/rules/*.md` and `.devin/rules/*.md` (`trigger`, `globs`,
+    `description`), and the legacy `.windsurfrules`.
+- The frontmatter fields named above become claim metadata: `metadata` in `claims` output (only when
+  there is some), in audit findings, in `diff` claim versions and in `history` claims, and a
+  "Frontmatter:" line in Markdown reports. A `diff` report lists unchanged claims whose frontmatter
+  changed under "Frontmatter changed". Frontmatter is read as a small YAML subset, as written; values are
+  capped at 300 characters and 50 list items.
+- `memfalsify discover [DIR]` lists the instruction files of all these agents in a repository, as a
+  Markdown table or JSON, with `--exclude` globs. It reads names only, fails on unreadable directories,
+  lists a file reachable under two names once (`same_as`), and skips symlinks that leave the directory,
+  names with control characters, symlinked directories and nested git repositories.
+- `@file.md` imports (Claude Code, Gemini CLI) are followed like local Markdown links: one level deep,
+  inside the memory file's directory, and not inside code spans. `--no-follow-links` turns both off.
+
+#### Changed
+
+- A line holding an `@file.md` import is an index entry, like a line with a local Markdown link: it was
+  read as a claim before.
+- `history` counts a change to a file's frontmatter metadata as the latest change of each of its claims.
+- Frontmatter after a UTF-8 byte order mark is recognized and skipped; its lines were read as claims.
+
+### memlab-mcp
+
+#### Changed
+
+- `memfalsify_claims` returns the same objects as `memfalsify claims`, including `metadata`, and the
+  other memfalsify tools accept the new instruction formats.
+
+### Repository
+
+#### Added
+
+- GitHub Action: `memory: auto` audits every instruction file `memfalsify discover` finds in the
+  workspace (or, with `diff-base`, diffs each one). The `exclude` globs also leave instruction files out
+  of discovery.
+- The `memfalsify` skill covers the new formats, `memfalsify discover` and `memory: auto`.
+- Test fixtures for every format in `tests/fixtures/formats/`.
 
 ## memlab-core
 
