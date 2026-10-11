@@ -1,0 +1,72 @@
+"""Index a directory of evidence files into exact, hashed sentence spans."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from pydantic import BaseModel
+
+from memcore import EvidenceSpan, make_span, sha256_bytes
+
+from .text import features, sentence_spans
+
+MEDIA = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".tiff", ".mp3", ".wav", ".m4a",
+         ".flac", ".ogg", ".mp4", ".mov", ".webm", ".mkv", ".pdf"}
+SKIP_DIRS = {"node_modules", "__pycache__", "venv"}
+MAX_BYTES = 2_000_000
+REPORT_HEADER = "# MemFalsify audit report"
+
+
+class Passage(BaseModel):
+    span: EvidenceSpan
+    words: frozenset[str]
+    numbers: frozenset[str]
+
+
+class Skipped(BaseModel):
+    path: str
+    reason: str
+
+
+def scan(root: Path, exclude: list[Path] = ()) -> tuple[list[Passage], list[Skipped]]:
+    root = Path(root).resolve()
+    excluded = {Path(p).resolve() for p in exclude}
+    passages, skipped = [], []
+    for directory, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS)
+        for name in sorted(filenames):
+            if name.startswith("."):
+                continue
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            resolved = path.resolve()
+            if resolved in excluded:
+                continue
+            if not resolved.is_relative_to(root):
+                skipped.append(Skipped(path=relative, reason="symlink escapes evidence root"))
+                continue
+            if path.suffix.lower() in MEDIA:
+                skipped.append(Skipped(path=relative, reason="media file: multimodal extraction not implemented"))
+                continue
+            raw = resolved.read_bytes()
+            if len(raw) > MAX_BYTES:
+                skipped.append(Skipped(path=relative, reason="larger than 2 MB"))
+                continue
+            try:
+                if b"\x00" in raw:
+                    raise UnicodeDecodeError("utf-8", raw, 0, 1, "binary")
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                skipped.append(Skipped(path=relative, reason="not UTF-8 text"))
+                continue
+            if text.startswith(REPORT_HEADER) or text.lstrip().startswith('{\n  "tool": "memfalsify"'):
+                skipped.append(Skipped(path=relative, reason="MemFalsify report: a report cannot be its own evidence"))
+                continue
+            digest = sha256_bytes(raw)
+            for start, end in sentence_spans(text):
+                words, numbers = features(text[start:end])
+                if words:
+                    passages.append(Passage(span=make_span(relative, digest, text, start, end,
+                                                           source_kind="file"),
+                                            words=words, numbers=numbers))
+    return passages, skipped

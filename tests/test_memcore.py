@@ -1,0 +1,74 @@
+import json
+
+import pytest
+from pydantic import ValidationError
+
+from memcore import EvidenceError, append_jsonl, load_manifest, locate_quote, read_jsonl
+
+
+def write_manifest(root, **overrides):
+    (root / "src.txt").write_text("Alpha line.\nThe PM rejects Feature A.\n", encoding="utf-8")
+    span = locate_quote(root, "src.txt", "The PM rejects Feature A.")
+    entry = {"id": "e1", "path": "src.txt", "sha256": span.sha256, "quote": span.quote, "start": span.start,
+             "end": span.end, "source_uri": "synthetic://t", "source_kind": "test",
+             "captured_at": "2026-10-07T00:00:00Z", **overrides}
+    (root / "evidence.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    return root / "evidence.jsonl"
+
+
+def test_manifest_verifies_hash_and_span(tmp_path):
+    spans = load_manifest(write_manifest(tmp_path))
+    assert spans["e1"].quote == "The PM rejects Feature A." and spans["e1"].line == 2
+
+
+def test_tampered_file_fails_closed(tmp_path):
+    manifest = write_manifest(tmp_path)
+    (tmp_path / "src.txt").write_text("Alpha line.\nThe PM approves Feature A.\n", encoding="utf-8")
+    with pytest.raises(EvidenceError, match="hash mismatch"):
+        load_manifest(manifest)
+
+
+def test_invented_quote_fails_closed(tmp_path):
+    with pytest.raises(EvidenceError, match="quote does not match"):
+        load_manifest(write_manifest(tmp_path, quote="The PM approves Feature A."))
+
+
+def test_quote_must_exist_verbatim(tmp_path):
+    write_manifest(tmp_path)
+    with pytest.raises(EvidenceError, match="not found verbatim"):
+        locate_quote(tmp_path, "src.txt", "PM approves")
+
+
+@pytest.mark.parametrize("path", ["../outside.txt", "/etc/hosts"])
+def test_paths_cannot_escape_root(tmp_path, path):
+    (tmp_path.parent / "outside.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(EvidenceError, match="escapes|relative"):
+        locate_quote(tmp_path, path, "x")
+
+
+def test_symlink_cannot_escape_root(tmp_path):
+    outside = tmp_path.parent / "secret.txt"
+    outside.write_text("secret", encoding="utf-8")
+    (tmp_path / "link.txt").symlink_to(outside)
+    with pytest.raises(EvidenceError, match="escapes"):
+        locate_quote(tmp_path, "link.txt", "secret")
+
+
+def test_naive_capture_time_rejected(tmp_path):
+    with pytest.raises(ValidationError):
+        load_manifest(write_manifest(tmp_path, captured_at="2026-10-07T00:00:00"))
+
+
+def test_duplicate_evidence_id_rejected(tmp_path):
+    manifest = write_manifest(tmp_path)
+    manifest.write_text(manifest.read_text() * 2, encoding="utf-8")
+    with pytest.raises(EvidenceError, match="duplicate"):
+        load_manifest(manifest)
+
+
+def test_append_jsonl_only_appends(tmp_path):
+    path = tmp_path / "log.jsonl"
+    path.write_text('{"id": 1}', encoding="utf-8")  # no trailing newline
+    append_jsonl(path, {"id": 2})
+    assert [r["id"] for _, r in read_jsonl(path)] == [1, 2]
+    assert path.read_text().startswith('{"id": 1}\n')

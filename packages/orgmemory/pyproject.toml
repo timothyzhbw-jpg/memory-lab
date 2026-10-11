@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orgmemory"
+version = "0.1.0"
+description = "Verified Organizational Memory: replay decisions under explicit authority rules with traceable evidence"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = ["memlab-core>=0.1,<0.2", "pydantic>=2.5", "typer>=0.12"]
+
+[project.scripts]
+orgmemory = "orgmemory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

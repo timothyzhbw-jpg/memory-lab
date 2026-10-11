@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memfalsify"
+version = "0.1.0"
+description = "Audit agent memory against traceable evidence; challenge claims, never rewrite them"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = ["memlab-core>=0.1,<0.2", "pydantic>=2.5", "typer>=0.12"]
+
+[project.scripts]
+memfalsify = "memfalsify.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

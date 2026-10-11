@@ -1,49 +1,193 @@
-# Memory Lab
+# Memory Lab: Verified Memory Infrastructure for AI Agents
 
-Two offline prototypes in one runnable Python monorepo: **MemFalsify** audits agent memory against supplied evidence; **Verified Organizational Memory** replays decisions under explicit authority rules. Python 3.10+, standard library only at runtime, no API keys.
+Agent memory tools mostly store and retrieve. This project is about **keeping what an agent remembers true**: every memory should have evidence, a place in time, and a traceable origin, and information without authority should not be able to change the current state.
 
-## Run
+`Remember → Verify → Challenge → Resolve → Evolve`
 
-```sh
-python -m memory_lab demo examples/demo.json
-python -m unittest discover -s tests -v
-python -m memory_lab audit examples/demo.json
-python -m memory_lab replay examples/demo.json --as-of 2026-10-07T23:59:59Z
+It contains two independent tools that share one evidence core:
+
+| | **MemFalsify** | **Verified Organizational Memory** (`orgmemory`) |
+|---|---|---|
+| Question | *Is this memory backed by evidence?* | *Is this the current, authorized state?* |
+| Input | `MEMORY.md` + a directory of evidence files | Event log + role policy + evidence manifest |
+| Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail |
+| Writes | Nothing (only the report you ask for) | Nothing on replay; `append` only appends |
+
+Everything runs offline with no API keys. Python 3.10+, Apache-2.0.
+
+```text
+        Claude Code / Codex / other agents  (skills/)
+                          │
+          ┌───────────────┴───────────────┐
+          ▼                               ▼
+     MemFalsify                     orgmemory
+  evidence support for          state + authority for
+  remembered claims             organizational decisions
+          └───────────────┬───────────────┘
+                          ▼
+           memcore: hashed, exact-quote evidence
 ```
 
-Run these commands from the repository directory. Optionally install with `pip install -e .` to use the `memory-lab` command (installation may fetch the build tool). All commands read inputs and print JSON to stdout; none alter memories, evidence, events or policy. Redirect output to a separate report if desired.
+## Quick start
 
-## Monday–Thursday demo
+```bash
+git clone <this repo> memory-lab && cd memory-lab
+python -m venv .venv && source .venv/bin/activate
+pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
+```
 
-All demo data is synthetic, clearly labeled by provenance. Monday: customer requests A. Tuesday: engineer identifies B. Wednesday: PM rejects A. Thursday: customer requests reconsideration. Result: A remains **rejected**, dependency B is retained, reconsideration is true, PM review is pending, and Wednesday remains the last authorized decision.
+Install only what you need: `memcore` plus either tool works on its own.
 
-MemFalsify challenges “A is approved,” supports “A depends on B,” and reports insufficient evidence for “A will ship next week.” It proposes review, never fabricates a replacement. Supported means consistent with supplied assertions, not independently established truth.
+### MemFalsify: audit a MEMORY.md
 
-## Data contract
+```bash
+cd examples/memfalsify
+memfalsify audit MEMORY.md --evidence evidence --reviews reviews.jsonl --as-of 2026-10-10
+```
 
-`examples/demo.json` is a complete editable schema example:
+The example memory holds ten claims about a fictional service. The audit ([full report](examples/memfalsify/report.md)) finds:
 
-- `evidence`: unique ID, relative UTF-8 file path, SHA-256 of raw bytes, exact quote and zero-based Unicode character `[start,end)` span, source URI/kind and capture timestamp. Paths and symlinks cannot escape the dataset directory. Hash and quote mismatches fail closed.
-- `memories`: unique ID and text. `assertions`: memory ID, `supports` or `contradicts`, nonempty evidence IDs. Assertions are reviewed interpretations, not automatically inferred facts.
-- `events`: unique ID, timezone-aware effective timestamp, actor, action, feature and nonempty evidence IDs. Dependency events include `dependency`; revocation includes `supersedes` matching the current decision event.
-- `policy`: trusted actor-to-role mapping and action-to-allowed-roles mapping. Unknown actors/actions receive no implied authority; unknown actions are rejected as invalid input.
+| Memory | Result | Why |
+|---|---|---|
+| Feature A (bulk export) is approved for the November release. | **challenged** | A reviewer confirmed the decision log: *"Product manager rejects Feature A…"*; also conflicts with another memory |
+| The public API rate limit is 100 requests per minute. | possible counterevidence | `docs/api.md:3` says 60 |
+| The main database runs PostgreSQL 15. | possible counterevidence | `docs/database.md:3` says 16 |
+| Deployments always go through the staging cluster. | possible counterevidence, overgeneralization | An incident note records a hotfix that skipped staging |
+| The bulk export will ship next week. | no evidence, relative time | "next week" relative to when? |
+| 2026-03-02: Feature B was postponed to Q3. | no evidence, possibly stale | Over 180 days old |
+| We probably use squash merges for pull requests. | possible support, inference marker | `CONTRIBUTING.md` agrees, but the memory is phrased as a guess |
+| Bulk export depends on the billing schema migration. | **supported**, duplicate | Confirmed by a reviewer; stated in two files |
 
-Replay sorts by effective time; ties use input ingestion order. Future events are excluded by `--as-of`. It validates the entire supplied log, even events after the cutoff. Approval/rejection by a permitted actor supersedes the prior decision and clears review requests. A permitted revoke must target the current decision. Unauthorized events remain visible in the audit trail and do not update state. Events are conceptually append-only; this prototype reads a JSON log and does not provide a persistent database or authenticated ingestion. Preserve historical policy versions externally; changing policy changes replay.
+Every quote carries `path:line`, character offsets and the SHA-256 of the file it came from. A whiteboard photo in the evidence folder is listed as skipped, not guessed at.
 
-## Optional adapters
+**How status is decided.** MemFalsify nominates evidence by itself, but only a human review can settle a memory:
 
-`memory_lab/adapters.py` defines an extraction boundary and caller-owned callback wrapper for LLM/Jev integrations. “Jev” is treated as an unspecified provider: no invented SDK/API contract. The shipped CLI is fully offline and uses manually supplied assertions/events. The callback validates references, labels candidates for human review, and cannot grant authority or write state. Integration code must separately validate candidate semantics and schema before ingestion.
+| Status | Meaning |
+|---|---|
+| `supported` / `challenged` / `conflicted` | Human-confirmed evidence in `reviews.jsonl` supports / contradicts / does both |
+| `candidate_counterevidence` | The verifier found a passage that may contradict the memory: opposing terms (*approved* / *rejected*), different numbers, or negation |
+| `disputed` | Two verifiers disagree (see *Verifier backends*) |
+| `candidate_support` | A passage that restates the memory |
+| `insufficient_evidence` | Nothing found. That means unverified, not false |
 
-For images/audio/video, `MultimodalSource` describes a transcription/OCR boundary. Keep original bytes/hash, derived transcript/hash, page/time/region locator and extractor version; verify derived spans manually before registering evidence. The current CLI accepts UTF-8 text evidence only. Multimodal extraction is an extension interface, not a shipped OCR or audio engine.
+Independent of evidence, each memory is checked for `overgeneralization` (always, all, never…), `relative_time` without a date, `possibly_stale` dates, `inference_marker` (probably, seems…), `internal_conflict` with another memory, and `duplicate`.
 
-## Trust boundary and evaluation
+Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
-Evidence hashes establish integrity relative to the supplied manifest, not authenticity: someone who can replace both can forge them. Quotes prove a span exists, not that it entails an assertion. Actor IDs are trusted dataset inputs; there is no identity authentication. Treat the policy and manifest as reviewer-controlled configuration. Same-time conflicting decisions use ingestion order, a documented deterministic choice, not automatic conflict resolution.
+Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
 
-Useful as a reproducible research baseline and small internal demo. Not production-ready organizational infrastructure. Next steps: authenticated event ingestion, signed provenance, versioned policy and bitemporal storage, semantic evaluation against labeled evidence, and durable proposal review. MemFalsify presently flags review instead of autonomously suggesting factual rewrites. No market novelty or performance claims are made.
+### Organizational Memory: replay decisions
 
-## Repository
+```bash
+orgmemory replay examples/orgmemory/feature-a
+```
 
-`memory_lab/` contains evidence, audit, state, adapters and CLI modules; `skills/memfalsify/SKILL.md` is the reusable audit workflow; `tests/` tests observable trust and state invariants; `examples/` contains synthetic provenance and the Monday–Thursday scenario.
+| When | Who (role) | Event |
+|---|---|---|
+| Mon | customer | requests Feature A |
+| Tue | engineer | raises a technical risk |
+| Wed | product manager | **rejects** Feature A |
+| Thu | customer | requests Feature A again |
+| Thu | account manager | posts "Feature A is approved" |
 
-MIT licensed; see LICENSE. Contributions: include a minimal synthetic reproduction and run the test command above. Never commit private evidence or credentials.
+Result ([full report](examples/orgmemory/replay-report.md)):
+
+```yaml
+subject: Feature A
+current_status: rejected
+reconsideration_requested: true
+pending_approval: [product_manager]
+open_risks: ["Bulk export reads the billing schema, which is mid-migration"]
+last_authorized_decision: ev-wed-reject (reject by zhou)
+unauthorized_change_attempts: [ev-thu-sales-approve]
+```
+
+Thursday's newer messages do not overwrite Wednesday's decision. The repeated request becomes a reconsideration awaiting the product manager. The account manager's "approval" is logged but ignored, because the policy does not let that role approve.
+
+Other commands:
+
+```bash
+orgmemory explain  <dataset> "Feature A"      # why it is in this state, with quoted evidence
+orgmemory replay   <dataset> --as-of 2026-10-07T23:59:59Z   # state at a past time
+orgmemory validate <dataset>                  # check every event, hash and quote
+orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
+orgmemory append   <dataset> --event '{"id": ..., ...}'
+```
+
+## Data formats
+
+**`reviews.jsonl`** (MemFalsify, optional): human-confirmed assertions.
+
+```json
+{"memory_id": "m-27e874e0", "relation": "contradicts", "path": "notes/2026-10-07-decision-log.md", "quote": "Product manager rejects Feature A (bulk export) for the November release.", "reviewer": "demo-reviewer", "note": "optional"}
+```
+
+`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes and old reviews stop applying, so it must be reviewed again. `quote` must appear verbatim in `path`, which is relative to the evidence directory.
+
+**Organizational dataset**: a directory with three files.
+
+- `events.jsonl`: one event per line, append-only. Fields: `id`, `timestamp` (with timezone; it is the effective time), `actor`, `action`, `subject`, `evidence_ids` (at least one), plus `note` (required for `raise_risk`), `dependency` (required for `dependency`) and `supersedes` (required for `revoke`, which must target the current decision). Actions: `request`, `reconsider`, `raise_risk`, `dependency`, `approve`, `reject`, `revoke`, `comment`.
+- `policy.json`: `{"actors": {actor: [roles]}, "permissions": {action: [roles]}}`. Unknown actors have no roles. `pending_approval` lists the roles that can both approve and reject.
+- `evidence.jsonl`: `id`, `path`, `sha256` of the raw bytes, exact `quote` and its `[start, end)` character span, `source_uri`, `source_kind`, `captured_at`. Use `orgmemory evidence add` instead of hashing by hand.
+
+Replay rules: events are ordered by effective time, and ties keep file order. The whole log is validated before replay, including events after `--as-of`. An authorized `approve` / `reject` sets the status and clears reconsideration, pending approval and ignored attempts. Reversals and same-time conflicting decisions are recorded under `conflicts`.
+
+## Agent skills
+
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. Copy them into your agent's skills directory:
+
+```bash
+cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
+cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
+```
+
+The CLIs must be installed in the environment the agent's shell uses.
+
+## Verifier backends (LLM, Jev)
+
+A verifier judges one claim against one passage and returns `supports`, `contradicts` or `unrelated` with a rationale. The built-in `LexicalVerifier` is deterministic and explainable, but it only sees words: it misses paraphrases and can be fooled by context. To plug in a model, implement the protocol and wrap two verifiers in `DualVerifier`. Where they disagree, the result is `disputed`, so a human sees both opinions.
+
+```python
+from memfalsify.audit import audit
+from memfalsify.verify import DualVerifier, Judgment, LexicalVerifier
+
+class MyLLMVerifier:
+    name = "my-llm"
+    def judge(self, claim: str, passage: str) -> Judgment:
+        ...  # call your model; return Judgment(relation=..., rationale=..., verifier=self.name)
+
+report = audit("MEMORY.md", "evidence", verifier=DualVerifier(MyLLMVerifier(), LexicalVerifier()))
+```
+
+Model judgments stay candidates: they never replace the human review step.
+
+## Trust boundaries and limitations
+
+- A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
+- Lexical candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
+- Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
+- Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
+- This is a research MVP, not production infrastructure.
+
+## Roadmap
+
+| | MemFalsify | Organizational Memory |
+|---|---|---|
+| **v0.1** (this release) | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
+| v0.2 | LLM + Jev dual verification | GitHub Issues / PR ingestion |
+| v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit |
+| v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
+| v1.0 | Benchmark, stable API | Benchmark, stable API |
+
+## Development
+
+```bash
+pip install pytest
+pytest          # runs against packages/*/src, no install needed
+```
+
+Layout: `packages/memcore` (evidence integrity, JSONL), `packages/memfalsify`, `packages/orgmemory`, `skills/`, `examples/`, `tests/`. Contributions should include a minimal synthetic reproduction. Never commit private evidence or credentials.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).

@@ -1,0 +1,18 @@
+{
+  "actors": {
+    "buyer@acme": ["customer"],
+    "lin": ["engineer"],
+    "zhou": ["product_manager"],
+    "wu": ["account_manager"]
+  },
+  "permissions": {
+    "request": ["customer", "account_manager", "engineer", "product_manager"],
+    "reconsider": ["customer", "account_manager", "engineer", "product_manager"],
+    "raise_risk": ["engineer", "product_manager"],
+    "dependency": ["engineer", "product_manager"],
+    "comment": ["customer", "account_manager", "engineer", "product_manager"],
+    "approve": ["product_manager"],
+    "reject": ["product_manager"],
+    "revoke": ["product_manager"]
+  }
+}

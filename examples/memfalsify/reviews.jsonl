@@ -1,0 +1,2 @@
+{"memory_id": "m-27e874e0", "relation": "contradicts", "path": "notes/2026-10-07-decision-log.md", "quote": "Product manager rejects Feature A (bulk export) for the November release.", "reviewer": "demo-reviewer", "note": "Decision log records a rejection, not an approval."}
+{"memory_id": "m-d4ec01d6", "relation": "supports", "path": "notes/2026-10-06-standup.md", "quote": "Bulk export depends on the billing schema migration", "reviewer": "demo-reviewer"}

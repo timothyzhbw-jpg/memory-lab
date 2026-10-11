@@ -1,0 +1,3 @@
+#sales channel, 2026-10-08 (synthetic)
+
+Wu: I told Acme Feature A is approved, let's just ship it.
