@@ -1,0 +1,23 @@
+﻿WEBVTT - synthetic captions
+Kind: captions
+Language: en
+
+STYLE
+::cue { color: white }
+
+NOTE source_sha256: 401c7a2e2648c4027e473c8c1055d645d3ea34ba7707ac41798597cfa6f51fe6
+
+intro
+00:00:12.500 --> 00:00:17.000 align:start position:10%
+<v Priya>The public API rate limit is 60 requests
+per minute per key.
+
+NOTE a comment between cues is not evidence
+
+01:02:03.004 --> 01:02:05.000
+Bulk export waits for the billing migration.
+
+00:01:10.000 --> 00:01:10.000
+
+00:01:11.000 --> 00:01:12.000
+   下周上线。  

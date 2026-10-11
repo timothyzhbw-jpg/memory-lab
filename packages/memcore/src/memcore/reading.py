@@ -7,6 +7,7 @@ symlinks at the syscall boundary, including files replaced after validation.
 from __future__ import annotations
 
 import errno
+import hashlib
 import os
 import stat
 from contextlib import contextmanager
@@ -183,3 +184,22 @@ def walk_files(path: Path, onerror=None):
         yield from _walk_directory(resolved, descriptor, onerror)
     finally:
         os.close(descriptor)
+
+
+def file_sha256(path: Path, chunk_size: int = 1 << 20) -> str:
+    """SHA-256 of a file's bytes, read in chunks so a large media file never sits in memory."""
+    digest = hashlib.sha256()
+    with _open(path) as handle:
+        while chunk := handle.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def list_files(directory: Path) -> list[str]:
+    """Names of the entries in one directory that are not directories, listed like ``walk_files``."""
+    def fail(error: OSError) -> None:
+        raise error
+
+    for _, _, files in walk_files(directory, onerror=fail):
+        return files
+    return []
