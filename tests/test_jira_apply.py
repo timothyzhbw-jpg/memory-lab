@@ -333,3 +333,21 @@ def test_untrusted_text_never_reaches_the_terminal(jira_dataset, tmp_path):
     result = cli(jira_dataset, capture_file(tmp_path, data), "--dry-run")
     assert result.exit_code == 0 and result.output.isascii() and "owned" not in result.output
     assert SITE in result.output
+
+
+def test_repeated_keys_are_refused_in_captures_config_and_policy_aliases(jira_dataset, tmp_path):
+    # main rejects a repeated JSON key in every input; the Jira importer follows the same rule.
+    text = (FIXTURES / "capture-1.json").read_text(encoding="utf-8")
+    forged = tmp_path / "forged.json"
+    forged.write_text(text.replace('"jira_capture": 1,', '"jira_capture": 1, "jira_capture": 1,', 1),
+                      encoding="utf-8")
+    with pytest.raises(JiraCaptureError, match="duplicate key"):
+        run_convert(jira_dataset, forged, dry_run=True)
+    (jira_dataset / "jira.json").write_text('{"statuses": {"10003": "approve", "10003": "reject"}}',
+                                            encoding="utf-8")
+    with pytest.raises(JiraCaptureError, match="invalid jira.json"):
+        run_convert(jira_dataset, FIXTURES / "capture-1.json", dry_run=True)
+    shutil.copyfile(FIXTURES / "jira.json", jira_dataset / "jira.json")
+    (jira_dataset / "policy-log.jsonl").write_bytes(b"")
+    with pytest.raises(JiraCaptureError, match="cannot open policy-log.jsonl"):
+        run_convert(jira_dataset, jira_dataset / "policy-log.jsonl", dry_run=True)
