@@ -1,4 +1,5 @@
-"""orgmemory command line. Replay and audit are read-only; `append` and `evidence add` only ever append lines."""
+"""orgmemory command line. Replay and audit are read-only; `append` and `evidence add` only ever append lines;
+`export` creates files only outside the dataset."""
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 
 from .audit import DEFAULT_STALE_DAYS, audit
+from .export import adr_markdown, create_files, decision_records, decisions_csv
 from .models import Event
 from .replay import Dataset, replay, validate
 from .report import audit_markdown, explain, to_markdown
@@ -92,6 +94,54 @@ def audit_command(
                nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
+
+
+class ExportFormat(str, Enum):
+    adr = "adr"
+    csv = "csv"
+
+
+@app.command("export")
+def export_command(
+    dataset: Path = DATASET,
+    fmt: ExportFormat = typer.Option(ExportFormat.adr, "--format", "-f",
+                                     help="adr: one Markdown decision record per file; csv: one table"),
+    out: Optional[Path] = typer.Option(
+        None, "--out", "-o",
+        help="adr: directory to create the records in (required); csv: file to create (default: stdout). "
+             "Must be outside the dataset"),
+    as_of: Optional[str] = typer.Option(None, help="Ignore events after this time (ISO 8601 with timezone)"),
+    force: bool = typer.Option(False, "--force", help="Replace existing files of the same name instead of refusing"),
+) -> None:
+    """Export each subject's current authorized decision as an ADR, or all of them as one CSV table."""
+    if fmt is ExportFormat.adr and out is None:
+        _fail("--format adr needs --out DIR")
+    data = _load(dataset)
+    try:
+        cutoff = _as_of(as_of)
+        subjects, records = decision_records(data, cutoff)
+    except (ValidationError, ValueError) as exc:
+        _fail(str(exc))
+    when = cutoff.isoformat() if cutoff else "end of log"
+    if fmt is ExportFormat.csv:
+        text = decisions_csv(records)
+        if out is None:
+            typer.echo(text, nl=False)
+            return
+        files, directory = {out.name: text.encode("utf-8")}, out.parent
+    elif not records:
+        typer.echo(f"no subject has an authorized decision as of {when}; nothing written")
+        return
+    else:
+        files, directory = {r.file_name: adr_markdown(r).encode("utf-8") for r in records}, out
+    try:
+        written = create_files(dataset, directory, files, force=force)
+    except (ValueError, OSError) as exc:
+        _fail(str(exc))
+    for path in written:
+        typer.echo(f"wrote {path}")
+    typer.echo(f"exported {len(records)} decision(s) of {subjects} subject(s), as of {when}; subjects without an "
+               "authorized decision are left out")
 
 
 @app.command("validate")
