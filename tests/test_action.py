@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -221,3 +222,150 @@ def test_action_diff_base_outside_a_repository_fails(tmp_path, monkeypatch, runn
 def test_action_passes_diff_base_through_env():
     text = (ROOT / "action.yml").read_text(encoding="utf-8")
     assert "  diff-base:\n" in text and "MEMFALSIFY_DIFF_BASE: ${{ inputs.diff-base }}" in text
+
+
+# --- Supply chain: pinned actions, hash-locked dependencies ---------------------------------------------------
+
+LOCK_DIR = ROOT / "action" / "requirements"
+LOCK_SETS = {"lexical": {"pydantic", "typer", "setuptools"},
+             "llm": {"pydantic", "typer", "setuptools", "anthropic"},
+             "jev": {"pydantic", "typer", "setuptools", "typesafe-sdk"},
+             "all": {"pydantic", "typer", "setuptools", "anthropic", "typesafe-sdk"}}
+PINNED_USES = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
+PINNED_LINE = re.compile(r"^\s*(?:- )?uses:\s+\S+@[0-9a-f]{40}  # v\d+\.\d+\.\d+$")
+ENTRY = re.compile(r"^(?P<name>[A-Za-z0-9][\w.-]*)==(?P<version>[^\s;]+)(?: ; (?P<marker>.*?))? "
+                   r"(?P<hashes>--hash=sha256:[0-9a-f]{64}(?: --hash=sha256:[0-9a-f]{64})*)$")
+
+
+def uses_lines(path):
+    return [line for line in (ROOT / path).read_text(encoding="utf-8").splitlines()
+            if re.match(r"^\s*(?:- )?uses:", line) and not re.match(r"^\s*(?:- )?uses:\s+\./\s*$", line)]
+
+
+def lock_entries(name):
+    """Logical requirement lines of a lock file: continuations joined, comments and blank lines dropped."""
+    text = re.sub(r"\s*\\\n\s*", " ", (LOCK_DIR / f"{name}.txt").read_text(encoding="utf-8"))
+    return [line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def pins(name):
+    """Package name (normalized) to the exact versions the lock file pins (one per environment marker)."""
+    found = {}
+    for entry in lock_entries(name):
+        match = ENTRY.match(entry)
+        assert match, f"{name}.txt: not an exact pin with sha256 hashes: {entry[:100]}"
+        found.setdefault(normalized(match.group("name")), []).append(match.group("version"))
+    return found
+
+
+def normalized(name):
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def requirements_of(name):
+    """Direct requirements of a .in file, following -r includes."""
+    found = []
+    for line in (LOCK_DIR / f"{name}.in").read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line.startswith("-r "):
+            found += requirements_of(line[3:].strip().removesuffix(".in"))
+        elif line:
+            found.append(line)
+    return found
+
+
+@pytest.mark.parametrize("path", ["action.yml", ".github/workflows/ci.yml"])
+def test_third_party_actions_are_pinned_to_commit_shas(path):
+    lines = uses_lines(path)
+    assert lines
+    for line in lines:
+        assert PINNED_LINE.match(line), f"{path}: pin to a 40-character commit SHA with a '# vX.Y.Z' comment: {line}"
+
+
+@pytest.mark.parametrize("path", ["docs/github-action.md", "README.md", "README.zh-CN.md",
+                                  "skills/memfalsify/SKILL.md", "skills/orgmemory/SKILL.md"])
+def test_documented_actions_are_pinned_too(path):
+    refs = re.findall(r"uses:\s+(actions/\S+)", (ROOT / path).read_text(encoding="utf-8"))
+    assert refs, path
+    assert all(PINNED_USES.match(ref) for ref in refs), refs
+
+
+def install_commands():
+    text = re.sub(r"\s*\\\n\s*", " ", (ROOT / "action.yml").read_text(encoding="utf-8"))
+    return [line.strip() for line in text.splitlines()
+            if "-m pip install" in line and not line.lstrip().startswith("#")]
+
+
+def test_action_installs_the_lock_file_with_require_hashes():
+    locked = [c for c in install_commands() if "--require-hashes" in c]
+    assert len(locked) == 1
+    assert "--only-binary :all:" in locked[0]
+    assert '-r "$GITHUB_ACTION_PATH/action/requirements/$lock.txt"' in locked[0]
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert 'lexical|llm|jev) lock="$MEMFALSIFY_VERIFIER" ;;' in text and 'dual|cascade) lock="all" ;;' in text
+    for name in LOCK_SETS:
+        assert (LOCK_DIR / f"{name}.txt").is_file()
+
+
+def test_action_installs_its_own_packages_without_dependencies():
+    own = [c for c in install_commands() if "$src/memcore" in c]
+    assert len(own) == 1
+    assert "--no-deps" in own[0] and "--no-build-isolation" in own[0] and '"$src/memfalsify"' in own[0]
+    assert "[" not in own[0]  # no extras: pip would resolve them from PyPI
+    # Every pip install is either the hash-checked lock file or the --no-deps install of the action's packages.
+    assert len(install_commands()) == 2
+    assert "$GITHUB_ACTION_PATH/packages/memcore" in (ROOT / "action.yml").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", LOCK_SETS)
+def test_lock_file_pins_every_requirement_with_hashes(name):
+    found = pins(name)  # fails on any line that is not an exact pin followed by sha256 hashes
+    assert set(found) >= LOCK_SETS[name]
+    only_models = {"anthropic", "typesafe-sdk"} - LOCK_SETS[name]
+    assert not only_models & set(found)  # a verifier installs only the SDKs it uses
+
+
+@pytest.mark.parametrize("name", LOCK_SETS)
+def test_lock_file_satisfies_its_input_requirements(name):
+    from packaging.requirements import Requirement
+
+    found = pins(name)
+    for line in requirements_of(name):
+        requirement = Requirement(line)
+        versions = found[normalized(requirement.name)]
+        assert all(requirement.specifier.contains(v) for v in versions), f"{name}: {line} vs the lock {versions}"
+
+
+def toml_list(text, key):
+    match = re.search(rf"^{key}\s*=\s*\[(.*?)\]\s*$", text, re.MULTILINE)
+    return re.findall(r'"([^"]+)"', match.group(1)) if match else []
+
+
+def test_lock_inputs_match_the_package_dependencies():
+    core = (ROOT / "packages" / "memcore" / "pyproject.toml").read_text(encoding="utf-8")
+    falsify = (ROOT / "packages" / "memfalsify" / "pyproject.toml").read_text(encoding="utf-8")
+    runtime = {spec for spec in toml_list(core, "dependencies") + toml_list(falsify, "dependencies")
+               if not spec.startswith("memlab-core")}
+    build = set(toml_list(core, "requires")) | set(toml_list(falsify, "requires"))
+    assert runtime and build
+    assert set(requirements_of("lexical")) == runtime | build
+    assert set(requirements_of("llm")) == set(requirements_of("lexical")) | set(toml_list(falsify, "llm"))
+    assert set(requirements_of("jev")) == set(requirements_of("lexical")) | set(toml_list(falsify, "jev"))
+    assert set(requirements_of("all")) == set(requirements_of("llm")) | set(requirements_of("jev"))
+
+
+def test_dogfood_job_holds_nothing_for_a_pull_request_to_take():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    code = "\n".join(line.split(" #", 1)[0] for line in workflow.splitlines() if not line.lstrip().startswith("#"))
+    assert "uses: ./" in code  # the job the documentation talks about still exists
+    assert "pull_request_target" not in code and "secrets" not in code
+    assert not re.search(r"write|id-token", code)  # nothing beyond the read-only token
+    assert re.search(r"^permissions:\n  contents: read\n", code, re.MULTILINE)
+    dogfood = code.split("  dogfood:", 1)[1]
+    assert "persist-credentials: false" in dogfood and "verifier" not in dogfood  # the offline lexical default
+    assert re.search(r"^    permissions:\n      contents: read\n", dogfood, re.MULTILINE)
+
+
+@pytest.mark.parametrize("path", ["docs/github-action.md", "README.md", "README.zh-CN.md"])
+def test_hard_link_limitation_is_documented(path):
+    assert re.search(r"[Hh]ard links|硬链接", (ROOT / path).read_text(encoding="utf-8")), path

@@ -1,0 +1,4 @@
+# The [all] extra of memfalsify (both model SDKs, for the dual and cascade verifiers), on top of the lexical set.
+-r lexical.in
+anthropic>=1.13
+typesafe-sdk>=0.7

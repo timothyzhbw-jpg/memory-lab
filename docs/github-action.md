@@ -44,7 +44,7 @@ jobs:
   memfalsify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           persist-credentials: false
       - uses: timothyzhbw-jpg/memory-lab@main
@@ -56,16 +56,27 @@ jobs:
 
 Pin the action to a full commit SHA rather than `@main`, with a comment saying which version it is, for
 example `uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # main, 2026-10-11`. The action runs inside your
-job, and a branch can move under you; update the SHA when you choose to. The install step pulls memfalsify's
-dependencies (pydantic, typer) from PyPI within the version ranges the package declares.
+job, and a branch can move under you; update the SHA when you choose to. Pin the other actions in your workflow
+the same way, as the examples here do: a tag such as `@v4` is a pointer its owner can move to other code. The
+action pins the actions it uses and installs its Python dependencies from a hash-checked lock file, so pinning
+the action pins everything it runs (see "Dependencies and pinning").
 
 This repository audits its own `AGENTS.md` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-(`uses: ./`).
+(`uses: ./`; see "Why the dogfood job is safe").
 
 Set `persist-credentials: false` on checkout so its job token is not stored in `.git/config` while the
 audit runs. The action skips memory symlinks that leave the workspace or resolve into hidden or skipped
 directories, with a warning annotation. Memory, linked memory and evidence inputs are checked against
 both their original paths and resolved targets; a harmless filename cannot expose `.git/config`.
+
+**Hard links are not detected.** A hard link is a second name for the same file, so MemFalsify cannot tell it
+from the file it was made from. If a file on the same filesystem is hard-linked into the evidence directory,
+its bytes are read, hashed and can be quoted in the report, wherever its other name lives (a key outside the
+checkout, for example). The audit does not skip every file with more than one link, because that would also
+skip legitimate ones. Git does not store hard links, so a checkout never creates one and a pull request cannot
+plant it. Someone, or an earlier step of your own job, with write access to the audited directory on that
+machine can. Audit only directories you control, and where others can write, look first with
+`find . -type f -links +1`.
 
 ## Gate a pull request on the claims it changes
 
@@ -83,7 +94,7 @@ jobs:
   memfalsify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0   # the base commit must be in the checkout
           persist-credentials: false
@@ -144,7 +155,7 @@ require a particular file should check its presence separately.
       - id: memfalsify
         uses: timothyzhbw-jpg/memory-lab@<sha>
       - if: always() && steps.memfalsify.outputs.report != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: memfalsify-report
           path: ${{ steps.memfalsify.outputs.report }}
@@ -214,6 +225,69 @@ secrets and pass them on the step. Never commit a key to the repository.
 - **Cost and variance.** Up to 8 passages are judged per instruction on every run (each judged by both models
   with `dual`, and by both when Jev is unsure with `cascade`), and model verdicts can change between runs. Consider `strict: "false"` or a scheduled workflow for model verifiers, and a strict `lexical`
   job as the gate.
+
+## Dependencies and pinning
+
+The action runs inside your job, so what it installs matters as much as its own code. It trusts exactly this:
+
+- **Actions are pinned to commit SHAs.** `action.yml` uses `actions/setup-python` at a full 40-character
+  commit with a `# vX.Y.Z` comment, and so does this repository's CI. Pin the action itself to a commit too.
+- **Python dependencies come from a lock file.** The install step picks one file from
+  [`action/requirements/`](../action/requirements) by `verifier`: `lexical.txt` (pydantic, typer),
+  `llm.txt` (adds `anthropic`), `jev.txt` (adds `typesafe-sdk`), and `all.txt` for `dual` and `cascade`. Each
+  pins every package, including transitive ones, to an exact version with the SHA-256 of every release file,
+  and each includes `setuptools`, the build backend of the action's own packages. The step runs
+  `pip install --require-hashes --only-binary :all: -r <file>`: pip refuses a package that is unpinned,
+  unlisted or whose bytes differ from the hash, and never builds a source distribution (which would fetch its
+  build requirements unpinned).
+- **The action's own packages come from the action path.** `memlab-core` and `memfalsify` are copied from the
+  checked-out action, so they are the code at the pinned commit, and installed with
+  `--no-deps --no-build-isolation`: nothing is resolved, and the build uses the locked `setuptools`. A final
+  `pip check` fails the step if the lock no longer satisfies the packages' declared requirements.
+
+Still trusted: the hashes only say that PyPI serves the bytes someone locked, so review the lock file's diff
+whenever it changes; the Python that `actions/setup-python` installs (and the `pip` bundled with it); and
+GitHub itself.
+
+Each lock file is universal: one file covers Linux, macOS and Windows on every Python from 3.10 (the packages'
+`requires-python`) upward, using environment markers such as `exceptiongroup ; python_full_version < '3.11'`.
+The `python-version` input accepts any such version.
+
+### Regenerating the lock files
+
+The `.in` files next to the `.txt` files list the direct requirements; keep them in step with the dependencies
+in `packages/memcore/pyproject.toml` and `packages/memfalsify/pyproject.toml` (a test compares them). Then,
+with [uv](https://docs.astral.sh/uv/) installed and network access to PyPI:
+
+```bash
+scripts/update-action-lock.sh             # re-lock, keeping the versions already pinned
+scripts/update-action-lock.sh --upgrade   # re-resolve everything to the newest releases
+```
+
+The script runs `uv pip compile --universal --python-version 3.10 --generate-hashes` once per set. Review the
+diff, run `python -m pytest tests/test_action.py`, and commit the `.in` and `.txt` files together. Do this when a
+package's dependencies change, and regularly to pick up security fixes.
+
+## Why the dogfood job is safe
+
+`uses: ./` runs the action from the checked-out ref, so on a pull request the `dogfood` job runs the pull
+request's own `action.yml`, lock files and package sources. Unlike a pinned `uses: owner/repo@<sha>`, the code
+is not fixed in advance. That is acceptable here only because the job has nothing for that code to take:
+
+- the token is read-only (`permissions: contents: read` on the workflow and on the job) and is not stored in
+  `.git/config` (`persist-credentials: false`);
+- `ci.yml` contains no `secrets.` reference, and the job uses the offline `lexical` verifier, so there is no
+  provider key to read;
+- the trigger is `pull_request`, never `pull_request_target`: for a pull request from a fork GitHub withholds
+  secrets and gives the job a read-only token whatever the workflow says;
+- the `test` job in the same workflow already runs the pull request's code (pytest) under the same token, so
+  the dogfood job opens no path that did not exist.
+
+It would stop being safe if someone gave this job a secret (for example a model verifier key), a write
+permission, or a `pull_request_target` trigger: a pull request could then edit `action.yml` or a lock file to
+use it. `tests/test_action.py` fails the build if `ci.yml` does any of those. To dogfood a model verifier, run it
+on `push` to the default branch only, or use `uses: timothyzhbw-jpg/memory-lab@<sha>` of a reviewed commit.
+Another repository should not copy `uses: ./`: it works here because the repository is the action.
 
 ## Security notes
 

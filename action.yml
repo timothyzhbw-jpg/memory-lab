@@ -66,7 +66,7 @@ runs:
   using: composite
   steps:
     - id: python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
       with:
         python-version: ${{ inputs.python-version }}
         update-environment: false
@@ -78,11 +78,10 @@ runs:
         SETUP_PYTHON: ${{ steps.python.outputs.python-path }}
       run: |
         set -euo pipefail
+        # One hash-pinned lock file per dependency set (action/requirements/*.txt; see docs/github-action.md).
         case "$MEMFALSIFY_VERIFIER" in
-          lexical) extra="" ;;
-          llm) extra="[llm]" ;;
-          jev) extra="[jev]" ;;
-          dual|cascade) extra="[all]" ;;
+          lexical|llm|jev) lock="$MEMFALSIFY_VERIFIER" ;;
+          dual|cascade) lock="all" ;;
           *) echo "::error title=MemFalsify::the verifier input must be lexical, llm, jev, dual or cascade"; exit 2 ;;
         esac
         # Build from a copy: pip writes build/ and *.egg-info into the source tree, which is the
@@ -94,7 +93,15 @@ runs:
         cp -R "$GITHUB_ACTION_PATH/packages/memcore" "$GITHUB_ACTION_PATH/packages/memfalsify" "$src/"
         "$SETUP_PYTHON" -m venv "$venv"
         if [ -x "$venv/bin/python" ]; then py="$venv/bin/python"; else py="$venv/Scripts/python.exe"; fi
-        "$py" -m pip install --quiet --disable-pip-version-check "$src/memcore" "$src/memfalsify$extra"
+        # Third-party packages come only from the vendored lock file: exact versions, every file hashed,
+        # wheels only (building an sdist would fetch its build backend unpinned).
+        "$py" -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary :all: \
+          -r "$GITHUB_ACTION_PATH/action/requirements/$lock.txt"
+        # The action's own packages come from the action path. --no-deps stops pip from resolving anything
+        # else; --no-build-isolation builds with the locked setuptools instead of fetching one.
+        "$py" -m pip install --quiet --disable-pip-version-check --no-deps --no-build-isolation \
+          "$src/memcore" "$src/memfalsify"
+        "$py" -m pip check --disable-pip-version-check
         echo "python=$py" >> "$GITHUB_OUTPUT"
 
     - id: audit

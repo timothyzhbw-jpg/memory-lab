@@ -21,8 +21,8 @@ jobs:
           - {os: windows-latest, python-version: "3.10"}
           - {os: windows-latest, python-version: "3.13"}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
@@ -30,10 +30,17 @@ jobs:
       - name: Test
         run: python -m pytest -q
 
+  # `uses: ./` runs the action from the checked-out ref, so a pull request exercises its own copy of
+  # action.yml and its lock files. That is safe only while this job holds nothing worth stealing: a
+  # read-only token that is not persisted, no secrets, and the offline lexical verifier. Do not add a
+  # secret, a write permission or `pull_request_target` here (tests/test_action.py checks), and see
+  # "Why the dogfood job is safe" in docs/github-action.md.
   dogfood:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           persist-credentials: false
       - name: Audit AGENTS.md against this repository

@@ -34,6 +34,21 @@ Release 0.3 contains:
   same check covers evidence manifests, `reviews.jsonl`, `github.json`, `github-sync.jsonl`, GitHub
   capture files, GitHub API responses, and benchmark `labels.jsonl` and `case.json`. The error is
   `<file>:<line>: invalid JSON: duplicate key` and the commands exit 2.
+- The GitHub Action no longer resolves anything floating. `actions/setup-python` in `action.yml`, and
+  `actions/checkout` and `actions/setup-python` in the CI workflow, are pinned to full commit SHAs with a
+  `# vX.Y.Z` comment, and the documentation examples are pinned too. The install step runs
+  `pip install --require-hashes --only-binary :all:` against a lock file vendored in `action/requirements/`
+  (`lexical`, `llm`, `jev`, `all`, chosen by `verifier`; universal for Python 3.10 and newer on Linux, macOS and
+  Windows), then installs `memlab-core` and `memfalsify` from the action path with `--no-deps
+  --no-build-isolation` and runs `pip check`, so a retargeted tag or a compromised PyPI release can no longer
+  run in the job. `scripts/update-action-lock.sh` regenerates the lock files with `uv pip compile
+  --generate-hashes`. `docs/github-action.md` explains why the dogfood job (`uses: ./`) is safe and which
+  changes would make it unsafe; tests fail the build if CI gains a secret, a write permission or
+  `pull_request_target`.
+- Documented that evidence reads follow hard links: a hard link is indistinguishable from its original, so a
+  file hard-linked into the evidence directory on the same filesystem is read and can be quoted. Git does not
+  store hard links, so only someone with write access to the audited directory can plant one. See
+  `docs/github-action.md` and the trust boundaries in both READMEs.
 
 ## memlab-core
 

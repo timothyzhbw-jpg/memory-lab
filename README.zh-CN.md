@@ -316,7 +316,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     with:
       persist-credentials: false
   - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
@@ -326,6 +326,8 @@ steps:
 
 记忆和证据文件的原始路径、符号链接解析后的路径都不能包含隐藏组件或忽略目录；被跳过的输入会注明原因。
 Action 还会警告并跳过解析到工作区外的记忆符号链接。
+Action 只使用固定到提交 SHA 的 Action，并从带哈希校验的锁文件安装 Python 依赖
+（[详情](docs/github-action.md#dependencies-and-pinning)）。
 
 ## 信任边界与局限
 
@@ -336,6 +338,7 @@ Action 还会警告并跳过解析到工作区外的记忆符号链接。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
 - JSON 对象里重复的键会被拒绝，包括嵌套对象里的重复键。如果保留后出现的值，`events.jsonl` 的同一行可以让读文件的人看到一个 `actor`，回放却使用另一个；`policy.json` 里把同一个人写两次时，也会按后一次的角色授权。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
+- 不检测硬链接。硬链接是同一个文件的另一个名字，所以同一文件系统上、被硬链接进证据目录的文件会被读取，并可能被引用进报告，不管它的另一个名字在哪里（符号链接会被检查并拒绝；硬链接无法与原文件区分，而跳过所有链接数大于 1 的文件也会误跳合法的链接）。Git 不保存硬链接，所以检出或 PR 无法植入硬链接；能写入被审计目录的人可以。只审计你自己控制的目录（见 [GitHub Action](docs/github-action.md) 的说明）。
 - `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。
 - GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。
 - `policy.json` 是全局的：给一个 `gh:` 账号配置角色，等于在所有导入仓库的议题上都授予了这个角色。
