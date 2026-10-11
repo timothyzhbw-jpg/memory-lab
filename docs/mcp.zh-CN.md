@@ -2,7 +2,7 @@
 
 [English](mcp.md) | 中文
 
-`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，把 MemFalsify 和 orgmemory 暴露给本机上的 Agent。这些工具调用的库函数和 `memfalsify`、`orgmemory` 命令相同。它们不写报告，也不改事件日志、证据清单或权限策略。
+`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，以[工具](#工具)、[资源](#资源)和[提示词](#提示词)的形式把 MemFalsify 和 orgmemory 暴露给本机上的 Agent。工具调用的库函数和 `memfalsify`、`orgmemory` 命令相同，资源调用的是工具的代码。它们都不写报告，也不改事件日志、证据清单或权限策略。
 
 ## 工具
 
@@ -33,6 +33,39 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 默认验证器是 `lexical`，完全离线。`llm`、`jev`、`dual`、`cascade` 会把记忆和证据文本发到外部 API，并且产生费用。除非启动时加了 `--allow-model-verifiers`，服务器会拒绝它们。加上这个旗标后，`memfalsify_audit` 和 `memfalsify_diff` 会被标成会访问本机以外的服务。`memfalsify_diff` 上的模型验证器使用命令行的默认模型名和段落上限（每条记忆最多 8 段，覆盖率 0.2）。没有 `--llm-model`、`--jev-model`、`--accept-at`、`--max-judged`、`--min-coverage` 这些参数。
 
 `base`、`head` 和 `to` 必须非空，不能以 `-` 开头，也不能包含控制字符。每个修订版本都会先解析成一个提交。记忆文件必须位于一个 git 工作区中，且该仓库的顶层目录、git 目录、公共目录（链接工作区指向主仓库的那个）和对象库都解析到 `--root` 之内，对象库里不能有 `objects/info/alternates`，也不能有符号链接。否则这三个 git 工具会拒绝该文件。`GIT_DIR` 以及其他指向仓库位置的变量会被忽略。git 自己的诊断信息不会返回，因为它可能点名根目录之外的路径。结果里的提交说明和作者名不可信。这三个工具会跟随本地 `.md` 链接，和命令行的默认行为一致。它们没有 `follow_links` 开关，也没有 `--output`、`--strict` 或 `--stale-days`。diff 审计使用 180 天的过期窗口。
+
+## 资源
+
+支持 MCP 资源的客户端可以按 URI 读取五种报告，而不必调用工具。它们是资源模板（`resources/templates/list`）；`resources/list` 为空。每个资源运行的都是表中对应工具的代码，所以返回的文本相同，访问边界和证据限制相同（例如超过 2 MB 的证据文件会被跳过），错误信息也相同。
+
+| URI 模板 | MIME 类型 | 与之文本相同的工具 |
+|---|---|---|
+| `memlab://memory/{+memory_file}/claims` | `application/json` | `memfalsify_claims` |
+| `memlab://memory/{+memory_file}/audit{?evidence_dir,reviews_file,as_of}` | `text/markdown` | 使用 `lexical` 验证器的 `memfalsify_audit` |
+| `memlab://dataset/{+dataset}/state{?as_of}` | `text/markdown` | `orgmemory_replay` |
+| `memlab://dataset/{+dataset}/audit{?as_of,stale_days}` | `text/markdown` | `orgmemory_audit` |
+| `memlab://dataset/{+dataset}/explain/{subject}{?as_of}` | `text/markdown` | `orgmemory_explain` |
+
+以 `--root examples` 为例：`memlab://memory/memfalsify/MEMORY.md/claims`、`memlab://memory/memfalsify/MEMORY.md/audit?evidence_dir=memfalsify%2Fevidence&as_of=2026-10-10`、`memlab://dataset/orgmemory/feature-a/state` 和 `memlab://dataset/orgmemory/github-acme-web/explain/acme%2Fweb%2312`。
+
+- 路径相对于 `--root`。在服务器自己的检查之前，SDK 默认的资源安全检查会拒绝任何路径变量里的绝对路径、离开根目录的 `..` 和 NUL 字符。之后再做和工具参数相同的检查，包括符号链接检查和受限读取。
+- 查询参数都是可选的，含义和同名的工具参数相同。未知的查询参数会被忽略。`stale_days` 必须是不小于 0 的整数。subject 要做百分号编码：空格写成 `%20`，`/` 写成 `%2F`，`#` 写成 `%23`。
+- 资源一律使用离线的 `lexical` 验证器，即使服务器启动时加了 `--allow-model-verifiers` 也一样，因为客户端可能在模型没有要求的情况下读取资源。报告只有 Markdown 格式。没有 `exclude`、`verifier` 和 `format`，也没有 diff、history 和 rollback 的资源：这些请用工具。
+- 读取失败时返回 JSON-RPC 错误：URI 未知、路径被拒绝或输入无效时是 `-32602`，读取无法完成时是 `-32603`。错误信息就是工具会返回的那条，或者一条固定的信息。URI 本身不会被回显，也不会写进日志。
+
+## 提示词
+
+提示词是固定的指令，客户端可以把它们作为命令提供给用户。每个提示词返回一条用户消息，引导 Agent 用上面的工具走完技能里一个“先出报告”的流程。
+
+| 提示词 | 参数 | 流程 |
+|---|---|---|
+| `audit_memory` | `memory_file`，可选 `evidence_dir`、`reviews_file`（必须同时提供 `evidence_dir`）、`as_of` | 用 `lexical` 验证器运行 `memfalsify_audit`，主动证伪有风险的记忆，先报告需要关注的记忆，附上引文和 `path:line`。没有 `evidence_dir` 时，Agent 会先问用户信任哪些证据。 |
+| `review_memory_changes` | `memory_file`、`base`，可选 `head`、`evidence_dir` | 运行 `memfalsify_diff`，复核新增和修改的记忆，指出被删除的记忆，并说明未变的记忆没有重新检查。用户问某条记忆从哪里来时用 `memfalsify_history`；`memfalsify_rollback` 只用来展示补丁。 |
+| `explain_status` | `dataset`、`subject`，可选 `as_of` | 先运行 `orgmemory_validate`，再运行 `orgmemory_explain`，回答当前状态、授权决定及其证据、待审批、风险和被忽略的越权尝试。 |
+
+消息把参数写成代码块里的一行 JSON，控制字符、双向文本字符和其他不可见字符都会转义，因此参数无法另起一行，也无法藏起文字。提示词不读取文件，也不嵌入文件内容。提示词不会让 Agent 写文件、应用补丁、记录人工复核或追加事件：每个提示词最后都要求 Agent 报告之后就停下，并说明这类修改需要用户明确批准。工具引用的文本仍然不可信；Agent 被要求遇到工具报错时如实报告并停下，而不是绕过去。
+
+在返回任何文本之前，参数会按工具的方式检查：路径必须在根目录内且存在，修订版本遵守 git 工具的规则，`as_of` 必须是日期（`audit_memory`）或带时区的 ISO 8601 时间（`explain_status`）。未知的提示词，以及缺少、未知或无效的参数，都返回 JSON-RPC 错误（`-32602`），错误信息与工具相同，从不回显根目录之外的路径。
 
 ## 安装
 

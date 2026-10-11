@@ -16,7 +16,25 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### memlab-mcp
+
+#### Added
+
+- Read-only resource templates: `memlab://memory/{+memory_file}/claims` and
+  `.../audit{?evidence_dir,reviews_file,as_of}`, and `memlab://dataset/{+dataset}/state{?as_of}`,
+  `.../audit{?as_of,stale_days}` and `.../explain/{subject}{?as_of}`. Each one runs the code of the matching
+  tool, so it returns the same text, under the same confinement, with the same error messages. Resources
+  always use the lexical verifier, even with `--allow-model-verifiers`.
+- Prompts `audit_memory`, `review_memory_changes` and `explain_status` for the skills' report-first
+  workflows. They quote their arguments as one line of JSON with invisible characters escaped, check them
+  as the tools do, embed no file contents and never tell the agent to write a file.
+
+#### Security
+
+- Resource and prompt errors carry the tools' messages or a fixed one. They do not echo the requested URI
+  or arguments, and they are not logged, so neither a client nor stderr sees a path outside the root or a
+  traceback. The SDK's default resource security (no `..` escape, absolute path or NUL) runs before the
+  server's own path checks.
 
 ## memlab-core
 
