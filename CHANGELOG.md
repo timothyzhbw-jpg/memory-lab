@@ -47,6 +47,7 @@ Release 0.3 contains:
 
 - MCP, Action, benchmark, and README library imports use the public package roots where possible,
   with no behavior changes. CLI configuration and report-header helpers remain internal.
+- memfalsify `audit` and `diff` find internal conflicts from an inverted index of normalized terms and reuse each claim's lexical features. Reports stay byte-identical; large memories are much faster. Timings are in `benchmarks/perf/`.
 
 ## memlab-core
 

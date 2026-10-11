@@ -72,7 +72,7 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 | `candidate_support` | 找到了复述这条记忆的片段 |
 | `insufficient_evidence` | 什么都没找到。这表示“未经验证”，不表示“是错的” |
 
-不论有没有证据，每条记忆都会检查：`overgeneralization`（绝对化措辞）、没有日期的 `relative_time`（相对时间）、`possibly_stale`（可能过期）、`inference_marker`（推测性措辞）、与其他记忆的 `internal_conflict`（内部矛盾），以及 `duplicate`（重复）。
+不论有没有证据，每条记忆都会检查：`overgeneralization`（绝对化措辞）、没有日期的 `relative_time`（相对时间）、`possibly_stale`（可能过期）、`inference_marker`（推测性措辞）、与其他记忆的 `internal_conflict`（内部矛盾），以及 `duplicate`（重复）。内部矛盾按规范化后的词项建索引，只比较有可能发生词法冲突的记忆。报告与两两全比的结果相同。
 
 `verify_counterevidence`、`add_absolute_date`、`narrow_scope` 这类操作只是建议，不会自动执行。`replacement` 字段永远是空的：MemFalsify 从不替你编写事实。
 

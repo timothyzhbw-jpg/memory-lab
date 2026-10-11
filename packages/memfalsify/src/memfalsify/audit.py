@@ -1,7 +1,9 @@
 """MemFalsify audit: challenge each memory claim against evidence. Read-only by construction."""
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -15,7 +17,8 @@ from memcore.reading import read_input_bytes
 from . import __version__
 from .corpus import Passage, Skipped, scan
 from .memory import Claim, parse_memory
-from .text import ABSOLUTE, HEDGE, RELATIVE_TIME, explicit_dates, features
+from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, HEDGE, RELATIVE_TIME, explicit_dates, features,
+                   has_negation)
 from .verify import Judgment, LexicalVerifier, Verifier, coverage
 
 Status = Literal["challenged", "conflicted", "candidate_counterevidence", "disputed",
@@ -149,7 +152,198 @@ def candidates(claim: Claim, passages: list[Passage], verifier: Verifier, limit:
             for *_, j, p in scored[:limit]]
 
 
-def issues_for(claim: Claim, others: list[Claim], as_of: date, stale_days: int) -> list[Issue]:
+@dataclass(frozen=True)
+class _Lex:
+    """Lexical features of one claim, computed once per audit."""
+    words: frozenset[str]
+    numbers: frozenset[str]
+    negated: bool
+    zh: frozenset[str]
+
+
+_ZH_TERMS = tuple(dict.fromkeys(term for pair in ANTONYMS_ZH for term in pair))
+
+
+def _opposite_map(pairs: list[tuple[str, str]]) -> dict[str, frozenset[str]]:
+    found: dict[str, set[str]] = {}
+    for left, right in pairs:
+        found.setdefault(left, set()).add(right)
+        found.setdefault(right, set()).add(left)
+    return {term: frozenset(opposites) for term, opposites in found.items()}
+
+
+_EN_OPPOSITES = _opposite_map(ANTONYM_STEMS)
+_ZH_OPPOSITES = _opposite_map(list(ANTONYMS_ZH))
+
+
+def _zh_present(text: str) -> frozenset[str]:
+    return frozenset(term for term in _ZH_TERMS if term in text)
+
+
+def _lex_of(text: str) -> _Lex:
+    words, numbers = features(text)
+    return _Lex(words, numbers, has_negation(text), _zh_present(text))
+
+
+def _min_shared(size: int, related: float) -> int:
+    """Fewest shared terms that can still reach ``related`` coverage after the antonym bonus of +1.
+
+    ``coverage`` adds that one before the threshold, so a smaller intersection can never be
+    ``contradicts`` in this direction. Zero means an empty intersection can pass (a single term
+    plus an antonym).
+    """
+    for shared in range(size + 1):
+        if min(shared + 1, size) / size >= related:
+            return shared
+    return size + 1
+
+
+def _opposed(claim: _Lex, passage: _Lex) -> bool:
+    """Same question as ``opposing_terms``, answered from features already in hand."""
+    words = passage.words
+    for left, right in ANTONYM_STEMS:
+        if left in claim.words and right in words and left not in words:
+            return True
+        if right in claim.words and left in words and right not in words:
+            return True
+    present = passage.zh
+    for left, right in ANTONYMS_ZH:
+        if left in claim.zh and right in present and left not in present:
+            return True
+        if right in claim.zh and left in present and right not in present:
+            return True
+    return False
+
+
+def _directed_contradicts(claim: _Lex, passage: _Lex, shared: int, related: float) -> bool:
+    """``LexicalVerifier.judge(claim, passage).relation == 'contradicts'``, without building a judgment."""
+    size = len(claim.words)
+    if size == 0:
+        return False
+    # ``score < related`` is the verifier's cutoff. Shared terms cannot exceed ``size``.
+    if shared / size >= related:
+        if _opposed(claim, passage):
+            return True
+        if claim.numbers and passage.numbers and claim.numbers.isdisjoint(passage.numbers):
+            return True
+        return claim.negated != passage.negated
+    if (shared + 1) / size < related:
+        return False
+    return _opposed(claim, passage)
+
+
+class _ConflictIndex:
+    """Pairs that can lexically contradict, found from a prefix of each claim's rarest terms.
+
+    Terms are ordered by increasing document frequency. If claim A must share at least ``k`` terms
+    with another claim to clear the coverage threshold (counting the antonym bonus), any such claim
+    contains one of A's rarest ``len(A) - k + 1`` terms. Claims whose own threshold is lower are
+    found from their prefixes. A claim of one term can also contradict a claim it shares nothing
+    with, when that term and an antonym are opposed; those are probed directly.
+    """
+
+    def __init__(self, claims: list[Claim]):
+        self.claims = claims
+        self.related = _LEXICAL.related
+        self.lex = [_lex_of(claim.text) for claim in claims]
+        self._pos = {}
+        for index, claim in enumerate(claims):
+            self._pos.setdefault(id(claim), index)
+        counts: Counter[str] = Counter()
+        self.contains: dict[str, list[int]] = defaultdict(list)
+        self.zh_at: dict[str, list[int]] = defaultdict(list)
+        for index, lex in enumerate(self.lex):
+            counts.update(lex.words)
+            for term in lex.words:
+                self.contains[term].append(index)
+            for term in lex.zh:
+                self.zh_at[term].append(index)
+        self._counts = counts
+        # One-term claims can contradict a claim they share nothing with, via an antonym.
+        # Everyone else has to be able to find those claims from the opposite term.
+        self.singletons: dict[str, list[int]] = defaultdict(list)
+        for index, lex in enumerate(self.lex):
+            if len(lex.words) == 1:
+                self.singletons[next(iter(lex.words))].append(index)
+        self.prefixes: list[tuple[str, ...]] = []
+        self.in_prefix: dict[str, list[int]] = defaultdict(list)
+        for index, lex in enumerate(self.lex):
+            prefix = self._prefix(lex.words)
+            self.prefixes.append(prefix)
+            for term in prefix:
+                self.in_prefix[term].append(index)
+
+    def _prefix(self, words: frozenset[str]) -> tuple[str, ...]:
+        size = len(words)
+        # No terms, or a threshold outside (0, 1]: a zero score can pass, or no score can.
+        # Either way the rare-term prefix does not apply.
+        if size == 0 or not 0.0 < self.related <= 1.0:
+            return ()
+        needed = _min_shared(size, self.related)
+        if needed <= 0:
+            return ()
+        rarest = sorted(words, key=lambda term: (self._counts.get(term, 0), term))
+        return tuple(rarest[:size - needed + 1])
+
+    def _loose(self, lex: _Lex, chosen: set[int]) -> None:
+        """Candidates when an empty intersection can still reach the threshold."""
+        for term in lex.words:
+            chosen.update(self.contains.get(term, ()))
+            for opposite in _EN_OPPOSITES.get(term, ()):
+                chosen.update(self.contains.get(opposite, ()))
+        for term in lex.zh:
+            for opposite in _ZH_OPPOSITES.get(term, ()):
+                chosen.update(self.zh_at.get(opposite, ()))
+
+    def _antonym_singletons(self, lex: _Lex, chosen: set[int]) -> None:
+        for term in lex.words:
+            for opposite in _EN_OPPOSITES.get(term, ()):
+                chosen.update(self.singletons.get(opposite, ()))
+        for term in lex.zh:
+            for opposite in _ZH_OPPOSITES.get(term, ()):
+                chosen.update(self.singletons.get(opposite, ()))
+
+    def _candidates(self, lex: _Lex, prefix: tuple[str, ...], skip: int | None) -> set[int]:
+        chosen: set[int] = set()
+        if prefix:
+            for term in prefix:
+                chosen.update(self.contains.get(term, ()))
+        elif 0.0 < self.related <= 1.0:
+            self._loose(lex, chosen)
+        else:
+            chosen.update(range(len(self.claims)))
+        for term in lex.words:
+            chosen.update(self.in_prefix.get(term, ()))
+        if 0.0 < self.related <= 1.0:
+            self._antonym_singletons(lex, chosen)
+        if skip is not None:
+            chosen.discard(skip)
+        return chosen
+
+    def issues(self, claim: Claim) -> list[Issue]:
+        position = self._pos.get(id(claim))
+        if position is not None and self.claims[position] is claim:
+            lex = self.lex[position]
+            chosen = self._candidates(lex, self.prefixes[position], position)
+        else:
+            lex = _lex_of(claim.text)
+            chosen = self._candidates(lex, self._prefix(lex.words), None)
+        found = []
+        for index in sorted(chosen):
+            other = self.claims[index]
+            if other.id == claim.id:
+                continue
+            other_lex = self.lex[index]
+            shared = len(lex.words & other_lex.words)
+            if (_directed_contradicts(lex, other_lex, shared, self.related)
+                    or _directed_contradicts(other_lex, lex, shared, self.related)):
+                found.append(Issue(kind="internal_conflict",
+                                   detail=f"may contradict {other.id} at {other.location}: \"{other.text}\""))
+        return found
+
+
+def issues_for(claim: Claim, others: list[Claim], as_of: date, stale_days: int,
+               conflicts: _ConflictIndex | None = None) -> list[Issue]:
     found = []
     text = claim.text
     if match := ABSOLUTE.search(text):
@@ -162,13 +356,9 @@ def issues_for(claim: Claim, others: list[Claim], as_of: date, stale_days: int) 
                            detail=f"latest date {max(dates)} is over {stale_days} days before {as_of}"))
     if match := HEDGE.search(text):
         found.append(Issue(kind="inference_marker", detail=f"'{match.group()}' marks an inference, not an observation"))
-    for other in others:
-        if other.id == claim.id:
-            continue
-        # Always lexical: comparing every pair with a model verifier would be quadratic in model calls.
-        if any(_LEXICAL.judge(a, b).relation == "contradicts" for a, b in ((text, other.text), (other.text, text))):
-            found.append(Issue(kind="internal_conflict",
-                               detail=f"may contradict {other.id} at {other.location}: \"{other.text}\""))
+    # Always lexical: comparing every pair with a model verifier would be quadratic in model calls.
+    # ``conflicts`` indexes ``others``; internal conflicts stay in that list's order.
+    found.extend((conflicts if conflicts is not None else _ConflictIndex(others)).issues(claim))
     if claim.also_at:
         found.append(Issue(kind="duplicate", detail="also stated at " + ", ".join(claim.also_at)))
     return found
@@ -254,13 +444,14 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
         raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
     confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
     findings = []
+    conflict_index = _ConflictIndex(claims) if targets else None
     for claim in targets:
         reviewed = confirmed.get(claim.id, [])
         evidence = reviewed + [c for c in candidates(claim, passages, verifier, max_candidates,
                                                      min_coverage, max_judged)
                                if not any(_overlaps(c.span, r.span) for r in reviewed)]
         status = status_of(evidence)
-        issues = issues_for(claim, claims, as_of, stale_days)
+        issues = issues_for(claim, claims, as_of, stale_days, conflicts=conflict_index)
         actions = [STATUS_PROPOSALS[status]] if status in STATUS_PROPOSALS else []
         actions += [ISSUE_PROPOSALS[i.kind] for i in issues]
         proposals = [Proposal(action=a, reason=r) for a, r in dict.fromkeys(actions)]

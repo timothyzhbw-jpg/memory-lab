@@ -74,7 +74,7 @@ Chinese memories work too: Chinese text is matched by overlapping character pair
 | `candidate_support` | A passage that restates the memory |
 | `insufficient_evidence` | Nothing found. That means unverified, not false |
 
-Independent of evidence, each memory is checked for `overgeneralization` (always, all, never…), `relative_time` without a date, `possibly_stale` dates, `inference_marker` (probably, seems…), `internal_conflict` with another memory, and `duplicate`.
+Independent of evidence, each memory is checked for `overgeneralization` (always, all, never…), `relative_time` without a date, `possibly_stale` dates, `inference_marker` (probably, seems…), `internal_conflict` with another memory, and `duplicate`. Internal conflicts use an index of normalized terms, so only claims that can lexically conflict are compared. The report is the same as comparing every pair.
 
 Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
