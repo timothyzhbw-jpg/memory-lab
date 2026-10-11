@@ -26,7 +26,7 @@ from memcore.reading import confinement_supported, confined_reads
 from memfalsify import jev, llm
 from memfalsify.audit import audit
 from memfalsify.cli import VerifierChoice, build_verifier, preselection
-from memfalsify.gitstore import GitError, HistoryError
+from memfalsify.gitstore import GitError, HistoryError, json_shield, show_text
 from memfalsify.history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
 from memfalsify.memory import parse_memory
 from memfalsify.report import to_markdown as audit_markdown
@@ -34,7 +34,8 @@ from memfalsify.rollback import rollback_patch
 from memfalsify.verify import VerifierError
 from orgmemory.audit import DEFAULT_STALE_DAYS, audit as decision_audit
 from orgmemory.replay import Dataset, replay
-from orgmemory.report import audit_markdown as decision_audit_markdown, explain, to_markdown as replay_markdown
+from orgmemory.report import audit_markdown as decision_audit_markdown, explain, json_shield as org_json_shield
+from orgmemory.report import terminal_line, to_markdown as replay_markdown
 
 from . import __version__
 
@@ -249,8 +250,9 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
             claims, _ = parse_memory(path)
         except (ValueError, OSError) as exc:
             raise ToolError(ws.failure(exc)) from None
-        return json.dumps([{"memory_id": c.id, "location": c.location, "text": c.text} for c in claims],
-                          ensure_ascii=False, indent=2)
+        return json_shield(json.dumps(
+            [{"memory_id": c.id, "location": c.location, "text": c.text} for c in claims],
+            ensure_ascii=False, indent=2))
 
     memory_help = "Memory file to audit, e.g. MEMORY.md. " + PATHS
     git_memory_help = "Memory file in a git work tree, e.g. MEMORY.md. " + PATHS + " " + GIT_ROOT
@@ -308,7 +310,8 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
             raise ToolError(ws.failure(exc)) from None
         report = report.model_copy(update={"memory_file": ws.show(memory),
                                            "evidence_root": ws.show(evidence) if evidence else None})
-        return audit_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        rendered = audit_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        return show_text(rendered) if format == "markdown" else json_shield(rendered)
 
     def memfalsify_diff(
         memory_file: Annotated[str, Field(description=git_memory_help)],
@@ -340,7 +343,8 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         report = report.model_copy(update={
             "memory_file": shown,
             "audit": report.audit.model_copy(update={"memory_file": shown, "evidence_root": evidence_shown})})
-        return diff_to_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        rendered = diff_to_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        return show_text(rendered) if format == "markdown" else json_shield(rendered)
 
     def memfalsify_history(
         memory_file: Annotated[str, Field(description=git_memory_help)],
@@ -356,7 +360,8 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         except (ValueError, OSError) as exc:
             raise ToolError(ws.failure(exc)) from None
         report = report.model_copy(update={"memory_file": ws.show(memory)})
-        return history_to_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        rendered = history_to_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        return show_text(rendered) if format == "markdown" else json_shield(rendered)
 
     def memfalsify_rollback(
         memory_file: Annotated[str, Field(description=git_memory_help)],
@@ -381,7 +386,8 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         lines = [f"ok: {len(data.events)} events, {len(data.evidence)} evidence records"]
         unknown = sorted({e.actor for e in data.events} - data.policy.actors.keys())
         if unknown:
-            lines.append(f"note: actors without any role (their events cannot change state): {', '.join(unknown)}")
+            shown = ", ".join(terminal_line(actor) for actor in unknown)
+            lines.append(f"note: actors without any role (their events cannot change state): {shown}")
         return "\n".join(lines)
 
     def orgmemory_replay(
@@ -390,7 +396,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         format: Annotated[FORMATS, Field(description="markdown (readable report) or json")] = "markdown",
     ) -> str:
         result = _replay(ws.dataset(dataset), _moment(as_of))
-        return replay_markdown(result) if format == "markdown" else result.model_dump_json(indent=2)
+        return replay_markdown(result) if format == "markdown" else org_json_shield(result.model_dump_json(indent=2))
 
     def orgmemory_explain(
         dataset: Annotated[str, Field(description=dataset_help)],
@@ -412,7 +418,8 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         format: Annotated[FORMATS, Field(description="markdown (readable report) or json")] = "markdown",
     ) -> str:
         report = _audit(ws.dataset(dataset), _moment(as_of), stale_days)
-        return decision_audit_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        rendered = decision_audit_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+        return rendered if format == "markdown" else org_json_shield(rendered)
 
     tools = [
         (memfalsify_claims, "MemFalsify: list claims",

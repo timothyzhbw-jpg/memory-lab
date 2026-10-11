@@ -111,16 +111,18 @@ def sentences(raw: str) -> list[tuple[str, int, int]]:
 
 
 def normalize_memory(text: str) -> str:
-    """Drop one leading U+FEFF and turn CR and CRLF into LF. Idempotent."""
-    if text.startswith("\ufeff"):
-        text = text[1:]
-    return text.replace("\r\n", "\n").replace("\r", "\n")
+    """Drop leading U+FEFF and turn CR and CRLF into LF. Idempotent.
+
+    Every leading byte-order mark is removed. One call and a second call on the result agree, including
+    when git has already normalized a snapshot before ``parse_text`` normalizes it again.
+    """
+    return text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
     """Claims and local link targets of one memory file.
 
-    A single leading U+FEFF is ignored. CR, CRLF and LF are line breaks.
+    Leading U+FEFF is ignored. CR, CRLF and LF are line breaks.
     """
     text = normalize_memory(text)
     lines = text.split("\n")

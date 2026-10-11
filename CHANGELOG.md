@@ -23,8 +23,8 @@ Release 0.3 contains:
 ### Fixed
 
 - Memory files, reviews, evidence manifests, organizational-memory events and policy, GitHub captures, and git history output reject malformed or hostile input with `ValueError`, `EvidenceError`, or `HistoryError`. The CLIs exit 2 and print one line, instead of a traceback or a hang.
-- A leading BOM in a memory file is ignored, and CR, CRLF, and LF are line breaks.
-- `memfalsify` stdout and organizational-memory replay and explain do not emit terminal control or bidi characters. `--output`, and MemFalsify's audit Markdown, keep the original quotes.
+- Leading byte-order marks (U+FEFF) in a memory file are ignored, and CR, CRLF, and LF are line breaks. Stripping them is idempotent, so a git snapshot and a direct read extract the same claims.
+- Report stdout from `memfalsify` audit, diff, history, and claims, and from organizational-memory replay, explain, audit, and validate, does not emit terminal control or bidi characters. Replay and explain keep untrusted subjects, actors, notes, and evidence quotes on one line and escape pipes. `memfalsify rollback` prints an exact patch. `--output`, and MemFalsify's audit Markdown from the library, keep the original quotes. The read-only MCP tools return that same text; `memfalsify_rollback` stays an exact patch.
 
 ## memlab-core
 

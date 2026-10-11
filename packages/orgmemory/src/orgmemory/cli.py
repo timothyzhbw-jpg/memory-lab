@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -16,7 +15,7 @@ from memcore import EvidenceError, ManifestEntry, append_jsonl, load_json, load_
 from .audit import DEFAULT_STALE_DAYS, audit
 from .models import Event
 from .replay import Dataset, replay, validate
-from .report import audit_markdown, explain, to_markdown
+from .report import audit_markdown, explain, json_shield, terminal_line, to_markdown
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="Replay organizational decisions under explicit authority rules.")
@@ -29,14 +28,6 @@ DATASET = typer.Argument(..., exists=True, file_okay=False, help="Directory with
 class Format(str, Enum):
     markdown = "markdown"
     json = "json"
-
-
-_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
-
-def _json_shield(text: str) -> str:
-    """Replace raw C1, bidi and line-separator characters with JSON ``\\uXXXX`` escapes."""
-    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
 
 
 def _fail(message: str) -> None:
@@ -68,7 +59,7 @@ def replay_command(
         result = replay(data, _as_of(as_of))
     except ValidationError as exc:
         _fail(str(exc))
-    typer.echo(to_markdown(result) if fmt is Format.markdown else _json_shield(result.model_dump_json(indent=2)))
+    typer.echo(to_markdown(result) if fmt is Format.markdown else json_shield(result.model_dump_json(indent=2)))
 
 
 @app.command("explain")
@@ -98,7 +89,7 @@ def audit_command(
         report = audit(data, _as_of(as_of), stale_days)
     except ValidationError as exc:
         _fail(str(exc))
-    text = audit_markdown(report) if fmt is Format.markdown else _json_shield(report.model_dump_json(indent=2) + "\n")
+    text = audit_markdown(report) if fmt is Format.markdown else json_shield(report.model_dump_json(indent=2) + "\n")
     typer.echo(text, nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
@@ -111,7 +102,8 @@ def validate_command(dataset: Path = DATASET) -> None:
     unknown = sorted({e.actor for e in data.events} - data.policy.actors.keys())
     typer.echo(f"ok: {len(data.events)} events, {len(data.evidence)} evidence records")
     if unknown:
-        typer.echo(f"note: actors without any role (their events cannot change state): {', '.join(unknown)}")
+        shown = ", ".join(terminal_line(actor) for actor in unknown)
+        typer.echo(f"note: actors without any role (their events cannot change state): {shown}")
 
 
 @app.command("append")
@@ -166,7 +158,7 @@ def _github_result(summary, dry_run: bool) -> None:
         typer.echo(line)
     if dry_run:
         for event in summary.plan.events:
-            typer.echo(_json_shield(json.dumps(event.model_dump(mode="json", exclude_none=True), ensure_ascii=True)))
+            typer.echo(json_shield(json.dumps(event.model_dump(mode="json", exclude_none=True), ensure_ascii=True)))
     if not summary.complete:
         raise typer.Exit(3)
 

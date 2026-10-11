@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterable
 from datetime import date
 from enum import Enum
@@ -14,7 +13,7 @@ from pydantic import ValidationError
 
 from . import jev, llm
 from .audit import ATTENTION, audit
-from .gitstore import show_text
+from .gitstore import json_shield, show_text
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
 from .memory import parse_memory
 from .report import to_markdown
@@ -61,15 +60,6 @@ def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_
             "max_judged": None if lexical else max_judged}
 
 
-# C1, bidi, zero-width and line separators. json.dumps already escapes C0. Replacing the raw
-# character with a \\uXXXX escape keeps json.loads able to restore it and a terminal unable to act on it.
-_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
-
-def _json_shield(text: str) -> str:
-    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
-
-
 def _fail(message: str) -> None:
     flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
     typer.echo(f"error: {flat}", err=True)
@@ -77,7 +67,7 @@ def _fail(message: str) -> None:
 
 
 def _emit(text: str, markdown: bool) -> None:
-    typer.echo(show_text(text) if markdown else _json_shield(text), nl=False)
+    typer.echo(show_text(text) if markdown else json_shield(text), nl=False)
 
 
 def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "report") -> None:
@@ -240,7 +230,7 @@ def claims_command(
     except (ValidationError, ValueError, OSError) as exc:
         _fail(str(exc))
     for claim in claims:
-        typer.echo(_json_shield(json.dumps(
+        typer.echo(json_shield(json.dumps(
             {"memory_id": claim.id, "location": claim.location, "text": claim.text}, ensure_ascii=False)))
 
 

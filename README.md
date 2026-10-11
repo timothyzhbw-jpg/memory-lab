@@ -80,7 +80,7 @@ Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narr
 
 Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
 
-Malformed memory, reviews, or evidence exits 2 with one line on stderr. A leading byte-order mark is ignored, and CR, CRLF, and LF are all line breaks. Stdout has control and bidi characters removed; `--output` keeps the report's exact quotes.
+Malformed memory, reviews, or evidence exits 2 with one line on stderr. Leading byte-order marks are ignored, and CR, CRLF, and LF are all line breaks. Stdout has control and bidi characters removed; `--output` keeps the report's exact quotes.
 
 #### Review memory changes in git
 
@@ -327,7 +327,7 @@ the claims it adds or changes.
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
 - On public repositories anyone can open issues, comment, review pull requests and close their own issues. All of it is recorded under the real account and ignored by replay unless that account is mapped, so expect `unauthorized_change_attempts`. That is accurate, not a bug.
-- Capture hashes prove the bytes the importer rendered from the API, not what GitHub served, and a capture given to `convert` is trusted as what GitHub said: convert only captures you made. Captured GitHub text is untrusted, and prompt injection in issue bodies is expected. It never becomes IDs, notes, actors or importer output, but `replay` and `explain` print evidence quotes as they are (single-line, with no terminal escapes or bidi characters, but possibly with markdown or HTML).
+- Capture hashes prove the bytes the importer rendered from the API, not what GitHub served, and a capture given to `convert` is trusted as what GitHub said: convert only captures you made. Captured GitHub text is untrusted, and prompt injection in issue bodies is expected. It never becomes IDs, notes, actors or importer output, but `replay` and `explain` print evidence quotes on one line (terminal, bidi, and line-break characters are escaped, a pipe is escaped, and other markdown or HTML can remain).
 - The GitHub token is read from the environment only, sent only to `https://api.github.com` (redirects are never followed to another host), and never written or printed.
 - Datasets imported from private repositories, and `--save-capture` files, contain private text: never commit them. There is no redaction workflow: removing a secret from a capture means editing it by hand, after which `validate` fails on purpose.
 - This is a research MVP, not production infrastructure.

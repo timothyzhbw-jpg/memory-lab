@@ -65,6 +65,18 @@ def show_text(text: str) -> str:
     return DISPLAY.sub("\ufffd", text)
 
 
+# json.dumps escapes C0. These are the characters it leaves raw under ensure_ascii=False.
+JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+
+
+def json_shield(text: str) -> str:
+    """Replace raw DEL, C1, bidi, zero-width and line-separator characters with JSON ``\\uXXXX`` escapes.
+
+    ``json.loads`` restores the character. A terminal never sees it raw.
+    """
+    return JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
+
+
 def check_revision(rev: str) -> str:
     """Refuse revisions that git could read as an option or that cannot be shown safely."""
     if not rev or rev.startswith("-") or CONTROL.search(rev):

@@ -120,6 +120,48 @@ def test_claims_match_the_library(root):
     assert claims == [{"memory_id": c.id, "location": c.location, "text": c.text} for c in expected]
 
 
+def _strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+@requires_confinement
+def test_tool_results_keep_untrusted_text_inert(root):
+    """MCP returns the same shielded text as CLI stdout. Rollback stays exact and is not covered here."""
+    memory = root / "hostile.md"
+    memory.write_text("- The cache uses \x1b[31mRedis\u202e for sessions.\n", encoding="utf-8")
+    server = create_server(root)
+    raw = ok(call(server, "memfalsify_claims", memory_file="hostile.md"))
+    assert "\u202e" not in raw and "\x1b" not in raw
+    assert any("\u202e" in item for item in _strings(json.loads(raw)))
+    markdown = ok(call(server, "memfalsify_audit", memory_file="hostile.md"))
+    assert "\u202e" not in markdown and "\x1b" not in markdown
+    audit_json = ok(call(server, "memfalsify_audit", memory_file="hostile.md", format="json"))
+    assert "\u202e" not in audit_json and "\x1b" not in audit_json
+    assert any("\u202e" in item for item in _strings(json.loads(audit_json)))
+
+    events = root / DATASET / "events.jsonl"
+    events.write_text(events.read_text(encoding="utf-8").replace(
+        '"actor": "lin"', '"actor": "li\\u001b\\u202en\\n| hacked"', 1), encoding="utf-8")
+    replay_json = ok(call(server, "orgmemory_replay", dataset=DATASET, format="json"))
+    assert "\u202e" not in replay_json and "\x1b" not in replay_json
+    assert any("\u202e" in item and "\n| hacked" in item for item in _strings(json.loads(replay_json)))
+    replay_md = ok(call(server, "orgmemory_replay", dataset=DATASET))
+    assert "\u202e" not in replay_md and "\x1b" not in replay_md and "\n| hacked" not in replay_md
+    audit_json = ok(call(server, "orgmemory_audit", dataset=DATASET, as_of="2026-10-31T00:00:00Z", format="json"))
+    assert "\u202e" not in audit_json and "\x1b" not in audit_json
+    validated = ok(call(server, "orgmemory_validate", dataset=DATASET))
+    assert "\x1b" not in validated and "\u202e" not in validated
+    note = [line for line in validated.splitlines() if line.startswith("note:")]
+    assert len(note) == 1 and "hacked" in note[0]
+
+
 @requires_confinement
 def test_audit_matches_the_library_and_hides_the_root(root):
     server = create_server(root)

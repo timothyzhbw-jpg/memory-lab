@@ -24,7 +24,7 @@ from memfalsify.cli import app as memfalsify_app
 from memfalsify.corpus import scan
 from memfalsify.gitstore import MAX_GIT_HEADER, MAX_GIT_OBJECT, HistoryError, _tree_entries, read_batch_object
 from memfalsify.history import parse_git_log
-from memfalsify.memory import parse_memory, parse_text
+from memfalsify.memory import normalize_memory, parse_memory, parse_text
 from memfalsify.report import to_markdown as audit_markdown
 from orgmemory.cli import app as orgmemory_app
 from orgmemory.github_map import GithubConfig, convert
@@ -459,6 +459,11 @@ def test_bom_and_cr_match_lf_claims(tmp_path):
                                       "Feature A was rejected by the product manager."]
     assert lf[0][1] == 4
     assert pairs("\ufeff" + BODY) == lf
+    double = "\ufeff\ufeff" + BODY
+    assert pairs(double) == lf
+    assert normalize_memory(normalize_memory(double)) == normalize_memory(double)
+    # A git snapshot is normalized once before parse_text normalizes it again. Both paths must agree.
+    assert pairs(normalize_memory(double)) == pairs(double) == lf
     assert pairs(BODY.replace("\n", "\r\n")) == lf
     assert pairs(BODY.replace("\n", "\r")) == lf
     path = tmp_path / "MEMORY.md"
@@ -484,6 +489,12 @@ def test_huge_evidence_offsets_are_evidence_errors(tmp_path):
                           source_uri="u", source_kind="file", captured_at="2026-10-01T00:00:00Z")
     with pytest.raises(EvidenceError, match="quote does not match"):
         verify_entry(quote, tmp_path)
+    # Python slices clamp, so text[0:10**100] == text. The quote is the whole file and must still be refused.
+    whole = raw.decode("utf-8")
+    clamped = ManifestEntry(id="clamped", start=0, end=10**100, sha256=digest, quote=whole, path="note.txt",
+                            source_uri="u", source_kind="file", captured_at="2026-10-01T00:00:00Z")
+    with pytest.raises(EvidenceError, match="quote does not match"):
+        verify_entry(clamped, tmp_path)
 
 
 def test_naive_timestamp_is_a_validation_error():
@@ -533,12 +544,30 @@ def test_claims_json_shields_bidi_and_round_trips(tmp_path):
 
 def test_replay_markdown_strips_terminal_controls(org_demo):
     path = org_demo / "events.jsonl"
-    path.write_text(path.read_text(encoding="utf-8").replace("Bulk export", "Bulk \\u001b\\u202eexport", 1),
-                    encoding="utf-8")
+    text = path.read_text(encoding="utf-8").replace("Bulk export", "Bulk \\u001b\\u202eexport", 1)
+    text = text.replace('"actor": "lin"', '"actor": "li\\u001b\\u202en\\n| hacked"', 1)
+    path.write_text(text, encoding="utf-8")
     rendered = to_markdown(replay(Dataset.load(org_demo)))
     assert "\x1b" not in rendered and "\u202e" not in rendered
+    assert "\n| hacked" not in rendered
     assert "rejected" in rendered
     result = RUNNER.invoke(orgmemory_app, ["replay", str(org_demo)])
     assert result.exit_code == 0, result.output
     assert "\x1b" not in result.output and "\u202e" not in result.output
+    assert "\n| hacked" not in result.output
     assert "rejected" in result.output
+    payload = RUNNER.invoke(orgmemory_app, ["replay", str(org_demo), "--format", "json"])
+    assert payload.exit_code == 0, payload.output
+    assert "\x1b" not in payload.output and "\u202e" not in payload.output
+    assert any("\u202e" in item and "\n| hacked" in item for item in _strings(json.loads(payload.output)))
+
+
+def test_validate_actor_names_are_one_inert_line(org_demo):
+    path = org_demo / "events.jsonl"
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        '"actor": "lin"', '"actor": "li\\u001b\\u202en\\nextra"', 1), encoding="utf-8")
+    result = RUNNER.invoke(orgmemory_app, ["validate", str(org_demo)])
+    assert result.exit_code == 0, result.output
+    assert "\x1b" not in result.output and "\u202e" not in result.output
+    note = [line for line in result.output.splitlines() if line.startswith("note:")]
+    assert len(note) == 1 and "extra" in note[0]
