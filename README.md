@@ -62,7 +62,15 @@ The example memory holds ten claims about a fictional service. The audit ([full 
 
 Every quote carries `path:line`, character offsets and the SHA-256 of the file it came from. A whiteboard photo in the evidence folder is listed as skipped, not guessed at.
 
-Chinese memories work too: Chinese text is matched by overlapping character pairs (no dictionary segmentation), with antonym pairs such as 批准/拒绝, dates like 2026年3月2日, and wording such as 总是, 下周 and 可能. Chinese negation is matched per character (不, 没, 未, 无, 非, 别, 勿), so words like 未来 or 非常 can trigger a false "only one side is negated" candidate. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
+Chinese memories work too, without a segmentation dictionary or any extra dependency:
+
+- Chinese text is matched by overlapping character pairs and triples, and a Chinese claim's coverage counts characters, so the claim and the source need not split words the same way.
+- Quantities are compared as numbers: Chinese numerals before a measure word (三个月, 两名), 万/亿/千 amounts (1200万, 一千二百万), percentages (百分之十, 一成), halves (半小时, 一年半), dates such as 2026年3月2日, and full-width digits and punctuation (１２０，ＡＰＩ). 第四季度 reads as Q4, as in English. So 三秒 against 2秒 is a "different values" candidate.
+- Negation (不, 没有, 未, 无, 非, 别, 勿, 不再, 禁止, 不得) counts only in a clause that shares a term with the other side, and words such as 未来, 非常, 无论 or 级别, and double negatives such as 非…不可, are not negations.
+- Opposite modality is a candidate contradiction: all (所有, 任何, 一律) against only (仅, 只有), or must (必须) against need not (无需, 不必).
+- Antonym pairs such as 批准/拒绝 and wording such as 总是, 下周 and 可能 are recognized.
+
+On the benchmark this finds 5 of 19 Chinese contradictions, against 11 of 29 English ones. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
 
 **How status is decided.** MemFalsify nominates evidence by itself, but only a human review can settle a memory:
 
@@ -303,8 +311,8 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 
 The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 139 labeled English and Chinese claims across
 eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
-precision 0.62, recall 0.27 and 3-way accuracy 0.44; these cases exercise failure modes rather than estimate
-accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
+precision 0.73, recall 0.33 and 3-way accuracy 0.47, with per-language results; these cases exercise failure
+modes rather than estimate accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
 
 The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files against repository
 evidence and puts the report in the job summary. Its default strict check fails on possible counterevidence;
@@ -320,6 +328,7 @@ the claims it adds or changes.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
+- Lexical judging of Chinese has no dictionary: it misses paraphrases (冻结招聘 for 不招) and reads negation and modality from fixed cue lists. Only Han characters are split into n-grams; Japanese kana and Korean Hangul are not.
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.

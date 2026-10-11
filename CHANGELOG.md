@@ -16,7 +16,29 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### memfalsify
+
+#### Changed
+
+- Lexical judging of Chinese text, with no new dependency. Text without CJK characters is read exactly as
+  before: the English golden reports and every English benchmark prediction are unchanged.
+  - Full-width digits, letters and punctuation are read as ASCII (`１２０`, `ＡＰＩ`, `，`).
+  - Chinese numerals before a measure word (`三个月`, `两名`), `万`/`亿`/`千` amounts (`1200万`,
+    `一千二百万`), `百分之` and `成` percentages, `半` halves (`半小时`, `一年半`) and dates
+    (`2026年10月11日`) are compared as numbers, so `三秒` against `2秒` is a different value. `第四季度`
+    reads as `Q4`, as in English.
+  - CJK runs yield character trigrams as well as bigrams. A Chinese claim's term coverage counts
+    characters: a character is found when a bigram or trigram containing it occurs in the passage, so word
+    boundaries need not line up. A Latin-script term in a Chinese claim weighs two characters.
+  - Negation cues (`不`, `没有`, `未`, `无`, `非`, `别`, `勿`, `不再`, `禁止`, `不得`) count only in a
+    clause that shares a term with the other side. Words such as `未来`, `非常`, `无论`, `不仅` and `级别`,
+    and double negatives (`非…不可`, `不得不`), are not negations.
+  - New rationale `opposite modality`: all (`所有`, `任何`, `一律`) against only (`仅`, `只有`), or must
+    (`必须`, `非…不可`) against need not (`无需`, `不必`).
+  - A bare quantity such as `三个月。` is no longer a claim, as with `3 months.`; `memfalsify diff` pairs
+    edited Chinese claims by bigram and trigram similarity.
+  - On the benchmark, Chinese contradiction recall rises from 2/19 to 5/19 and precision from 0.25 to
+    0.56, and Chinese false flags fall from 6/32 to 4/32. See `benchmarks/memfalsify/RESULTS.md`.
 
 ## memlab-core
 
