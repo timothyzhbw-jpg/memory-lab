@@ -343,6 +343,8 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.Dataset` | Construct from events, Policy, verified evidence and an optional policy_log (list of PolicyChange); load(directory=...) reads and validates the dataset files, including policy-log.jsonl when present. |
 | `orgmemory.DatedPolicy` | Effective-dated roles of a replay or audit: the policy.json as_of baseline (or None) and the RoleChange entries applied up to the cutoff. |
 | `orgmemory.Decision` | Authorized decision, actor roles, timestamp, and quoted evidence. |
+| `orgmemory.DecisionRecord` | One subject's current authorized decision as an Architecture Decision Record: ADR status, current status, the decision and earlier decisions, context events, open requests, dependencies, ignored attempts, conflicts, the roles that may change it, and every named event. |
+| `orgmemory.Dependency` | A dependency named in a DecisionRecord: the subject, its current status (None without events) and the dependency events that declared it. |
 | `orgmemory.Event` | Validated event with aware timestamp, actor, action, subject, and evidence IDs. |
 | `orgmemory.FetchProgress` | Optional throttled progress reporter with injectable clock and stream; update/rate_limit report progress. |
 | `orgmemory.GitHubError` | Permanent GitHub failure with optional HTTP status. |
@@ -352,6 +354,7 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.Plan` | Pure conversion result with events, captures, spans, drift, skips, and counts. |
 | `orgmemory.Policy` | Actor roles (the baseline from optional as_of), action permissions including manage_roles; roles/allows/permitted/decision_roles expose policy checks. |
 | `orgmemory.PolicyChange` | Frozen policy-log.jsonl entry: id, aware timestamp, actor, grant or revoke_role, subject_actor, role, evidence IDs and an optional note. |
+| `orgmemory.RecordEvent` | A CitedEvent named by a DecisionRecord, with its note, dependency, supersedes target and whether it came after the decision. |
 | `orgmemory.ReplayResult` | Subject states and event audit trail, optionally cut off at as_of; dated_policy is set only for effective-dated roles. |
 | `orgmemory.Risk` | Risk event, actor, and note. |
 | `orgmemory.RoleChange` | A policy-log entry as replay applied it: who changed whose role and when, the acting roles, roles before and after, and quoted evidence. |
@@ -362,11 +365,14 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.TrailEntry` | One replayed event’s outcome and before/after status. |
 | `orgmemory.Transport` | Callable taking URL and headers, returning (HTTP status, response headers, bytes). |
 | `orgmemory.__version__` | Installed distribution version string. |
+| `orgmemory.adr_markdown` | Render one DecisionRecord as an ADR in Markdown: Status, Context, Decision, Consequences and Evidence with exact quotes and full hashes. |
 | `orgmemory.audit` | Audit a Dataset using replay; as_of/now select the reference time and stale_days defaults to 14. |
 | `orgmemory.audit_markdown` | Render a decision-process AuditReport as Markdown. |
 | `orgmemory.changes` | Replay a Dataset at start and at end and report, per subject, what the events after start up to and including end changed; never writes files. |
 | `orgmemory.changes_markdown` | Render a ChangesReport as Markdown: summary table, then each subject's changes with quoted evidence. |
 | `orgmemory.convert` | Purely map raw capture dict plus existing events/evidence IDs and GithubConfig into a Plan; no I/O. |
+| `orgmemory.decision_records` | Replay a Dataset (optionally up to as_of) and return (subjects replayed, a DecisionRecord per subject with a current authorized decision); never writes files. |
+| `orgmemory.decisions_csv` | Render DecisionRecords as one CSV table (one row per record, spreadsheet formulas neutralized). |
 | `orgmemory.explain` | Render one subject’s state and decision provenance from a ReplayResult. |
 | `orgmemory.load_events` | Parse events JSONL with line-numbered validation errors. |
 | `orgmemory.load_policy_log` | Parse policy-log.jsonl with line-numbered validation errors. |
@@ -379,11 +385,14 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.validate` | Check event ID uniqueness, evidence references and supersession targets across the full log, and policy-log IDs (unique, not event IDs, no gh: prefix) and their evidence. |
 
 ```python
+adr_markdown(record: DecisionRecord) -> str
 audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
 audit_markdown(report: AuditReport) -> str
 changes(dataset: Dataset, start: datetime, end: datetime) -> ChangesReport
 changes_markdown(report: ChangesReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
+decision_records(dataset: Dataset, as_of: Optional[datetime]=None) -> tuple[int, list[DecisionRecord]]
+decisions_csv(records: list[DecisionRecord]) -> str
 explain(result: ReplayResult, subject: str) -> str
 load_events(path: Path) -> list[Event]
 load_policy_log(path: Path) -> list[PolicyChange]

@@ -407,7 +407,8 @@ def test_untrusted_audit_fields_render_as_text(tmp_path, field):
 
 
 @pytest.mark.parametrize("payload", ["# HIGH forged", "- forged", "1. forged", "---", "```html",
-                                     "<h3>HIGH forged</h3>", "&#10;# HIGH forged"])
+                                     "<h3>HIGH forged</h3>", "&#10;# HIGH forged", "    indented code",
+                                     "  - nested forged"])
 def test_evidence_cannot_add_markdown_blocks(tmp_path, payload):
     from markdown_it import MarkdownIt
 

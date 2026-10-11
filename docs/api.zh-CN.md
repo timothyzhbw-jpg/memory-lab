@@ -320,6 +320,8 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.Dataset` | 由事件、Policy、已验证证据和可选的 policy_log（PolicyChange 列表）构造；load(directory=...) 读取并验证数据集文件，存在 policy-log.jsonl 时也会读取。 |
 | `orgmemory.DatedPolicy` | 回放或审计中带生效时间的角色：policy.json 的 as_of 基线（或 None），以及截止时间前已应用的 RoleChange 记录。 |
 | `orgmemory.Decision` | 授权决策、参与者角色、时间及证据引用。 |
+| `orgmemory.DecisionRecord` | 以架构决策记录（ADR）表示的一个议题的当前授权决定：ADR 状态、当前状态、该决定及更早的决定、背景事件、未结请求、依赖、被忽略的尝试、冲突、可改变它的角色，以及所有提到的事件。 |
+| `orgmemory.Dependency` | DecisionRecord 中的一项依赖：议题、其当前状态（没有事件时为 None）以及声明它的依赖事件。 |
 | `orgmemory.Event` | 已验证的事件，包含带时区时间、参与者、操作、议题及证据 ID。 |
 | `orgmemory.FetchProgress` | 可选的节流进度报告器，支持注入 clock 与 stream；update/rate_limit 报告进度。 |
 | `orgmemory.GitHubError` | GitHub 永久失败，带可选 HTTP 状态。 |
@@ -329,6 +331,7 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.Plan` | 纯转换结果，包含事件、抓取文件、引用、漂移、跳过项及计数。 |
 | `orgmemory.Policy` | 参与者角色（从可选的 as_of 起生效的基线）与动作权限（包括 manage_roles）；roles/allows/permitted/decision_roles 提供权限检查。 |
 | `orgmemory.PolicyChange` | 不可变的 policy-log.jsonl 记录：id、带时区的时间戳、actor、grant 或 revoke_role、subject_actor、role、证据 ID 和可选的 note。 |
+| `orgmemory.RecordEvent` | DecisionRecord 提到的 CitedEvent，附带 note、dependency、supersedes 目标，以及它是否发生在决定之后。 |
 | `orgmemory.ReplayResult` | 各议题状态与事件审计轨迹，可按 as_of 截止；只有角色带生效时间时才有 dated_policy。 |
 | `orgmemory.Risk` | 风险事件、参与者及备注。 |
 | `orgmemory.RoleChange` | 回放实际应用的一条角色变更：谁在何时改变了谁的角色、操作者当时的角色、变更前后的角色，以及引用的证据。 |
@@ -339,11 +342,14 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.TrailEntry` | 单个回放事件的结果及前后状态。 |
 | `orgmemory.Transport` | 可调用类型，输入 URL 与请求头，返回（HTTP 状态、响应头、字节）。 |
 | `orgmemory.__version__` | 已安装发行包的版本字符串。 |
+| `orgmemory.adr_markdown` | 把一个 DecisionRecord 渲染为 Markdown 格式的 ADR：Status、Context、Decision、Consequences，以及带逐字引用和完整哈希的 Evidence。 |
 | `orgmemory.audit` | 通过回放审计 Dataset；as_of/now 选择参考时间，stale_days 默认 14。 |
 | `orgmemory.audit_markdown` | 将决策流程 AuditReport 渲染为 Markdown。 |
 | `orgmemory.changes` | 在 start 和 end 两个时间点回放 Dataset，按议题报告 start 之后到 end（含）为止的事件带来的变化；不写文件。 |
 | `orgmemory.changes_markdown` | 把 ChangesReport 渲染为 Markdown：先是汇总表，再是每个议题的变化及引用证据。 |
 | `orgmemory.convert` | 将原始抓取字典、已有事件／证据 ID 及 GithubConfig 纯映射为 Plan；无 I/O。 |
+| `orgmemory.decision_records` | 回放 Dataset（可只到 as_of 为止），返回（回放的议题数，每个有当前授权决定的议题一个 DecisionRecord）；不写文件。 |
+| `orgmemory.decisions_csv` | 把 DecisionRecord 渲染为一张 CSV 表（每条记录一行，电子表格公式会被中和）。 |
 | `orgmemory.explain` | 从 ReplayResult 渲染某个议题的状态与决策来源。 |
 | `orgmemory.load_events` | 解析事件 JSONL，验证错误带行号。 |
 | `orgmemory.load_policy_log` | 解析 policy-log.jsonl，验证错误会标出行号。 |
@@ -356,11 +362,14 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.validate` | 在完整日志范围内检查事件 ID 唯一性、证据引用与取代目标，以及角色变更日志的 ID（唯一、不与事件 ID 相同、不以 gh: 开头）和证据。 |
 
 ```python
+adr_markdown(record: DecisionRecord) -> str
 audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
 audit_markdown(report: AuditReport) -> str
 changes(dataset: Dataset, start: datetime, end: datetime) -> ChangesReport
 changes_markdown(report: ChangesReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
+decision_records(dataset: Dataset, as_of: Optional[datetime]=None) -> tuple[int, list[DecisionRecord]]
+decisions_csv(records: list[DecisionRecord]) -> str
 explain(result: ReplayResult, subject: str) -> str
 load_events(path: Path) -> list[Event]
 load_policy_log(path: Path) -> list[PolicyChange]

@@ -301,6 +301,30 @@ release needs a memlab-core release that has it; raise their memlab-core pins th
 - `orgmemory.audit.periods()`: every pending-approval and reconsideration period of a subject's trail.
   `open_periods()` is now built on it and returns the same events as before.
 
+- `orgmemory export DATASET --out DIR [--as-of T] [--force]` writes one Architecture Decision Record per
+  subject whose replay has a current authorized decision. The layout is Michael Nygard's, as adr-tools
+  writes it (title, `Date:`, Status, Context, Decision, Consequences), with MADR's status words
+  (`approved` is Accepted, `rejected` Rejected, revoked back to `proposed` Proposed) and an Evidence section
+  with every cited quote, its file, line, character range, full SHA-256 and source URI. Context lists the
+  requests and risks on record; Consequences lists who may change the status, dependencies, ignored change
+  attempts and conflicts. File names are `<slug>-<hash12>.md`, from the subject alone, and records contain
+  nothing from the run, so an unchanged log exports to the same bytes.
+- `orgmemory export --format csv [--out FILE]`: the same decisions as one table, to stdout or a new file.
+  List columns are JSON arrays that decode to the exact values; other cells are one line, and a cell that
+  starts like a spreadsheet formula gets a leading `'`.
+- Export is create-only: if any target exists, nothing is written, unless `--force`, which replaces regular
+  files by rename and never writes through a symlink or hard link. A target inside the dataset directory is
+  refused, also through a symlink, `..` or different letter case. Untrusted text is escaped as in
+  `orgmemory audit`. `examples/orgmemory/adr/` holds the output for both example datasets.
+
+#### Fixed
+
+- `orgmemory audit` Markdown: untrusted text starting with four spaces, such as an indented evidence quote,
+  became an indented code block that showed the escaping instead of the text. Leading spaces are now written
+  as character references.
+- `orgmemory export --force` no longer deletes a pre-existing temporary name when that name cannot be
+  created.
+
 ### memlab-mcp
 
 No code change. Through the libraries, `memfalsify_audit`, `memfalsify_diff` and the orgmemory tools read

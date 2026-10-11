@@ -585,6 +585,24 @@ def test_explain_and_audit_cite_the_media_position(org_media):
             in result.output)
 
 
+def test_adr_export_and_html_cite_the_media_position(org_media):
+    # ADR export and HTML pages, merged alongside sidecars, locate a cue in its media file too.
+    from orgmemory.export import adr_markdown, decision_records
+    from orgmemory.htmlreport import replay_html
+    assert add(org_media, "--quote", "<v Priya>The public API rate limit is 60 requests\nper minute").exit_code == 0
+    events = org_media / "events.jsonl"
+    events.write_bytes(events.read_bytes() + (json.dumps({
+        "id": "fri", "timestamp": "2026-10-09T09:00:00Z", "actor": "zhou", "action": "approve",
+        "subject": "Rate limit", "evidence_ids": ["cue"]}) + "\n").encode("utf-8"))
+    data = Dataset.load(org_media)
+    _, records = decision_records(data)
+    record = next(r for r in records if r.subject == "Rate limit")
+    assert ("`media/clip.mp4#t=12.5,17` (00:00:12.500-00:00:17.000) · transcript `media/clip.mp4.vtt:12`"
+            in adr_markdown(record))
+    page = replay_html(replay(data))
+    assert "<code>media/clip.mp4#t=12.5,17</code>" in page and "transcript <code>media/clip.mp4.vtt:12</code>" in page
+
+
 def test_sidecar_reads_never_write(media_dir):
     before = snapshot(media_dir.parent)
     scan(media_dir)

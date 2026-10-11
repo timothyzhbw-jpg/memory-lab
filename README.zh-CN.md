@@ -12,8 +12,8 @@
 |---|---|---|
 | 回答的问题 | 这条记忆有证据支撑吗？ | 这是当前的、经过授权的状态吗？ |
 | 输入 | `MEMORY.md` 或各家 Agent 的指令文件（`CLAUDE.md`、`AGENTS.md`、Cursor、Copilot、Gemini、Windsurf）+ 一个证据文件目录 | 事件日志 + 角色权限策略 + 证据清单 |
-| 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹、决策流程审计 |
-| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 和 GitHub、Jira 导入工具只追加 |
+| 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹、决策流程审计、ADR 导出 |
+| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 和 GitHub、Jira 导入工具只追加；`export` 只在数据集之外新建文件 |
 
 默认完全离线运行，不需要任何 API key；可以选择开启模型验证（Claude 和 TypeSafe AI 的 Jev）。需要 Python 3.10+，许可证 Apache-2.0。
 
@@ -183,6 +183,7 @@ orgmemory replay   <数据集> --as-of 2026-10-07T23:59:59Z   # 某个历史时�
 orgmemory validate <数据集>                  # 校验每个事件、哈希和引用
 orgmemory audit    <数据集> --as-of 2026-10-31T00:00:00Z   # 决策流程哪里需要关注
 orgmemory changes  <数据集> --from 2026-10-05T23:59:59Z --to 2026-10-08T23:59:59Z   # 两个时间点之间发生了什么变化
+orgmemory export   <数据集> --out docs/adr      # 每个已有决定的议题导出一份架构决策记录（ADR）
 orgmemory evidence add <数据集> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <数据集> --event '{"id": ..., ...}'
 orgmemory policy grant|revoke <数据集> ...   # 记录从某个时间点起生效的角色变更（见下文）
@@ -260,6 +261,26 @@ orgmemory changes <数据集> --from ISO8601 --to ISO8601 [--format markdown|jso
 - Markdown 报告以一张汇总表开头：每个有变化的议题一行，列出它之前和之后的状态、按类型统计的变化，最后是合计行。议题有变化，或者在时间段之前没有任何事件时，才会列出。议题按名称排序，每个议题的变化先按类型（上表顺序）、再按回放顺序排列。
 - `--format json` 包含 `from_time`、`to_time`、事件和议题的计数、`summary`（各类型的变化数量，列出所有类型）和 `subjects`；每个议题有 `status_before`（时间段内新出现的议题为 `null`）、`status_after` 和 `changes`。
 - `--from` 和 `--to` 都必须提供，并且要带时区；`--from` 不能晚于 `--to`。退出码：`0`；输入无效时为 `2`，与 `replay` 相同。
+
+#### 把决策导出为 ADR
+
+`export` 把每个议题当前的有权限决定写成一份架构决策记录（Architecture Decision Record，ADR），可以放进 `docs/adr` 这样的目录；也可以把所有决定导出成一张 CSV 表。和 `audit` 一样，它只复述回放结果，从不修改数据集。
+
+```bash
+orgmemory export <数据集> --out 目录 [--as-of ISO8601] [--force]
+orgmemory export <数据集> --format csv [--out 文件] [--as-of ISO8601] [--force]
+```
+
+- 回放后有当前有权限决定的议题，每个导出一个 Markdown 文件；没有决定的议题不导出。版式沿用 Michael Nygard 的模板（与 adr-tools 生成的一致）：议题作标题，`Date:`（决定当天的日期），然后是 `Status`、`Context`、`Decision`、`Consequences`，再加一节 `Evidence`。状态用 MADR 的词：`approved` 写作 `Accepted`，`rejected` 写作 `Rejected`，最后一个决定被撤销（`revoke`）的议题写作 `Proposed`。
+- **Status**：作出决定的事件、回放截止时间，以及进行中的“申请重新考虑”或待批准，和需要哪些角色来决定。**Context**：已生效的申请、申请重新考虑和风险，按回放顺序排列，发生在决定之后的会标出。**Decision**：谁（及其角色）在什么时间作了什么决定，`revoke` 撤销的是哪个决定，以及更早的有权限决定。**Consequences**：权限策略允许哪些角色改变这个状态、依赖及其状态、被忽略的越权修改，以及回放记录的冲突。**Evidence**：上述事件引用的每段原文，附文件、行号、字符范围、完整 SHA-256、来源 URI、来源类型和采集时间，以及引用它的事件。
+- 文件名是 `<slug>-<hash12>.md`：议题转成小写 ASCII 字母、数字和连字符（最多 48 个字符；如果什么都不剩就用 `subject`），后接议题原文 SHA-256 的前 12 位十六进制，因此 slug 相同的议题也会得到不同的文件。`Feature A` 对应 `feature-a-5481a84ec80d.md`。记录里不含任何与本次运行有关的内容，所以对没有变化的日志再导出一次，得到的字节完全相同。
+- 只新建文件：只要有一个目标文件已存在，就什么都不写。`--force` 通过重命名替换已存在的普通文件（绝不会顺着符号链接或硬链接写到别处）；目录里的其他文件保持不动，也从不删除文件。目录不存在时会自动创建。
+- 绝不写入数据集：`--out` 位于数据集目录之内时会被拒绝，经由符号链接、`..` 或大小写不同的路径也一样。
+- 不可信文本（议题、参与者、角色、备注、ID、原文）按 `orgmemory audit` 的方式转义：保持为单行的字面 Markdown。
+- `--format csv` 为每个有决定的议题输出一行，默认写到标准输出，加 `--out` 则新建一个文件（同样只新建，规则同上）。列依次为：`subject`、`adr_file`、`status`、`current_status`、`decided_at`、`decision_event`、`decision_action`、`decided_by`、`decided_by_roles`、`supersedes`、`earlier_decisions`、`reconsideration_requested`、`pending_approval`、`dependencies`、`open_risks`、`unauthorized_change_attempts`、`conflicts`，决定所引用证据的 `evidence_ids`、`evidence_sha256`、`evidence_source_uris` 和 `evidence_quotes`，以及 `as_of`。列表列是 JSON 数组，解码后与原值完全一致。每行只占一行：其他单元格里的控制字符、格式字符（双向文本、零宽字符）和分隔符转义为 `\uXXXX`，U+FFFF 以上为 `\U00XXXXXX`；以 `=`、`+`、`-` 或 `@` 开头的单元格前面加一个 `'`，避免电子表格把它当作公式执行。
+- 退出码：`0`，包括还没有任何议题有决定的情况（此时不写 ADR 文件）；输入无效或写入被拒绝时为 `2`，什么都不写。
+
+示例（由两个示例数据集导出）：[Feature A 的决策记录](examples/orgmemory/adr/feature-a/feature-a-5481a84ec80d.md)、[GitHub 示例的决策记录](examples/orgmemory/adr/github-acme-web/)（包括被接受、被拒绝和被撤销的 PR 与 issue），以及 [`examples/orgmemory/adr/`](examples/orgmemory/adr/) 里对应的 CSV 表。
 
 #### 导入 GitHub Issues 和 Pull Request
 
@@ -551,6 +572,7 @@ Action 还会警告并跳过解析到工作区外的记忆符号链接。
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。使用 `--batch` 时，Anthropic 会把批次的请求和结果保留最多 29 天，该工作区（workspace）里有权限的人都能看到；如果觉得太久，可以通过 API 删除该批次。
 - `orgmemory audit` 的发现项和 `orgmemory changes` 只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
+- 导出的 ADR 只是复述回放后的日志。它的 Context 列出的是记录在案的申请和风险，不是任何人的理由；记录也不会自动更新：日志变化后需要重新导出。
 - 参与者（`actor`）ID、`policy.json` 和 `policy-log.jsonl` 被视为可信输入。目前还没有身份认证或签名溯源。记录在 `policy-log.jsonl` 里的角色变更带有生效时间，但修改 `policy.json`（包括不分时间的 `permissions`）或改写角色变更日志，仍然会改变每一次回放的结果。
 - JSON 对象里重复的键会被拒绝，包括嵌套对象里的重复键。如果保留后出现的值，`events.jsonl` 的同一行可以让读文件的人看到一个 `actor`，回放却使用另一个；`policy.json` 里把同一个人写两次时，也会按后一次的角色授权。
 - 证据是 UTF-8 文本。图片、音频、视频和 PDF 只能通过你提供的转写稿或 OCR 旁车文件成为证据，而旁车文件只是某人（或某个模型）对媒体内容的读取结果：`source_sha256` 一致只说明它描述的是哪份字节，不说明它准确。没有可用旁车文件的媒体会在报告的 `Skipped evidence` 部分列为跳过。
