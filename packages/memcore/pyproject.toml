@@ -9,7 +9,7 @@ description = "Shared evidence integrity primitives for MemFalsify and Verified 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-dependencies = ["pydantic>=2.5"]
+dependencies = ["pydantic>=2.12"]
 
 [project.urls]
 Homepage = "https://github.com/timothyzhbw-jpg/memory-lab"

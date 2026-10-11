@@ -78,7 +78,8 @@ def _fingerprint(path: Path) -> dict[str, bytes]:
 def test_tutorial_bash_blocks_run_in_order(tmp_path):
     blocks = bash_blocks(TUTORIAL.read_text(encoding="utf-8"))
     expected = [stated_exit(block) for block in blocks]
-    bin_dir = ROOT / ".venv" / "bin"
+    # The CLIs installed next to this interpreter: ./.venv/bin locally, the runner's Python on CI.
+    bin_dir = Path(sys.executable).parent
     missing = [name for name in CLI_NAMES if not (bin_dir / name).is_file()]
     assert not missing, f"missing CLIs in {bin_dir}: {missing}"
 
