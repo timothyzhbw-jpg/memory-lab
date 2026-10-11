@@ -51,8 +51,10 @@ memlab-core needs a minor version and their pins must move to it.
 
 - The evidence scan indexes each cue or OCR line of a sidecar as a passage. Markdown reports cite the media
   file and position (`clip.mp4#t=12.5,17 (00:00:12.500-00:00:17.000)`), then the sidecar line and its
-  hash, then the media file's hash or that it was not present. JSON spans carry `media`. When a report
-  uses sidecar evidence, its limitations say that a transcript or OCR is someone's reading of the media.
+  hash, then the media file's hash or that it was not present. A multi-line cue is quoted line by line
+  (in `diff` reports too, before control characters are neutralized). JSON spans carry `media`. When a
+  report uses sidecar evidence, its limitations say that a transcript or OCR is someone's reading of the
+  media.
 - Reviews may cite a sidecar. The quote must lie inside one cue or line; an optional `locator` picks which.
 - Example: `examples/memfalsify-media`.
 

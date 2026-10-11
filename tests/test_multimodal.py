@@ -22,6 +22,7 @@ from memcore.sidecar import SidecarError, media_for, parse_sidecar, sidecar_form
 from memfalsify.audit import MEDIA_NOTE, audit
 from memfalsify.cli import app as memfalsify_app
 from memfalsify.corpus import NO_SIDECAR, scan
+from memfalsify.history import diff_to_markdown, memory_diff
 from memfalsify.report import to_markdown
 from orgmemory.cli import app as org_app
 from orgmemory.replay import Dataset, replay
@@ -401,6 +402,18 @@ def test_a_transcript_without_media_says_its_binding_was_not_checked(media_dir):
     markdown = to_markdown(media_audit(media_dir, "The public API rate limit is 100 requests per minute."))
     assert "`clip.mp4#t=12.5,17` (00:00:12.500-00:00:17.000) · transcript `clip.mp4.vtt:12`" in markdown
     assert "media file not present, binding not checked" in markdown
+
+
+def test_diff_reports_split_crlf_cues_before_scrubbing_controls(git_repo):
+    """Diff Markdown replaces control characters (CR included); a CRLF cue must still print as two lines."""
+    base = git_repo.commit("memory", {"MEMORY.md": "- The queue runs on Kafka.\n"})
+    git_repo.write({"MEMORY.md": "- The queue runs on Kafka.\n"
+                                 "- Deployments go through staging, except for hotfixes.\n"})
+    evidence = Path(shutil.copytree(FIXTURES, git_repo.root.parent / "media-evidence"))
+    markdown = diff_to_markdown(memory_diff(git_repo.root / "MEMORY.md", base, evidence_root=evidence))
+    assert "· `retro.wav#t=5.25,9` (00:00:05.250-00:00:09.000) · transcript `retro.srt:9` ·" in markdown
+    assert "  > <i>Deployments go through staging,</i>\n  > except for hotfixes.\n" in markdown
+    assert "�" not in markdown
 
 
 def test_the_media_example_report_is_current(tmp_path, monkeypatch):
