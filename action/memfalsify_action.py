@@ -22,6 +22,7 @@ from memfalsify.audit import ATTENTION, AuditReport
 from memfalsify.cli import app
 from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
 from memfalsify.discover import discover
+from memfalsify.gitstore import code_span
 from memfalsify.history import DiffReport, HistoryError, diff_to_markdown, resolve_commit
 from memfalsify.report import to_markdown
 
@@ -153,7 +154,7 @@ def main(env: dict[str, str] | None = None) -> int:
         code = run_cli(args + (["--strict"] if strict == "true" else []) + ["--", memory])
         if code not in ((0, 1) if strict == "true" else (0,)) or not json_path.is_file():
             annotate("error", f"memfalsify could not audit {memory} (exit code {code}); see the step log")
-            sections.append(f"{DIFF_HEADER if base else REPORT_HEADER}\n\n- Memory: `{memory}`\n\n"
+            sections.append(f"{DIFF_HEADER if base else REPORT_HEADER}\n\n- Memory: {code_span(memory)}\n\n"
                             f"**Audit failed** with exit code {code}; see the step log.\n")
             codes.append(ERROR)
             continue

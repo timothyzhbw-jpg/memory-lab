@@ -7,7 +7,8 @@ import pytest
 from typer.testing import CliRunner
 
 from memfalsify.cli import app
-from memfalsify.discover import discover, discovery_to_markdown
+from memfalsify.corpus import Skipped
+from memfalsify.discover import Discovery, InstructionFile, discover, discovery_to_markdown
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "formats"
 runner = CliRunner()
@@ -99,6 +100,56 @@ def test_discover_skips_names_with_control_characters(tmp_path):
     found = discover(tmp_path)
     assert found.files == [] and [s.reason for s in found.skipped] == ["file name contains control characters"]
     assert "\x1b" not in discovery_to_markdown(found)
+
+
+def test_discovery_markdown_keeps_names_and_patterns_inert(tmp_path):
+    rules = tmp_path / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    (rules / "a`b.mdc").write_bytes(b"- The cache uses Redis.\n")
+    nested = tmp_path / "sub`tick"
+    nested.mkdir()
+    (nested / "AGENTS.md").write_bytes(b"- The cache uses Redis.\n")
+    pattern = "*\n- [phish](http://evil)"
+    markdown = discovery_to_markdown(discover(tmp_path, exclude=[pattern, "ok"]))
+    # A backtick in the name needs a longer fence, or the span closes and the rest of the name is Markdown.
+    assert "| ``.cursor/rules/a`b.mdc`` | Cursor | `cursor-rule` |" in markdown
+    assert "| ``sub`tick/AGENTS.md`` | Codex and other AGENTS.md readers | `agents-md` |" in markdown
+    assert "- Excluded: `* - [phish](http://evil)`, `ok`" in markdown
+    assert "\n- [phish](http://evil)" not in markdown and "\x1b" not in markdown
+    # A name the OS may reject still has to render as one cell: pipes stay escaped inside the fence.
+    synthetic = Discovery(
+        directory="we\nird",
+        excluded=[pattern],
+        files=[InstructionFile(path="a`|b.mdc", format="cursor-rule", agent="Cursor", same_as="sub`|x.md")],
+        skipped=[Skipped(path="bad`name", reason="symlinked directory not followed")],
+        limitations=["limit"],
+    )
+    text = discovery_to_markdown(synthetic)
+    assert "| ``a`\\|b.mdc`` | Cursor | `cursor-rule` (same file as ``sub`\\|x.md``) |" in text
+    assert "- Directory: `we ird`" in text and "\nird" not in text
+    assert "- Excluded: `* - [phish](http://evil)`" in text
+    assert "- ``bad`name``: symlinked directory not followed" in text
+    assert "\n- [phish](http://evil)" not in text
+
+
+def test_zero_file_index_does_not_collapse_files(tmp_path, monkeypatch):
+    import memfalsify.discover as discover_module
+
+    (tmp_path / "AGENTS.md").write_bytes(b"- The cache uses Redis.\n")
+    (tmp_path / "CLAUDE.md").write_bytes(b"- Handlers validate request bodies.\n")
+    real = os.stat
+
+    def zero_index(path, *args, **kwargs):
+        status = real(path, *args, **kwargs)
+        fields = list(status)
+        fields[1] = 0  # st_ino
+        fields[2] = 0  # st_dev
+        return os.stat_result(tuple(fields))
+
+    monkeypatch.setattr(discover_module.os, "stat", zero_index)
+    found = discover(tmp_path)
+    assert found.distinct == ["AGENTS.md", "CLAUDE.md"]
+    assert [f.same_as for f in found.files] == [None, None]
 
 
 def test_discover_cli(tmp_path):

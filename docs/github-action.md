@@ -78,7 +78,7 @@ workspace, instead of a fixed list:
 | Agent | Files found | Frontmatter shown in the report |
 |---|---|---|
 | Claude Code | `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/rules/**/*.md` | `paths` |
-| Codex and other `AGENTS.md` readers | `AGENTS.md`, `AGENTS.override.md` | |
+| Codex and other `AGENTS.md` readers | `AGENTS.md`, `AGENTS.override.md`, `.claude/AGENTS.md` | |
 | Cursor | `.cursor/rules/**/*.mdc`, and `.cursorrules` at the top | `description`, `globs`, `alwaysApply` |
 | GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md` (top `.github` only) | `applyTo`, `excludeAgent` |
 | Gemini CLI | `GEMINI.md` | |
@@ -91,7 +91,8 @@ workspace, instead of a fixed list:
   Exclude fixtures, examples and vendored code, whose instruction files are not yours.
 - Discovery skips other hidden directories, `node_modules/`, `__pycache__/`, `venv/` and nested git
   repositories (submodules), and only follows a symlink to a regular file inside the workspace. A file
-  reachable under two names, such as a `CLAUDE.md` symlinked to `AGENTS.md`, is audited once.
+  reachable under two names, such as a `CLAUDE.md` symlinked to `AGENTS.md`, is audited once. If the filesystem
+  reports no file index, both names are audited.
 - No file found is a notice and success, as with named files that do not exist. A directory that cannot be
   read fails the step with exit 2.
 - With `diff-base`, discovery looks at the checked-out head: an instruction file that the pull request adds

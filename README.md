@@ -87,7 +87,7 @@ Every command also takes the instruction files of other coding agents. Each form
 | Agent | Files | Frontmatter fields kept |
 |---|---|---|
 | Claude Code | `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/rules/**/*.md` | `paths` |
-| Codex and other `AGENTS.md` readers | `AGENTS.md`, `AGENTS.override.md` | |
+| Codex and other `AGENTS.md` readers | `AGENTS.md`, `AGENTS.override.md`, `.claude/AGENTS.md` | |
 | Cursor | `.cursor/rules/**/*.mdc`; legacy `.cursorrules` | `description`, `globs`, `alwaysApply` |
 | GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md` | `applyTo`, `excludeAgent` |
 | Gemini CLI | `GEMINI.md` | |
@@ -102,7 +102,7 @@ memfalsify audit .cursor/rules/api.mdc --evidence .  # claims, diff and history 
 - `diff` lists unchanged claims whose frontmatter changed under "Frontmatter changed" (they are not audited), and `history` counts that as the latest change of each claim of the file.
 - `@file.md` imports (Claude Code, Gemini CLI) are followed like local Markdown links: one level deep and inside the file's directory. A line that imports is not a claim.
 - Locations are `path:line`, relative to the audited file's directory, with lines counted from the top of the file, frontmatter included.
-- `discover` reads file names only. It finds `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and the rule directories in any directory, and `.cursorrules`, `.windsurfrules` and `.github/` at the top only. It does not search other hidden directories, `node_modules/`, `__pycache__/` or `venv/`, lists nested git repositories as skipped, follows a symlink only to a regular file inside the directory, and lists a file reachable under two names once (`same_as`). An unreadable directory exits 2. Files outside the repository (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, Windsurf's global rules) and names configured in an agent's settings are not searched.
+- `discover` reads file names only. It finds `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and the rule directories in any directory, and `.cursorrules`, `.windsurfrules` and `.github/` at the top only. It does not search other hidden directories, `node_modules/`, `__pycache__/` or `venv/`, lists nested git repositories as skipped, follows a symlink only to a regular file inside the directory, and lists a file reachable under two names once (`same_as`), or both names when the filesystem reports no file index. An unreadable directory exits 2. Files outside the repository (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, Windsurf's global rules) and names configured in an agent's settings are not searched.
 
 #### Review memory changes in git
 

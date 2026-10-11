@@ -66,6 +66,17 @@ def show_text(text: str) -> str:
     return DISPLAY.sub("\ufffd", text)
 
 
+def code_span(text: str) -> str:
+    """Untrusted text as one Markdown code span, whatever backticks it contains.
+
+    Whitespace is collapsed, so a newline in a path or a pattern cannot open a new Markdown line.
+    """
+    text = " ".join(show_text(text).split())
+    fence = "`" * (max((len(run) for run in re.findall(r"`+", text)), default=0) + 1)
+    pad = " " if text[:1] == "`" or text[-1:] == "`" else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
+
+
 def check_revision(rev: str) -> str:
     """Refuse revisions that git could read as an option or that cannot be shown safely."""
     if not rev or rev.startswith("-") or CONTROL.search(rev):

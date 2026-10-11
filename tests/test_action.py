@@ -45,6 +45,17 @@ def test_action_publishes_report_and_applies_strict(tmp_path, monkeypatch, capsy
     assert f"{level} title=MemFalsify::1 memory needs attention" in capsys.readouterr().out
 
 
+def test_action_failure_keeps_a_hostile_memory_name_inert(tmp_path, monkeypatch, runner_env):
+    monkeypatch.chdir(tmp_path)
+    name = "a`[x](evil).md"
+    (tmp_path / name).write_text("- The cache uses Redis.\n", encoding="utf-8")
+    env = {**runner_env, "MEMFALSIFY_MEMORY": name, "MEMFALSIFY_EVIDENCE": "missing-dir"}
+    assert action.main(env) == 2
+    summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
+    assert "- Memory: ``a`[x](evil).md``" in summary
+    assert "\n[x](evil)" not in summary
+
+
 def test_action_without_memory_files_notices_and_succeeds(tmp_path, monkeypatch, capsys, runner_env):
     monkeypatch.chdir(tmp_path)
     assert action.main(runner_env) == 0

@@ -4,7 +4,8 @@ Checked against each agent's documentation in October 2026:
 
 - Claude Code (``CLAUDE.md``, ``CLAUDE.local.md``, ``.claude/CLAUDE.md``, ``.claude/rules/**/*.md`` with
   ``paths``): https://code.claude.com/docs/en/memory
-- Codex and other ``AGENTS.md`` readers (``AGENTS.md``, ``AGENTS.override.md``):
+- Codex and other ``AGENTS.md`` readers (``AGENTS.md``, ``AGENTS.override.md``, and ``.claude/AGENTS.md``,
+  which Claude Code also loads):
   https://learn.chatgpt.com/docs/agent-configuration/agents-md
 - Cursor (``.cursor/rules/**/*.mdc`` with ``description``, ``globs``, ``alwaysApply``; legacy
   ``.cursorrules``): https://cursor.com/docs/context/rules

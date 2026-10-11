@@ -164,10 +164,25 @@ def test_audit_cites_frontmatter_and_locates_claims(formats):
     assert limit.metadata == CURSOR_API
     assert limit.evidence[0].span.location == "api.md:1"
     markdown = to_markdown(report)
-    assert ("`api.mdc:9` · Fixture: Cursor rule for memfalsify format tests (not instructions for this repository)"
+    assert ("`api.mdc:9` · `Fixture: Cursor rule for memfalsify format tests (not instructions for this repository)`"
             "\n\nFrontmatter: `description: Rate limits and validation for the fixture API` · "
             "`globs: src/api/**/*.ts` · `alwaysApply: false`\n") in markdown
     assert json.loads(report.model_dump_json())["findings"][0]["metadata"] == CURSOR_API
+
+
+def test_instruction_paths_and_headings_stay_inert(tmp_path):
+    name = "a`[x](evil).mdc"
+    rule = tmp_path / ".cursor" / "rules" / name
+    rule.parent.mkdir(parents=True)
+    rule.write_bytes(b"---\ndescription: scope\n---\n# See [phish](http://evil) and a `tick`\n\n"
+                     b"- The cache uses Redis.\n")
+    markdown = to_markdown(audit(rule, as_of=AS_OF))
+    memory = next(line for line in markdown.splitlines() if line.startswith("- Memory: "))
+    assert memory.startswith("- Memory: ``") and name in memory
+    assert "``a`[x](evil).mdc:6``" in markdown
+    # The heading ends in a backtick, so the span is padded and cannot stay open.
+    assert "`` See [phish](http://evil) and a `tick` ``" in markdown
+    assert "\n[phish](http://evil)" not in markdown and "\n[x](evil)" not in markdown
 
 
 def test_frontmatter_text_is_shown_safely(tmp_path):

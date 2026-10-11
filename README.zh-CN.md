@@ -85,7 +85,7 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 | Agent | 文件 | 保留的 frontmatter 字段 |
 |---|---|---|
 | Claude Code | `CLAUDE.md`、`CLAUDE.local.md`、`.claude/CLAUDE.md`、`.claude/rules/**/*.md` | `paths` |
-| Codex 及其他读取 `AGENTS.md` 的 Agent | `AGENTS.md`、`AGENTS.override.md` | |
+| Codex 及其他读取 `AGENTS.md` 的 Agent | `AGENTS.md`、`AGENTS.override.md`、`.claude/AGENTS.md` | |
 | Cursor | `.cursor/rules/**/*.mdc`；旧式的 `.cursorrules` | `description`、`globs`、`alwaysApply` |
 | GitHub Copilot | `.github/copilot-instructions.md`、`.github/instructions/**/*.instructions.md` | `applyTo`、`excludeAgent` |
 | Gemini CLI | `GEMINI.md` | |
@@ -100,7 +100,7 @@ memfalsify audit .cursor/rules/api.mdc --evidence .  # claims、diff、history �
 - `diff` 把 frontmatter 改了、措辞没变的记忆列在 “Frontmatter changed” 下（不审计它们）；`history` 把这种改动算作该文件每条记忆的最近一次修改。
 - `@file.md` 导入（Claude Code、Gemini CLI）和本地 Markdown 链接一样会被跟进：只跟一层，且不出该文件所在目录。含导入的行不算记忆。
 - 位置写作 `path:line`，路径相对于被审计文件所在目录，行号从文件第一行算起（包括 frontmatter）。
-- `discover` 只读取文件名。`AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 和各类规则目录在任何目录下都会找；`.cursorrules`、`.windsurfrules` 和 `.github/` 只在顶层找。它不进入其他隐藏目录以及 `node_modules/`、`__pycache__/`、`venv/`；嵌套的 git 仓库列为已跳过；符号链接只有指向本目录内的普通文件时才会列出；同一个文件有两个名字时只列一次（`same_as`）。目录不可读时退出码为 2。仓库之外的文件（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、Windsurf 的全局规则）以及在 Agent 设置里另行配置的文件名不在搜索范围内。
+- `discover` 只读取文件名。`AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 和各类规则目录在任何目录下都会找；`.cursorrules`、`.windsurfrules` 和 `.github/` 只在顶层找。它不进入其他隐藏目录以及 `node_modules/`、`__pycache__/`、`venv/`；嵌套的 git 仓库列为已跳过；符号链接只有指向本目录内的普通文件时才会列出；同一个文件有两个名字时只列一次（`same_as`）；文件系统没有报告文件索引时，两个名字都会列出。目录不可读时退出码为 2。仓库之外的文件（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、Windsurf 的全局规则）以及在 Agent 设置里另行配置的文件名不在搜索范围内。
 
 #### 审查 git 里的记忆改动
 

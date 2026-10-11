@@ -19,7 +19,7 @@ from . import __version__
 from .audit import ATTENTION, AuditReport, Status, audit_claims
 from .corpus import DIFF_HEADER, HISTORY_HEADER
 from .formats import Value
-from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, open_repository, printable,
+from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, code_span, open_repository, printable,
                        resolve_commit, show_text)
 from .memory import Claim
 from .report import LABELS, _finding, _quote, metadata_line
@@ -201,12 +201,11 @@ def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow
 
 
 def _files(files: list[str]) -> str:
-    shown = [show_text(f) for f in files]
-    return f"{len(shown)} file(s)" + (": " + ", ".join(f"`{f}`" for f in shown) if shown else "")
+    return f"{len(files)} file(s)" + (": " + ", ".join(code_span(f) for f in files) if files else "")
 
 
 def _where(version: ClaimVersion) -> str:
-    return f"`{show_text(version.location)}`" + (f" · {show_text(version.section)}" if version.section else "")
+    return code_span(version.location) + (f" · {code_span(version.section)}" if version.section else "")
 
 
 def _meta(metadata: dict[str, Value]) -> list[str]:
@@ -215,15 +214,16 @@ def _meta(metadata: dict[str, Value]) -> list[str]:
 
 def diff_to_markdown(report: DiffReport) -> str:
     audit = report.audit
-    head = (f"`{show_text(report.head.rev)}` (commit `{report.head.commit[:12]}`)" if report.head.commit
+    head = (f"{code_span(report.head.rev)} (commit {code_span(report.head.commit[:12])})" if report.head.commit
             else "working tree")
     out = [DIFF_HEADER, "",
-           f"- Memory: `{show_text(report.memory_file)}`",
-           f"- Base: `{show_text(report.base.rev)}` (commit `{report.base.commit[:12]}`), {_files(report.base.files)}",
+           f"- Memory: {code_span(report.memory_file)}",
+           f"- Base: {code_span(report.base.rev)} (commit {code_span(report.base.commit[:12])}), "
+           f"{_files(report.base.files)}",
            f"- Head: {head}, {_files(report.head.files)}",
-           f"- Evidence root: `{show_text(audit.evidence_root)}` (as it is now)" if audit.evidence_root
+           f"- Evidence root: {code_span(audit.evidence_root)} (as it is now)" if audit.evidence_root
            else "- Evidence root: none supplied",
-           *(["- Excluded from evidence: " + ", ".join(f"`{show_text(p)}`" for p in audit.excluded)]
+           *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in audit.excluded)]
              if audit.excluded else []),
            f"- Verifier: `{audit.verifier}` · as of {audit.as_of} · mode: **{report.mode}** (no memory was modified)",
            "", "| Change | Claims |", "|---|---|"]
@@ -271,7 +271,7 @@ def diff_to_markdown(report: DiffReport) -> str:
             out += _finding(finding, scrub=True)
     if audit.skipped_evidence:
         out += ["## Skipped evidence", ""]
-        out += [f"- `{show_text(s.path)}`: {show_text(s.reason)}" for s in audit.skipped_evidence]
+        out += [f"- {code_span(s.path)}: {show_text(s.reason)}" for s in audit.skipped_evidence]
         out.append("")
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations + audit.limitations]
     return "\n".join(out) + "\n"
@@ -435,13 +435,13 @@ def history_to_markdown(report: HistoryReport) -> str:
                       else "; the clone is shallow, so older commits were not available" if report.shallow
                       else f"; older commits were not read (`--max-commits {report.max_commits}`)"))
     out = [HISTORY_HEADER, "",
-           f"- Memory: `{show_text(report.memory_file)}` ({_files(report.files)})",
+           f"- Memory: {code_span(report.memory_file)} ({_files(report.files)})",
            f"- Scanned: {scanned}, plus the working tree",
            f"- Mode: **{report.mode}** (nothing was modified)", "",
            f"## Current claims ({len(report.claims)})", ""]
     for claim in report.claims:
         out += [f"### `{claim.memory_id}`", "", _quote(claim.text, scrub=True), "",
-                f"`{show_text(claim.location)}`" + (f" · {show_text(claim.section)}" if claim.section else ""), "",
+                code_span(claim.location) + (f" · {code_span(claim.section)}" if claim.section else ""), "",
                 *_meta(claim.metadata),
                 f"- Introduced: {_commit(claim.introduced)}",
                 "- Last changed: " + ("same as introduced" if claim.last_changed == claim.introduced
@@ -453,8 +453,8 @@ def history_to_markdown(report: HistoryReport) -> str:
         out += [f"## Removed claims ({len(report.removed)})", ""]
         for gone in report.removed:
             out += [f"### `{gone.memory_id}`", "", _quote(gone.text, scrub=True), "",
-                    f"Was at `{show_text(gone.location)}`"
-                    + (f" · {show_text(gone.section)}" if gone.section else ""), "",
+                    f"Was at {code_span(gone.location)}"
+                    + (f" · {code_span(gone.section)}" if gone.section else ""), "",
                     f"- Removed: {_commit(gone.removed)}", f"- Introduced: {_commit(gone.introduced)}", ""]
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
     return "\n".join(out) + "\n"

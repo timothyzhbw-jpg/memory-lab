@@ -18,7 +18,7 @@ from memcore.reading import walk_files
 from . import __version__
 from .corpus import DISCOVER_HEADER, SKIP_DIRS, Skipped, _matches
 from .formats import detect
-from .gitstore import CONTROL, printable, show_text
+from .gitstore import CONTROL, code_span, printable
 
 # Searched in every directory that is searched.
 NAMES = ("AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md")
@@ -45,6 +45,7 @@ LIMITATIONS = [
     "Other hidden directories, `node_modules/`, `__pycache__/` and `venv/` are not searched, and nested git "
     "repositories (submodules, worktrees) are listed as skipped.",
     "Discovery reads the directory, not git's index: untracked and ignored files are listed too.",
+    "When the filesystem reports a file index of zero, two names cannot be told apart, so both are listed.",
 ]
 
 
@@ -150,40 +151,50 @@ def discover(directory: Path, exclude: Iterable[str] = ()) -> Discovery:
         for spec in NESTED + (ROOT_NESTED if not relative.parts else ()):
             search(here, relative, *spec)
 
-    # Each file once: a real file is preferred over a link to it, then the first path in order.
-    first: dict[tuple[int, int], str] = {}
+    # Each file once when the filesystem gives a nonzero file index: a real file is preferred over a link
+    # to it, then the first path in order. A zero index does not identify a file, so those names stay
+    # listed separately rather than hiding one.
+    first: dict[tuple, str] = {}
     for name in sorted(found, key=lambda n: (found[n].is_symlink(), n)):
         status = os.stat(found[name])
-        first.setdefault((status.st_dev, status.st_ino), name)
+        first.setdefault(_file_id(status, name), name)
     files = []
     for name in sorted(found):
         status = os.stat(found[name])
         fmt = detect(PurePosixPath(name))
-        same = first[(status.st_dev, status.st_ino)]
+        same = first[_file_id(status, name)]
         files.append(InstructionFile(path=name, format=fmt.name, agent=fmt.agent,
                                      same_as=None if same == name else same))
     return Discovery(directory=str(directory), excluded=patterns, files=files, skipped=skipped,
                      limitations=LIMITATIONS)
 
 
+def _file_id(status: os.stat_result, name: str) -> tuple:
+    """A zero ``st_ino`` does not identify a file (Python documents this for some filesystems)."""
+    if status.st_ino == 0:
+        return ("path", name)
+    return (status.st_dev, status.st_ino)
+
+
 def _cell(text: str) -> str:
-    return show_text(text).replace("|", "\\|")
+    """One table cell. Pipes are escaped so they cannot split the row, including inside the code span."""
+    return code_span(text).replace("|", "\\|")
 
 
 def discovery_to_markdown(report: Discovery) -> str:
     out = [DISCOVER_HEADER, "",
-           f"- Directory: `{show_text(report.directory)}`",
-           *(["- Excluded: " + ", ".join(f"`{show_text(p)}`" for p in report.excluded)] if report.excluded else []),
+           f"- Directory: {code_span(report.directory)}",
+           *(["- Excluded: " + ", ".join(code_span(p) for p in report.excluded)] if report.excluded else []),
            f"- Mode: **{report.mode}** (file names only; no file was read)", ""]
     if report.files:
         out += [f"{len(report.distinct)} instruction file(s).", "", "| File | Agent | Format |", "|---|---|---|"]
         for f in report.files:
-            note = f" (same file as `{_cell(f.same_as)}`)" if f.same_as else ""
-            out.append(f"| `{_cell(f.path)}` | {_cell(f.agent)} | `{f.format}`{note} |")
+            note = f" (same file as {_cell(f.same_as)})" if f.same_as else ""
+            out.append(f"| {_cell(f.path)} | {f.agent} | `{f.format}`{note} |")
     else:
         out.append("No instruction file found.")
     out.append("")
     if report.skipped:
-        out += ["## Skipped", ""] + [f"- `{show_text(s.path)}`: {s.reason}" for s in report.skipped] + [""]
+        out += ["## Skipped", ""] + [f"- {code_span(s.path)}: {s.reason}" for s in report.skipped] + [""]
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
     return "\n".join(out) + "\n"

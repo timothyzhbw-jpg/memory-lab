@@ -24,7 +24,8 @@ Release 0.3 contains:
   `MEMORY.md`. Each format was checked against the agent's documentation (sources in
   `packages/memfalsify/src/memfalsify/formats.py`):
   - Claude Code: `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/rules/**/*.md` (`paths`).
-  - Codex and other `AGENTS.md` readers: `AGENTS.md`, `AGENTS.override.md`.
+  - Codex and other `AGENTS.md` readers: `AGENTS.md`, `AGENTS.override.md`, and `.claude/AGENTS.md`
+    (Claude Code loads that file too).
   - Cursor: `.cursor/rules/**/*.mdc` (`description`, `globs`, `alwaysApply`) and the legacy `.cursorrules`.
   - GitHub Copilot: `.github/copilot-instructions.md` and `.github/instructions/**/*.instructions.md`
     (`applyTo`, `excludeAgent`).
@@ -38,7 +39,8 @@ Release 0.3 contains:
   capped at 300 characters and 50 list items.
 - `memfalsify discover [DIR]` lists the instruction files of all these agents in a repository, as a
   Markdown table or JSON, with `--exclude` globs. It reads names only, fails on unreadable directories,
-  lists a file reachable under two names once (`same_as`), and skips symlinks that leave the directory,
+  lists a file reachable under two names once (`same_as`; both names when the filesystem reports no file
+  index), and skips symlinks that leave the directory,
   names with control characters, symlinked directories and nested git repositories.
 - `@file.md` imports (Claude Code, Gemini CLI) are followed like local Markdown links: one level deep,
   inside the memory file's directory, and not inside code spans. `--no-follow-links` turns both off.
