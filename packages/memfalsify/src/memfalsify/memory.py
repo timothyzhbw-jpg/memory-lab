@@ -66,10 +66,35 @@ def _strip(pattern: re.Pattern, text: str, origin: list[int], keep_group: int | 
     return "".join(out), where
 
 
+def _expand_markup(raw: str, start: int, end: int, others: list[tuple[int, int]]) -> tuple[int, int]:
+    """Grow a content span to the link or emphasis that wraps it, and stop at a neighbor's content.
+
+    A match that also overlaps or touches another sentence (``[A. B.](url)``, or ``****`` between two
+    sentences) is left outside. Rollback substitutes this span, so taking the shared markup would keep
+    the neighbor's URL or steal its marker.
+    """
+    while True:
+        grew = False
+        for pattern in (LINK, WIKILINK, EMPHASIS):
+            for match in pattern.finditer(raw):
+                ms, me = match.span()
+                if me != start and ms != end and not (ms < end and me > start):
+                    continue
+                if any((ms < oe and me > os) or me == os or ms == oe for os, oe in others):
+                    continue
+                new_s, new_e = min(start, ms), max(end, me)
+                if new_s < start or new_e > end:
+                    start, end = new_s, new_e
+                    grew = True
+        if not grew:
+            return start, end
+
+
 def sentences(raw: str) -> list[tuple[str, int, int]]:
     """(claim text, raw start, raw end) for each claim-sized sentence of one memory line.
 
-    The text has links and emphasis removed; the raw span covers the same sentence with its markup.
+    The text has links and emphasis removed. The raw span covers that sentence plus markup that wraps
+    it alone; markup shared with another sentence on the line stays outside the span.
     """
     cleaned, origin = _strip(LINK, raw, list(range(len(raw))), 1)
     cleaned, origin = _strip(WIKILINK, cleaned, origin, 1)
@@ -80,7 +105,9 @@ def sentences(raw: str) -> list[tuple[str, int, int]]:
         words, _ = features(text)
         if len(words) >= 2:
             found.append((text, origin[start], origin[end - 1] + 1))
-    return found
+    content = [(start, end) for _, start, end in found]
+    return [(text, *_expand_markup(raw, start, end, content[:i] + content[i + 1:]))
+            for i, (text, start, end) in enumerate(found)]
 
 
 def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:

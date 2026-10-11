@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,9 +10,11 @@ from typer.testing import CliRunner
 
 from conftest import GitRepo as Repo, snapshot
 from memfalsify import gitstore
+from memfalsify.audit import audit
 from memfalsify.cli import app
-from memfalsify.history import compare, memory_diff, memory_history
+from memfalsify.history import compare, diff_to_markdown, history_to_markdown, memory_diff, memory_history
 from memfalsify.memory import parse_text, sentences
+from memfalsify.report import to_markdown
 from memfalsify.rollback import rollback_patch
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -142,6 +145,30 @@ def test_sentences_map_back_to_raw_markup():
     assert [text for text, _, _ in found] == ["The cache uses Redis via the client.", "Deploys use make ship."]
     assert [raw[s:e] for _, s, e in found] == ["The cache uses **Redis** via [the client](https://x.test).",
                                                "Deploys use `make ship`."]
+
+
+def test_sentences_keep_wrapping_markup_unless_it_is_shared():
+    """A link or emphasis that wraps one sentence is part of its raw span. One that also touches another
+    sentence stays outside both, so rollback cannot pull the neighbor's URL or marker in."""
+    wrapped = "- **The cache uses Redis.** [The queue runs on Kafka.](https://q.example/old)"
+    found = sentences(wrapped)
+    assert [text for text, _, _ in found] == ["The cache uses Redis.", "The queue runs on Kafka."]
+    assert [wrapped[s:e] for _, s, e in found] == ["**The cache uses Redis.**",
+                                                   "[The queue runs on Kafka.](https://q.example/old)"]
+    wiki = "- [[The cache uses Redis.]]"
+    _, start, end = sentences(wiki)[0]
+    assert wiki[start:end] == "[[The cache uses Redis.]]"
+    adjacent = "[Alpha ships in Q3.](https://a.example) [Beta ships in Q4.](https://b.example)"
+    assert [adjacent[s:e] for _, s, e in sentences(adjacent)] == [
+        "[Alpha ships in Q3.](https://a.example)", "[Beta ships in Q4.](https://b.example)"]
+    shared = "[Alpha ships in Q3. Beta ships in Q4.](https://shared.example)"
+    assert [shared[s:e] for _, s, e in sentences(shared)] == ["Alpha ships in Q3.", "Beta ships in Q4."]
+    # The period is a boundary only when whitespace survives the marker strip, so the stars are two pairs.
+    stars = "First claim stays put.** **Second claim stays put."
+    found = sentences(stars)
+    assert [text for text, _, _ in found] == ["First claim stays put.", "Second claim stays put."]
+    assert [stars[s:e] for _, s, e in found] == ["First claim stays put.**", "**Second claim stays put."]
+    assert found[0][2] <= found[1][1]
 
 
 # --- diff ------------------------------------------------------------------------------------------
@@ -294,6 +321,66 @@ def test_errors_outside_a_repository_and_without_git(tmp_path, monkeypatch, repo
     assert result.exit_code == 2 and "git was not found" in result.output
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the CRLF shim is a POSIX PATH override; Git for Windows pipes LF")
+def test_crlf_rev_parse_still_opens_the_repository(repo, tmp_path, monkeypatch):
+    """A git that writes CRLF from ``rev-parse --show-toplevel`` must not leave CR on the prefix.
+    ``cat-file --batch`` is exec'd through so its stdin pipe stays connected."""
+    repo.commit("one", {"docs/MEMORY.md": "- The cache uses Redis.\n"})
+    repo.write({"docs/MEMORY.md": "- The cache uses Memcached.\n"})
+    real = shutil.which("git")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    shim = bindir / "git"
+    shim.write_text(
+        f"#!{sys.executable}\n"
+        "import os, subprocess, sys\n"
+        f"real = {real!r}\n"
+        "args = sys.argv[1:]\n"
+        "if 'rev-parse' in args and '--show-toplevel' in args:\n"
+        "    proc = subprocess.run([real, *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n"
+        "    sys.stderr.buffer.write(proc.stderr)\n"
+        "    sys.stdout.buffer.write(proc.stdout.replace(b'\\n', b'\\r\\n'))\n"
+        "    raise SystemExit(proc.returncode)\n"
+        "os.execv(real, [real, *args])\n",
+        encoding="utf-8")
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bindir) + os.pathsep + os.environ["PATH"])
+    memory = repo.root / "docs" / "MEMORY.md"
+    opened = gitstore.open_repository(memory)
+    assert opened.prefix == "docs/"
+    assert opened.root == repo.root.resolve()
+    report = memory_diff(memory, "HEAD")
+    assert report.summary == {"added": 0, "changed": 1, "removed": 0, "unchanged": 0}
+
+
+def test_diff_and_history_markdown_strip_terminal_controls(repo, tmp_path):
+    """Claim text, headings and evidence quotes are untrusted. Diff and history Markdown must not carry
+    terminal or bidi controls into a terminal or a job summary. ``audit`` Markdown stays literal."""
+    esc, rlo = "\x1b\x07", "\u202e"
+    repo.commit("one", {"MEMORY.md": "- The cache uses Redis.\n"})
+    repo.write({"MEMORY.md": f"# {esc}{rlo}Infra\n\n- The cache uses {esc}{rlo}Redis for sessions.\n",
+                "evidence/note.md": f"The cache uses {esc}{rlo}Redis for sessions.\n"})
+    memory = repo.root / "MEMORY.md"
+    diff = memory_diff(memory, "HEAD", evidence_root=repo.root / "evidence")
+    markdown = diff_to_markdown(diff)
+    history = history_to_markdown(memory_history(memory))
+    for report in (markdown, history):
+        assert esc not in report and rlo not in report and "\ufffd" in report
+        assert "Redis for sessions" in report
+    assert any(esc in (e.span.quote or "") for f in diff.audit.findings for e in f.evidence)
+    assert esc not in markdown.split("## Audit of added and changed claims", 1)[1]
+    out = tmp_path / "diff.md"
+    result = runner.invoke(app, ["diff", str(memory), "--base", "HEAD", "-e", str(repo.root / "evidence"),
+                                 "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    written = out.read_bytes()
+    assert esc.encode() not in written and rlo.encode() not in written and "\ufffd".encode() in written
+    payload = diff.model_dump_json()
+    assert rlo in payload and "\\u001b" in payload  # JSON keeps the text; only C0 is escaped
+    audited = to_markdown(audit(memory, repo.root / "evidence"))
+    assert esc in audited and rlo in audited
+
+
 @pytest.mark.skipif(os.name == "nt", reason="Windows forbids control characters in file names")
 def test_memory_path_with_control_characters_is_refused(repo):
     name = "notes\nforged.md"
@@ -418,6 +505,40 @@ def test_history_stops_honestly_at_a_shallow_clone(repo, tmp_path):
     assert not memory_history(repo.root / "MEMORY.md").shallow  # the root commit of a full clone is real
 
 
+def test_history_attributes_the_root_commit_inside_a_shallow_clone(repo, tmp_path):
+    """``clone --depth`` that reaches the root still has no parent *object*, but the commit itself has no
+    ``parent`` line. That history is complete. A boundary commit still records the parent it did not fetch."""
+    repo.commit("one", {"MEMORY.md": "- The cache uses Redis.\n"})
+    repo.commit("two", {"MEMORY.md": "- The cache uses Redis.\n- The queue runs on Kafka.\n"})
+    reached = tmp_path / "reached"
+    repo.git("clone", "-q", "--depth", "2", repo.root.as_uri(), str(reached))
+    report = memory_history(reached / "MEMORY.md")
+    assert report.complete and not report.shallow and report.commits_scanned == 2
+    assert {c.text: c.introduced.subject for c in report.claims} == {
+        "The cache uses Redis.": "one", "The queue runs on Kafka.": "two"}
+    assert "clone is shallow" not in runner.invoke(app, ["history", str(reached / "MEMORY.md")]).stdout
+
+    boundary = tmp_path / "boundary"
+    repo.git("clone", "-q", "--depth", "1", repo.root.as_uri(), str(boundary))
+    report = memory_history(boundary / "MEMORY.md")
+    assert report.shallow and not report.complete and report.commits_scanned == 0
+    assert all(c.introduced is None for c in report.claims)
+
+    solo_root = tmp_path / "solo"
+    solo_root.mkdir()
+    solo = Repo(solo_root, repo.hooks)
+    solo.git("init", "-q")
+    solo.git("config", "--local", "user.name", "Test Author")
+    solo.git("config", "--local", "user.email", "test@example.com")
+    # The subject itself begins with "parent ", which must not be read as a commit header.
+    solo.commit("parent is not a header", {"MEMORY.md": "- The cache uses Redis.\n"})
+    solo_clone = tmp_path / "solo-clone"
+    solo.git("clone", "-q", "--depth", "1", solo_root.as_uri(), str(solo_clone))
+    report = memory_history(solo_clone / "MEMORY.md")
+    assert report.complete and not report.shallow and report.commits_scanned == 1
+    assert report.claims[0].introduced.subject == "parent is not a header"
+
+
 def test_history_in_a_repository_without_commits(repo):
     repo.write({"MEMORY.md": "- The cache uses Redis.\n"})
     report = memory_history(repo.root / "MEMORY.md")
@@ -450,6 +571,37 @@ def test_rollback_restores_old_wording_with_markup(repo):
     assert repo.read("MEMORY.md") == expected.encode()  # only that claim; other edits stay
     old_id = next(c.id for c in claims_of(BASE_MEMORY) if c.text == "The cache uses Redis.")
     assert rollback_patch(repo.root / "MEMORY.md", old_id, base).patch is None  # now unchanged
+
+
+def test_rollback_restores_wrapping_link_and_emphasis(repo):
+    old = ("- [The queue runs on Kafka.](https://q.example/old)\n"
+           "- **The cache uses Redis.**\n")
+    new = ("- [The queue runs on RabbitMQ.](https://q.example/new)\n"
+           "- The cache uses Memcached.\n")
+    base = repo.commit("base", {"MEMORY.md": old})
+    repo.write({"MEMORY.md": new})
+    queue = claims_of("- The queue runs on RabbitMQ.\n")[0].id
+    cache = claims_of("- The cache uses Memcached.\n")[0].id
+    apply(repo, rollback_patch(repo.root / "MEMORY.md", queue, base).patch)
+    assert repo.read("MEMORY.md") == ("- [The queue runs on Kafka.](https://q.example/old)\n"
+                                      "- The cache uses Memcached.\n").encode()
+    apply(repo, rollback_patch(repo.root / "MEMORY.md", cache, base).patch)
+    assert repo.read("MEMORY.md") == old.encode()
+
+    longer = "- The cache uses Redis. [The queue runs on Kafka.](https://q.example/old)\n"
+    base = repo.commit("longer", {"MEMORY.md": longer})
+    repo.write({"MEMORY.md": "- The cache uses Redis.\n"})
+    gone = claims_of("- The queue runs on Kafka.\n")[0].id
+    apply(repo, rollback_patch(repo.root / "MEMORY.md", gone, base).patch)
+    assert repo.read("MEMORY.md") == ("- The cache uses Redis.\n"
+                                      "- [The queue runs on Kafka.](https://q.example/old)\n").encode()
+
+    paired = "- [Alpha ships in Q3.](https://a.example) [Beta ships in Q4.](https://b.example)\n"
+    base = repo.commit("paired", {"MEMORY.md": paired})
+    repo.write({"MEMORY.md": "- [Alpha ships in Q3.](https://a.example) [Beta ships in Q5.](https://b.example/new)\n"})
+    beta = claims_of("- Beta ships in Q5.\n")[0].id
+    apply(repo, rollback_patch(repo.root / "MEMORY.md", beta, base).patch)
+    assert repo.read("MEMORY.md") == paired.encode()
 
 
 def test_rollback_accepts_the_old_id_and_linked_files(repo):
