@@ -8,6 +8,12 @@ from .audit import (
     CitedEvent,
     audit,
 )
+from .changes import (
+    Change,
+    ChangesReport,
+    SubjectChanges,
+    changes,
+)
 from .github_apply import (
     Summary,
     run_convert,
@@ -53,6 +59,7 @@ from .replay import (
 )
 from .report import (
     audit_markdown,
+    changes_markdown,
     explain,
     to_markdown,
 )
@@ -62,6 +69,8 @@ __all__ = [
     "AuditFinding",
     "AuditReport",
     "Capture",
+    "Change",
+    "ChangesReport",
     "CitedEvent",
     "Client",
     "Conflict",
@@ -81,6 +90,7 @@ __all__ = [
     "Risk",
     "RoleChange",
     "Stopped",
+    "SubjectChanges",
     "SubjectState",
     "Summary",
     "TrailEntry",
@@ -88,6 +98,8 @@ __all__ = [
     "__version__",
     "audit",
     "audit_markdown",
+    "changes",
+    "changes_markdown",
     "convert",
     "explain",
     "load_events",

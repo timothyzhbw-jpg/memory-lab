@@ -1,16 +1,19 @@
-"""Markdown views of a replay (current state first, then provenance and the full audit trail) and of an audit."""
+"""Markdown views of a replay (current state first, then provenance and the full audit trail), of an audit,
+and of the changes between two times."""
 from __future__ import annotations
 
 import json
 import re
 import unicodedata
+from collections import Counter
 from html import escape
-from typing import Callable
+from typing import Callable, Optional
 
 from memcore import EvidenceSpan
 from memcore.sidecar import one_line, show_line
 
-from .audit import SEVERITIES, AuditFinding, AuditReport
+from .audit import SEVERITIES, AuditFinding, AuditReport, CitedEvent
+from .changes import KINDS as CHANGE_KINDS, ChangesReport
 from .models import DatedPolicy, ReplayResult, RoleChange, SubjectState
 
 # Terminal and bidi controls. Newlines and tabs stay so the report can still break lines.
@@ -180,16 +183,23 @@ def _audit_code(text: str) -> str:
     return f"{fence}{text}{fence}"
 
 
-def _audit_finding(finding: AuditFinding) -> list[str]:
-    about = _safe(finding.subject) if finding.subject is not None else f"actor {_safe(finding.actor or '')}"
-    out = [f"### {finding.severity.upper()} · {finding.kind} · {about}", "", _safe(finding.detail), ""]
-    for event in finding.events:
-        where = f" on {_safe(event.subject)}" if event.subject != finding.subject else ""
+def _cited_events(events: list[CitedEvent], subject: Optional[str]) -> list[str]:
+    """One line per event (naming its subject when it differs from ``subject``), then its evidence."""
+    out = []
+    for event in events:
+        where = f" on {_safe(event.subject)}" if event.subject != subject else ""
         roles = ", ".join(event.roles) or "none"
         out.append(f"- {_audit_code(event.event_id)}{where} at {event.timestamp.isoformat()}: {_safe(event.actor)} "
                    f"(roles: {_safe(roles)}) · {event.action} · {event.outcome}")
         for span in event.evidence:
             out += cite(span, clean=_safe, code=_audit_code)
+    return out
+
+
+def _audit_finding(finding: AuditFinding) -> list[str]:
+    about = _safe(finding.subject) if finding.subject is not None else f"actor {_safe(finding.actor or '')}"
+    out = [f"### {finding.severity.upper()} · {finding.kind} · {about}", "", _safe(finding.detail), ""]
+    out += _cited_events(finding.events, finding.subject)
     out += _audit_role_changes(finding.role_changes)
     out.append("")
     return out
@@ -234,4 +244,39 @@ def audit_markdown(report: AuditReport) -> str:
     if report.dated_policy is not None:
         out.append("- Roles are effective-dated: a role granted or removed later does not change an earlier "
                    "event's outcome, and `role_changed_after_decision` is informational.")
+    return "\n".join(out) + "\n"
+
+
+def _change_counts(counts) -> str:
+    listed = [f"`{kind}` ×{counts[kind]}" for kind in CHANGE_KINDS if counts.get(kind)]
+    return ", ".join(listed) or "none"
+
+
+def changes_markdown(report: ChangesReport) -> str:
+    """The changes as Markdown: a summary table first, then each subject's changes with their cited evidence."""
+    out = ["# Organizational decision changes", "",
+           "| Subject | Status before | Status after | Changes |", "|---|---|---|---|"]
+    for item in report.subjects:
+        out.append(f"| {_safe(item.subject)} | {item.status_before or 'no events'} | {item.status_after} | "
+                   f"{_change_counts(Counter(change.kind for change in item.changes))} |")
+    out.append(f"| **Total** | | | {_change_counts(report.summary)} |")
+    out += ["",
+            f"- Period: after {report.from_time.isoformat()}, up to and including {report.to_time.isoformat()}",
+            f"- {report.events_in_period} of {report.events_total} events fall in the period, on "
+            f"{report.subjects_in_period} subject(s); {report.subjects_changed} subject(s) changed",
+            f"- Mode: **{report.mode}** (the event log was not modified)", ""]
+    for item in report.subjects:
+        out += [f"## {_safe(item.subject)}", "",
+                f"Status: {item.status_before or 'no events'} → {item.status_after}", ""]
+        for change in item.changes:
+            out += [f"### {change.kind}", "", _safe(change.detail), ""]
+            out += _cited_events(change.events, item.subject)
+            out.append("")
+    if not report.subjects:
+        out += ["No changes in the period.", ""]
+    out += ["## Notes", "",
+            "- Changes restate two replays of the log, at the start and at the end of the period, and the audit "
+            "trail between them. An event at exactly the start time belongs to the earlier replay.",
+            "- Only what replay applied changes state: an event the policy ignored is listed as an "
+            "`unauthorized_attempt`, and a `comment` is not listed."]
     return "\n".join(out) + "\n"

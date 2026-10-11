@@ -312,6 +312,8 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.AuditFinding` | 决策流程发现，包含类型、严重程度、议题、事件、引用，以及它引用的角色变更（仅限带生效时间的角色）。 |
 | `orgmemory.AuditReport` | 只读决策流程报告，包含回放计数、发现、严重程度和类型计数；角色带生效时间时还有 dated_policy。 |
 | `orgmemory.Capture` | 渲染后的源文件字节、相对路径及清单项；不是原始抓取字典。 |
+| `orgmemory.Change` | 一个议题在某段时间内的一项变化：类型（决定、待审批或复议的开启与了结、风险、依赖、冲突、未授权尝试）、说明、决定前后的状态，以及引用的事件。 |
+| `orgmemory.ChangesReport` | 只读报告：from_time（不含）到 to_time（含）之间发生了什么变化，包括事件与议题计数、各类型变化数和每个议题的变化。 |
 | `orgmemory.CitedEvent` | 事件元数据及其精确证据引用。 |
 | `orgmemory.Client` | 用 transport 与 token 构造；可选 max_wait=3600、sleep、clock、progress。get/get_json/pages 发起限制来源的请求。 |
 | `orgmemory.Conflict` | 记录同刻决策、决策反转或无效替代。 |
@@ -331,6 +333,7 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.Risk` | 风险事件、参与者及备注。 |
 | `orgmemory.RoleChange` | 回放实际应用的一条角色变更：谁在何时改变了谁的角色、操作者当时的角色、变更前后的角色，以及引用的证据。 |
 | `orgmemory.Stopped` | 暂时停止抓取；高层 sync 可能返回不完整的 Summary。 |
+| `orgmemory.SubjectChanges` | 一个议题在该时间段前后的状态（之前没有事件时为 None）及其变化。 |
 | `orgmemory.SubjectState` | 当前授权状态、风险、依赖、待批准项、决策及冲突。 |
 | `orgmemory.Summary` | GitHub 导入的抓取／计划、追加计数、游标及完整性；lines() 返回显示文本。 |
 | `orgmemory.TrailEntry` | 单个回放事件的结果及前后状态。 |
@@ -338,6 +341,8 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.__version__` | 已安装发行包的版本字符串。 |
 | `orgmemory.audit` | 通过回放审计 Dataset；as_of/now 选择参考时间，stale_days 默认 14。 |
 | `orgmemory.audit_markdown` | 将决策流程 AuditReport 渲染为 Markdown。 |
+| `orgmemory.changes` | 在 start 和 end 两个时间点回放 Dataset，按议题报告 start 之后到 end（含）为止的事件带来的变化；不写文件。 |
+| `orgmemory.changes_markdown` | 把 ChangesReport 渲染为 Markdown：先是汇总表，再是每个议题的变化及引用证据。 |
 | `orgmemory.convert` | 将原始抓取字典、已有事件／证据 ID 及 GithubConfig 纯映射为 Plan；无 I/O。 |
 | `orgmemory.explain` | 从 ReplayResult 渲染某个议题的状态与决策来源。 |
 | `orgmemory.load_events` | 解析事件 JSONL，验证错误带行号。 |
@@ -353,6 +358,8 @@ to_markdown(report: AuditReport) -> str
 ```python
 audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
 audit_markdown(report: AuditReport) -> str
+changes(dataset: Dataset, start: datetime, end: datetime) -> ChangesReport
+changes_markdown(report: ChangesReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
 explain(result: ReplayResult, subject: str) -> str
 load_events(path: Path) -> list[Event]

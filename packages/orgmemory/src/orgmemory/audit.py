@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from typing import Literal, Optional, get_args
@@ -48,6 +49,13 @@ class CitedEvent(BaseModel):
     action: str
     outcome: str
     evidence: list[EvidenceSpan]
+
+
+def cited(entry: TrailEntry, evidence: dict[str, EvidenceSpan]) -> CitedEvent:
+    """A replayed event with the evidence it cites."""
+    return CitedEvent(event_id=entry.event_id, timestamp=entry.timestamp, subject=entry.subject,
+                      actor=entry.actor, roles=entry.roles, action=entry.action, outcome=entry.outcome,
+                      evidence=[evidence[i] for i in entry.evidence_ids])
 
 
 class AuditFinding(BaseModel):
@@ -90,29 +98,55 @@ def _note(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def open_periods(entries: list[TrailEntry]) -> tuple[list[TrailEntry], list[TrailEntry]]:
-    """The applied events that opened, and kept open, a subject's final pending approval and reconsideration.
+@dataclass
+class Period:
+    """One stretch of time during which a subject's pending approval, or its reconsideration, was open."""
+    opened: list[TrailEntry]               # the applied events that opened it and kept it open, in replay order
+    closed: Optional[TrailEntry] = None    # the applied approve or reject that closed it; None while open
+
+
+def periods(entries: list[TrailEntry]) -> tuple[list[Period], list[Period]]:
+    """Every pending-approval period and every reconsideration period of one subject's trail, in replay order.
 
     This mirrors replay() without changing it: an applied approve or reject closes both; an applied
     request, reconsider or revoke opens the pending approval; a reconsider, or a request while an approve
     or reject is in force, opens the reconsideration. Unauthorized events and invalid revokes change nothing.
     """
-    pending: list[TrailEntry] = []
-    reconsider: list[TrailEntry] = []
+    pending: list[Period] = []
+    reconsider: list[Period] = []
+
+    def keep_open(runs: list[Period], entry: TrailEntry) -> None:
+        if runs and runs[-1].closed is None:
+            runs[-1].opened.append(entry)
+        else:
+            runs.append(Period([entry]))
+
     decided = False
     for entry in entries:
         if entry.outcome != "applied":
             continue
         if entry.action in ("approve", "reject"):
-            pending, reconsider, decided = [], [], True
+            for runs in (pending, reconsider):
+                if runs and runs[-1].closed is None:
+                    runs[-1].closed = entry
+            decided = True
         elif entry.action == "revoke":
-            pending.append(entry)
+            keep_open(pending, entry)
             decided = False
         elif entry.action in ("request", "reconsider"):
-            pending.append(entry)
+            keep_open(pending, entry)
             if decided or entry.action == "reconsider":
-                reconsider.append(entry)
+                keep_open(reconsider, entry)
     return pending, reconsider
+
+
+def open_periods(entries: list[TrailEntry]) -> tuple[list[TrailEntry], list[TrailEntry]]:
+    """The applied events that opened, and kept open, a subject's final pending approval and reconsideration."""
+    def still_open(runs: list[Period]) -> list[TrailEntry]:
+        return list(runs[-1].opened) if runs and runs[-1].closed is None else []
+
+    pending, reconsider = periods(entries)
+    return still_open(pending), still_open(reconsider)
 
 
 class _Auditor:
@@ -133,10 +167,7 @@ class _Auditor:
         self.findings: list[AuditFinding] = []
 
     def cite(self, event_id: str) -> CitedEvent:
-        entry = self.entries[event_id]
-        return CitedEvent(event_id=entry.event_id, timestamp=entry.timestamp, subject=entry.subject,
-                          actor=entry.actor, roles=entry.roles, action=entry.action, outcome=entry.outcome,
-                          evidence=[self.dataset.evidence[i] for i in entry.evidence_ids])
+        return cited(self.entries[event_id], self.dataset.evidence)
 
     def add(self, kind: str, severity: str, detail: str, event_ids, subject: Optional[str] = None,
             actor: Optional[str] = None, role_changes: tuple[RoleChange, ...] = ()) -> None:

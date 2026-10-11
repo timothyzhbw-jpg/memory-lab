@@ -335,6 +335,8 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.AuditFinding` | Decision-process finding with kind, severity, subjects, events, citations, and the role changes it cites (dated roles only). |
 | `orgmemory.AuditReport` | Read-only decision-process report with replay counts, findings, severity and kind counts, and dated_policy when roles are effective-dated. |
 | `orgmemory.Capture` | Rendered source-file bytes, relative path, and manifest entries; not the raw capture dict. |
+| `orgmemory.Change` | One change of a subject in a period: kind (decision, opened or resolved pending approval or reconsideration, risk, dependency, conflict, unauthorized attempt), detail, decision status before and after, and the cited events. |
+| `orgmemory.ChangesReport` | Read-only report of what changed between from_time (exclusive) and to_time (inclusive): event and subject counts, changes per kind, and per-subject changes. |
 | `orgmemory.CitedEvent` | Event metadata with its exact evidence quotes. |
 | `orgmemory.Client` | Construct with transport and token; optional max_wait=3600, sleep, clock, progress. get/get_json/pages perform origin-confined requests. |
 | `orgmemory.Conflict` | Recorded simultaneous decision, reversal, or invalid supersession. |
@@ -354,6 +356,7 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.Risk` | Risk event, actor, and note. |
 | `orgmemory.RoleChange` | A policy-log entry as replay applied it: who changed whose role and when, the acting roles, roles before and after, and quoted evidence. |
 | `orgmemory.Stopped` | Transient fetch stop; high-level sync can return an incomplete Summary. |
+| `orgmemory.SubjectChanges` | One subject's status before and after the period (None before when it had no events) and its changes. |
 | `orgmemory.SubjectState` | Current authorized status, risks, dependencies, pending approvals, decisions, and conflicts. |
 | `orgmemory.Summary` | GitHub import capture/plan, append counts, cursor, completeness; lines() returns display text. |
 | `orgmemory.TrailEntry` | One replayed event’s outcome and before/after status. |
@@ -361,6 +364,8 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.__version__` | Installed distribution version string. |
 | `orgmemory.audit` | Audit a Dataset using replay; as_of/now select the reference time and stale_days defaults to 14. |
 | `orgmemory.audit_markdown` | Render a decision-process AuditReport as Markdown. |
+| `orgmemory.changes` | Replay a Dataset at start and at end and report, per subject, what the events after start up to and including end changed; never writes files. |
+| `orgmemory.changes_markdown` | Render a ChangesReport as Markdown: summary table, then each subject's changes with quoted evidence. |
 | `orgmemory.convert` | Purely map raw capture dict plus existing events/evidence IDs and GithubConfig into a Plan; no I/O. |
 | `orgmemory.explain` | Render one subject’s state and decision provenance from a ReplayResult. |
 | `orgmemory.load_events` | Parse events JSONL with line-numbered validation errors. |
@@ -376,6 +381,8 @@ to_markdown(report: AuditReport) -> str
 ```python
 audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
 audit_markdown(report: AuditReport) -> str
+changes(dataset: Dataset, start: datetime, end: datetime) -> ChangesReport
+changes_markdown(report: ChangesReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
 explain(result: ReplayResult, subject: str) -> str
 load_events(path: Path) -> list[Event]

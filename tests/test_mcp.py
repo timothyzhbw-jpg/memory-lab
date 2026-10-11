@@ -22,15 +22,20 @@ from memfalsify.verify import LexicalVerifier  # noqa: E402
 from memlab_mcp import server as memlab_server  # noqa: E402
 from memlab_mcp.server import create_server  # noqa: E402
 from orgmemory.audit import audit as org_audit  # noqa: E402
+from orgmemory.changes import changes as org_changes  # noqa: E402
 from orgmemory.replay import Dataset  # noqa: E402
+from orgmemory.report import changes_markdown  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 GIT_TOOLS = {"memfalsify_diff", "memfalsify_history", "memfalsify_rollback"}
 TOOLS = {"memfalsify_claims", "memfalsify_audit", "orgmemory_validate", "orgmemory_replay", "orgmemory_explain",
-         "orgmemory_audit"} | GIT_TOOLS
+         "orgmemory_audit", "orgmemory_changes"} | GIT_TOOLS
+# The periods of the example reports examples/orgmemory/changes-report.md and github-acme-web/changes-report.md.
+PERIOD = {"from_time": "2026-10-05T23:59:59Z", "to_time": "2026-10-08T23:59:59Z"}
+GITHUB_PERIOD = {"from_time": "2026-10-05T23:59:59Z", "to_time": "2026-10-10T23:59:59Z"}
 # The arguments each tool needs besides its path, for tests that vary only the path.
 REQUIRED = {"orgmemory_explain": {"subject": "Feature A"}, "memfalsify_diff": {"base": "HEAD"},
-            "memfalsify_rollback": {"claim": "m-00000000", "to": "HEAD"}}
+            "memfalsify_rollback": {"claim": "m-00000000", "to": "HEAD"}, "orgmemory_changes": PERIOD}
 MEMORY, EVIDENCE, REVIEWS, DATASET = "memfalsify/MEMORY.md", "memfalsify/evidence", "memfalsify/reviews.jsonl", "feature-a"
 SECRET = "outside-the-root secret: do not read"
 
@@ -215,6 +220,25 @@ def test_policy_log_symlink_cannot_leave_the_root(root):
     assert "policy-log.jsonl is a symlink that leaves the server root" in message and SECRET not in message
 
 
+@requires_confinement
+def test_orgmemory_changes_matches_the_library(root):
+    server = create_server(root)
+    report, markdown, empty = session(server, ("orgmemory_changes", {"dataset": DATASET, **PERIOD, "format": "json"}),
+                                      ("orgmemory_changes", {"dataset": DATASET, **PERIOD}),
+                                      ("orgmemory_changes", {"dataset": DATASET, "from_time": PERIOD["to_time"],
+                                                             "to_time": PERIOD["to_time"]}))
+    direct = org_changes(Dataset.load(root / DATASET), datetime(2026, 10, 5, 23, 59, 59, tzinfo=timezone.utc),
+                         datetime(2026, 10, 8, 23, 59, 59, tzinfo=timezone.utc))
+    assert ok(report) == direct.model_dump_json(indent=2)
+    assert ok(markdown) == changes_markdown(direct)
+    item, = json.loads(ok(report))["subjects"]
+    assert (item["subject"], item["status_before"], item["status_after"]) == ("Feature A", "proposed", "rejected")
+    assert item["changes"][0]["event_ids"] == ["ev-wed-reject"]
+    assert ok(markdown).startswith("# Organizational decision changes\n\n| Subject | Status before | Status after |")
+    assert "Feature A is rejected" in ok(markdown) and str(root.resolve()) not in ok(markdown)
+    assert "No changes in the period." in ok(empty)
+
+
 # --- path safety ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("blocked", [".git", "node_modules", "__pycache__", "venv"])
@@ -321,12 +345,15 @@ def test_other_path_arguments_cannot_escape(root):
         ("orgmemory_replay", dict(dataset="/")),
         ("orgmemory_explain", dict(dataset="../root/../..", subject="Feature A")),
         ("orgmemory_audit", dict(dataset="..")),
+        ("orgmemory_changes", dict(dataset="..", **PERIOD)),
+        ("orgmemory_changes", dict(dataset=str(root.parent), **PERIOD)),
     ]
     for name, arguments in cases:
         message = error(call(server, name, **arguments))
         assert "outside the server root" in message, (name, arguments)
-    message = error(call(server, "orgmemory_validate", dataset="evil-dataset"))
-    assert "events.jsonl is a symlink that leaves the server root" in message and SECRET not in message
+    for name in ("orgmemory_validate", "orgmemory_changes"):
+        message = error(call(server, name, dataset="evil-dataset", **REQUIRED.get(name, {})))
+        assert "events.jsonl is a symlink that leaves the server root" in message and SECRET not in message
 
 
 @requires_confinement
@@ -397,7 +424,7 @@ def test_evidence_directory_swap_cannot_list_outside_root(root, monkeypatch):
 
 
 @pytest.mark.parametrize("filename", memlab_server.DATASET_FILES)
-@pytest.mark.parametrize("tool", ["orgmemory_validate", "orgmemory_audit"])
+@pytest.mark.parametrize("tool", ["orgmemory_validate", "orgmemory_audit", "orgmemory_changes"])
 @requires_confinement
 def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename, tool):
     original = memlab_server.Dataset.load
@@ -409,14 +436,12 @@ def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename, to
         return original(directory)
 
     monkeypatch.setattr(memlab_server.Dataset, "load", swap_then_load)
-    result = call(create_server(root), tool, dataset=DATASET)
+    result = call(create_server(root), tool, dataset=DATASET, **REQUIRED.get(tool, {}))
     assert SECRET not in error(result)
 
 
-@pytest.mark.parametrize("mode", ["legacy", "auto"])
-@requires_confinement
-def test_orgmemory_audit_untrusted_text_is_data_in_both_formats(root, mode):
-    from markdown_it import MarkdownIt
+def untrusted_dataset(root) -> tuple[str, str]:
+    """A dataset under root/untrusted whose IDs, actor, subject, notes, source and quote all carry markup."""
     from memcore import locate_quote
 
     directory = root / "untrusted"
@@ -435,6 +460,22 @@ def test_orgmemory_audit_untrusted_text_is_data_in_both_formats(root, mode):
                    action=action, subject=payload, evidence_ids=[payload], note=quote)
               for day, action in enumerate(("request", "approve", "raise_risk"), 1)]
     (directory / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    return payload, quote
+
+
+def inline_markup(markdown: str) -> set[str]:
+    """Inline token types that untrusted text must never produce."""
+    from markdown_it import MarkdownIt
+
+    tokens = MarkdownIt().parse(markdown)
+    inline = {child.type for token in tokens for child in (token.children or [])}
+    return inline & {"html_inline", "link_open", "image", "strong_open", "em_open"}
+
+
+@pytest.mark.parametrize("mode", ["legacy", "auto"])
+@requires_confinement
+def test_orgmemory_audit_untrusted_text_is_data_in_both_formats(root, mode):
+    payload, quote = untrusted_dataset(root)
     before = snapshot(root)
     args = dict(dataset="untrusted", as_of="2026-10-31T00:00:00Z")
     markdown_result, json_result = session(create_server(root), ("orgmemory_audit", args),
@@ -444,15 +485,33 @@ def test_orgmemory_audit_untrusted_text_is_data_in_both_formats(root, mode):
     assert report["findings"][0]["subject"] == payload
     assert report["findings"][0]["events"][0]["evidence"][0]["quote"] == quote
     assert "\x1b" not in markdown and "\u202e" not in markdown and "\n### HIGH forged" not in markdown
-    findings = markdown.split("## Findings\n", 1)[1].split("## Notes", 1)[0]
-    tokens = MarkdownIt().parse(findings)
-    inline = [child for token in tokens for child in (token.children or [])]
-    assert not {t.type for t in inline} & {"html_inline", "link_open", "image", "strong_open", "em_open"}
+    assert not inline_markup(markdown.split("## Findings\n", 1)[1].split("## Notes", 1)[0])
     assert snapshot(root) == before
 
 
+@pytest.mark.parametrize("mode", ["legacy", "auto"])
 @requires_confinement
-def test_orgmemory_audit_evidence_swap_cannot_escape_root(root, monkeypatch):
+def test_orgmemory_changes_untrusted_text_is_data_in_both_formats(root, mode):
+    payload, quote = untrusted_dataset(root)
+    before = snapshot(root)
+    args = dict(dataset="untrusted", from_time="2026-09-30T00:00:00Z", to_time="2026-10-31T00:00:00Z")
+    markdown_result, json_result = session(create_server(root), ("orgmemory_changes", args),
+                                           ("orgmemory_changes", {**args, "format": "json"}), mode=mode)
+    markdown = ok(markdown_result)
+    report = json.loads(ok(json_result))
+    item, = report["subjects"]
+    assert item["subject"] == payload and item["changes"][0]["events"][0]["evidence"][0]["quote"] == quote
+    assert [c["kind"] for c in item["changes"]] == ["decision", "pending_approval_opened",
+                                                     "pending_approval_resolved", "risk_raised"]
+    assert "\x1b" not in markdown and "\u202e" not in markdown and "\n### HIGH forged" not in markdown
+    assert not inline_markup(markdown.split("\n## ", 1)[1].split("\n## Notes", 1)[0])
+    assert markdown.count("\n## ") == 2  # the subject's section and the notes
+    assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("tool", ["orgmemory_audit", "orgmemory_changes"])
+@requires_confinement
+def test_orgmemory_evidence_swap_cannot_escape_root(root, monkeypatch, tool):
     from memcore import evidence as evidence_module
 
     original = evidence_module.read_file_bytes
@@ -472,7 +531,7 @@ def test_orgmemory_audit_evidence_swap_cannot_escape_root(root, monkeypatch):
         return original(path)
 
     monkeypatch.setattr(evidence_module, "read_file_bytes", swap_then_read)
-    result = call(create_server(root), "orgmemory_audit", dataset=DATASET)
+    result = call(create_server(root), tool, dataset=DATASET, **REQUIRED.get(tool, {}))
     assert replaced and not leaked and SECRET not in error(result)
 
 
@@ -645,6 +704,15 @@ def test_bad_input_is_a_clear_tool_error(root):
         ("orgmemory_audit", dict(dataset=DATASET, stale_days=-1), "invalid arguments; check: stale_days"),
         ("orgmemory_audit", dict(dataset=DATASET, as_of="2026-10-31"), "with a timezone"),
         ("orgmemory_audit", dict(dataset="broken"), "broken/events.jsonl:1: invalid JSON"),
+        ("orgmemory_changes", dict(dataset=DATASET), "invalid arguments; check: from_time, to_time"),
+        ("orgmemory_changes", dict(dataset=DATASET, from_time="2026-10-05", to_time=PERIOD["to_time"]),
+         "from_time must be an ISO 8601 time with a timezone"),
+        ("orgmemory_changes", dict(dataset=DATASET, from_time=PERIOD["from_time"], to_time=""),
+         "to_time must be an ISO 8601 time with a timezone"),
+        ("orgmemory_changes", dict(dataset=DATASET, from_time=PERIOD["to_time"], to_time=PERIOD["from_time"]),
+         "from_time must not be after to_time"),
+        ("orgmemory_changes", dict(dataset="broken", **PERIOD), "broken/events.jsonl:1: invalid JSON"),
+        ("orgmemory_changes", dict(dataset=DATASET, format="html", **PERIOD), "invalid arguments; check: format"),
     ]
     for name, arguments, expected in cases:
         message = error(call(server, name, **arguments))
@@ -670,10 +738,12 @@ def test_no_tool_writes_anything(root):
         ("orgmemory_explain", {"dataset": DATASET, "subject": "Feature A"}),
         ("orgmemory_audit", {"dataset": DATASET}),
         ("orgmemory_audit", {"dataset": DATASET, "format": "json", "as_of": "2026-10-31T00:00:00Z"}),
+        ("orgmemory_changes", {"dataset": DATASET, **PERIOD}),
+        ("orgmemory_changes", {"dataset": DATASET, **PERIOD, "format": "json"}),
         ("orgmemory_append", {"dataset": DATASET, "event": "{}"}),
     )
     assert [r.is_error for r in results] == [False, False, False, True, False, False, False, False, False, False,
-                                             True]
+                                             False, False, True]
     assert snapshot(root.parent) == before
 
 
@@ -1098,6 +1168,11 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
         ("orgmemory_audit", {"dataset": DATASET, "stale_days": "soon"}, "stale_days"),
         ("orgmemory_audit", {"dataset": DATASET, "as_of": "2026-10-31"}, "timezone"),
         ("orgmemory_audit", {"dataset": DATASET, "format": "html"}, "format"),
+        ("orgmemory_changes", {"dataset": DATASET, **PERIOD, "format": "html"}, "format"),
+        ("orgmemory_changes", {"dataset": DATASET, **PERIOD, "from_time": "2026-10-05"}, "timezone"),
+        ("orgmemory_changes", {"dataset": DATASET, **PERIOD, "to_time": 17}, "to_time"),
+        ("orgmemory_changes", {"dataset": DATASET, "from_time": PERIOD["to_time"], "to_time": PERIOD["from_time"]},
+         "must not be after"),
         ("orgmemory_append", {"dataset": DATASET, "event": "{}"}, "unknown tool"),
         ("orgmemory_evidence_add", {"dataset": DATASET}, "unknown tool"),
     ])
@@ -1194,6 +1269,11 @@ def test_stdio_examples_end_to_end(tmp_path):
                     "audit_org_json": await client.call_tool(
                         "orgmemory_audit", {"dataset": "orgmemory/github-acme-web", "as_of": as_of,
                                             "stale_days": 20, "format": "json"}),
+                    "changes": await client.call_tool(
+                        "orgmemory_changes", {"dataset": "orgmemory/feature-a", **PERIOD}),
+                    "changes_json": await client.call_tool(
+                        "orgmemory_changes", {"dataset": "orgmemory/github-acme-web", **GITHUB_PERIOD,
+                                              "format": "json"}),
                 }
                 return info, protocol, instructions, listed, validate, outputs
 
@@ -1218,4 +1298,9 @@ def test_stdio_examples_end_to_end(tmp_path):
     _same_as_cli(_cli("orgmemory", "audit", "orgmemory/github-acme-web", "--as-of", as_of), ok(outputs["audit_org"]))
     _same_as_cli(_cli("orgmemory", "audit", "orgmemory/github-acme-web", "--as-of", as_of, "--stale-days", "20",
                       "--format", "json"), ok(outputs["audit_org_json"]))
+    _same_as_cli(_cli("orgmemory", "changes", "orgmemory/feature-a", "--from", PERIOD["from_time"],
+                      "--to", PERIOD["to_time"]), ok(outputs["changes"]))
+    assert ok(outputs["changes"]) == (EXAMPLES / "orgmemory" / "changes-report.md").read_text(encoding="utf-8")
+    _same_as_cli(_cli("orgmemory", "changes", "orgmemory/github-acme-web", "--from", GITHUB_PERIOD["from_time"],
+                      "--to", GITHUB_PERIOD["to_time"], "--format", "json"), ok(outputs["changes_json"]))
     assert snapshot(EXAMPLES) == before
