@@ -2,26 +2,20 @@
 
 Frontmatter must stay valid for Claude Code and Codex (name, description).
 Every memfalsify, orgmemory and memlab-mcp command path and ``--flag`` in a
-skill must appear in that CLI's ``--help`` tree, so the skills cannot drift.
+skill must exist in that CLI's command tree (what ``--help`` lists), so the skills cannot drift.
 """
-import os
+import importlib
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+from typer.main import get_command
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = ROOT / "skills"
 CLI_NAMES = ("memfalsify", "orgmemory", "memlab-mcp")
-MODULES = {"memfalsify": "memfalsify", "orgmemory": "orgmemory", "memlab-mcp": "memlab_mcp"}
-SRC = [
-    ROOT / "packages" / "memcore" / "src",
-    ROOT / "packages" / "memfalsify" / "src",
-    ROOT / "packages" / "orgmemory" / "src",
-    ROOT / "packages" / "memlab-mcp" / "src",
-]
+APPS = {"memfalsify": ("memfalsify.cli", "app"), "orgmemory": ("orgmemory.cli", "app"),
+        "memlab-mcp": ("memlab_mcp.server", "app")}
 # A CLI token, not a path segment such as benchmarks/memfalsify/run.py.
 CLI_TOKEN = re.compile(r"(?<![/\w])(memfalsify|orgmemory|memlab-mcp)\b")
 INVOCATION = re.compile(
@@ -104,46 +98,6 @@ def invocations(text: str) -> list[tuple[str, tuple[str, ...]]]:
     return found
 
 
-def command_names(help_text: str) -> list[str]:
-    """Names from a Typer Commands panel. Continuation lines are indented past the bar."""
-    names: list[str] = []
-    collecting = False
-    for line in help_text.splitlines():
-        if not collecting:
-            heading = line.strip().rstrip(":")
-            if heading == "Commands" or ("Commands" in line and any(mark in line for mark in "╭+")):
-                collecting = True
-            continue
-        stripped = line.strip()
-        if names and (stripped.startswith(("╰", "╭", "+")) or set(stripped) <= set("+-")):
-            break
-        match = re.search(r"[│|]\s{0,2}([a-z][a-z0-9-]*)\s{2,}\S", line)
-        if match is None and "│" not in line and "|" not in line:
-            match = re.match(r"^\s{0,2}([a-z][a-z0-9-]*)\s{2,}\S", line)
-        if match:
-            names.append(match.group(1))
-    return names
-
-
-def run_help(module: str, args: tuple[str, ...]) -> str:
-    env = os.environ.copy()
-    env["TERMINAL_WIDTH"] = "220"
-    env["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUTF8"] = "1"
-    paths = [str(path) for path in SRC]
-    if env.get("PYTHONPATH"):
-        paths.append(env["PYTHONPATH"])
-    env["PYTHONPATH"] = os.pathsep.join(paths)
-    completed = subprocess.run(
-        [sys.executable, "-m", module, *args, "--help"],
-        check=False, capture_output=True, cwd=ROOT, env=env, encoding="utf-8")
-    if completed.returncode != 0:
-        raise AssertionError(
-            f"{module} {' '.join(args)} --help exited {completed.returncode}\n{completed.stderr}")
-    return completed.stdout
-
-
 class CliHelp:
     def __init__(self, commands: set[tuple[str, ...]], flags: set[str]):
         self.commands = commands
@@ -151,21 +105,22 @@ class CliHelp:
 
 
 def build_index() -> dict[str, CliHelp]:
+    """Walk each Typer app's Click command tree: exact on every platform, unlike scraping rendered help."""
     index = {}
     for name in CLI_NAMES:
-        module = MODULES[name]
-        commands: set[tuple[str, ...]] = {()}
-        flags: set[str] = set()
-        queue = [()]
-        while queue:
-            path = queue.pop()
-            text = run_help(module, path)
-            flags.update(FLAG.findall(text))
-            for command in command_names(text):
-                child = path + (command,)
-                if child not in commands:
-                    commands.add(child)
-                    queue.append(child)
+        module, attribute = APPS[name]
+        root = get_command(getattr(importlib.import_module(module), attribute))
+        commands: set[tuple[str, ...]] = set()
+        flags: set[str] = {"--help"}
+
+        def walk(command, path: tuple[str, ...]) -> None:
+            commands.add(path)
+            for param in command.params:
+                flags.update(opt for opt in (*param.opts, *param.secondary_opts) if opt.startswith("--"))
+            for child_name, child in getattr(command, "commands", {}).items():
+                walk(child, path + (child_name,))
+
+        walk(root, ())
         index[name] = CliHelp(commands, flags)
     return index
 
@@ -212,7 +167,7 @@ def drift(body: str, index: dict[str, CliHelp]) -> list[str]:
 
 
 def test_cli_help_index_sees_shipped_commands(index):
-    """The help walker itself still sees the commands these skills are about."""
+    """The command-tree walker itself still sees the commands these skills are about."""
     assert ("audit",) in index["memfalsify"].commands
     assert ("claims",) in index["memfalsify"].commands
     assert "--exclude" in index["memfalsify"].flags
@@ -228,9 +183,9 @@ def test_cli_help_index_sees_shipped_commands(index):
 
 
 def test_drift_checker_catches_unknown_commands_and_flags(index):
-    bad = drift("`memfalsify diff --history`\n", index)
-    assert any("diff" in item for item in bad)
-    assert any("--history" in item for item in bad)
+    bad = drift("`memfalsify no-such-command --no-such-flag`\n", index)
+    assert any("no-such-command" in item for item in bad)
+    assert any("--no-such-flag" in item for item in bad)
     assert drift("`memfalsify audit --exclude 'vendor/**'`\n", index) == []
     assert drift("`benchmarks/memfalsify/run.py --check`\n", index) == []
 
