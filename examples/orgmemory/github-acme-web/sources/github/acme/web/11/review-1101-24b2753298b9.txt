@@ -1,0 +1,4 @@
+GitHub review 1101 on acme/web#11 by gh:zhou:4242 (User) at 2026-10-06T13:00:00Z: approved on commit 11aa11aa11aa
+{"author_association":"CONTRIBUTOR","commit_id":"11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa","event":"reviewed","id":1101,"kind":"review","number":11,"repo":"acme/web","repo_id":1001,"state":"approved","submitted_at":"2026-10-06T13:00:00Z","user":{"id":4242,"login":"zhou","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Approved, ship it.

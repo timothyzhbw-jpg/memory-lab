@@ -29,14 +29,20 @@ class Dataset:
         events = events or directory / "events.jsonl"
         policy = policy or directory / "policy.json"
         evidence = evidence or directory / "evidence.jsonl"
-        parsed = []
-        for number, record in read_jsonl(events):
-            try:
-                parsed.append(Event.model_validate(record))
-            except ValueError as exc:
-                raise ValueError(f"{events}:{number}: {exc}") from exc
+        parsed = load_events(events)
         policy_model = Policy.model_validate(json.loads(Path(policy).read_text(encoding="utf-8")))
         return cls(parsed, policy_model, load_manifest(evidence))
+
+
+def load_events(path: Path) -> list[Event]:
+    """Parse and validate every line of an events JSONL file; errors name the line."""
+    parsed = []
+    for number, record in read_jsonl(path):
+        try:
+            parsed.append(Event.model_validate(record))
+        except ValueError as exc:
+            raise ValueError(f"{path}:{number}: {exc}") from exc
+    return parsed
 
 
 def validate(events: list[Event], evidence: dict[str, EvidenceSpan]) -> None:

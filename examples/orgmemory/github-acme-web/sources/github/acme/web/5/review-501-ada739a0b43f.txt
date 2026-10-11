@@ -1,0 +1,4 @@
+GitHub review 501 on acme/web#5 by gh:zhou-pm:5003 (User) at 2026-10-06T14:00:00Z: approved on commit a1b2c3d4e5f6
+{"author_association":"MEMBER","commit_id":"a1b2c3d4e5f60718293a4b5c6d7e8f9012345678","event":"reviewed","id":501,"kind":"review","number":5,"repo":"acme/web","repo_id":1001,"state":"approved","submitted_at":"2026-10-06T14:00:00Z","user":{"id":5003,"login":"zhou-pm","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Approved.

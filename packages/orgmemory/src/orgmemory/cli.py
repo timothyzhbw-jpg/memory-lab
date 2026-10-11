@@ -120,5 +120,72 @@ def evidence_add(
     typer.echo(f"registered {id} at {span.location}")
 
 
+github_app = typer.Typer(no_args_is_help=True, help="Ingest GitHub issues and pull requests.")
+app.add_typer(github_app, name="github")
+
+
+def _github_result(summary, dry_run: bool) -> None:
+    for line in summary.lines():
+        typer.echo(line)
+    if dry_run:
+        for event in summary.plan.events:
+            typer.echo(json.dumps(event.model_dump(mode="json", exclude_none=True), ensure_ascii=True))
+    if not summary.complete:
+        raise typer.Exit(3)
+
+
+def _github_fail(exc: Exception) -> None:
+    # Validation errors may embed raw API text or malformed existing records.
+    # Only known importer constants are safe to display.
+    from .github_fetch import GitHubError
+    safe = {"another sync is running; delete the lock if not", "repository identity changed",
+            "a cursor already exists; use --full or --issue", "save-capture path already exists",
+            "invalid sync options: --full, --since and --issue cannot be combined",
+            "content-addressed capture tamper conflict"}
+    _fail(str(exc) if str(exc) in safe or isinstance(exc, GitHubError)
+          else "GitHub ingestion failed: invalid input, dataset or filesystem; nothing appended")
+
+
+@github_app.command("sync")
+def github_sync(
+    dataset: Path = DATASET,
+    repo: str = typer.Argument(..., help="GitHub OWNER/REPO"),
+    full: bool = typer.Option(False, help="Rescan every issue and pull request"),
+    since: Optional[str] = typer.Option(None, help="Bound a first run (aware ISO 8601; only without a cursor)"),
+    issue: Optional[list[int]] = typer.Option(None, "--issue", min=1, help="Refresh this number (repeatable)"),
+    max_wait: float = typer.Option(3600, min=0, help="Maximum single rate-limit sleep, in seconds"),
+    save_capture: Optional[Path] = typer.Option(None, help="Create a raw capture file; may contain private text"),
+    dry_run: bool = typer.Option(False, help="Fetch and print planned JSONL without writing the dataset"),
+) -> None:
+    """Fetch GitHub activity and append deterministic events and evidence."""
+    from . import github_fetch
+    from .github_apply import run_sync
+    try:
+        token = github_fetch.token_from_env()
+        if not token:
+            typer.echo("warning: unauthenticated GitHub access (public repos only, 60 requests/hour)", err=True)
+        if save_capture is not None:
+            typer.echo("warning: saved capture contains raw and possibly private GitHub content", err=True)
+        client = github_fetch.Client(github_fetch.urllib_transport(), token, max_wait=max_wait)
+        summary = run_sync(dataset, repo, client, full=full, since=_as_of(since), issues=issue or [],
+                           save_capture=save_capture, dry_run=dry_run)
+    except (github_fetch.GitHubError, ValueError, OSError) as exc:
+        _github_fail(exc)
+    _github_result(summary, dry_run)
+
+
+@github_app.command("convert")
+def github_convert(dataset: Path = DATASET,
+                   capture_json: Path = typer.Argument(..., exists=True, dir_okay=False),
+                   dry_run: bool = typer.Option(False, help="Print planned JSONL without writing anything")) -> None:
+    """Apply a previously saved GitHub capture offline."""
+    from .github_apply import run_convert
+    try:
+        summary = run_convert(dataset, capture_json, dry_run=dry_run)
+    except (ValueError, OSError) as exc:
+        _github_fail(exc)
+    _github_result(summary, dry_run)
+
+
 def main() -> None:
     app()

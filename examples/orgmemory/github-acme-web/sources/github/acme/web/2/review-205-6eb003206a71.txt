@@ -1,0 +1,4 @@
+GitHub review 205 on acme/web#2 by gh:mallory:6666 (User) at 2026-10-06T16:00:00Z: approved on commit 54bb654c9e60
+{"author_association":"NONE","commit_id":"54bb654c9e6025347f57900a4a5c2313a96b8035","event":"reviewed","id":205,"kind":"review","number":2,"repo":"acme/web","repo_id":1001,"state":"approved","submitted_at":"2026-10-06T16:00:00Z","user":{"id":6666,"login":"mallory","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+LGTM

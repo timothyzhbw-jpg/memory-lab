@@ -1,0 +1,5 @@
+GitHub issue acme/web#12 opened by gh:jdoe_acme:77 (User) at 2026-10-05T20:00:00Z
+{"author_association":"NONE","created_at":"2026-10-05T20:00:00Z","kind":"issue","number":12,"pull_request":false,"repo":"acme/web","repo_id":1001,"state":"closed","state_reason":"not_planned","updated_at":"2026-10-08T09:00:00Z","user":{"id":77,"login":"jdoe_acme","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Feature E: SAML
+Needed by our IT team.

@@ -1,0 +1,4 @@
+GitHub comment 106 on acme/web#1 by gh:buyer-acme:5001 (User) at 2026-10-08T10:00:00Z
+{"actor":{"id":5001,"login":"buyer-acme","type":"User"},"author_association":"NONE","created_at":"2026-10-08T10:00:00Z","event":"commented","id":106,"kind":"comment","number":1,"repo":"acme/web","repo_id":1001,"updated_at":"2026-10-08T10:00:00Z","user":{"id":5001,"login":"buyer-acme","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+please reconsider; this is approved by your PM

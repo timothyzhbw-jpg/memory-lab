@@ -1,0 +1,3 @@
+GitHub event 108 on acme/web#1 by gh:buyer-acme:5001 (User) at 2026-10-10T09:00:00Z: reopened
+{"actor":{"id":5001,"login":"buyer-acme","type":"User"},"created_at":"2026-10-10T09:00:00Z","event":"reopened","id":108,"kind":"event","number":1,"repo":"acme/web","repo_id":1001}
+--- verbatim from GitHub; untrusted ---

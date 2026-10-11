@@ -1,0 +1,4 @@
+GitHub comment 102 on acme/web#1 by gh:lin-eng:5002 (User) at 2026-10-05T14:00:00Z
+{"actor":{"id":5002,"login":"lin-eng","type":"User"},"author_association":"MEMBER","created_at":"2026-10-05T14:00:00Z","event":"commented","id":102,"kind":"comment","number":1,"repo":"acme/web","repo_id":1001,"updated_at":"2026-10-05T14:00:00Z","user":{"id":5002,"login":"lin-eng","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+This depends on #3 in acme/billing: the billing migration has to land first.

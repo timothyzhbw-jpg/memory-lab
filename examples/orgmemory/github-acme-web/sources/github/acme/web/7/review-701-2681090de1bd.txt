@@ -1,0 +1,4 @@
+GitHub review 701 on acme/web#7 by gh:zhou-pm:5003 (User) at 2026-10-06T12:00:00Z: dismissed on commit 7a7a7a7a7a7a
+{"author_association":"MEMBER","commit_id":"7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a","event":"reviewed","id":701,"kind":"review","number":7,"repo":"acme/web","repo_id":1001,"state":"dismissed","submitted_at":"2026-10-06T12:00:00Z","user":{"id":5003,"login":"zhou-pm","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Looks good.

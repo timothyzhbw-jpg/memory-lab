@@ -1,0 +1,7 @@
+GitHub issue acme/web#1 opened by gh:buyer-acme:5001 (User) at 2026-10-05T09:00:00Z
+{"author_association":"NONE","created_at":"2026-10-05T09:00:00Z","kind":"issue","number":1,"pull_request":false,"repo":"acme/web","repo_id":1001,"state":"closed","state_reason":"not_planned","updated_at":"2026-10-08T16:00:00Z","user":{"id":5001,"login":"buyer-acme","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Feature A: CSV export for the quarterly report
+We need CSV export before the Q4 board meeting.
+
+Please prioritise.

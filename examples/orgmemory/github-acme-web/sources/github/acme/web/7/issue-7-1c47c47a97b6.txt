@@ -1,0 +1,5 @@
+GitHub pull request acme/web#7 opened by gh:lin-eng:5002 (User) at 2026-10-05T15:00:00Z
+{"author_association":"MEMBER","created_at":"2026-10-05T15:00:00Z","draft":false,"kind":"issue","number":7,"pull_request":true,"repo":"acme/web","repo_id":1001,"state":"open","updated_at":"2026-10-07T08:00:00Z","user":{"id":5002,"login":"lin-eng","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Export: add column headers
+Small follow-up to #2.

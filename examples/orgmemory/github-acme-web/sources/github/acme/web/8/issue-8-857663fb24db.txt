@@ -1,0 +1,5 @@
+GitHub issue acme/web#8 opened by gh:buyer-acme:5001 (User) at 2026-10-05T16:00:00Z
+{"author_association":"NONE","created_at":"2026-10-05T16:00:00Z","kind":"issue","number":8,"pull_request":false,"repo":"acme/web","repo_id":1001,"state":"closed","state_reason":"not_planned","updated_at":"2026-10-06T11:00:00Z","user":{"id":5001,"login":"buyer-acme","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Feature C: audit log export
+Exports for auditors.

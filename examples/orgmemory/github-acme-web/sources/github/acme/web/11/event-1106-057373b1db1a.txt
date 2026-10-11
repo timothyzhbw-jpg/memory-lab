@@ -1,0 +1,4 @@
+GitHub event 1106 on acme/web#11 by gh:zhou-pm:5003 (User) at 2026-10-07T11:00:00Z: review_dismissed review 1105 (was approved)
+{"actor":{"id":5003,"login":"zhou-pm","type":"User"},"created_at":"2026-10-07T11:00:00Z","dismissed_review":{"review_id":1105,"state":"approved"},"event":"review_dismissed","id":1106,"kind":"event","number":11,"repo":"acme/web","repo_id":1001}
+--- verbatim from GitHub; untrusted ---
+Bots do not approve PRs here.

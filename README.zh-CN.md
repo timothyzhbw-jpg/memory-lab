@@ -118,6 +118,45 @@ orgmemory evidence add <数据集> --id ... --path ... --quote "..." --source-ur
 orgmemory append   <数据集> --event '{"id": ..., ...}'
 ```
 
+#### 导入 GitHub Issues 和 Pull Request
+
+`orgmemory github` 把一个仓库的 issue 和 pull request 转换成数据集里的事件、证据和存档文件。每个 issue 或 PR 是一个议题（subject，例如 `acme/web#12`）。导入过程是确定性的，不使用任何模型。
+
+```bash
+orgmemory github sync    <数据集> OWNER/REPO [--full | --since ISO8601] [--issue N]... [--max-wait 3600] [--save-capture f.json] [--dry-run]
+orgmemory github convert <数据集> f.json [--dry-run]  # 离线应用之前保存的抓取结果
+orgmemory explain        <数据集> "acme/web#12"
+```
+
+- token 取 `GITHUB_TOKEN`、`GH_TOKEN` 中第一个非空的值（可以用 `GH_TOKEN=$(gh auth token)`）；没有 `--token` 参数。一个只读的细粒度（fine-grained）token，带 Issues、Pull requests 和 Metadata 的读权限就够了。没有 token 时以未认证方式运行：只能访问公开仓库，每小时 60 次请求。
+- 第一次运行读取全部内容；可以用 `--since ISO时间`（必须带时区）限定范围，但仓库一旦有了游标（完成过一次完整同步），这个参数就会被拒绝。之后每次只读取上一次完整同步以来变化的内容，并往前多重叠 5 分钟。`--full` 重新扫描全部，`--issue N`（可重复）只刷新指定编号，不能与 `--full` 或 `--since` 同用。重复运行是安全的：ID 是确定的，日志里已有的内容不会被追加第二次。GitHub 不一定会因为每种变化（标签、依赖关系）都把 issue 标为已更新，所以隔一段时间跑一次 `--full`。
+- `--dry-run` 会实际请求 GitHub（消耗请求次数），打印摘要和计划写入的事件，但不写入数据集或锁文件。`--save-capture` 把抓取到的 issue 和时间线按 API 返回的原样写入一个新文件，之后可以用 `convert` 应用；它可以和 `--dry-run` 一起用，这样就能先审阅抓取结果再应用。文件里是原始的、可能私密的文本。保存路径只能是新文件，不能覆盖导入工具管理的文件或 `policy.json` / `github.json`。
+- 退出码：`0` 表示完整完成（包括“没有新内容”）；`2` 表示出错，没有追加任何内容；`3` 表示只完成了一部分：限流等待超过 `--max-wait`（默认 3600 秒），或服务端、网络反复出错，导致抓取中止，已完整抓取的条目已经写入，游标没有移动，稍后再运行一次即可。
+- 数据集目录必须已存在。`events.jsonl` 和 `evidence.jsonl` 会在第一次写入时创建。导入不需要 `policy.json`；`replay`、`explain` 和 `validate` 需要。
+
+**导入工具从不读取或写入 `policy.json`：`gh:<login>:<id>` 形式的参与者 ID 对应什么角色，由你自己配置。** 账号配置角色之前，它的事件会被记录，但不会改变任何状态。同步摘要会列出新事件涉及的参与者，`orgmemory validate` 会列出所有不在 `policy.json` 里的参与者。
+
+| GitHub | 事件 |
+|---|---|
+| 新建 issue 或 PR | `request` |
+| 审查（review）批准 / 要求修改 | 审查者的 `approve` / `reject` |
+| 批准或要求修改的审查被人撤销（dismiss） | 撤销者对该审查的 `revoke` |
+| issue 以“不计划做”（not planned）关闭 | 关闭者的 `reject` |
+| PR 合并 / 未合并就关闭 | 合并者的 `approve` / 关闭者的 `reject` |
+| 在一次记为 `reject` 的关闭之后重新打开 / 其他重新打开 | 对该次关闭的 `revoke`，然后是 `request` / `request` |
+| 向曾经要求修改的审查者重新请求审查 | `request` |
+| `github.json` 里列出的标签被添加 / 移除 | 对应的 `approve`、`reject` 或 `raise_risk` / 对该标签所做决定的 `revoke`，否则记为 `comment`（风险无法撤回） |
+| 添加“被阻塞于”（blocked by）关系 | `dependency` |
+| 评论、只含评论的审查、其他关闭、推送新提交时自动撤销的过期审查、移除“被阻塞于”关系 | `comment` |
+| 机器人、应用、Agent 或已删除账号做的任何操作 | 只记为 `comment` |
+| 其他一切（指派、提及、交叉引用、其他审查请求、未列出的标签、编辑） | 不产生事件 |
+
+文本从不被解析：任何地方出现的“LGTM”“/approve”“approved by @pm”或“depends on #3”都只是作者的一条 `comment`。被撤销的审查保留原来的结论，所以日志不取决于你什么时候同步。编辑只会增加一个新的证据版本，不产生事件；被删除的评论仍保留在数据集里，并在所属 issue 下次刷新时报告为已消失（gone）。
+
+有权 `revoke` 的人重新打开时，议题回到 `proposed`。否则这次撤销是一次被忽略的越权尝试，后面的 `request` 只有在重新打开者的角色允许 `request` 时才会标记“申请重新考虑”。有两种预期内的噪声：没有批准权限的人合并 PR，即使之前已有授权的批准，这次合并也会被列为被忽略的越权尝试；重新打开一次并非当前决定的关闭（例如一次越权的关闭）时，如果重新打开者有权撤销，会显示 `invalid_supersession`。
+
+示例：[`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-web/) 是用 `orgmemory github convert` 从 `acme/web` 的两份合成抓取结果（在 `tests/fixtures/github/` 里）生成的，附有[回放报告](examples/orgmemory/github-acme-web/replay-report.md)。其中 `acme/web#1` 就是 GitHub 上的功能A故事：产品经理以“不计划做”关闭了 issue，客户经理加上了 `approved` 标签，客户又重新打开了它。这个 issue 仍是 `rejected`，`reconsideration_requested: true`，`pending_approval: [product_manager]`；标签和重新打开带来的 `revoke` 都列为被忽略的越权尝试。
+
 ## 数据格式
 
 **`reviews.jsonl`**（MemFalsify，可选）：人工确认的判断。
@@ -135,6 +174,31 @@ orgmemory append   <数据集> --event '{"id": ..., ...}'
 - `evidence.jsonl`：`id`、`path`、原始字节的 `sha256`、逐字的 `quote` 及其 `[start, end)` 字符区间、`source_uri`、`source_kind`、`captured_at`。请用 `orgmemory evidence add` 生成，不要手算哈希。
 
 回放规则：事件按生效时间排序，时间相同时保持文件顺序。回放前会校验整个日志，包括 `--as-of` 之后的事件。有权限的 `approve` / `reject` 会设定状态，并清除“申请重新考虑”、待审批和被忽略的越权尝试。决定被推翻或同一时刻出现相互冲突的决定时，都会记录在 `conflicts` 中。
+
+**GitHub 导入相关文件**（在同一个数据集目录里）：
+
+- `github.json`（可选，归你所有；导入工具只读取它）：`{"labels": {"<标签>": "approve" | "reject" | "raise_risk"}}`。标签名匹配时不区分大小写，未列出的标签不产生任何事件。修改它只影响尚未写入日志的事件（`--full` 可以补全）；已有事件如果按新配置会得到不同结果，会被报告为漂移（drift），但绝不会被改写。
+- `github-sync.jsonl`：每次实际写入的运行追加一行（`--dry-run` 不写），字段有 `repo`、`repo_id`、`source`（`sync` 或 `convert`）、`mode`、`since`、`started_at`（本次运行第一个响应里服务器的 `Date`）、`finished_at`、`complete`、`items`、`requests`、`events_appended`、`evidence_appended`、`gone`、`drift` 和 `importer`。下一次的游标是最近一次完整、模式为 `full` 或 `incremental` 的 `sync` 行的 `started_at` 减 5 分钟；指定编号的、未完成的、`convert` 和 dry run 都不会移动游标。离线转换使用抓取结果的 `started_at` 作为 `finished_at`，确保可重复生成。记录下来的 `repo_id` 锁定了仓库：如果同一个名字后来对应另一个 ID（仓库被删除后重建），导入会被拒绝。仓库改名或转移同样会失败，需要有意识地重新导入。
+- `sources/github/<owner>/<repo>/<n>/<对象>-<hash12>.txt`：每个 issue 或 PR、每条评论、每个审查的每个版本各一个文件，每个被映射的 issue 事件也各一个，只创建、不修改；`<对象>` 是 `issue-<n>`、`comment-<id>`、`review-<id>` 或 `event-<id>`，`<hash12>` 是文件 SHA-256 的前 12 位。第 1 行是只由校验过的字段拼成的 ASCII 事实行；第 2 行是白名单 API 字段组成的 JSON 记录（非 ASCII 字符全部转义）；第 3 行是固定的分隔行；其余是 GitHub 返回的原文（标题和正文、评论或审查正文、撤销说明），一字不改，只有孤立代理字符（lone surrogate）会被替换成 U+FFFD，并在记录里标注 `"lossy": true`。示例里 `acme/web#2` 的审查 206：
+
+```text
+GitHub review 206 on acme/web#2 by gh:zhou-pm:5003 (User) at 2026-10-07T09:00:00Z: approved on commit 54bb654c9e60
+{"author_association":"MEMBER","commit_id":"54bb654c9e6025347f57900a4a5c2313a96b8035","event":"reviewed","id":206,...}
+--- verbatim from GitHub; untrusted ---
+Approved now that export waits for the billing migration.
+```
+
+每个事件都引用所属对象的 `fact` 证据，也就是整行事实行，其中写明的参与者与事件的参与者相同。条件允许时，事件还会引用 `text` 证据：原文部分第一个非空、且不以 `<!--` 开头的行，去掉首尾空白后截断到 200 个字符。如果评论被折叠（minimized），或这一行包含制表符以外的控制字符、双向文本控制字符（bidi）、零宽字符或行分隔符，就不引用 `text`。结论是从撤销记录里找回的审查，还会引用那次撤销的 `fact`。
+
+| GitHub ID | 格式 | 示例 |
+|---|---|---|
+| 议题 | `<owner>/<repo>#<编号>`，小写 | `acme/web#12` |
+| 参与者 | `gh:<login>:<用户 id>`，login 转为小写；login 不是合法的 GitHub 登录名时为 `gh:~:<id>` | `gh:zhou-pm:5003` |
+| 事件 | `gh:<议题>/` 加上 `opened`、`comment/<id>`、`review/<id>`、`event/<id>`，或 `event/<id>/request`（重新打开之后的那个请求） | `gh:acme/web#1/event/108/request` |
+| 证据 | `gh:<议题>/` 加上 `issue@<th12>`、`comment/<id>@<th12>`、`review/<id>@<th12>` 或 `event/<id>`，再加 `/fact` 或 `/text` | `gh:acme/web#2/review/206@67c4aa9e1b3a/fact` |
+| 依赖 | 阻塞它的 issue，写成议题的形式 | `acme/billing#3` |
+
+`<th12>` 只取原文文本的 SHA-256 前 12 位，所以编辑会产生新的证据版本，而改登录名不会。登录名改名或被他人重新注册后，会得到一个新的参与者 ID，没有任何角色。
 
 ## Agent 技能
 
@@ -192,6 +256,12 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
+- GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。
+- `policy.json` 是全局的：给一个 `gh:` 账号配置角色，等于在所有导入仓库的议题上都授予了这个角色。
+- 在公开仓库里，任何人都可以开 issue、评论、审查 PR、关闭自己的 issue。这些都会以真实账号记录下来，只要账号没有配置角色，回放就会忽略它们，所以会出现 `unauthorized_change_attempts`。这是如实记录，不是 bug。
+- 存档文件的哈希只能证明导入工具根据 API 响应生成的字节，不能证明 GitHub 实际返回了什么；交给 `convert` 的抓取结果会被当作“GitHub 的原话”，所以只转换你自己抓取的结果。抓取到的 GitHub 文本不可信，issue 正文里出现提示注入是预料之中的。这些文本永远不会进入 ID、备注、参与者或导入工具的输出，但 `replay` 和 `explain` 会原样打印证据引用（单行，不含终端转义序列和双向文本控制字符，但可能包含 markdown 或 HTML）。
+- GitHub token 只从环境变量读取，只发送给 `https://api.github.com`（从不跟随重定向到其他主机），也从不写入文件或打印出来。
+- 从私有仓库导入的数据集和 `--save-capture` 文件包含私密文本，绝不要提交。目前没有脱敏流程：要从存档文件里删掉泄露的密钥只能手工编辑，之后 `validate` 会按设计报错。
 - 这是一个研究用的 MVP，不是生产级基础设施。
 
 ## 路线图
@@ -199,7 +269,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 | | MemFalsify | 组织记忆 |
 |---|---|---|
 | **v0.1** | 文本记忆审计、证据追溯、人工确认流程 | 事件日志、状态机、权限规则、决策溯源 |
-| **v0.2**（进行中） | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR（开发中） |
+| **v0.2** | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR ✓ |
 | v0.3 | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 | 状态冲突与决策审计 |
 | v0.4 | 多模态证据（带定位的 OCR / 转写） | 跨平台组织记忆 |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |

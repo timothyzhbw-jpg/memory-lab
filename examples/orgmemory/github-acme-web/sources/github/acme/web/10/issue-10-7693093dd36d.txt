@@ -1,0 +1,6 @@
+GitHub issue acme/web#10 opened by gh:buyer-acme:5001 (User) at 2026-10-05T18:00:00Z
+{"author_association":"NONE","created_at":"2026-10-05T18:00:00Z","kind":"issue","number":10,"pull_request":false,"repo":"acme/web","repo_id":1001,"state":"open","updated_at":"2026-10-06T08:50:00Z","user":{"id":5001,"login":"buyer-acme","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+导出功能 🚀 CSV export for 华东 region
+First line of the body
+Second line

@@ -1,3 +1,4 @@
+import socket
 import shutil
 from pathlib import Path
 
@@ -18,3 +19,21 @@ def org_demo(tmp_path):
 
 def snapshot(root: Path) -> dict:
     return {p: p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("a test tried to open a network connection")
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+
+
+@pytest.fixture
+def github_dataset(tmp_path):
+    root = tmp_path / "github"
+    root.mkdir()
+    fixtures = Path(__file__).parent / "fixtures" / "github"
+    for name in ("policy.json", "github.json"):
+        shutil.copyfile(fixtures / name, root / name)
+    return root

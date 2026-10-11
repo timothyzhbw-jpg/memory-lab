@@ -1,0 +1,4 @@
+GitHub review 1105 on acme/web#11 by gh:github-actions[bot]:41898282 (Bot) at 2026-10-07T10:00:00Z: dismissed on commit 11aa11aa11aa
+{"author_association":"NONE","commit_id":"11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa","event":"reviewed","id":1105,"kind":"review","number":11,"repo":"acme/web","repo_id":1001,"state":"dismissed","submitted_at":"2026-10-07T10:00:00Z","user":{"id":41898282,"login":"github-actions[bot]","type":"Bot"}}
+--- verbatim from GitHub; untrusted ---
+Automated approval: all checks passed.

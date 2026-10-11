@@ -1,0 +1,5 @@
+GitHub pull request acme/web#5 opened by gh:lin-eng:5002 (User) at 2026-10-05T13:00:00Z
+{"author_association":"MEMBER","created_at":"2026-10-05T13:00:00Z","draft":false,"kind":"issue","number":5,"pull_request":true,"repo":"acme/web","repo_id":1001,"state":"open","updated_at":"2026-10-06T14:00:00Z","user":{"id":5002,"login":"lin-eng","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Rate-limit the export endpoint
+Adds a per-tenant rate limit.

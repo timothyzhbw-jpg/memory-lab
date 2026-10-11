@@ -1,0 +1,7 @@
+GitHub pull request acme/web#2 opened by gh:lin-eng:5002 (User) at 2026-10-05T10:00:00Z
+{"author_association":"MEMBER","created_at":"2026-10-05T10:00:00Z","draft":false,"kind":"issue","number":2,"pull_request":true,"repo":"acme/web","repo_id":1001,"state":"closed","updated_at":"2026-10-07T10:00:00Z","user":{"id":5002,"login":"lin-eng","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Add CSV export endpoint
+Implements the export requested in #1.
+
+LGTM from product already, see Slack.
