@@ -16,7 +16,11 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- MemFalsify benchmark cases `en-units-scope`, `zh-units-negation` and `es-operacion-alcance`: 63 labeled
+  claims for paraphrased support and contradiction, unit conflicts, date and version arithmetic, scope swaps
+  between services, and negation and modality. The lexical baseline was measured again on all 202 claims.
 
 ## memlab-core
 

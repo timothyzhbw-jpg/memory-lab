@@ -301,9 +301,9 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 
 ## Benchmark and GitHub Action
 
-The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 139 labeled English and Chinese claims across
-eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
-precision 0.62, recall 0.27 and 3-way accuracy 0.44; these cases exercise failure modes rather than estimate
+The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 202 labeled English, Chinese and Spanish claims
+across eleven synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
+precision 0.71, recall 0.33 and 3-way accuracy 0.42; these cases exercise failure modes rather than estimate
 accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
 
 The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files against repository

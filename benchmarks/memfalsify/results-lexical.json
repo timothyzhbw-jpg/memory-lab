@@ -1,5 +1,5 @@
 {
-  "memfalsify_version": "0.1.0",
+  "memfalsify_version": "0.3.0",
   "verifier": "lexical",
   "settings": {
     "min_coverage": 0.5,
@@ -7,19 +7,19 @@
     "verifier": "lexical"
   },
   "cost": {
-    "judge_calls": 129,
+    "judge_calls": 227,
     "escalations": null,
-    "seconds": 0.126
+    "seconds": 0.264
   },
   "metrics": {
-    "claims": 139,
+    "claims": 202,
     "contradiction": {
-      "tp": 13,
-      "fp": 8,
-      "fn": 35,
-      "precision": 0.6190476190476191,
-      "recall": 0.2708333333333333,
-      "f1": 0.37681159420289856,
+      "tp": 27,
+      "fp": 11,
+      "fn": 54,
+      "precision": 0.7105263157894737,
+      "recall": 0.3333333333333333,
+      "f1": 0.453781512605042,
       "disputed": {
         "contradicted": 0,
         "supported": 0,
@@ -27,57 +27,57 @@
       }
     },
     "support": {
-      "tp": 4,
-      "fp": 5,
-      "fn": 40,
-      "precision": 0.4444444444444444,
-      "recall": 0.09090909090909091,
-      "f1": 0.1509433962264151
+      "tp": 12,
+      "fp": 12,
+      "fn": 60,
+      "precision": 0.5,
+      "recall": 0.16666666666666666,
+      "f1": 0.25
     },
     "accuracy": {
-      "correct": 61,
-      "total": 139,
-      "rate": 0.43884892086330934
+      "correct": 84,
+      "total": 202,
+      "rate": 0.4158415841584158
     },
     "confusion": {
       "contradicted": {
-        "contradicted": 13,
-        "supported": 4,
-        "unsupported": 31,
+        "contradicted": 27,
+        "supported": 10,
+        "unsupported": 44,
         "disputed": 0
       },
       "supported": {
-        "contradicted": 6,
-        "supported": 4,
-        "unsupported": 34,
+        "contradicted": 9,
+        "supported": 12,
+        "unsupported": 51,
         "disputed": 0
       },
       "unsupported": {
         "contradicted": 2,
-        "supported": 1,
-        "unsupported": 44,
+        "supported": 2,
+        "unsupported": 45,
         "disputed": 0
       }
     },
     "issues": {
       "overgeneralization": {
-        "tp": 13,
+        "tp": 15,
         "fp": 2,
-        "fn": 3,
-        "precision": 0.8666666666666667,
-        "recall": 0.8125,
-        "f1": 0.8387096774193549
+        "fn": 4,
+        "precision": 0.8823529411764706,
+        "recall": 0.7894736842105263,
+        "f1": 0.8333333333333334
       },
       "relative_time": {
-        "tp": 9,
+        "tp": 10,
         "fp": 0,
         "fn": 4,
         "precision": 1.0,
-        "recall": 0.6923076923076923,
-        "f1": 0.8181818181818182
+        "recall": 0.7142857142857143,
+        "f1": 0.8333333333333334
       },
       "possibly_stale": {
-        "tp": 6,
+        "tp": 8,
         "fp": 0,
         "fn": 0,
         "precision": 1.0,
@@ -85,65 +85,65 @@
         "f1": 1.0
       },
       "inference_marker": {
-        "tp": 10,
+        "tp": 11,
         "fp": 1,
         "fn": 0,
-        "precision": 0.9090909090909091,
+        "precision": 0.9166666666666666,
         "recall": 1.0,
-        "f1": 0.9523809523809523
+        "f1": 0.9565217391304348
       },
       "internal_conflict": {
-        "tp": 6,
-        "fp": 5,
-        "fn": 12,
-        "precision": 0.5454545454545454,
-        "recall": 0.3333333333333333,
-        "f1": 0.41379310344827586
+        "tp": 12,
+        "fp": 15,
+        "fn": 23,
+        "precision": 0.4444444444444444,
+        "recall": 0.34285714285714286,
+        "f1": 0.3870967741935484
       },
       "duplicate": {
         "tp": 5,
         "fp": 0,
-        "fn": 2,
+        "fn": 10,
         "precision": 1.0,
-        "recall": 0.7142857142857143,
-        "f1": 0.8333333333333334
+        "recall": 0.3333333333333333,
+        "f1": 0.5
       }
     },
     "tags": {
       "paraphrase": {
-        "claims": 52,
+        "claims": 78,
         "contradiction_recall": {
           "hits": 1,
           "n": 12,
           "rate": 0.08333333333333333
         },
         "support_recall": {
-          "hits": 2,
-          "n": 40,
-          "rate": 0.05
+          "hits": 10,
+          "n": 66,
+          "rate": 0.15151515151515152
         },
         "false_flags": {
-          "hits": 4,
-          "n": 40,
-          "rate": 0.1
+          "hits": 7,
+          "n": 66,
+          "rate": 0.10606060606060606
         }
       },
       "numeric": {
-        "claims": 44,
+        "claims": 90,
         "contradiction_recall": {
-          "hits": 5,
-          "n": 18,
-          "rate": 0.2777777777777778
+          "hits": 16,
+          "n": 47,
+          "rate": 0.3404255319148936
         },
         "support_recall": {
-          "hits": 1,
-          "n": 18,
-          "rate": 0.05555555555555555
+          "hits": 5,
+          "n": 35,
+          "rate": 0.14285714285714285
         },
         "false_flags": {
           "hits": 2,
-          "n": 26,
-          "rate": 0.07692307692307693
+          "n": 43,
+          "rate": 0.046511627906976744
         }
       },
       "antonym": {
@@ -165,11 +165,11 @@
         }
       },
       "negation": {
-        "claims": 14,
+        "claims": 17,
         "contradiction_recall": {
-          "hits": 4,
-          "n": 14,
-          "rate": 0.2857142857142857
+          "hits": 7,
+          "n": 17,
+          "rate": 0.4117647058823529
         },
         "support_recall": {
           "hits": 0,
@@ -183,29 +183,29 @@
         }
       },
       "negation_trap": {
-        "claims": 30,
+        "claims": 40,
         "contradiction_recall": {
           "hits": 0,
           "n": 0,
           "rate": null
         },
         "support_recall": {
-          "hits": 0,
-          "n": 16,
-          "rate": 0.0
+          "hits": 3,
+          "n": 24,
+          "rate": 0.125
         },
         "false_flags": {
-          "hits": 5,
-          "n": 30,
-          "rate": 0.16666666666666666
+          "hits": 8,
+          "n": 40,
+          "rate": 0.2
         }
       },
       "distractor": {
-        "claims": 56,
+        "claims": 75,
         "contradiction_recall": {
-          "hits": 4,
-          "n": 16,
-          "rate": 0.25
+          "hits": 15,
+          "n": 33,
+          "rate": 0.45454545454545453
         },
         "support_recall": {
           "hits": 0,
@@ -214,44 +214,44 @@
         },
         "false_flags": {
           "hits": 3,
-          "n": 40,
-          "rate": 0.075
+          "n": 42,
+          "rate": 0.07142857142857142
         }
       },
       "temporal": {
-        "claims": 18,
+        "claims": 29,
         "contradiction_recall": {
-          "hits": 3,
-          "n": 13,
-          "rate": 0.23076923076923078
+          "hits": 5,
+          "n": 17,
+          "rate": 0.29411764705882354
         },
         "support_recall": {
-          "hits": 1,
-          "n": 5,
-          "rate": 0.2
+          "hits": 2,
+          "n": 12,
+          "rate": 0.16666666666666666
         },
         "false_flags": {
-          "hits": 2,
-          "n": 5,
-          "rate": 0.4
+          "hits": 4,
+          "n": 12,
+          "rate": 0.3333333333333333
         }
       },
       "chinese": {
-        "claims": 51,
+        "claims": 71,
         "contradiction_recall": {
-          "hits": 2,
-          "n": 19,
-          "rate": 0.10526315789473684
+          "hits": 7,
+          "n": 29,
+          "rate": 0.2413793103448276
         },
         "support_recall": {
-          "hits": 0,
-          "n": 15,
-          "rate": 0.0
+          "hits": 2,
+          "n": 24,
+          "rate": 0.08333333333333333
         },
         "false_flags": {
           "hits": 6,
-          "n": 32,
-          "rate": 0.1875
+          "n": 42,
+          "rate": 0.14285714285714285
         }
       },
       "repo": {
@@ -273,33 +273,33 @@
         }
       },
       "multi_sentence": {
-        "claims": 13,
+        "claims": 21,
         "contradiction_recall": {
           "hits": 1,
-          "n": 2,
-          "rate": 0.5
+          "n": 5,
+          "rate": 0.2
         },
         "support_recall": {
           "hits": 1,
-          "n": 11,
-          "rate": 0.09090909090909091
+          "n": 16,
+          "rate": 0.0625
         },
         "false_flags": {
-          "hits": 0,
-          "n": 11,
-          "rate": 0.0
+          "hits": 2,
+          "n": 16,
+          "rate": 0.125
         }
       }
     },
     "citations": {
       "contradicted": {
-        "hits": 11,
-        "n": 13,
-        "rate": 0.8461538461538461
+        "hits": 24,
+        "n": 27,
+        "rate": 0.8888888888888888
       },
       "supported": {
-        "hits": 4,
-        "n": 4,
+        "hits": 12,
+        "n": 12,
         "rate": 1.0
       }
     }
@@ -1092,6 +1092,498 @@
           "supported": {
             "hits": 3,
             "n": 3,
+            "rate": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "en-units-scope",
+      "description": "Northline capacity memory: latency budgets, error budgets, storage units, retention, gateway timeouts, retries and the Search 2.4 rollout. Evidence is the SLO policy, a 2026-09-18 capacity note, a 2026-03-02 retention plan, ADR-030, the superseded ADR-018 and the search release notes. Hard parts: milliseconds against seconds and minutes, GB against GiB, percent paraphrases, a 105-day gap stated only as two dates, a minor version mistaken for a patch, search versus billing scope, and modality (must not, no longer, only if).",
+      "as_of": "2026-10-08",
+      "judge_calls": 45,
+      "escalations": null,
+      "metrics": {
+        "claims": 23,
+        "contradiction": {
+          "tp": 7,
+          "fp": 2,
+          "fn": 6,
+          "precision": 0.7777777777777778,
+          "recall": 0.5384615384615384,
+          "f1": 0.6363636363636364,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 2,
+          "fp": 1,
+          "fn": 8,
+          "precision": 0.6666666666666666,
+          "recall": 0.2,
+          "f1": 0.3076923076923077
+        },
+        "accuracy": {
+          "correct": 9,
+          "total": 23,
+          "rate": 0.391304347826087
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 7,
+            "supported": 1,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 2,
+            "supported": 2,
+            "unsupported": 6,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "internal_conflict": {
+            "tp": 4,
+            "fp": 4,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.5714285714285714,
+            "f1": 0.5333333333333333
+          },
+          "duplicate": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 9,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 9,
+              "rate": 0.2222222222222222
+            },
+            "false_flags": {
+              "hits": 2,
+              "n": 9,
+              "rate": 0.2222222222222222
+            }
+          },
+          "numeric": {
+            "claims": 19,
+            "contradiction_recall": {
+              "hits": 6,
+              "n": 12,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 7,
+              "rate": 0.2857142857142857
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
+            }
+          },
+          "negation": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 2,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 2,
+              "n": 2,
+              "rate": 1.0
+            }
+          },
+          "distractor": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 5,
+              "n": 6,
+              "rate": 0.8333333333333334
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "temporal": {
+            "claims": 5,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            }
+          },
+          "multi_sentence": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 6,
+            "n": 7,
+            "rate": 0.8571428571428571
+          },
+          "supported": {
+            "hits": 2,
+            "n": 2,
+            "rate": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "es-operacion-alcance",
+      "description": "Rumbal operations memory in Spanish: latency budgets, storage units, retention, gateway timeouts, retries, paging and the search 2.4 rollout. Evidence is the SLO note, ADR-015, superseded ADR-008, the 2026-09-18 capacity note, the on-call runbook and the version notes. Hard parts: unit and percent paraphrases, search versus billing scope, a 105-day gap stated only as two dates, a patch-versus-minor mistake, and modality (no se debe, ya no, únicamente cuando, solo).",
+      "as_of": "2026-10-08",
+      "judge_calls": 30,
+      "escalations": null,
+      "metrics": {
+        "claims": 20,
+        "contradiction": {
+          "tp": 2,
+          "fp": 1,
+          "fn": 8,
+          "precision": 0.6666666666666666,
+          "recall": 0.2,
+          "f1": 0.3076923076923077,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 4,
+          "fp": 4,
+          "fn": 5,
+          "precision": 0.5,
+          "recall": 0.4444444444444444,
+          "f1": 0.47058823529411764
+        },
+        "accuracy": {
+          "correct": 6,
+          "total": 20,
+          "rate": 0.3
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 2,
+            "supported": 3,
+            "unsupported": 5,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 1,
+            "supported": 4,
+            "unsupported": 4,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 1,
+            "unsupported": 0,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "relative_time": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "possibly_stale": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "inference_marker": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "internal_conflict": {
+            "tp": 0,
+            "fp": 2,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "duplicate": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 2,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 8,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 4,
+              "n": 8,
+              "rate": 0.5
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 8,
+              "rate": 0.125
+            }
+          },
+          "numeric": {
+            "claims": 13,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 8,
+              "rate": 0.125
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 5,
+              "rate": 0.4
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "negation": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 3,
+              "rate": 0.6666666666666666
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 4,
+              "rate": 0.25
+            }
+          },
+          "distractor": {
+            "claims": 6,
+            "contradiction_recall": {
+              "hits": 2,
+              "n": 5,
+              "rate": 0.4
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            }
+          },
+          "multi_sentence": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 1,
+              "n": 2,
+              "rate": 0.5
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 2,
+            "n": 2,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 4,
+            "n": 4,
             "rate": 1.0
           }
         }
@@ -2488,6 +2980,270 @@
           }
         }
       }
+    },
+    {
+      "id": "zh-units-negation",
+      "description": "航标容量与重试记忆：时延预算、错误预算、存储单位、保留期、网关超时和重试条件。证据是服务指标、ADR-011、被取代的 ADR-004、2026-09-18 容量会，以及 2026-03-02 的保留计划。难点是毫秒对分钟、GB 对 GiB、百分数的中文换算、检索与账单的适用范围，以及“不得”“不再”“只有…才”。",
+      "as_of": "2026-10-08",
+      "judge_calls": 23,
+      "escalations": null,
+      "metrics": {
+        "claims": 20,
+        "contradiction": {
+          "tp": 5,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "disputed": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 0
+          }
+        },
+        "support": {
+          "tp": 2,
+          "fp": 2,
+          "fn": 7,
+          "precision": 0.5,
+          "recall": 0.2222222222222222,
+          "f1": 0.3076923076923077
+        },
+        "accuracy": {
+          "correct": 8,
+          "total": 20,
+          "rate": 0.4
+        },
+        "confusion": {
+          "contradicted": {
+            "contradicted": 5,
+            "supported": 2,
+            "unsupported": 3,
+            "disputed": 0
+          },
+          "supported": {
+            "contradicted": 0,
+            "supported": 2,
+            "unsupported": 7,
+            "disputed": 0
+          },
+          "unsupported": {
+            "contradicted": 0,
+            "supported": 0,
+            "unsupported": 1,
+            "disputed": 0
+          }
+        },
+        "issues": {
+          "overgeneralization": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "relative_time": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "possibly_stale": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "inference_marker": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "precision": null,
+            "recall": null,
+            "f1": null
+          },
+          "internal_conflict": {
+            "tp": 2,
+            "fp": 4,
+            "fn": 3,
+            "precision": 0.3333333333333333,
+            "recall": 0.4,
+            "f1": 0.36363636363636365
+          },
+          "duplicate": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 2,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        "tags": {
+          "paraphrase": {
+            "claims": 9,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 9,
+              "rate": 0.2222222222222222
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 9,
+              "rate": 0.0
+            }
+          },
+          "numeric": {
+            "claims": 14,
+            "contradiction_recall": {
+              "hits": 4,
+              "n": 9,
+              "rate": 0.4444444444444444
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 5,
+              "rate": 0.0
+            }
+          },
+          "negation": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            }
+          },
+          "negation_trap": {
+            "claims": 4,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 1,
+              "n": 3,
+              "rate": 0.3333333333333333
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 4,
+              "rate": 0.0
+            }
+          },
+          "distractor": {
+            "claims": 7,
+            "contradiction_recall": {
+              "hits": 4,
+              "n": 6,
+              "rate": 0.6666666666666666
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          },
+          "temporal": {
+            "claims": 3,
+            "contradiction_recall": {
+              "hits": 1,
+              "n": 1,
+              "rate": 1.0
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
+            }
+          },
+          "chinese": {
+            "claims": 20,
+            "contradiction_recall": {
+              "hits": 5,
+              "n": 10,
+              "rate": 0.5
+            },
+            "support_recall": {
+              "hits": 2,
+              "n": 9,
+              "rate": 0.2222222222222222
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 10,
+              "rate": 0.0
+            }
+          },
+          "multi_sentence": {
+            "claims": 1,
+            "contradiction_recall": {
+              "hits": 0,
+              "n": 0,
+              "rate": null
+            },
+            "support_recall": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
+            }
+          }
+        },
+        "citations": {
+          "contradicted": {
+            "hits": 5,
+            "n": 5,
+            "rate": 1.0
+          },
+          "supported": {
+            "hits": 2,
+            "n": 2,
+            "rate": 1.0
+          }
+        }
+      }
     }
   ],
   "predictions": [
@@ -3510,6 +4266,1011 @@
           "opinions": []
         }
       ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-0b9590df",
+      "text": "Search p99 must stay within a quarter of a second.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-195fbcad",
+      "text": "The search latency budget at the 99th percentile is 250 milliseconds.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-49f34c10",
+      "text": "The billing service's p99 latency budget is a quarter of a second.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-ab9c155b",
+      "text": "A checkout write may take up to 2 minutes to return.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-71d61998",
+      "text": "The monthly error budget for search is one tenth of one percent of requests.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "policies/slo.md:11",
+          "quote": "The monthly error budget for the search service is 0.1 percent of requests.",
+          "rationale": "source restates the claim (term coverage 0.75)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-c2ab5bea",
+      "text": "The search service may fail 1 percent of requests each month.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "policies/slo.md:11",
+          "quote": "The monthly error budget for the search service is 0.1 percent of requests.",
+          "rationale": "different values: claim ['1'] vs source ['0.1']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "policies/slo.md:15",
+          "quote": "The billing service's monthly error budget is 0.5 percent of requests.",
+          "rationale": "different values: claim ['1'] vs source ['0.5']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-5a6b5d84",
+      "text": "The billing service is probably allowed a smaller share of failed requests each month than search.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "multi_sentence"
+      ],
+      "issues": [
+        "inference_marker"
+      ],
+      "predicted_issues": [
+        "inference_marker"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-7ce46973",
+      "text": "The hot tier holds half a tebibyte of search indexes.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict",
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-0e42e63f",
+      "text": "Search indexes on the hot tier take up 512 GiB.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict",
+        "duplicate"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-2c68ca08",
+      "text": "Search indexes occupy 512 GB on the hot tier.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": false,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-03-02-retention-plan.md:3",
+          "quote": "On 2026-03-02 the capacity group adopted a plan to retain hot-tier search indexes for 30 days.",
+          "rationale": "different values: claim ['512'] vs source ['2026-03-02', '30']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-18-capacity.md:7",
+          "quote": "Hot-tier retention for search indexes is 14 days.",
+          "rationale": "different values: claim ['512'] vs source ['14']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "notes/2026-09-18-capacity.md:3",
+          "quote": "Search indexes occupy 512 GiB on the hot tier.",
+          "rationale": "source restates the claim (term coverage 0.83)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-7fc387ab",
+      "text": "The billing archive holds 500 GiB.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notes/2026-09-18-capacity.md:5",
+          "quote": "The billing archive holds 500 GB of invoices, which is about 466 GiB.",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-48c37970",
+      "text": "Hot-tier retention for search indexes is 90 days.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-18-capacity.md:7",
+          "quote": "Hot-tier retention for search indexes is 14 days.",
+          "rationale": "different values: claim ['90'] vs source ['14']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-03-02-retention-plan.md:3",
+          "quote": "On 2026-03-02 the capacity group adopted a plan to retain hot-tier search indexes for 30 days.",
+          "rationale": "different values: claim ['90'] vs source ['2026-03-02', '30']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-18-capacity.md:3",
+          "quote": "Search indexes occupy 512 GiB on the hot tier.",
+          "rationale": "different values: claim ['90'] vs source ['512']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-505683c5",
+      "text": "Hot-tier search indexes are kept for 30 days.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "temporal",
+        "numeric",
+        "distractor"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-18-capacity.md:7",
+          "quote": "Hot-tier retention for search indexes is 14 days.",
+          "rationale": "different values: claim ['30'] vs source ['14']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-18-capacity.md:3",
+          "quote": "Search indexes occupy 512 GiB on the hot tier.",
+          "rationale": "different values: claim ['30'] vs source ['512']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "notes/2026-09-18-capacity.md:9",
+          "quote": "Cold-tier search snapshots are kept for 90 days.",
+          "rationale": "different values: claim ['30'] vs source ['90']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-8082df59",
+      "text": "2026-03-02: the capacity group planned to keep hot-tier search indexes for 30 days.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "temporal",
+        "numeric"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notes/2026-03-02-retention-plan.md:3",
+          "quote": "On 2026-03-02 the capacity group adopted a plan to retain hot-tier search indexes for 30 days.",
+          "rationale": "source restates the claim (term coverage 0.78)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-e117997e",
+      "text": "The gateway timeout for billing invoice renders is 1500 ms.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-030-timeouts.md:7",
+          "quote": "The gateway timeout for billing invoice renders is 8 seconds.",
+          "rationale": "different values: claim ['1500'] vs source ['8']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-57098f1c",
+      "text": "Every gateway timeout is 1500 ms.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-018-timeouts.md:5",
+          "quote": "The gateway timeout for search queries was 800 ms.",
+          "rationale": "different values: claim ['1500'] vs source ['800']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-030-timeouts.md:7",
+          "quote": "The gateway timeout for billing invoice renders is 8 seconds.",
+          "rationale": "different values: claim ['1500'] vs source ['8']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "decisions/ADR-030-timeouts.md:5",
+          "quote": "The gateway timeout for search queries is 1500 ms.",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-a0b87097",
+      "text": "105 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "multi_sentence"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-ae12af5d",
+      "text": "Only 30 days passed between the production debut of release 2.3.1, on 2026-05-20, and the replacement by release 2.4.0.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "multi_sentence"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-287387be",
+      "text": "Production is one patch release ahead of release 2.3.1.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-97e523f2",
+      "text": "A search query that returned HTTP 200 must not be retried.",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-030-timeouts.md:11",
+          "quote": "A billing invoice render may be retried at most once, and only if the first attempt returned HTTP 503.",
+          "rationale": "different values: claim ['200'] vs source ['503']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-079af382",
+      "text": "Clients no longer retry search queries after HTTP 200.",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "temporal",
+        "multi_sentence"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-030-timeouts.md:13",
+          "quote": "Until 2026-07-22, clients retried search queries even after HTTP 200.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-3f6e0bf2",
+      "text": "Billing invoice renders must not be retried.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "negation",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-030-timeouts.md:11",
+          "quote": "A billing invoice render may be retried at most once, and only if the first attempt returned HTTP 503.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "decisions/ADR-030-timeouts.md:7",
+          "quote": "The gateway timeout for billing invoice renders is 8 seconds.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "en-units-scope",
+      "memory_id": "m-ec84535f",
+      "text": "Retrying a billing invoice render is permitted solely when the first try responded with HTTP 503.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-e86ffe46",
+      "text": "La latencia p99 de la búsqueda tiene que mantenerse dentro de un cuarto de segundo.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-114f71b4",
+      "text": "El presupuesto p99 de facturación es un cuarto de segundo.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-84fa4b37",
+      "text": "La confirmación de un pedido puede tardar hasta 2 minutos.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-780f435f",
+      "text": "El presupuesto mensual de errores de la búsqueda es una décima parte del uno por ciento.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-0f1e9056",
+      "text": "La búsqueda puede fallar en el 1 por ciento de las peticiones cada mes.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-be5447b7",
+      "text": "Los índices de búsqueda en el nivel caliente ocupan medio tebibyte.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict",
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notas/2026-09-18-capacidad.md:3",
+          "quote": "Los índices de búsqueda ocupan 512 GiB en el nivel caliente.",
+          "rationale": "source restates the claim (term coverage 0.83)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-4fed288f",
+      "text": "El nivel caliente guarda 512 GiB de índices de búsqueda.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict",
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notas/2026-09-18-capacidad.md:3",
+          "quote": "Los índices de búsqueda ocupan 512 GiB en el nivel caliente.",
+          "rationale": "source restates the claim (term coverage 0.89)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-51476637",
+      "text": "Los índices de búsqueda ocupan 512 GB en el nivel caliente.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notas/2026-09-18-capacidad.md:3",
+          "quote": "Los índices de búsqueda ocupan 512 GiB en el nivel caliente.",
+          "rationale": "source restates the claim (term coverage 0.91)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-348cd486",
+      "text": "El archivo de facturas ocupa 500 GiB.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "notas/2026-09-18-capacidad.md:5",
+          "quote": "El archivo de facturas guarda 500 GB, unos 466 GiB.",
+          "rationale": "source restates the claim (term coverage 0.83)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-ef491be7",
+      "text": "La retención caliente de la búsqueda es de 90 días.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "notas/2026-09-18-capacidad.md:7",
+          "quote": "La retención del nivel caliente de búsqueda es de 14 días.",
+          "rationale": "different values: claim ['90'] vs source ['14']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-c56240d1",
+      "text": "No se debe reintentar una búsqueda que ya respondió con HTTP 200.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "decisiones/ADR-015-reintentos.md:9",
+          "quote": "No se debe reintentar una consulta de búsqueda que ya devolvió HTTP 200.",
+          "rationale": "source restates the claim (term coverage 0.82)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-4a817988",
+      "text": "Las búsquedas ya no se reintentan después de un HTTP 200.",
+      "truth": "supported",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "temporal",
+        "multi_sentence"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisiones/ADR-015-reintentos.md:13",
+          "quote": "Hasta el 2026-07-22, las consultas de búsqueda se reintentaban incluso después de un HTTP 200.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-b9b61f33",
+      "text": "El renderizado de facturas no se puede reintentar.",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "negation",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "decisiones/ADR-015-reintentos.md:11",
+          "quote": "Un renderizado de factura se puede reintentar como máximo una vez, y solo si el primer intento devolvió HTTP 503.",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-e1cecfaa",
+      "text": "Reintentar el renderizado de una factura está permitido únicamente cuando el primer intento contestó con HTTP 503.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-ceb64446",
+      "text": "El turno de facturación no debe reconocer una alerta de búsqueda.",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "negation_trap"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "guardias/turnos.md:7",
+          "quote": "Una alerta de búsqueda no debe ser reconocida por el turno de facturación.",
+          "rationale": "source restates the claim (term coverage 0.91)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-ad9c98df",
+      "text": "El turno de búsqueda no debe reconocer una alerta de facturación.",
+      "truth": "unsupported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "negation_trap",
+        "distractor"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "guardias/turnos.md:7",
+          "quote": "Una alerta de búsqueda no debe ser reconocida por el turno de facturación.",
+          "rationale": "source restates the claim (term coverage 0.91)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-de9ad6f4",
+      "text": "Cualquier persona del turno de búsqueda puede silenciar una alerta de búsqueda.",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "distractor"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "guardias/turnos.md:9",
+          "quote": "Solo la persona titular de la guardia de búsqueda puede silenciar una alerta de búsqueda, y solo si la tasa de error de la búsqueda ya bajó del 1 por ciento.",
+          "rationale": "source restates the claim (term coverage 0.82)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-1d5728ef",
+      "text": "Pasaron 105 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0.",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "multi_sentence"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-023d2758",
+      "text": "Solo pasaron 30 días entre el debut en producción de la versión 2.3.1, el 2026-05-20, y la sustitución por la versión 2.4.0.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "temporal",
+        "multi_sentence"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "es-operacion-alcance",
+      "memory_id": "m-e211bea2",
+      "text": "La versión de producción está solo un parche por encima de la 2.3.1.",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
     },
     {
       "case": "repo-instructions-cli",
@@ -5290,6 +7051,478 @@
           "opinions": []
         }
       ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-be1b9a73",
+      "text": "检索的九九分位时延必须压在四分之一秒以内。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-9eb905f1",
+      "text": "账单服务的 p99 时延预算是四分之一秒。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-854ab582",
+      "text": "下单接口的返回时限是 2 分钟。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-abd591c9",
+      "text": "检索服务每月的错误预算是请求量的千分之一。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-fcea3b27",
+      "text": "检索服务每个月允许百分之一的请求失败。",
+      "truth": "contradicted",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-f97d6193",
+      "text": "检索索引的热数据有半个太比字节。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict",
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-316df596",
+      "text": "检索索引的热数据占用五百一十二吉比字节。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict",
+        "duplicate"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-88bfc869",
+      "text": "检索索引的热数据占了 512 GB。",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "numeric",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "制度/时延与容量.md:17",
+          "quote": "检索索引的热数据占用 512 GiB。",
+          "rationale": "source restates the claim (term coverage 0.86)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-f702f052",
+      "text": "账单归档有 500 GiB。",
+      "truth": "contradicted",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "numeric",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "制度/时延与容量.md:19",
+          "quote": "账单归档保存的发票合计 500 GB，大约相当于 466 GiB。",
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-7ecc72ea",
+      "text": "检索热数据保留 90 天。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:21",
+          "quote": "检索热数据保留 14 天。",
+          "rationale": "different values: claim ['90'] vs source ['14']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "记录/2026-03-02-保留计划.md:3",
+          "quote": "2026年3月2日，容量组的计划是把检索热数据保留 30 天。",
+          "rationale": "different values: claim ['90'] vs source ['2', '2026', '3', '30']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-61bf3f02",
+      "text": "检索热数据目前保留 30 天。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "temporal",
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [
+        "relative_time",
+        "internal_conflict"
+      ],
+      "predicted_issues": [
+        "relative_time",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:21",
+          "quote": "检索热数据保留 14 天。",
+          "rationale": "different values: claim ['30'] vs source ['14']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-724eeaa8",
+      "text": "2026年3月2日容量组曾打算让检索热数据保留三十天。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "temporal",
+        "numeric",
+        "chinese"
+      ],
+      "issues": [
+        "possibly_stale"
+      ],
+      "predicted_issues": [
+        "possibly_stale",
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-2924502a",
+      "text": "账单渲染的网关超时是 1500 毫秒。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "决策/ADR-011-超时与重试.md:7",
+          "quote": "账单渲染的网关超时是 8 秒。",
+          "rationale": "different values: claim ['1500'] vs source ['8']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-f854cb9f",
+      "text": "所有网关超时都是 1500 毫秒。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "numeric",
+        "chinese"
+      ],
+      "issues": [
+        "overgeneralization"
+      ],
+      "predicted_issues": [
+        "overgeneralization"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "决策/ADR-004-超时.md:5",
+          "quote": "检索查询的网关超时曾是 800 毫秒。",
+          "rationale": "different values: claim ['1500'] vs source ['800']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "决策/ADR-011-超时与重试.md:7",
+          "quote": "账单渲染的网关超时是 8 秒。",
+          "rationale": "different values: claim ['1500'] vs source ['8']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "决策/ADR-011-超时与重试.md:5",
+          "quote": "检索查询的网关超时是 1500 毫秒。",
+          "rationale": "source restates the claim (term coverage 0.80)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-7b71be98",
+      "text": "已经成功的检索查询不得再发一次。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-fa982fc7",
+      "text": "检索查询成功之后已经不再重试。",
+      "truth": "supported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "temporal",
+        "multi_sentence",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-6ce7baf8",
+      "text": "账单渲染不得重试。",
+      "truth": "contradicted",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
+      "tags": [
+        "negation",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "决策/ADR-011-超时与重试.md:11",
+          "quote": "账单渲染最多重试一次，且仅当第一次返回 HTTP 503 时才允许重试。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "决策/ADR-011-超时与重试.md:7",
+          "quote": "账单渲染的网关超时是 8 秒。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-781d4827",
+      "text": "账单渲染只有第一次返回 HTTP 503 时才能重试。",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "决策/ADR-011-超时与重试.md:11",
+          "quote": "账单渲染最多重试一次，且仅当第一次返回 HTTP 503 时才允许重试。",
+          "rationale": "source restates the claim (term coverage 0.77)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-35b34052",
+      "text": "账单值班不得确认检索告警。",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "会议纪要/2026-09-18-容量会.md:3",
+          "quote": "检索告警不得由账单值班确认。",
+          "rationale": "source restates the claim (term coverage 0.78)",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-units-negation",
+      "memory_id": "m-0ad5d868",
+      "text": "检索值班不得确认账单告警。",
+      "truth": "unsupported",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
+      "tags": [
+        "negation_trap",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
     }
   ]
 }

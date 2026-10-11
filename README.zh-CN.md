@@ -301,8 +301,8 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 
 ## 评测集与 GitHub Action
 
-[MemFalsify 评测集](benchmarks/memfalsify/README.md)包含八组虚构案例、139 条中英文标注记忆。
-[实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.62、召回率为 0.27，三分类准确率为 0.44。
+[MemFalsify 评测集](benchmarks/memfalsify/README.md)包含十一组虚构案例、202 条英文、中文和西班牙文标注记忆。
+[实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.71、召回率为 0.33，三分类准确率为 0.42。
 这些案例用于检验已知失败模式，不能代表真实记忆的准确率。运行 `python benchmarks/memfalsify/run.py` 即可离线评测。
 
 [GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件与仓库证据核对，并把报告放入任务摘要。
