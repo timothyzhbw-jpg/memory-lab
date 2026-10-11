@@ -14,7 +14,7 @@ from memcore.sidecar import one_line, show_line
 
 from .audit import SEVERITIES, AuditFinding, AuditReport, CitedEvent
 from .changes import KINDS as CHANGE_KINDS, ChangesReport
-from .models import DatedPolicy, ReplayResult, RoleChange, SubjectState
+from .models import DatedPolicy, ReplayResult, RoleChange, SubjectState, TrailEntry
 
 # Terminal and bidi controls. Newlines and tabs stay so the report can still break lines.
 _TERMINAL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
@@ -105,6 +105,11 @@ def _roles_line(dated: DatedPolicy | None) -> list[str]:
 
 
 def explain(result: ReplayResult, subject: str) -> str:
+    return _explain(result, subject, [e for e in result.audit_log if e.subject == subject])
+
+
+def _explain(result: ReplayResult, subject: str, rows: list[TrailEntry]) -> str:
+    """``explain`` with the subject's trail entries already selected (``to_markdown`` groups them once)."""
     state = result.states[subject]
     out = [f"## {subject}", ""] + state_block(state) + [""]
     decision = state.last_authorized_decision
@@ -130,7 +135,6 @@ def explain(result: ReplayResult, subject: str) -> str:
         out.append("")
     if state.conflicts:
         out += ["**Conflicts**", ""] + [f"- {c.kind} {c.event_ids}: {c.detail}" for c in state.conflicts] + [""]
-    rows = [e for e in result.audit_log if e.subject == subject]
     actors = {e.actor for e in rows}
     relevant = [c for c in changes if c.subject_actor in actors]
     if relevant:
@@ -148,45 +152,76 @@ def explain(result: ReplayResult, subject: str) -> str:
 
 
 def to_markdown(result: ReplayResult) -> str:
+    grouped: dict[str, list[TrailEntry]] = {}
+    for entry in result.audit_log:
+        grouped.setdefault(entry.subject, []).append(entry)
     cutoff = result.as_of.isoformat() if result.as_of else "end of log"
     out = ["# Organizational memory replay", "",
            f"- Replayed {result.events_replayed} of {result.events_total} events, as of {cutoff}",
            *_roles_line(result.dated_policy),
            f"- Mode: **{result.mode}** (the event log was not modified)", ""]
     for subject in result.states:
-        out.append(explain(result, subject))
+        out.append(_explain(result, subject, grouped.get(subject, [])))
     return terminal_safe("\n".join(out))
 
 
 # Control, format (bidi, zero-width) and line/paragraph separator characters.
 UNSAFE_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
+_LINE_CLASSES = frozenset(UNSAFE_CATEGORIES)
+_ASCII_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_MARKUP = re.compile(r"[\\`*_{}\[\]#|~&<>]")
+_LEADING = re.compile(r"^(?:\s*[-+=]|\s*\d+[.)](?=\s))")
+_MARKDOWN_CHARS = re.compile(r"([\\`*_{}\[\]#|~])")
+_LEADING_SPACES = re.compile(r"^ +")
+_LEADING_MARK = re.compile(r"^(\s*)([-+=])")
+_LEADING_NUMBER = re.compile(r"^(\s*\d+)([.)])(?=\s)")
+_BACKTICKS = re.compile(r"`+")
+
+
+def _plain_line(text: str) -> bool:
+    """True when ``_one_line`` would copy every character unchanged."""
+    if text.isascii():
+        # ASCII Cc is C0 plus DEL. Format and separator characters are all above ASCII.
+        return _ASCII_CONTROL.search(text) is None
+    for char in text:
+        if unicodedata.category(char) in _LINE_CLASSES:
+            return False
+    return True
 
 
 def _one_line(text: str) -> str:
     """Untrusted text kept on one line: control, format (bidi, zero-width) and separator characters are escaped."""
-    return "".join(c if unicodedata.category(c) not in UNSAFE_CATEGORIES
+    if _plain_line(text):
+        return text
+    return "".join(c if unicodedata.category(c) not in _LINE_CLASSES
                    else f"\\u{ord(c):04x}" if ord(c) <= 0xFFFF else f"\\U{ord(c):08x}" for c in text)
 
 
 def _safe(text: str) -> str:
     """Literal Markdown text, including in headings and evidence blockquotes."""
-    text = escape(_one_line(text), quote=False)
-    text = re.sub(r"([\\`*_{}\[\]#|~])", r"\\\1", text)
+    text = _one_line(text)
+    if _MARKUP.search(text) is None and _LEADING.search(text) is None and not text.startswith(" "):
+        return text  # nothing to escape: skip the substitutions
+    text = escape(text, quote=False)
+    text = _MARKDOWN_CHARS.sub(r"\\\1", text)
     # Leading spaces would make an evidence blockquote an indented code block: keep them as references.
-    text = re.sub(r"^ +", lambda spaces: "&#32;" * len(spaces.group()), text)
+    text = _LEADING_SPACES.sub(lambda spaces: "&#32;" * len(spaces.group()), text)
     # Block syntax can still be recognized at the start of a one-line quote/detail.
-    text = re.sub(r"^(\s*)([-+=])", r"\1\\\2", text)
-    return re.sub(r"^(\s*\d+)([.)])(?=\s)", r"\1\\\2", text)
+    text = _LEADING_MARK.sub(r"\1\\\2", text)
+    return _LEADING_NUMBER.sub(r"\1\\\2", text)
 
 
 def _audit_code(text: str) -> str:
     """Code spans need a delimiter longer than any backtick run in the data."""
     text = _one_line(text)
-    fence = "`" * (1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
-    # Padding protects backticks at the edges and preserves significant edge spaces.
-    if "`" in text or (text.startswith(" ") and text.endswith(" ") and text.strip()):
-        return f"{fence} {text} {fence}"
-    return f"{fence}{text}{fence}"
+    if "`" not in text:
+        # Padding protects significant edge spaces. A single space on both sides is not significant.
+        if text.startswith(" ") and text.endswith(" ") and text.strip():
+            return f"` {text} `"
+        return f"`{text}`"
+    fence = "`" * (1 + max(len(run) for run in _BACKTICKS.findall(text)))
+    # A backtick anywhere uses the padded form so the delimiter stays unambiguous.
+    return f"{fence} {text} {fence}"
 
 
 def _cited_events(events: list[CitedEvent], subject: Optional[str]) -> list[str]:

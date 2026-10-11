@@ -52,10 +52,11 @@ class CitedEvent(BaseModel):
 
 
 def cited(entry: TrailEntry, evidence: dict[str, EvidenceSpan]) -> CitedEvent:
-    """A replayed event with the evidence it cites."""
-    return CitedEvent(event_id=entry.event_id, timestamp=entry.timestamp, subject=entry.subject,
-                      actor=entry.actor, roles=entry.roles, action=entry.action, outcome=entry.outcome,
-                      evidence=[evidence[i] for i in entry.evidence_ids])
+    """A replayed event with the evidence it cites (already validated: built without revalidation)."""
+    return CitedEvent.model_construct(
+        event_id=entry.event_id, timestamp=entry.timestamp, subject=entry.subject, actor=entry.actor,
+        roles=list(entry.roles), action=entry.action, outcome=entry.outcome,
+        evidence=[evidence[i] for i in entry.evidence_ids])
 
 
 class AuditFinding(BaseModel):
@@ -157,6 +158,9 @@ class _Auditor:
         self.position = {entry.event_id: index for index, entry in enumerate(result.audit_log)}
         self.trails: dict[str, list[TrailEntry]] = defaultdict(list)
         self.standing: dict[str, Optional[str]] = {}  # invalid revoke -> the decision in force at that point
+        # Applied dependency and request ids, in replay order, so approved() does not rescan each trail.
+        self.dependency_ids: dict[str, dict[str, list[str]]] = defaultdict(dict)
+        self.request_ids: dict[str, dict[str, list[str]]] = defaultdict(dict)
         current: dict[str, str] = {}
         for entry in result.audit_log:
             self.trails[entry.subject].append(entry)
@@ -164,6 +168,11 @@ class _Auditor:
                 self.standing[entry.event_id] = current.get(entry.subject)
             if entry.outcome == "applied" and entry.action in DECISIONS:
                 current[entry.subject] = entry.event_id
+            elif entry.outcome == "applied" and entry.action == "dependency":
+                dependency = self.events[entry.event_id].dependency
+                self.dependency_ids[entry.subject].setdefault(dependency, []).append(entry.event_id)
+            elif entry.outcome == "applied" and entry.action in ("request", "reconsider"):
+                self.request_ids[entry.subject].setdefault(entry.actor, []).append(entry.event_id)
         self.findings: list[AuditFinding] = []
 
     def cite(self, event_id: str) -> CitedEvent:
@@ -175,9 +184,9 @@ class _Auditor:
         ids = sorted({i for i in event_ids if i in self.position}, key=self.position.__getitem__)
         cited = [self.cite(i) for i in ids]
         subjects = sorted({c.subject for c in cited} | ({subject} if subject is not None else set()))
-        self.findings.append(AuditFinding(kind=kind, severity=severity, subject=subject, actor=actor,
-                                          subjects=subjects, event_ids=ids, detail=detail, events=cited,
-                                          role_changes=list(role_changes)))
+        self.findings.append(AuditFinding.model_construct(
+            kind=kind, severity=severity, subject=subject, actor=actor, subjects=subjects, event_ids=ids,
+            detail=detail, events=cited, role_changes=list(role_changes)))
 
     # --- conflicts replay already detected ----------------------------------------------------------
 
@@ -202,7 +211,6 @@ class _Auditor:
 
     def approved(self, state: SubjectState) -> None:
         approval = state.last_authorized_decision
-        trail = self.trails[state.subject]
         for risk in state.risks:
             if self.position[risk.event_id] > self.position[approval.event_id]:
                 severity = "high"
@@ -213,12 +221,12 @@ class _Auditor:
                           f"{_note(risk.note)}; the log has no event that resolves a risk")
             self.add("risk_after_approval", severity, detail, [approval.event_id, risk.event_id],
                      subject=state.subject)
+        declared_by_name = self.dependency_ids.get(state.subject, {})
         for dependency in state.dependencies:
             other = self.result.states.get(dependency)
             if other is not None and other.current_status == "approved":
                 continue
-            declared = [e.event_id for e in trail if e.outcome == "applied" and e.action == "dependency"
-                        and self.events[e.event_id].dependency == dependency]
+            declared = declared_by_name.get(dependency, [])
             ids = [approval.event_id, *declared]
             if other is None:
                 severity, why = "low", "which has no events in this log"
@@ -229,8 +237,9 @@ class _Auditor:
                     ids.append(other.last_authorized_decision.event_id)
             self.add("unresolved_dependency", severity, f"approved, but depends on {dependency}, {why}", ids,
                      subject=state.subject)
-        own = [e.event_id for e in trail if e.outcome == "applied" and e.action in ("request", "reconsider")
-               and e.actor == approval.actor and self.position[e.event_id] < self.position[approval.event_id]]
+        approval_at = self.position[approval.event_id]
+        own = [event_id for event_id in self.request_ids.get(state.subject, {}).get(approval.actor, [])
+               if self.position[event_id] < approval_at]
         if own:
             self.add("self_approval", "low", f"{approval.actor} approved a subject they had also requested",
                      [*own, approval.event_id],
@@ -325,10 +334,12 @@ def audit(dataset: Dataset, as_of: Optional[datetime] = None, stale_days: int = 
     result = replay(dataset, as_of)
     reference = as_of or now or datetime.now(timezone.utc).replace(microsecond=0)
     findings = _Auditor(dataset, result, reference, stale_days).run()
-    return AuditReport(as_of=as_of, reference_time=reference, stale_days=stale_days,
-                       events_total=result.events_total, events_replayed=result.events_replayed,
-                       subjects_total=len(result.states),
-                       summary={s: sum(f.severity == s for f in findings) for s in SEVERITIES},
-                       kinds={k: sum(f.kind == k for f in findings)
-                              for k in report_kinds(result.dated_policy is not None)},
-                       findings=findings, dated_policy=result.dated_policy)
+    summary = dict.fromkeys(SEVERITIES, 0)
+    kinds = dict.fromkeys(report_kinds(result.dated_policy is not None), 0)
+    for finding in findings:
+        summary[finding.severity] += 1
+        kinds[finding.kind] += 1
+    return AuditReport.model_construct(
+        as_of=as_of, reference_time=reference, stale_days=stale_days, events_total=result.events_total,
+        events_replayed=result.events_replayed, subjects_total=len(result.states), summary=summary, kinds=kinds,
+        findings=findings, dated_policy=result.dated_policy)

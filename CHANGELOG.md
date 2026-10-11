@@ -81,6 +81,12 @@ Repository-level changes; no package version changes.
 - README: the Codex skills location is `~/.agents/skills/`, the user location in OpenAI's documentation, instead
   of `~/.codex/skills/`. The memfalsify and orgmemory skills say that the plugin roots the server at the project
   directory.
+- `orgmemory validate`, `replay`, `explain` and `audit` do less repeated work on large logs and return the
+  same reports. `load_manifest` reads and hashes each distinct evidence path once per load and checks later
+  entries against those bytes. Replay resolves each actor's permissions once, creates each subject state
+  once, and sorts that subject's dependencies once at the end. Audit indexes applied dependencies and
+  requests during its trail walk. The Markdown renderer keeps the previous escaping for any line that needs
+  it. Measurements are in `benchmarks/perf/README.md`.
 
 ### Fixed
 

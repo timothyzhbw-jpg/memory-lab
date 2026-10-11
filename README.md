@@ -212,6 +212,8 @@ orgmemory append   <dataset> --event '{"id": ..., ...}'
 orgmemory policy grant|revoke <dataset> ...   # record a role change from a point in time on (below)
 ```
 
+`validate`, `replay`, `explain` and `audit` return the same reports on large logs, with less repeated hashing, policy lookup and trail scanning. Measurements: [benchmarks/perf](benchmarks/perf/README.md).
+
 #### Roles that change over time
 
 Editing `policy.json` changes every replay, including decisions already made. Give the account manager the product manager role there and Thursday's "approval" in the example starts to count. To record a role change from a point in time on, append it to the optional `policy-log.jsonl` instead:

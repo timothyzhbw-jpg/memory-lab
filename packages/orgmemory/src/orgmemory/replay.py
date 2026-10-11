@@ -126,9 +126,13 @@ def validation_summary(data: Dataset) -> list[str]:
     return lines
 
 
+_ACTIONS = ("request", "reconsider", "raise_risk", "dependency", "approve", "reject", "revoke", "comment")
+
+
 def _decision(event: Event, roles: list[str], evidence: dict[str, EvidenceSpan]) -> Decision:
-    return Decision(event_id=event.id, actor=event.actor, roles=roles, action=event.action,
-                    timestamp=event.timestamp, evidence=[evidence[i] for i in event.evidence_ids])
+    # model_construct skips a second validation of spans the manifest already checked.
+    return Decision.model_construct(event_id=event.id, actor=event.actor, roles=list(roles), action=event.action,
+                                    timestamp=event.timestamp, evidence=[evidence[i] for i in event.evidence_ids])
 
 
 def _refusal(authority: Authority, event: Event, roles: list[str]) -> str:
@@ -143,18 +147,31 @@ def replay(dataset: Dataset, as_of: datetime | None = None) -> ReplayResult:
     # Effective time orders events; ties keep ingestion (file) order. Each event is judged by the roles its
     # actor held at its effective time, so a later grant or revoke_role never changes an earlier outcome.
     ordered = sorted(enumerate(dataset.events), key=lambda pair: (pair[1].timestamp, pair[0]))
+    # Resolve each action's permitted roles once; without dated roles, each actor's roles once too.
+    permitted = {action: frozenset(policy.permitted(action)) for action in _ACTIONS}
+    undated: dict[str, list[str]] | None = None if authority.dated else {}
+    decision_roles = policy.decision_roles
+    dependencies: dict[str, set[str]] = {}
     states: dict[str, SubjectState] = {}
     trail: list[TrailEntry] = []
     for _, event in ordered:
         if as_of and event.timestamp > as_of:
             continue
-        state = states.setdefault(event.subject, SubjectState(subject=event.subject))
+        state = states.get(event.subject)
+        if state is None:
+            # setdefault would build a SubjectState for every event, then throw it away.
+            state = states[event.subject] = SubjectState(subject=event.subject)
         before = state.current_status
-        roles = authority.roles(event.actor, event.timestamp)
-        outcome = "applied" if set(roles) & set(policy.permitted(event.action)) else "unauthorized"
+        if undated is None:
+            roles = authority.roles(event.actor, event.timestamp)
+        else:
+            roles = undated.get(event.actor)
+            if roles is None:
+                roles = undated[event.actor] = authority.roles(event.actor, event.timestamp)
+        outcome = "unauthorized" if permitted[event.action].isdisjoint(roles) else "applied"
         if outcome == "unauthorized":
             if event.action in DECISIONS:
-                state.pending_changes.append(PendingChange(
+                state.pending_changes.append(PendingChange.model_construct(
                     event_id=event.id, actor=event.actor, action=event.action,
                     reason=_refusal(authority, event, roles)))
         elif event.action in ("approve", "reject"):
@@ -162,9 +179,10 @@ def replay(dataset: Dataset, as_of: datetime | None = None) -> ReplayResult:
             status = "approved" if event.action == "approve" else "rejected"
             if last and last.action != "revoke" and last.action != event.action:
                 kind = "simultaneous_decisions" if last.timestamp == event.timestamp else "decision_reversed"
-                state.conflicts.append(Conflict(kind=kind, event_ids=[last.event_id, event.id],
-                                                detail=f"{last.action} by {last.actor} then {event.action} by {event.actor}"
-                                                + (" at the same effective time; ingestion order decided" if kind == "simultaneous_decisions" else "")))
+                state.conflicts.append(Conflict.model_construct(
+                    kind=kind, event_ids=[last.event_id, event.id],
+                    detail=f"{last.action} by {last.actor} then {event.action} by {event.actor}"
+                    + (" at the same effective time; ingestion order decided" if kind == "simultaneous_decisions" else "")))
             state.current_status = status
             state.last_authorized_decision = _decision(event, roles, evidence)
             state.decision_history.append(event.id)
@@ -175,28 +193,32 @@ def replay(dataset: Dataset, as_of: datetime | None = None) -> ReplayResult:
             last = state.last_authorized_decision
             if not last or last.event_id != event.supersedes:
                 outcome = "invalid_supersession"
-                state.conflicts.append(Conflict(kind="invalid_supersession", event_ids=[event.id],
-                                                detail=f"revoke targets {event.supersedes}, but the current decision is "
-                                                + (last.event_id if last else "none")))
+                state.conflicts.append(Conflict.model_construct(
+                    kind="invalid_supersession", event_ids=[event.id],
+                    detail=f"revoke targets {event.supersedes}, but the current decision is "
+                    + (last.event_id if last else "none")))
             else:
                 state.current_status = "proposed"
                 state.last_authorized_decision = _decision(event, roles, evidence)
                 state.decision_history.append(event.id)
-                state.pending_approval = policy.decision_roles
+                state.pending_approval = list(decision_roles)
         elif event.action in ("request", "reconsider"):
             decided = state.last_authorized_decision and state.last_authorized_decision.action != "revoke"
             if decided or event.action == "reconsider":
                 state.reconsideration_requested = True
-            state.pending_approval = policy.decision_roles
+            state.pending_approval = list(decision_roles)
         elif event.action == "raise_risk":
-            state.risks.append(Risk(event_id=event.id, actor=event.actor, note=event.note))
+            state.risks.append(Risk.model_construct(event_id=event.id, actor=event.actor, note=event.note))
         elif event.action == "dependency":
-            state.dependencies = sorted(set(state.dependencies) | {event.dependency})
+            dependencies.setdefault(event.subject, set()).add(event.dependency)
         if outcome == "applied":
             state.last_applied_event = event.id
-        trail.append(TrailEntry(event_id=event.id, timestamp=event.timestamp, actor=event.actor,
-                                roles=roles, action=event.action, subject=event.subject,
-                                outcome=outcome, status_before=before, status_after=state.current_status,
-                                evidence_ids=event.evidence_ids))
-    return ReplayResult(as_of=as_of, events_total=len(dataset.events), events_replayed=len(trail),
-                        states=states, audit_log=trail, dated_policy=authority.summary(evidence, as_of))
+        trail.append(TrailEntry.model_construct(
+            event_id=event.id, timestamp=event.timestamp, actor=event.actor, roles=list(roles),
+            action=event.action, subject=event.subject, outcome=outcome, status_before=before,
+            status_after=state.current_status, evidence_ids=list(event.evidence_ids)))
+    for subject, names in dependencies.items():
+        states[subject].dependencies = sorted(names)
+    return ReplayResult.model_construct(as_of=as_of, events_total=len(dataset.events), events_replayed=len(trail),
+                                        states=states, audit_log=trail,
+                                        dated_policy=authority.summary(evidence, as_of))

@@ -212,6 +212,8 @@ orgmemory append   <数据集> --event '{"id": ..., ...}'
 orgmemory policy grant|revoke <数据集> ...   # 记录从某个时间点起生效的角色变更（见下文）
 ```
 
+在大日志上，`validate`、`replay`、`explain` 和 `audit` 的报告与原来一致，同时减少重复的证据哈希、权限查找和轨迹扫描。测量见 [benchmarks/perf](benchmarks/perf/README.md)。
+
 #### 随时间变化的角色
 
 修改 `policy.json` 会改变每一次回放的结果，包括已经做出的决定。比如在里面给客户经理加上产品经理角色，示例里周四那次“批准”就会开始生效。要记录从某个时间点起生效的角色变更，请改为追加到可选的 `policy-log.jsonl`：
