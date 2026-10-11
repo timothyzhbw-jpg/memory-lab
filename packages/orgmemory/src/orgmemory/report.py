@@ -1,8 +1,15 @@
-"""Markdown views of a replay: current state first, then provenance and the full audit trail."""
+"""Markdown views of a replay (current state first, then provenance and the full audit trail) and of an audit."""
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
+from html import escape
+from typing import Callable
 
+from memcore import EvidenceSpan
+
+from .audit import KINDS, SEVERITIES, AuditFinding, AuditReport
 from .models import ReplayResult, SubjectState
 
 
@@ -14,6 +21,15 @@ def _yaml_value(value) -> str:
     if isinstance(value, list):
         return "[" + ", ".join(_yaml_value(v) for v in value) + "]"
     return json.dumps(value, ensure_ascii=False) if any(c in str(value) for c in ":#[]{},'\"") else str(value)
+
+
+def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = str,
+         code: Callable[[str], str] | None = None) -> list[str]:
+    """One evidence citation: id, location, source, short hash, then the exact quote."""
+    code = code or (lambda value: f"`{clean(value)}`")
+    return [f"{indent}- evidence {code(str(span.id))} · {code(span.location)} · {clean(str(span.source_uri))} "
+            f"· sha256 `{span.sha256[:12]}`",
+            f"{indent}  > {clean(span.quote)}"]
 
 
 def state_block(state: SubjectState) -> list[str]:
@@ -40,8 +56,7 @@ def explain(result: ReplayResult, subject: str) -> str:
                 f"- `{decision.event_id}`: {decision.actor} (roles: {', '.join(decision.roles)}) "
                 f"chose **{decision.action}** at {decision.timestamp.isoformat()}"]
         for span in decision.evidence:
-            out.append(f"  - evidence `{span.id}` · `{span.location}` · {span.source_uri} · sha256 `{span.sha256[:12]}`")
-            out.append(f"    > {span.quote}")
+            out += cite(span)
         out.append("")
     else:
         out += ["No authorized decision yet.", ""]
@@ -66,3 +81,67 @@ def to_markdown(result: ReplayResult) -> str:
     for subject in result.states:
         out.append(explain(result, subject))
     return "\n".join(out)
+
+
+def _one_line(text: str) -> str:
+    """Untrusted text kept on one line: control, format (bidi, zero-width) and separator characters are escaped."""
+    return "".join(c if unicodedata.category(c) not in ("Cc", "Cf", "Zl", "Zp")
+                   else f"\\u{ord(c):04x}" if ord(c) <= 0xFFFF else f"\\U{ord(c):08x}" for c in text)
+
+
+def _safe(text: str) -> str:
+    """Literal Markdown text, including in headings and evidence blockquotes."""
+    text = escape(_one_line(text), quote=False)
+    text = re.sub(r"([\\`*_{}\[\]#|~])", r"\\\1", text)
+    # Block syntax can still be recognized at the start of a one-line quote/detail.
+    text = re.sub(r"^(\s*)([-+=])", r"\1\\\2", text)
+    return re.sub(r"^(\s*\d+)([.)])(?=\s)", r"\1\\\2", text)
+
+
+def _audit_code(text: str) -> str:
+    """Code spans need a delimiter longer than any backtick run in the data."""
+    text = _one_line(text)
+    fence = "`" * (1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
+    # Padding protects backticks at the edges and preserves significant edge spaces.
+    if "`" in text or (text.startswith(" ") and text.endswith(" ") and text.strip()):
+        return f"{fence} {text} {fence}"
+    return f"{fence}{text}{fence}"
+
+
+def _audit_finding(finding: AuditFinding) -> list[str]:
+    about = _safe(finding.subject) if finding.subject is not None else f"actor {_safe(finding.actor or '')}"
+    out = [f"### {finding.severity.upper()} · {finding.kind} · {about}", "", _safe(finding.detail), ""]
+    for event in finding.events:
+        where = f" on {_safe(event.subject)}" if event.subject != finding.subject else ""
+        roles = ", ".join(event.roles) or "none"
+        out.append(f"- {_audit_code(event.event_id)}{where} at {event.timestamp.isoformat()}: {_safe(event.actor)} "
+                   f"(roles: {_safe(roles)}) · {event.action} · {event.outcome}")
+        for span in event.evidence:
+            out += cite(span, clean=_safe, code=_audit_code)
+    out.append("")
+    return out
+
+
+def audit_markdown(report: AuditReport) -> str:
+    """The audit as Markdown: a summary table first, then every finding with its cited evidence."""
+    out = ["# Organizational decision audit", "", "| Kind | High | Medium | Low |", "|---|---|---|---|"]
+    for kind in KINDS:
+        counts = [sum(f.kind == kind and f.severity == s for f in report.findings) for s in SEVERITIES]
+        out.append(f"| `{kind}` | " + " | ".join(map(str, counts)) + " |")
+    out.append("| **Total** | " + " | ".join(str(report.summary[s]) for s in SEVERITIES) + " |")
+    cutoff = report.as_of.isoformat() if report.as_of else "end of log"
+    out += ["",
+            f"- Audited {report.events_replayed} of {report.events_total} events on {report.subjects_total} "
+            f"subject(s), as of {cutoff}",
+            f"- Stale after {report.stale_days} days, measured at {report.reference_time.isoformat()}",
+            f"- Mode: **{report.mode}** (the event log was not modified)", ""]
+    if report.findings:
+        out += ["## Findings", ""]
+        for finding in report.findings:
+            out += _audit_finding(finding)
+    else:
+        out += ["No findings.", ""]
+    out += ["## Notes", "",
+            "- Findings restate the replayed log and policy. They are leads for a person to review, not verdicts.",
+            "- The log has no event that resolves a risk, so a risk stays on record after it is addressed."]
+    return "\n".join(out) + "\n"

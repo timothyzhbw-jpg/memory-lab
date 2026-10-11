@@ -19,6 +19,7 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 | `orgmemory_validate` | `dataset` | 和 `orgmemory validate` 相同的几行文本。 |
 | `orgmemory_replay` | `dataset`，可选 `as_of`（带时区的 ISO 8601）、`format` | 和 `orgmemory replay` 相同的报告。 |
 | `orgmemory_explain` | `dataset`、`subject`，可选 `as_of` | 和 `orgmemory explain` 相同的文本。 |
+| `orgmemory_audit` | `dataset`，可选 `as_of`、`stale_days`（不小于 0 的整数，默认 14）、`format` | 和 `orgmemory audit` 相同的报告。不传 `as_of` 时以当前时间计算是否超期，需要可复现的结果时请传 `as_of`。没有 `strict` 参数：严重程度就在报告里。 |
 
 使用相对于根目录的路径时，工具返回的就是在该根目录运行对应命令打印的文本。有的命令会多一个结尾换行。审计报告中的路径会解析成相对于服务器根目录的规范路径，因此 CLI 使用绝对路径或符号链接别名时，显示的路径标签可能不同。`memfalsify claims` 的形状不同：它按 JSONL 逐行打印，`memfalsify_claims` 把同样的对象收成一个 JSON 数组。
 
