@@ -56,7 +56,7 @@ Each report says what was used: one "API usage" line per backend (`verifier_stat
 
 - `--batch` bills the Claude requests at 50% of standard prices, but a batch can take up to 24 hours (most end within an hour).
 - Prompt caching only helps when a cached prefix reaches the model's minimum cacheable length. MemFalsify's instructions are a few hundred tokens, so for short memories the cache counters stay at 0 and nothing changes.
-- `--max-concurrency` (default 4) shortens the wait, not the bill. Keep it within your rate limits.
+- `--max-concurrency` (default 4) shortens the wait. The requests are the same set either way; cache-token totals, and so the bill when a prefix is cached, are whatever that run's API reported. It is not used with `--batch`. Keep it within your rate limits.
 
 ## 4. Run the benchmark
 

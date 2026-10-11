@@ -13,8 +13,9 @@ from memfalsify import jev, llm
 from memfalsify.audit import MODEL_NOTE, audit
 from memfalsify.cli import app
 from memfalsify.jev import JevVerifier
+from memfalsify.gitstore import printable
 from memfalsify.llm import SYSTEM, LLMVerifier, Verdict
-from memfalsify.report import to_markdown
+from memfalsify.report import to_markdown, usage_lines
 from memfalsify.verify import (RELATION_CRITERIA, CascadeVerifier, DualVerifier, Judgment, LexicalVerifier,
                                VerifierError, concurrently, judge_all)
 
@@ -102,6 +103,41 @@ def test_llm_verifier_skips_fallbacks_for_models_without_them():
 def test_llm_refusal_gives_no_verdict():
     judgment = LLMVerifier(client=fake_client(stop_reason="refusal")).judge(CLAIM, COUNTER)
     assert judgment.relation == "unrelated" and "refusal" in judgment.rationale
+
+
+# Newline, a Markdown breakout, a terminal color, a bidi override and a workflow-command marker.
+HOSTILE = "seen\n## pwned\x1b[31m\u202e::set-output"
+
+
+def _one_inert_line(text: str) -> None:
+    assert text == printable(text)
+    assert "\n" not in text and "\r" not in text and "\x1b" not in text and "\u202e" not in text
+
+
+def test_model_text_stays_one_inert_line(two_claims):
+    client = scripted_client(decide=lambda claim, passage: (Verdict(relation="contradicts", rationale=HOSTILE), "end_turn"))
+    report = model_audit(two_claims, LLMVerifier(client=client))
+    rationales = [evidence.rationale for finding in report.findings for evidence in finding.evidence]
+    assert rationales and all(rationale == printable(HOSTILE) for rationale in rationales)
+    markdown = to_markdown(report)
+    assert "\x1b" not in markdown and "\u202e" not in markdown
+    assert not any(line.startswith("## pwned") or line.startswith("::set-output") for line in markdown.splitlines())
+    refused = LLMVerifier(client=fake_client(stop_reason=HOSTILE)).judge(CLAIM, COUNTER)
+    _one_inert_line(refused.rationale)
+    assert refused.rationale == printable(f"no verdict (stop_reason: {HOSTILE})")
+    with pytest.raises(VerifierError) as caught:
+        LLMVerifier(client=fake_client(error=TypeError(HOSTILE))).judge(CLAIM, COUNTER)
+    assert str(caught.value) == printable(f"llm:claude-opus-5-5: {HOSTILE}")
+
+
+def test_usage_line_verifier_name_stays_inside_one_code_span():
+    from memfalsify.verify import VerifierStats
+    hostile = "m`\n- pwned\x1b[0m\u202e"
+    report = SimpleNamespace(verifier_stats=[VerifierStats(verifier=hostile, requests=1, output_tokens=2)])
+    [line] = usage_lines(report)
+    shown = printable(hostile).replace("`", "'")
+    assert line.startswith(f"- API usage of `{shown}`: 1 request(s)")
+    assert line.count("`") == 2 and "\n" not in line and "\x1b" not in line and "\u202e" not in line
 
 
 def test_llm_api_error_becomes_verifier_error():
@@ -512,6 +548,7 @@ def batch_client(batches=None, messages=None):
 
 
 def batched(client, model=llm.DEFAULT_MODEL, delays=None, progress=None):
+    pytest.importorskip("anthropic")
     return LLMVerifier(model, client=client, batch=True, sleep=(delays if delays is not None else []).append,
                        progress=progress)
 
@@ -602,7 +639,54 @@ def test_batch_refusal_is_asked_again_with_the_server_side_fallback():
     assert client.beta.messages.calls == []
 
 
+def test_batch_provider_text_is_one_inert_line():
+    pytest.importorskip("anthropic")
+    lines = []
+
+    class NastyId(FakeBatches):
+        def create(self, requests):
+            batch = SimpleNamespace(id=HOSTILE, processing_status="in_progress")
+            self.created.append((batch.id, list(requests)))
+            return batch
+
+    LLMVerifier(client=batch_client(NastyId(polls=1)), batch=True, sleep=lambda _seconds: None,
+                progress=lines.append).judge_many([(CLAIM, COUNTER)])
+    assert lines and all(line == printable(line) for line in lines)
+    assert printable(HOSTILE) in lines[0]
+
+    class NastyError(FakeBatches):
+        def results(self, batch_id):
+            error = SimpleNamespace(error=SimpleNamespace(type=HOSTILE))
+            yield SimpleNamespace(custom_id="pair-0", result=SimpleNamespace(type="errored", error=error))
+
+    with pytest.raises(VerifierError) as caught:
+        LLMVerifier(client=batch_client(NastyError()), batch=True, sleep=lambda _seconds: None).judge_many([(CLAIM, COUNTER)])
+    assert str(caught.value) == printable(str(caught.value)) and printable(HOSTILE) in str(caught.value)
+
+    class NastyCancel(FakeBatches):
+        def cancel(self, batch_id):
+            raise RuntimeError(HOSTILE)
+
+    lines.clear()
+
+    def interrupt(_seconds):
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        LLMVerifier(client=batch_client(NastyCancel(polls=5)), batch=True, sleep=interrupt,
+                    progress=lines.append).judge_many([(CLAIM, COUNTER)])
+    assert any(printable(HOSTILE) in line for line in lines)
+    assert all(line == printable(line) for line in lines)
+
+    client = batch_client(FakeBatches(decide=lambda claim, passage: ("not json", HOSTILE)))
+    with pytest.raises(VerifierError) as caught:
+        LLMVerifier(client=client, batch=True, sleep=lambda _seconds: None).judge_many([(CLAIM, COUNTER)])
+    message = str(caught.value)
+    assert message == printable(message) and "stop_reason:" in message and printable(HOSTILE) in message
+
+
 def test_batch_interrupt_cancels_the_batch():
+    pytest.importorskip("anthropic")
     batches = FakeBatches(polls=5)
 
     def interrupt(seconds):
@@ -637,6 +721,7 @@ def test_cascade_batches_only_the_escalated_pairs():
 
 
 def test_cli_batch(two_claims, monkeypatch):
+    pytest.importorskip("anthropic")
     client = batch_client()
     real = llm.LLMVerifier
     monkeypatch.setattr(llm, "LLMVerifier", lambda model, **kw: real(model, client=client, sleep=lambda s: None, **kw))
@@ -651,6 +736,7 @@ def test_cli_batch(two_claims, monkeypatch):
 
 
 def test_cli_batch_failure_exits_2_without_a_report(two_claims, monkeypatch, tmp_path):
+    pytest.importorskip("anthropic")
     client = batch_client(FakeBatches(outcome=lambda custom_id: "expired"))
     real = llm.LLMVerifier
     monkeypatch.setattr(llm, "LLMVerifier", lambda model, **kw: real(model, client=client, sleep=lambda s: None, **kw))

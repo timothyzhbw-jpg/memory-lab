@@ -284,7 +284,7 @@ memfalsify audit MEMORY.md --evidence evidence --verifier dual
 **成本与耗时。** 报告会列出每个模型后端发出的请求数，以及 API 报告的 token 数（JSON 中的 `verifier_stats`）。下面三项能降低成本或缩短等待，而不改变向模型提出的问题：
 
 - *提示缓存（prompt caching）。* Claude 验证器把系统提示标为可缓存的前缀；同一条记忆要和多个片段比对时，记忆本身也一并缓存。API 只缓存长度达到模型最低要求的前缀（见[提示缓存文档](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)）。系统提示只有几百个 token，所以记忆较短时什么都不会被缓存；实际情况以报告里的缓存计数为准。
-- *`--max-concurrency`*（默认 4）：同时进行的模型请求数。结果保持原有顺序，所以报告与逐个请求时完全一致。共用同一条已缓存记忆的 Claude 请求，会等其中第一个返回后再发出，这样才能读到它写入的缓存。请把这个值控制在你的 API 速率限制之内。
+- *`--max-concurrency`*（默认 4）：同时进行的模型请求数。判断保持请求顺序，因此在验证器本身确定的前提下，发现项与逐个请求时一致。缓存 token 计数来自该次运行的 API 响应，请求重叠时可能不同。共用同一条已缓存记忆的 Claude 请求，会等其中第一个返回后再发出，这样才能读到它写入的缓存。该选项在 `--batch` 下不使用。请把这个值控制在你的 API 速率限制之内。
 - *`--batch`*：把 Claude 请求（`llm`、`dual`、`cascade`）通过 [Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing) 发送，按标准价格的 50% 计费，但更慢：多数批次在一小时内完成，有些要 24 小时。命令会一直等待，并在 stderr 上打印批次 ID。只要有一个请求出错、过期或被取消，审计就以退出码 2 结束，不输出报告；中途中断会取消该批次。Batches API 不接受服务端拒答回退，所以在支持该回退的模型上，被拒答的请求会再直接发送一次，按标准价格计费。Jev 请求从不走批处理。
 
 Claude 每个 token 的价格（包括缓存写入、缓存读取和批处理）见 [Anthropic 定价页](https://platform.claude.com/docs/en/about-claude/pricing)。

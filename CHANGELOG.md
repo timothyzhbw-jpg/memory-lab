@@ -21,8 +21,9 @@ Release 0.3 contains:
 #### Added
 
 - `--max-concurrency N` on `audit` and `diff` (default 4) runs up to N model-verifier requests at once.
-  Results keep their order, so the report matches a serial run. Lexical judging stays serial. `audit()`,
-  `audit_claims()` and `memory_diff()` take `max_concurrency` (default 1).
+  Judgments stay in request order, so findings match a serial run of the same deterministic verifier.
+  Cache-token totals are whatever that run's API responses reported. Not used with `--batch`. Lexical
+  judging stays serial. `audit()`, `audit_claims()` and `memory_diff()` take `max_concurrency` (default 1).
 - `--batch` on `audit` and `diff`, for `--verifier llm`, `dual` or `cascade`, sends the Claude requests
   through the [Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing).
   Batch usage is billed at 50% of standard prices, but a batch can take up to 24 hours (most end within
@@ -52,6 +53,11 @@ Release 0.3 contains:
   passage are two text blocks of the user turn instead of one string. The wording, schema and effort are
   unchanged.
 - `audit.candidates()` now ranks judged passages; selecting them moved to `audit.shortlist()`.
+
+#### Fixed
+
+- Model rationales, batch status lines and batch errors are one line with terminal and bidi controls
+  removed. The Markdown API-usage line keeps the verifier name inside a single code span.
 
 ## memlab-core
 

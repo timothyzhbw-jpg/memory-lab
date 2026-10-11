@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from .audit import AuditReport, Finding
 from .corpus import REPORT_HEADER
-from .gitstore import show_text
+from .gitstore import printable, show_text
 
 LABELS = {
     "challenged": "CHALLENGED",
@@ -52,7 +52,9 @@ def usage_lines(report: AuditReport) -> list[str]:
     """One line per model backend: requests, and the tokens the API reported (cache writes and reads for Claude)."""
     out = []
     for stats in report.verifier_stats:
-        line = f"- API usage of `{stats.verifier}`: {stats.requests} request(s)"
+        # The name is a code span on one line. A backtick or a newline in it would break the span.
+        name = printable(stats.verifier).replace("`", "'")
+        line = f"- API usage of `{name}`: {stats.requests} request(s)"
         if stats.batched_requests:
             line += f" ({stats.batched_requests} through the Message Batches API)"
         line += f" · input tokens: {stats.input_tokens}"

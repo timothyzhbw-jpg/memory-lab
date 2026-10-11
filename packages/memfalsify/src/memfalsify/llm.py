@@ -24,6 +24,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
+from .gitstore import printable
 from .verify import RELATION_CRITERIA, Judgment, UsageMeter, VerifierError, VerifierStats, concurrently
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -131,10 +132,10 @@ class LLMVerifier:
                 **extra,
             )
         except self._api_error as exc:
-            raise VerifierError(f"{self.name}: {exc}") from exc
+            raise VerifierError(_shown(f"{self.name}: {exc}")) from exc
         except TypeError as exc:
             # The SDK only checks credentials when a request is sent, and reports missing ones as a TypeError.
-            raise VerifierError(f"{self.name}: {exc}") from exc
+            raise VerifierError(_shown(f"{self.name}: {exc}")) from exc
         self.meter.record(getattr(response, "usage", None))
         verdict = response.parsed_output if response.stop_reason != "refusal" else None
         return self._judgment(verdict, response.stop_reason)
@@ -142,8 +143,8 @@ class LLMVerifier:
     def _judgment(self, verdict: Verdict | None, stop_reason: str | None) -> Judgment:
         if verdict is None:
             return Judgment(relation="unrelated", verifier=self.name,
-                            rationale=f"no verdict (stop_reason: {stop_reason})")
-        return Judgment(relation=verdict.relation, rationale=verdict.rationale, verifier=self.name)
+                            rationale=_shown(f"no verdict (stop_reason: {stop_reason})"))
+        return Judgment(relation=verdict.relation, rationale=_shown(verdict.rationale), verifier=self.name)
 
     # --- Message Batches API ---------------------------------------------------------
 
@@ -188,8 +189,8 @@ class LLMVerifier:
         try:
             return Verdict.model_validate_json(text)
         except ValidationError as exc:
-            raise VerifierError(f"{self.name}: batch result {custom_id} is not a verdict "
-                                f"(stop_reason: {message.stop_reason})") from exc
+            raise VerifierError(_shown(f"{self.name}: batch result {custom_id} is not a verdict "
+                                       f"(stop_reason: {message.stop_reason})")) from exc
 
     def _run_batches(self, requests: list[dict[str, Any]]) -> dict[str, Any]:
         """Create batches, poll each until it has ended, and return every result keyed by ``custom_id``.
@@ -204,20 +205,21 @@ class LLMVerifier:
                 for chunk in _chunks(requests):
                     batch = batches.create(requests=chunk)
                     submitted.append(batch)
-                    self._progress(f"{self.name}: submitted Message Batch {batch.id} with {len(chunk)} request(s); "
-                                   "most batches end within an hour, some take up to 24 hours")
+                    self._progress(_shown(
+                        f"{self.name}: submitted Message Batch {batch.id} with {len(chunk)} request(s); "
+                        "most batches end within an hour, some take up to 24 hours"))
                 for batch in submitted:
                     batch = self._wait(batch)
                     ended.add(batch.id)
                     for entry in batches.results(batch.id):
                         if entry.custom_id not in expected or entry.custom_id in results:
-                            raise VerifierError(f"{self.name}: unexpected result {entry.custom_id!r} "
-                                                f"in batch {batch.id}")
+                            raise VerifierError(_shown(f"{self.name}: unexpected result {entry.custom_id!r} "
+                                                       f"in batch {batch.id}"))
                         results[entry.custom_id] = entry.result
             except self._api_error as exc:
-                raise VerifierError(f"{self.name}: {exc}") from exc
+                raise VerifierError(_shown(f"{self.name}: {exc}")) from exc
             except TypeError as exc:
-                raise VerifierError(f"{self.name}: {exc}") from exc
+                raise VerifierError(_shown(f"{self.name}: {exc}")) from exc
         except BaseException:
             self._cancel([b.id for b in submitted if b.id not in ended])
             raise
@@ -225,8 +227,9 @@ class LLMVerifier:
         failed.update({"missing": len(expected) - len(results)} if len(results) < len(expected) else {})
         if failed:
             details = ", ".join(f"{n} {kind}" for kind, n in sorted(failed.items()))
-            raise VerifierError(f"{self.name}: {sum(failed.values())} of {len(requests)} batch requests did not "
-                                f"succeed ({details}) in {', '.join(b.id for b in submitted)}; no partial report")
+            raise VerifierError(_shown(
+                f"{self.name}: {sum(failed.values())} of {len(requests)} batch requests did not "
+                f"succeed ({details}) in {', '.join(str(b.id) for b in submitted)}; no partial report"))
         return results
 
     def _wait(self, batch: Any) -> Any:
@@ -241,15 +244,21 @@ class LLMVerifier:
         for batch_id in batch_ids:
             try:
                 self.client.messages.batches.cancel(batch_id)
-                self._progress(f"{self.name}: canceled Message Batch {batch_id}")
+                self._progress(_shown(f"{self.name}: canceled Message Batch {batch_id}"))
             except Exception as exc:  # best effort: the original error is what gets reported
-                self._progress(f"{self.name}: could not cancel Message Batch {batch_id}: {exc}")
+                self._progress(_shown(f"{self.name}: could not cancel Message Batch {batch_id}: {exc}"))
+
+
+def _shown(text: object) -> str:
+    """Provider ids, errors and model text on one line, without terminal or bidi controls."""
+    return printable(str(text))
 
 
 def _failure(result: Any) -> str:
     """``expired``, ``canceled``, or ``errored`` with the API's error type when there is one."""
     error = getattr(getattr(getattr(result, "error", None), "error", None), "type", None)
-    return f"errored ({error})" if result.type == "errored" and error else result.type
+    kind = f"errored ({error})" if result.type == "errored" and error else result.type
+    return _shown(kind)
 
 
 def _chunks(requests: list[dict[str, Any]]) -> Iterator[list[dict[str, Any]]]:
