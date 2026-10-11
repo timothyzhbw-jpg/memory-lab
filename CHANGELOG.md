@@ -23,6 +23,8 @@ memlab-core needs a minor version and their pins must move to it.
 HTML reports. memfalsify's and orgmemory's `--format html` import `memcore.htmlpage`, so their next
 release needs a memlab-core release that has it; raise their memlab-core pins then.
 
+Repository-level changes; no package version changes.
+
 ### Security
 
 - MemFalsify applies one shared path policy to memory, linked memory and evidence inputs (including
@@ -50,12 +52,25 @@ release needs a memlab-core release that has it; raise their memlab-core pins th
 - Public signature annotations and wheel-included `py.typed` markers in all four packages.
 - English and Chinese API references, a 1.0 stability and deprecation policy, and pinned export tests.
 - `memcore.load_json` parses one JSON value and raises `ValueError` for malformed JSON, bytes that are not UTF-8, or JSON nested too deeply.
+- Claude Code plugin marketplace. `.claude-plugin/marketplace.json` lists the `memory-lab` plugin, whose root is
+  `skills/`. `claude plugin marketplace add timothyzhbw-jpg/memory-lab` and
+  `claude plugin install memory-lab@memory-lab` install `skills/memfalsify`, `skills/orgmemory` and the read-only
+  `memlab` MCP server, started as `memlab-mcp --root ${CLAUDE_PROJECT_DIR}` without `--allow-model-verifiers`.
+  The plugin pins no version, so Claude Code versions it by commit. It does not install the Python packages.
+- `docs/install-agents.md` and `docs/install-agents.zh-CN.md`: installing into Claude Code with the plugin and into
+  Codex with `~/.agents/skills` and `codex mcp add`, including the `config.toml` table that command writes.
+- `tests/test_packaging_agents.py`: the manifests' fields, names and paths follow the Claude Code marketplace and
+  manifest references, the plugin ships exactly the repository's skills, and the server's arguments parse with
+  `memlab-mcp`'s own command line with model verifiers off. An unexpanded `${CLAUDE_PROJECT_DIR}` fails to start.
 
 ### Changed
 
 - MCP, Action, benchmark, and README library imports use the public package roots where possible,
   with no behavior changes. CLI configuration and report-header helpers remain internal.
 - memfalsify `audit` and `diff` find internal conflicts from an inverted index of normalized terms and reuse each claim's lexical features. Reports stay byte-identical; large memories are much faster. Timings are in `benchmarks/perf/`.
+- README: the Codex skills location is `~/.agents/skills/`, the user location in OpenAI's documentation, instead
+  of `~/.codex/skills/`. The memfalsify and orgmemory skills say that the plugin roots the server at the project
+  directory.
 
 ### Fixed
 

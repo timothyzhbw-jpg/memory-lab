@@ -106,6 +106,8 @@ memlab-mcp --root /absolute/path/to/data --allow-model-verifiers
 
 ## 注册到 Claude Code
 
+Memory Lab 插件会替你注册这个服务器，命令是 `memlab-mcp --root ${CLAUDE_PROJECT_DIR}`，同时装上两个技能，而且从不打开模型验证器：见 [install-agents.zh-CN.md](install-agents.zh-CN.md)。需要别的根目录或 `--allow-model-verifiers` 时再手动注册，并在 `/mcp` 里关掉插件的服务器。
+
 下面的命令与本机 `claude mcp add --help` 的输出一致。传输方式默认是 `stdio`。`--` 不能省，否则 `--root` 会被 `claude` 自己吃掉，传不到 `memlab-mcp`。
 
 ```bash
@@ -130,4 +132,4 @@ Claude Desktop 是另一个应用。`claude mcp add` 不会配置它。`mcpServe
 codex mcp add memlab -- /absolute/path/to/memlab-mcp --root /absolute/path/to/data
 ```
 
-`--env KEY=VALUE` 给 stdio 服务器设置环境变量。多个变量就重复这个旗标。其余选项见 [Codex 文档](https://developers.openai.com/codex)。
+`--env KEY=VALUE` 给 stdio 服务器设置环境变量。多个变量就重复这个旗标。这条命令会在 `~/.codex/config.toml` 里写一张 `[mcp_servers.memlab]` 表；表的内容和 Codex 的技能目录见 [install-agents.zh-CN.md](install-agents.zh-CN.md)。其余选项见 [Codex 文档](https://developers.openai.com/codex)。

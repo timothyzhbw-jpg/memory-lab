@@ -79,3 +79,5 @@ The project instructions are in `AGENTS.md`. Codex reads that file directly, and
 - **Codex:** run `codex` in the repository folder.
 
 Cloud sessions install dependencies through `.claude/hooks/session-start.sh`. Locally, `scripts/setup-local.sh` does the same job.
+
+To use the skills and the MCP tools in your other projects, install them into the agent: [install-agents.md](install-agents.md).

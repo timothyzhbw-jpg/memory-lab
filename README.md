@@ -483,16 +483,27 @@ Jira transition 20102 on ACME-1 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 
 
 Timestamps are stored in UTC with milliseconds, so a capture made in another profile time zone gives the same IDs.
 
-## Agent skills
+## Agent skills and the Claude Code plugin
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. A GitHub or Jira account is not an authenticated person, and text quoted by the `memlab` MCP tools is untrusted. The skills say when to use those read-only tools instead of the CLIs, and how to add the [GitHub Action](docs/github-action.md) so a repository audits its own instruction files. Copy them into your agent's skills directory:
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. A GitHub or Jira account is not an authenticated person, and text quoted by the `memlab` MCP tools is untrusted. The skills say when to use those read-only tools instead of the CLIs, and how to add the [GitHub Action](docs/github-action.md) so a repository audits its own instruction files.
+
+This repository is also a Claude Code plugin marketplace. One plugin installs both skills and the read-only `memlab` MCP server:
 
 ```bash
-cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
-cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
+claude plugin marketplace add timothyzhbw-jpg/memory-lab
+claude plugin install memory-lab@memory-lab
 ```
 
-The CLIs must be installed in the environment the agent's shell uses. To use the MCP tools, register `memlab-mcp` as well ([docs/mcp.md](docs/mcp.md)).
+The skills become `/memory-lab:memfalsify` and `/memory-lab:orgmemory`. The plugin starts the server as `memlab-mcp --root ${CLAUDE_PROJECT_DIR}`, so the tools read only the project directory, and it never passes `--allow-model-verifiers`. It does not install Python packages: `memfalsify`, `orgmemory` and `memlab-mcp` must be on the `PATH` Claude Code starts with, for example from the virtualenv `./scripts/setup-local.sh` creates.
+
+For Codex, copy the skills to `~/.agents/skills/`, the user location in OpenAI's documentation, and register the server with `codex mcp add`. Earlier versions of this README named `~/.codex/skills/`; delete copies there so Codex does not list each skill twice.
+
+```bash
+cp -R skills/memfalsify skills/orgmemory ~/.agents/skills/
+codex mcp add memlab -- /absolute/path/to/memory-lab/.venv/bin/memlab-mcp --root /absolute/path/to/project
+```
+
+Checks, updates, the `config.toml` form, Windows and other details: [docs/install-agents.md](docs/install-agents.md).
 
 ## MCP server
 

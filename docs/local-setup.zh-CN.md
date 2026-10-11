@@ -79,3 +79,5 @@ python benchmarks/memfalsify/run.py --verifier dual --json results-dual.json
 - **Codex**：在仓库目录里运行 `codex`。
 
 云端会话通过 `.claude/hooks/session-start.sh` 安装依赖；在本地，这件事由 `scripts/setup-local.sh` 完成。
+
+想在你的其他项目里使用这些技能和 MCP 工具，就把它们装进 Agent：见 [install-agents.zh-CN.md](install-agents.zh-CN.md)。

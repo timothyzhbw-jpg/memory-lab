@@ -1,0 +1,15 @@
+{
+  "name": "memory-lab",
+  "description": "Memory Lab for Claude Code: the memfalsify and orgmemory skills and the read-only memlab MCP server",
+  "owner": {
+    "name": "timothyzhbw-jpg",
+    "url": "https://github.com/timothyzhbw-jpg"
+  },
+  "plugins": [
+    {
+      "name": "memory-lab",
+      "source": "./skills",
+      "description": "Audit agent memory against evidence (memfalsify) and replay authorized organizational decisions (orgmemory), with the read-only memlab MCP server rooted at the project directory"
+    }
+  ]
+}
