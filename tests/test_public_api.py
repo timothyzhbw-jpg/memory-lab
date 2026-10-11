@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import typing
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,11 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 PUBLIC = json.loads((REPO / "tests" / "public_api.json").read_text(encoding="utf-8"))
 PACKAGES = tuple(PUBLIC)
+
+
+def _is_class(obj) -> bool:
+    """A real class. On Python 3.10, inspect.isclass is also true for a generic alias such as Transport."""
+    return inspect.isclass(obj) and typing.get_origin(obj) is None
 
 
 @pytest.mark.parametrize("package", PACKAGES)
@@ -32,7 +38,7 @@ def test_exports_are_deliberate_importable_and_documented(package):
             docs = (REPO / "docs" / reference).read_text(encoding="utf-8")
             assert f"| `{package}.{name}` |" in docs, (reference, package, name)
         # Re-export the actual implementation, preserving defining-module imports.
-        if inspect.isfunction(obj) or inspect.isclass(obj):
+        if inspect.isfunction(obj) or _is_class(obj):
             defining = importlib.import_module(obj.__module__)
             assert getattr(defining, obj.__name__) is obj
 
@@ -45,7 +51,7 @@ def test_public_signatures_have_annotations(package):
         callables = []
         if inspect.isfunction(obj):
             callables.append(obj)
-        elif inspect.isclass(obj):
+        elif _is_class(obj):
             # Inspect explicit methods only, not generated Pydantic/dataclass constructors.
             for method_name, method in vars(obj).items():
                 if method_name.startswith("_") and method_name not in (
@@ -242,7 +248,7 @@ def test_public_signature_defaults_do_not_capture_the_environment(monkeypatch):
             functions = []
             if inspect.isfunction(obj):
                 functions.append(obj)
-            elif inspect.isclass(obj):
+            elif _is_class(obj):
                 functions.append(obj.__init__)
             for func in functions:
                 rendered = str(inspect.signature(func))
