@@ -70,6 +70,8 @@ from .verify import (
     Relation,
     Verifier,
     VerifierError,
+    VerifierStats,
+    judge_all,
 )
 
 __all__ = [
@@ -105,6 +107,7 @@ __all__ = [
     "Status",
     "Verifier",
     "VerifierError",
+    "VerifierStats",
     "__version__",
     "audit",
     "audit_claims",
@@ -113,6 +116,7 @@ __all__ = [
     "detect",
     "diff_to_markdown",
     "history_to_markdown",
+    "judge_all",
     "load_reviews",
     "memory_diff",
     "memory_history",

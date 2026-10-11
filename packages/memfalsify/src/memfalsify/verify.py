@@ -4,10 +4,18 @@ The built-in LexicalVerifier needs no model or API key. ``llm.LLMVerifier`` (Cla
 ``jev.JevVerifier`` (TypeSafe AI's Jev judgment model) implement the same ``Verifier`` protocol;
 ``DualVerifier`` combines two of them and keeps their disagreement visible instead of picking a winner;
 ``CascadeVerifier`` trusts a cheap verifier when it is confident and escalates to a stronger one otherwise.
+
+``judge_all`` judges many pairs at once, on a bounded thread pool or through a verifier's own ``judge_many``
+(the Claude verifier uses it for prompt caching and the Message Batches API). Model backends count their API
+usage in a ``UsageMeter`` and expose it through ``usage()``.
 """
 from __future__ import annotations
 
-from typing import Literal, Protocol
+import threading
+from collections import deque
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
@@ -41,6 +49,109 @@ class Verifier(Protocol):
     name: str
 
     def judge(self, claim: str, passage: str) -> Judgment: ...
+
+
+class VerifierStats(BaseModel):
+    """API usage of one model backend: requests sent and the token counts the API reported for them.
+
+    The cache counters are ``None`` for a backend without prompt caching. ``input_tokens`` excludes
+    tokens written to or read from the prompt cache, as in the Anthropic API's ``usage``."""
+    verifier: str
+    requests: int = 0
+    batched_requests: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+
+    def minus(self, earlier: VerifierStats) -> VerifierStats:
+        return VerifierStats(verifier=self.verifier, **{
+            field: None if (now := getattr(self, field)) is None else now - (getattr(earlier, field) or 0)
+            for field in COUNTERS})
+
+
+COUNTERS = ("requests", "batched_requests", "input_tokens", "output_tokens",
+            "cache_creation_input_tokens", "cache_read_input_tokens")
+TOKENS = COUNTERS[2:]
+
+
+class UsageMeter:
+    """Running totals for one backend, safe to update from several threads."""
+
+    def __init__(self, verifier: str, caching: bool = False):
+        self._lock = threading.Lock()
+        zero = 0 if caching else None
+        self._totals = VerifierStats(verifier=verifier, cache_creation_input_tokens=zero, cache_read_input_tokens=zero)
+
+    def record(self, usage: Any = None, *, batched: bool = False) -> None:
+        """Count one request; ``usage`` is the response's usage object (missing token fields count as 0)."""
+        with self._lock:
+            totals = self._totals
+            totals.requests += 1
+            totals.batched_requests += batched
+            for field in TOKENS:
+                if getattr(totals, field) is not None:
+                    setattr(totals, field, getattr(totals, field) + (getattr(usage, field, None) or 0))
+
+    def snapshot(self) -> VerifierStats:
+        with self._lock:
+            return self._totals.model_copy()
+
+
+def verifier_usage(verifier: Verifier) -> list[VerifierStats]:
+    """Usage so far of every model backend inside ``verifier``; empty for verifiers that call no API."""
+    usage = getattr(verifier, "usage", None)
+    return list(usage()) if callable(usage) else []
+
+
+def usage_since(before: list[VerifierStats], after: list[VerifierStats]) -> list[VerifierStats]:
+    """What each backend used between two ``verifier_usage`` snapshots."""
+    return [now.minus(then) for now, then in zip(after, before)] + after[len(before):]
+
+
+T = TypeVar("T")
+
+
+def concurrently(call: Callable[[int], T], count: int, max_concurrency: int = 1,
+                 after: Mapping[int, Sequence[int]] | None = None) -> list[T]:
+    """Return ``[call(0), ..., call(count - 1)]`` with at most ``max_concurrency`` calls running at once.
+
+    ``after`` maps an index to the (larger) indices that may start only once it has finished; those run before
+    work that has not started yet. Results keep index order whatever order the calls finish in. The first
+    exception is raised once the calls already running have returned; nothing else is started."""
+    if max_concurrency <= 1 or count <= 1:
+        return [call(i) for i in range(count)]
+    after = after or {}
+    held = {i for followers in after.values() for i in followers}
+    fresh = deque(i for i in range(count) if i not in held)
+    ready: deque[int] = deque()
+    results: list[Any] = [None] * count
+    running: dict[Future, int] = {}
+    with ThreadPoolExecutor(max_workers=min(max_concurrency, count)) as pool:
+        while fresh or ready or running:
+            while len(running) < max_concurrency and (ready or fresh):
+                i = (ready or fresh).popleft()
+                running[pool.submit(call, i)] = i
+            done, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in done:
+                i = running.pop(future)
+                results[i] = future.result()
+                ready.extend(after.get(i, ()))
+    return results
+
+
+def judge_all(verifier: Verifier, pairs: Sequence[tuple[str, str]], max_concurrency: int = 1) -> list[Judgment]:
+    """Judge ``(claim, passage)`` pairs and return the judgments in the order of ``pairs``.
+
+    A verifier with ``judge_many(pairs, max_concurrency)`` schedules the work itself; any other verifier
+    is called once per pair, ``max_concurrency`` calls at a time."""
+    many = getattr(verifier, "judge_many", None)
+    if callable(many):
+        judgments = list(many(pairs, max_concurrency))
+        if len(judgments) != len(pairs):
+            raise VerifierError(f"{verifier.name}: {len(judgments)} judgments for {len(pairs)} pairs")
+        return judgments
+    return concurrently(lambda i: verifier.judge(*pairs[i]), len(pairs), max_concurrency)
 
 
 def coverage(claim: str, passage: str) -> float:
@@ -99,7 +210,16 @@ class DualVerifier:
         self.name = f"{first.name}+{second.name}"
 
     def judge(self, claim: str, passage: str) -> Judgment:
-        a, b = self.first.judge(claim, passage), self.second.judge(claim, passage)
+        return self._combine(self.first.judge(claim, passage), self.second.judge(claim, passage))
+
+    def judge_many(self, pairs: Sequence[tuple[str, str]], max_concurrency: int = 1) -> list[Judgment]:
+        firsts = judge_all(self.first, pairs, max_concurrency)
+        return [self._combine(a, b) for a, b in zip(firsts, judge_all(self.second, pairs, max_concurrency))]
+
+    def usage(self) -> list[VerifierStats]:
+        return verifier_usage(self.first) + verifier_usage(self.second)
+
+    def _combine(self, a: Judgment, b: Judgment) -> Judgment:
         if a.relation == b.relation:
             return Judgment(relation=a.relation, rationale=f"{a.verifier}: {a.rationale}; {b.verifier}: {b.rationale}",
                             verifier=self.name, opinions=[a, b])
@@ -120,10 +240,26 @@ class CascadeVerifier:
 
     def judge(self, claim: str, passage: str) -> Judgment:
         a = self.first.judge(claim, passage)
-        if a.confidence is not None and a.confidence >= self.accept_at:
-            return Judgment(relation=a.relation, rationale=f"{a.verifier}: {a.rationale}", verifier=self.name,
-                            confidence=a.confidence, opinions=[a])
-        b = self.second.judge(claim, passage)
+        return self._accept(a) if self._sure(a) else self._escalate(a, self.second.judge(claim, passage))
+
+    def judge_many(self, pairs: Sequence[tuple[str, str]], max_concurrency: int = 1) -> list[Judgment]:
+        """Ask ``first`` about every pair, then ``second`` about the pairs ``first`` was unsure of."""
+        firsts = judge_all(self.first, pairs, max_concurrency)
+        unsure = [i for i, a in enumerate(firsts) if not self._sure(a)]
+        seconds = dict(zip(unsure, judge_all(self.second, [pairs[i] for i in unsure], max_concurrency)))
+        return [self._escalate(a, seconds[i]) if i in seconds else self._accept(a) for i, a in enumerate(firsts)]
+
+    def usage(self) -> list[VerifierStats]:
+        return verifier_usage(self.first) + verifier_usage(self.second)
+
+    def _sure(self, a: Judgment) -> bool:
+        return a.confidence is not None and a.confidence >= self.accept_at
+
+    def _accept(self, a: Judgment) -> Judgment:
+        return Judgment(relation=a.relation, rationale=f"{a.verifier}: {a.rationale}", verifier=self.name,
+                        confidence=a.confidence, opinions=[a])
+
+    def _escalate(self, a: Judgment, b: Judgment) -> Judgment:
         unsure = "no confidence" if a.confidence is None else f"confidence {a.confidence:.2f} < {self.accept_at}"
         return Judgment(relation=b.relation, verifier=self.name, opinions=[a, b],
                         rationale=f"{a.verifier} unsure ({unsure}), escalated; {b.verifier}: {b.rationale}")

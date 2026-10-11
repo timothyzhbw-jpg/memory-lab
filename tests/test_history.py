@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -217,6 +218,40 @@ def test_diff_cli_strict_exit_codes_and_formats(repo):
     assert result.exit_code == 0 and "nothing was audited" in result.stdout
     full = runner.invoke(app, ["audit", memory, "--strict", *evidence])
     assert full.exit_code == 1  # the whole-memory audit still flags it
+
+
+def test_diff_cli_model_options_and_usage(repo, monkeypatch):
+    from memfalsify import cli
+    from memfalsify.verify import Judgment, UsageMeter
+
+    class Metered:
+        name = "stand-in"
+
+        def __init__(self):
+            self.meter = UsageMeter(self.name, caching=True)
+
+        def judge(self, claim, passage):
+            self.meter.record(SimpleNamespace(input_tokens=10, output_tokens=2, cache_read_input_tokens=5))
+            return Judgment(relation="unrelated", rationale="-", verifier=self.name)
+
+        def usage(self):
+            return [self.meter.snapshot()]
+
+    seen, real_diff = [], cli.memory_diff
+    monkeypatch.setattr(cli, "build_verifier", lambda *a, **k: Metered())
+    monkeypatch.setattr(cli, "memory_diff", lambda *a, **k: seen.append(k["max_concurrency"]) or real_diff(*a, **k))
+    base = demo(repo)
+    args = ["diff", str(repo.root / "MEMORY.md"), "--base", base, "--evidence", str(repo.root / "evidence"),
+            "--verifier", "llm", "--max-concurrency", "3"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0 and seen == [3]
+    assert "- API usage of `stand-in`: 3 request(s) · input tokens: 30 uncached, 0 written to the prompt cache, " \
+           "15 read from it · output tokens: 6" in result.stdout
+    data = json.loads(runner.invoke(app, args + ["--format", "json"]).stdout)
+    assert data["audit"]["verifier_stats"][0]["requests"] == 3
+    monkeypatch.undo()
+    result = runner.invoke(app, ["diff", str(repo.root / "MEMORY.md"), "--base", base, "--verifier", "jev", "--batch"])
+    assert result.exit_code == 2 and "use it with --verifier llm, dual or cascade" in result.output
 
 
 def test_diff_between_two_commits_ignores_the_working_tree(repo):

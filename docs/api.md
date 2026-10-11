@@ -256,8 +256,8 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | API | Purpose |
 |---|---|
 | `memfalsify.ATTENTION` | Frozen set of statuses counted by strict audits: challenged, conflicted, candidate_counterevidence, disputed. |
-| `memfalsify.AuditReport` | Read-only audit result with findings, status counts, skipped evidence, and limitations. |
-| `memfalsify.CascadeVerifier` | Construct with first, second, accept_at=0.8; escalate when first has insufficient confidence. |
+| `memfalsify.AuditReport` | Read-only audit result with findings, status counts, per-backend API usage (verifier_stats), skipped evidence, and limitations. |
+| `memfalsify.CascadeVerifier` | Construct with first, second, accept_at=0.8; escalate when first has insufficient confidence. judge_many asks first about every pair, then second about the unsure ones; usage() combines both backends. |
 | `memfalsify.Change` | Frozen comparison result: kind, old/new Claim, similarity, and moved flag. |
 | `memfalsify.Claim` | Parsed claim with stable ID, text, path, line, section, duplicate locations, and the frontmatter metadata its file's format documents (for example a Cursor rule's globs). |
 | `memfalsify.ClaimChange` | Serialized diff entry with old/new ClaimVersion and optional audit status. |
@@ -265,16 +265,16 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.ClaimVersion` | Claim wording/location at a revision; of(claim) constructs one. |
 | `memfalsify.CommitInfo` | Commit identity, timestamp, author, and subject for attribution. |
 | `memfalsify.DiffReport` | Revision comparison plus audit of added/changed claims; attention counts strict statuses. |
-| `memfalsify.DualVerifier` | Construct with first and second; disagreement yields disputed and keeps both opinions. |
+| `memfalsify.DualVerifier` | Construct with first and second; disagreement yields disputed and keeps both opinions. judge_many asks each backend in one pass; usage() combines both backends. |
 | `memfalsify.EvidenceFinding` | Candidate or human-confirmed relation, rationale, opinions, and quoted span. |
 | `memfalsify.Finding` | One claim’s status, evidence, issues, proposed actions, and its file's frontmatter metadata. |
 | `memfalsify.GitError` | HistoryError with sanitized summary plus underlying diagnostic message. |
 | `memfalsify.HistoryError` | ValueError for invalid or unavailable Git history operations. |
 | `memfalsify.HistoryReport` | Current and removed claim provenance, scanned commits, and scan limitations. |
 | `memfalsify.Issue` | Wording, time, conflict, or duplicate issue with kind and detail. |
-| `memfalsify.JevVerifier` | Construct with model, optional SDK client, threshold=0.5; imports typesafe_sdk only at construction. |
+| `memfalsify.JevVerifier` | Construct with model, optional SDK client, threshold=0.5; imports typesafe_sdk only at construction. usage() reports its requests and tokens. |
 | `memfalsify.Judgment` | Relation, rationale, verifier name, optional confidence, and nested opinions. |
-| `memfalsify.LLMVerifier` | Construct with model, optional client, effort="low", fallbacks=None; imports anthropic only at construction. |
+| `memfalsify.LLMVerifier` | Construct with model, optional client, effort="low", fallbacks=None, and keyword-only batch=False (Message Batches API), progress and sleep; imports anthropic only at construction. Caches its prompt prefix; judge_many and usage() serve audits. |
 | `memfalsify.LexicalVerifier` | Offline verifier; related=0.6 and support=0.75 coverage thresholds. |
 | `memfalsify.MemoryFormat` | Frozen agent instruction format: name (for example cursor-rule), the agent that reads it, and the frontmatter fields kept as claim metadata. |
 | `memfalsify.Proposal` | Suggested action and reason; replacement is always None. |
@@ -285,16 +285,18 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.Rollback` | Patch result: bytes or None plus a message; no patch is applied. |
 | `memfalsify.Skipped` | Evidence file path and reason it was skipped. |
 | `memfalsify.Status` | Literal type for the seven audit status values. |
-| `memfalsify.Verifier` | Protocol: name: str and judge(claim: str, passage: str) → Judgment. |
+| `memfalsify.Verifier` | Protocol: name: str and judge(claim: str, passage: str) → Judgment. Optional judge_many(pairs, max_concurrency) and usage() → list[VerifierStats] are used when present. |
 | `memfalsify.VerifierError` | RuntimeError for unavailable SDKs, credentials, or failed model judgments. |
+| `memfalsify.VerifierStats` | API usage of one model backend: requests, batched requests, input and output tokens, and prompt-cache writes and reads (None without caching). |
 | `memfalsify.__version__` | Installed distribution version string. |
-| `memfalsify.audit` | Parse memory and audit it against optional evidence/reviews; never edits memory. |
+| `memfalsify.audit` | Parse memory and audit it against optional evidence/reviews; never edits memory. max_concurrency bounds simultaneous verifier calls (default 1). |
 | `memfalsify.audit_claims` | Audit parsed claims; only= selects findings while review/conflict checks retain all claims. memory_paths are excluded from evidence. |
 | `memfalsify.claim_id` | Return the normalized-text memory ID. |
 | `memfalsify.compare` | Compare two Claim lists deterministically by ID, section, and term similarity. |
 | `memfalsify.detect` | Return the MemoryFormat of a path from its exact, case-sensitive file name and directories (CLAUDE.md, AGENTS.md, GEMINI.md, .cursor/rules/*.mdc, .github/copilot-instructions.md, ...); anything else is plain Markdown. |
 | `memfalsify.diff_to_markdown` | Render a DiffReport as Markdown. |
 | `memfalsify.history_to_markdown` | Render a HistoryReport as Markdown. |
+| `memfalsify.judge_all` | Judge (claim, passage) pairs in order: through the verifier's judge_many when it has one, else max_concurrency judge calls at a time. |
 | `memfalsify.load_reviews` | Validate review records and their verbatim quotes for a claim-ID mapping; with skipped=, review evidence excluded by the input path policy is recorded there instead of raising. |
 | `memfalsify.memory_diff` | Compare base with head or the worktree and audit only added/changed claims against current evidence. |
 | `memfalsify.memory_history` | Attribute claims on the first-parent HEAD chain; max_commits defaults to 100. |
@@ -305,15 +307,16 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.to_markdown` | Render an AuditReport as Markdown. |
 
 ```python
-audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
-audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None) -> AuditReport
+audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
+audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]
 detect(path: str | PurePath) -> MemoryFormat
 diff_to_markdown(report: DiffReport) -> str
 history_to_markdown(report: HistoryReport) -> str
+judge_all(verifier: Verifier, pairs: Sequence[tuple[str, str]], max_concurrency: int=1) -> list[Judgment]
 load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *, skipped: list[Skipped] | None=None) -> dict[str, list[EvidenceFinding]]
-memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> DiffReport
+memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> DiffReport
 memory_history(memory_file: Path, max_commits: int=100, follow_links: bool=True) -> HistoryReport
 parse_memory(memory_file: Path, follow_links: bool=True, *, skipped: list[Skipped] | None=None) -> tuple[list[Claim], list[Path]]
 parse_text(text: str, display: str, fmt: MemoryFormat=MARKDOWN) -> tuple[list[Claim], list[str]]

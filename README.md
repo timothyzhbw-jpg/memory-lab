@@ -338,6 +338,14 @@ The two model backends work differently on purpose: Claude reasons its way to a 
 
 **Which passages a model sees.** The term index still pre-selects passages. Model verifiers use a looser threshold (`--min-coverage`, default 0.2 instead of 0.5) so paraphrases are judged, and only the best `--max-judged` passages per memory (default 8) are sent. That bounds cost at *memories × max-judged* calls per model. A passage that shares no terms with a memory is never judged.
 
+**Cost and latency.** The report lists, for each model backend, the requests it sent and the tokens the API reported (`verifier_stats` in JSON). Three things cut cost or waiting without changing what is asked:
+
+- *Prompt caching.* The Claude verifier marks its instructions as a cached prefix, and the claim too when it is judged against more than one passage. The API caches a prefix only from a model-dependent minimum length ([prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)). The instructions are only a few hundred tokens, so with short claims nothing is cached; the report's cache counters show what happened.
+- *`--max-concurrency`* (default 4) model requests run at once. Judgments stay in request order, so findings match a serial run of the same deterministic verifier. Cache-token totals are whatever that run's API responses reported, and they can differ when requests overlap. Claude requests that share a cached claim wait for the first of them, so they can read its cache entry. The option is not used with `--batch`. Keep the value within your API rate limits.
+- *`--batch`* sends the Claude requests (`llm`, `dual`, `cascade`) through the [Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing): billed at 50% of standard prices, but slower. Most batches end within an hour; some take up to 24 hours. The command waits, printing the batch ID on stderr. If any request errors, expires or is canceled, the audit exits 2 with no report, and an interrupt cancels the batch. The Batches API rejects the server-side refusal fallback, so on models that have that fallback a refused request is sent again directly, at the standard price. Jev requests are never batched.
+
+Claude's prices per token, including cache writes, cache reads and batches, are on the [Anthropic pricing page](https://platform.claude.com/docs/en/about-claude/pricing).
+
 The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). `dual` is the stricter choice: every judgment is checked twice. `cascade` follows the "accept when confident, escalate when unsure" pattern and is much cheaper, but it trusts Jev's confident answers alone, so tune `--accept-at` on memories you have already reviewed before relying on it.
 
 For both model backends, an API failure, a missing SDK or missing credentials stops the audit with exit code 2 and an error message rather than producing a partial report.
@@ -350,10 +358,10 @@ from pathlib import Path
 from memfalsify import DualVerifier, JevVerifier, LLMVerifier, audit
 
 report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVerifier(), JevVerifier()),
-               min_coverage=0.2, max_judged=8)
+               min_coverage=0.2, max_judged=8, max_concurrency=4)
 ```
 
-Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a verifier, so other models plug in the same way. Model judgments stay candidates: they never replace the human review step.
+`LLMVerifier(batch=True)` uses the Message Batches API. Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a verifier, so other models plug in the same way. Optionally, `judge_many(pairs, max_concurrency)` receives all of an audit's (claim, passage) pairs at once and returns the judgments in the same order, and `usage()` returns `VerifierStats` for the report. Model judgments stay candidates: they never replace the human review step.
 
 ## Benchmark and GitHub Action
 
@@ -388,7 +396,7 @@ and resolved symlink targets. The action also warns and skips memory symlinks th
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
-- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
+- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there. With `--batch`, Anthropic keeps the batch's requests and results for up to 29 days, visible to anyone with access to that workspace; delete the batch through the API if that is too long.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - A repeated key in a JSON object is rejected, including in a nested object. Keeping the last value would let one `events.jsonl` line show one `actor` to a person reading the file and another to replay, and would let a `policy.json` that names an actor twice grant the second list of roles.

@@ -233,8 +233,8 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | API | 用途 |
 |---|---|
 | `memfalsify.ATTENTION` | 严格审计计数的冻结状态集合：challenged、conflicted、candidate_counterevidence、disputed。 |
-| `memfalsify.AuditReport` | 只读审计结果，包含发现、状态计数、跳过的证据及局限。 |
-| `memfalsify.CascadeVerifier` | 构造参数为 first、second、accept_at=0.8；首个验证器置信度不足时升级。 |
+| `memfalsify.AuditReport` | 只读审计结果，包含发现、状态计数、各模型后端的 API 用量（verifier_stats）、跳过的证据及局限。 |
+| `memfalsify.CascadeVerifier` | 构造参数为 first、second、accept_at=0.8；首个验证器置信度不足时升级。judge_many 先让 first 判断全部片段，再让 second 判断其中没把握的；usage() 合并两个后端的用量。 |
 | `memfalsify.Change` | 不可变比较结果：类型、新旧 Claim、相似度及移动标记。 |
 | `memfalsify.Claim` | 解析后的记忆，包含稳定 ID、文本、路径、行号、章节、重复位置，以及所在文件格式规定的 frontmatter 元数据（例如 Cursor 规则的 globs）。 |
 | `memfalsify.ClaimChange` | 可序列化的差异项，包含新旧 ClaimVersion 与可选审计状态。 |
@@ -242,16 +242,16 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.ClaimVersion` | 某修订中的记忆文本与位置；of(claim) 从 Claim 构建。 |
 | `memfalsify.CommitInfo` | 用于溯源的提交标识、时间、作者及主题。 |
 | `memfalsify.DiffReport` | 修订比较及新增／修改记忆的审计；attention 统计严格状态。 |
-| `memfalsify.DualVerifier` | 用 first 与 second 构造；不一致时返回 disputed 并保留双方意见。 |
+| `memfalsify.DualVerifier` | 用 first 与 second 构造；不一致时返回 disputed 并保留双方意见。judge_many 让每个后端各判断一遍；usage() 合并两个后端的用量。 |
 | `memfalsify.EvidenceFinding` | 候选或人工确认的关系、理由、各验证器意见及证据引用。 |
 | `memfalsify.Finding` | 单条记忆的状态、证据、问题、建议操作，以及所在文件的 frontmatter 元数据。 |
 | `memfalsify.GitError` | HistoryError 子类，带经过清理的 summary 与底层诊断消息。 |
 | `memfalsify.HistoryError` | Git 历史操作无效或不可用时的 ValueError。 |
 | `memfalsify.HistoryReport` | 当前及已删除记忆的来源、已扫描提交和扫描局限。 |
 | `memfalsify.Issue` | 措辞、时间、冲突或重复问题，包含类型与详情。 |
-| `memfalsify.JevVerifier` | 构造参数为 model、可选 SDK client、threshold=0.5；仅构造时导入 typesafe_sdk。 |
+| `memfalsify.JevVerifier` | 构造参数为 model、可选 SDK client、threshold=0.5；仅构造时导入 typesafe_sdk。usage() 报告请求数和 token 数。 |
 | `memfalsify.Judgment` | 关系、理由、验证器名称、可选置信度及嵌套意见。 |
-| `memfalsify.LLMVerifier` | 构造参数为 model、可选 client、effort="low"、fallbacks=None；仅构造时导入 anthropic。 |
+| `memfalsify.LLMVerifier` | 构造参数为 model、可选 client、effort="low"、fallbacks=None，以及仅限关键字的 batch=False（Message Batches API）、progress 和 sleep；仅构造时导入 anthropic。缓存提示前缀；judge_many 和 usage() 供审计使用。 |
 | `memfalsify.LexicalVerifier` | 离线验证器；覆盖阈值 related=0.6、support=0.75。 |
 | `memfalsify.MemoryFormat` | 不可变的智能体指令文件格式：名称（例如 cursor-rule）、读取它的智能体，以及作为记忆元数据保留的 frontmatter 字段。 |
 | `memfalsify.Proposal` | 建议操作及原因；replacement 始终为 None。 |
@@ -262,16 +262,18 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.Rollback` | 补丁结果：字节或 None，以及消息；不应用补丁。 |
 | `memfalsify.Skipped` | 被跳过的证据路径及原因。 |
 | `memfalsify.Status` | 七种审计状态值的 Literal 类型。 |
-| `memfalsify.Verifier` | 协议：name: str 及 judge(claim: str, passage: str) → Judgment。 |
+| `memfalsify.Verifier` | 协议：name: str 及 judge(claim: str, passage: str) → Judgment。如果实现了可选的 judge_many(pairs, max_concurrency) 和 usage() → list[VerifierStats]，审计会使用它们。 |
 | `memfalsify.VerifierError` | SDK、凭据不可用或模型判断失败时的 RuntimeError。 |
+| `memfalsify.VerifierStats` | 单个模型后端的 API 用量：请求数、批量请求数、输入和输出 token，以及提示缓存的写入和读取（不支持缓存时为 None）。 |
 | `memfalsify.__version__` | 已安装发行包的版本字符串。 |
-| `memfalsify.audit` | 解析记忆并用可选的证据与人工审核记录进行审计；不修改记忆。 |
+| `memfalsify.audit` | 解析记忆并用可选的证据与人工审核记录进行审计；不修改记忆。max_concurrency 限制同时进行的验证器调用数（默认 1）。 |
 | `memfalsify.audit_claims` | 审计已解析的记忆；only= 限定输出，但审核与冲突检查仍使用全部记忆。memory_paths 不作为证据。 |
 | `memfalsify.claim_id` | 返回规范化文本的记忆 ID。 |
 | `memfalsify.compare` | 按 ID、章节及词语相似度确定性比较两组 Claim。 |
 | `memfalsify.detect` | 按精确且区分大小写的文件名和所在目录（CLAUDE.md、AGENTS.md、GEMINI.md、.cursor/rules/*.mdc、.github/copilot-instructions.md 等）返回路径的 MemoryFormat；其他文件按普通 Markdown 处理。 |
 | `memfalsify.diff_to_markdown` | 将 DiffReport 渲染为 Markdown。 |
 | `memfalsify.history_to_markdown` | 将 HistoryReport 渲染为 Markdown。 |
+| `memfalsify.judge_all` | 按顺序判断（记忆、片段）对：验证器有 judge_many 时交给它，否则每次最多并发 max_concurrency 个 judge 调用。 |
 | `memfalsify.load_reviews` | 根据记忆 ID 映射验证人工审核记录及其逐字引用；传入 skipped= 时，被输入路径策略排除的审核证据记录到该列表而不是抛出异常。 |
 | `memfalsify.memory_diff` | 比较 base 与 head 或工作区，仅以当前证据审计新增／修改的记忆。 |
 | `memfalsify.memory_history` | 沿 HEAD 第一父提交链溯源记忆；max_commits 默认 100。 |
@@ -282,15 +284,16 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.to_markdown` | 将 AuditReport 渲染为 Markdown。 |
 
 ```python
-audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
-audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None) -> AuditReport
+audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
+audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]
 detect(path: str | PurePath) -> MemoryFormat
 diff_to_markdown(report: DiffReport) -> str
 history_to_markdown(report: HistoryReport) -> str
+judge_all(verifier: Verifier, pairs: Sequence[tuple[str, str]], max_concurrency: int=1) -> list[Judgment]
 load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *, skipped: list[Skipped] | None=None) -> dict[str, list[EvidenceFinding]]
-memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> DiffReport
+memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> DiffReport
 memory_history(memory_file: Path, max_commits: int=100, follow_links: bool=True) -> HistoryReport
 parse_memory(memory_file: Path, follow_links: bool=True, *, skipped: list[Skipped] | None=None) -> tuple[list[Claim], list[Path]]
 parse_text(text: str, display: str, fmt: MemoryFormat=MARKDOWN) -> tuple[list[Claim], list[str]]

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import date
 from enum import Enum
 from pathlib import Path
@@ -43,17 +43,28 @@ class VerifierChoice(str, Enum):
     cascade = "cascade"
 
 
-def build_verifier(choice: VerifierChoice, llm_model: str, jev_model: str, accept_at: float = 0.8) -> Verifier:
-    """Model backends import their heavy dependencies only when constructed."""
+CLAUDE_CHOICES = (VerifierChoice.llm, VerifierChoice.dual, VerifierChoice.cascade)
+
+
+def build_verifier(choice: VerifierChoice, llm_model: str, jev_model: str, accept_at: float = 0.8,
+                   batch: bool = False, progress: Callable[[str], None] | None = None) -> Verifier:
+    """Model backends import their heavy dependencies only when constructed. ``batch`` sends the Claude
+    requests through the Message Batches API; ``progress`` receives its status lines."""
+    if batch and choice not in CLAUDE_CHOICES:
+        raise ValueError("--batch applies to Claude requests: use it with --verifier llm, dual or cascade")
+
+    def claude() -> Verifier:
+        return llm.LLMVerifier(llm_model, batch=True, progress=progress) if batch else llm.LLMVerifier(llm_model)
+
     if choice is VerifierChoice.lexical:
         return LexicalVerifier()
     if choice is VerifierChoice.llm:
-        return llm.LLMVerifier(llm_model)
+        return claude()
     if choice is VerifierChoice.jev:
         return jev.JevVerifier(jev_model)
     if choice is VerifierChoice.cascade:
-        return CascadeVerifier(jev.JevVerifier(jev_model), llm.LLMVerifier(llm_model), accept_at)
-    return DualVerifier(llm.LLMVerifier(llm_model), jev.JevVerifier(jev_model))
+        return CascadeVerifier(jev.JevVerifier(jev_model), claude(), accept_at)
+    return DualVerifier(claude(), jev.JevVerifier(jev_model))
 
 
 MAX_JUDGED = 8
@@ -73,6 +84,13 @@ _JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u20
 
 def _json_shield(text: str) -> str:
     return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
+def concurrency(choice: VerifierChoice, max_concurrency: int) -> int:
+    """Model verifiers wait on the network, so they run requests in parallel; lexical judging stays serial."""
+    return 1 if choice is VerifierChoice.lexical else max_concurrency
+
+
+def _progress(message: str) -> None:
+    typer.echo(message, err=True)
 
 
 def _fail(message: str) -> None:
@@ -115,6 +133,12 @@ LLM_MODEL = typer.Option(llm.DEFAULT_MODEL, help="Claude model for --verifier ll
 JEV_MODEL = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual/cascade")
 ACCEPT_AT = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence, else ask the LLM")
 MAX_JUDGED_OPTION = typer.Option(MAX_JUDGED, min=1, help="Model verifiers: passages judged per memory (bounds API calls)")
+MAX_CONCURRENCY = typer.Option(
+    4, min=1, help="Model verifiers: API requests in flight at once (results keep their order; not used for "
+                   "--batch requests)")
+BATCH = typer.Option(
+    False, "--batch", help="Send the Claude requests (llm, dual, cascade) through the Message Batches API: half "
+                           "the price, but a batch can take up to 24 hours (most end within an hour)")
 MIN_COVERAGE = typer.Option(
     None, min=0.0, max=1.0,
     help="Share of a memory's terms a passage must contain to be judged (default 0.5 lexical, 0.2 models)")
@@ -138,12 +162,16 @@ def audit_command(
     accept_at: float = ACCEPT_AT,
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
+    max_concurrency: int = MAX_CONCURRENCY,
+    batch: bool = BATCH,
 ) -> None:
     """Audit a memory or instruction file and print an evidence-cited report with proposed (unapplied) actions."""
     try:
         reference = date.fromisoformat(as_of) if as_of else None
-        report = audit(memory, evidence, reviews, verifier=build_verifier(verifier, llm_model, jev_model, accept_at),
-                       as_of=reference, stale_days=stale_days, follow_links=follow_links, exclude=exclude or (),
+        judge = build_verifier(verifier, llm_model, jev_model, accept_at, batch=batch, progress=_progress)
+        report = audit(memory, evidence, reviews, verifier=judge, as_of=reference, stale_days=stale_days,
+                       follow_links=follow_links, exclude=exclude or (),
+                       max_concurrency=concurrency(verifier, max_concurrency),
                        **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
@@ -179,13 +207,16 @@ def diff_command(
     accept_at: float = ACCEPT_AT,
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
+    max_concurrency: int = MAX_CONCURRENCY,
+    batch: bool = BATCH,
 ) -> None:
     """Show which claims changed between two revisions and audit only the added and changed ones."""
     try:
         reference = date.fromisoformat(as_of) if as_of else None
+        judge = build_verifier(verifier, llm_model, jev_model, accept_at, batch=batch, progress=_progress)
         report = memory_diff(memory, base, head, follow_links=follow_links, evidence_root=evidence, reviews=reviews,
-                             verifier=build_verifier(verifier, llm_model, jev_model, accept_at), as_of=reference,
-                             stale_days=stale_days, exclude=exclude or (),
+                             verifier=judge, as_of=reference, stale_days=stale_days, exclude=exclude or (),
+                             max_concurrency=concurrency(verifier, max_concurrency),
                              **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
