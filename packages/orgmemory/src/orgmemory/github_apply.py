@@ -127,7 +127,10 @@ def load_config(dataset: Path) -> GithubConfig:
     path = _path(dataset, "github.json")
     if not path.exists():
         return GithubConfig()
-    return GithubConfig.model_validate(loads_at(path, read_file_bytes(path)))
+    try:
+        return GithubConfig.model_validate(loads_at(path, read_file_bytes(path)))
+    except RecursionError as exc:
+        raise ValueError(f"{path}: invalid JSON: too deeply nested") from exc
 
 
 def next_since(sync_log: list[dict], repo: str) -> datetime | None:

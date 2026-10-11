@@ -42,12 +42,19 @@ Release 0.3 contains:
   and MCP server construction. Existing module import paths remain available.
 - Public signature annotations and wheel-included `py.typed` markers in all four packages.
 - English and Chinese API references, a 1.0 stability and deprecation policy, and pinned export tests.
+- `memcore.load_json` parses one JSON value and raises `ValueError` for malformed JSON, bytes that are not UTF-8, or JSON nested too deeply.
 
 ### Changed
 
 - MCP, Action, benchmark, and README library imports use the public package roots where possible,
   with no behavior changes. CLI configuration and report-header helpers remain internal.
 - memfalsify `audit` and `diff` find internal conflicts from an inverted index of normalized terms and reuse each claim's lexical features. Reports stay byte-identical; large memories are much faster. Timings are in `benchmarks/perf/`.
+
+### Fixed
+
+- Memory files, reviews, evidence manifests, organizational-memory events and policy, GitHub captures, and git history output reject malformed or hostile input with `ValueError`, `EvidenceError`, or `HistoryError`. The CLIs exit 2 and print one line, instead of a traceback or a hang.
+- A leading BOM in a memory file is ignored, and CR, CRLF, and LF are line breaks.
+- `memfalsify` stdout and organizational-memory replay and explain do not emit terminal control or bidi characters. `--output`, and MemFalsify's audit Markdown, keep the original quotes.
 
 ### memfalsify
 

@@ -25,6 +25,8 @@ def input_path(root: Path, path: Path, *, directory: bool = False) -> Path:
     Callers keep the walked path for reporting. The returned target must be opened without
     following new symlinks so a swap after this check cannot bypass the policy.
     """
+    if "\x00" in str(path) or "\x00" in str(root):
+        raise InputPathError("null character in path")  # the OS would raise ValueError on lstat
     root = Path(root).resolve()
     walked = Path(path).absolute()
     try:

@@ -111,8 +111,19 @@ def sentences(raw: str) -> list[tuple[str, int, int]]:
             for i, (text, start, end) in enumerate(found)]
 
 
+def normalize_memory(text: str) -> str:
+    """Drop one leading U+FEFF and turn CR and CRLF into LF. Idempotent."""
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
-    """Claims and local link targets of one memory file's text (newlines already normalized to LF)."""
+    """Claims and local link targets of one memory file.
+
+    A single leading U+FEFF is ignored. CR, CRLF and LF are line breaks.
+    """
+    text = normalize_memory(text)
     lines = text.split("\n")
     claims, links, section, fenced = [], [], None, False
     for index in range(_strip_frontmatter(lines), len(lines)):
@@ -148,7 +159,11 @@ def merge_duplicates(claims: list[Claim]) -> list[Claim]:
 
 
 def _parse_file(root: Path, path: Path, display: str) -> tuple[list[Claim], list[str]]:
-    return parse_text(read_input_text(root, path), display)
+    try:
+        text = read_input_text(root, path)
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{display}: not UTF-8 text") from exc
+    return parse_text(text, display)
 
 
 def parse_memory(memory_file: Path, follow_links: bool = True, *,

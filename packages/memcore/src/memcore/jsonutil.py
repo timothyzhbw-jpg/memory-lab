@@ -172,8 +172,13 @@ def loads(data: str | bytes | bytearray, *, parse_constant: Callable[[str], Any]
 
 def loads_at(source: str | Path, data: str | bytes | bytearray, *,
              parse_constant: Callable[[str], Any] | None = None) -> Any:
-    """Parse ``data`` from ``source``. Errors are ``{source}:{line}: invalid JSON: ...``."""
+    """Parse ``data`` from ``source``. Errors are ``{source}:{line}: invalid JSON: ...``; nesting too deep
+    for the parser and bytes that are not UTF-8 are ``{source}: invalid JSON: ...``."""
     try:
         return loads(data, parse_constant=parse_constant)
     except json.JSONDecodeError as exc:
         raise ValueError(f"{source}:{exc.lineno}: invalid JSON: {exc.msg}") from exc
+    except RecursionError as exc:
+        raise ValueError(f"{source}: invalid JSON: too deeply nested") from exc
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{source}: invalid JSON: not UTF-8 text") from exc

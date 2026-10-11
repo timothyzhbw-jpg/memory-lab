@@ -17,6 +17,7 @@ from .evidence import (
 )
 from .jsonl import (
     append_jsonl,
+    load_json,
     read_jsonl,
 )
 from .reading import (
@@ -39,6 +40,7 @@ __all__ = [
     "confinement_root",
     "confinement_supported",
     "line_of",
+    "load_json",
     "load_manifest",
     "locate_quote",
     "make_span",

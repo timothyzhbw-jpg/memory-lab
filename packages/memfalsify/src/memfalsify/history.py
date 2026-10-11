@@ -6,6 +6,7 @@ claim to the commits that introduced and last changed it. Git access lives in ``
 from __future__ import annotations
 
 import difflib
+import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
@@ -325,17 +326,36 @@ class _Lineage:
     replaced: Claim | None = None
 
 
-def _log(repo: Repository, head: str, paths: list[str], limit: int) -> list[CommitInfo]:
-    """Up to ``limit`` first-parent commits from ``head`` that touched ``paths``, newest first."""
-    out = repo.run("log", "--first-parent", "-z", f"--max-count={limit}", "--format=%H%x00%aI%x00%an%x00%s",
-                   "--end-of-options", head, "--", *paths)
+# git %aI is strict ISO-8601: no fractional seconds. Z or a numeric offset, as in +00:00 and -05:00.
+_GIT_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$")
+
+
+def parse_git_log(out: bytes) -> list[CommitInfo]:
+    """Commits from ``git log -z --format=%H%x00%aI%x00%an%x00%s``.
+
+    A record that is not four fields, a non-hex commit id, or an author date that is not strict
+    ISO-8601 raises ``HistoryError``. Author and subject are untrusted and go through ``printable``.
+    """
     fields = out.decode("utf-8", "replace").split("\0")
     if fields and fields[-1] == "":
         fields.pop()
     if len(fields) % 4 or any(not HEX.fullmatch(fields[i]) for i in range(0, len(fields), 4)):
         raise HistoryError("cannot parse git log output")
-    return [CommitInfo(commit=fields[i], date=fields[i + 1], author=printable(fields[i + 2]),
-                       subject=printable(fields[i + 3])) for i in range(0, len(fields), 4)]
+    commits = []
+    for index in range(0, len(fields), 4):
+        date = fields[index + 1]
+        if not _GIT_DATE.fullmatch(date):
+            raise HistoryError("cannot parse git log output")
+        commits.append(CommitInfo(commit=fields[index], date=date, author=printable(fields[index + 2]),
+                                  subject=printable(fields[index + 3])))
+    return commits
+
+
+def _log(repo: Repository, head: str, paths: list[str], limit: int) -> list[CommitInfo]:
+    """Up to ``limit`` first-parent commits from ``head`` that touched ``paths``, newest first."""
+    out = repo.run("log", "--first-parent", "-z", f"--max-count={limit}", "--format=%H%x00%aI%x00%an%x00%s",
+                   "--end-of-options", head, "--", *paths)
+    return parse_git_log(out)
 
 
 def memory_history(memory_file: Path, max_commits: int = 100, follow_links: bool = True) -> HistoryReport:

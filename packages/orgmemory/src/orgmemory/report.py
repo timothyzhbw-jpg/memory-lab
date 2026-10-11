@@ -12,6 +12,14 @@ from memcore import EvidenceSpan
 from .audit import KINDS, SEVERITIES, AuditFinding, AuditReport
 from .models import ReplayResult, SubjectState
 
+# Terminal and bidi controls. Newlines and tabs stay so the report can still break lines.
+_TERMINAL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+
+
+def terminal_safe(text: str) -> str:
+    """Replay text safe to print: control and bidi characters become U+FFFD. Newlines and tabs stay."""
+    return _TERMINAL.sub("\ufffd", text)
+
 
 def _yaml_value(value) -> str:
     if isinstance(value, bool):
@@ -70,7 +78,7 @@ def explain(result: ReplayResult, subject: str) -> str:
     out += ["**Event history**", "", "| Time | Event | Actor | Action | Outcome | Status |", "|---|---|---|---|---|---|"]
     out += [f"| {e.timestamp.isoformat()} | `{e.event_id}` | {e.actor} ({', '.join(e.roles) or 'no role'}) | "
             f"{e.action} | {e.outcome} | {e.status_before} → {e.status_after} |" for e in rows]
-    return "\n".join(out) + "\n"
+    return terminal_safe("\n".join(out) + "\n")
 
 
 def to_markdown(result: ReplayResult) -> str:
@@ -80,7 +88,7 @@ def to_markdown(result: ReplayResult) -> str:
            f"- Mode: **{result.mode}** (the event log was not modified)", ""]
     for subject in result.states:
         out.append(explain(result, subject))
-    return "\n".join(out)
+    return terminal_safe("\n".join(out))
 
 
 def _one_line(text: str) -> str:

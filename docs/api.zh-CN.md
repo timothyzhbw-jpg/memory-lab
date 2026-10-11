@@ -186,6 +186,7 @@ Change、Rollback、Capture、Plan、Summary 使用 dataclass 字段。完整函
 | `memcore.confinement_root` | 返回当前限制读取的根目录；无上下文时返回 None。 |
 | `memcore.confinement_supported` | 检查 POSIX O_NOFOLLOW 与 dir_fd 是否可用。 |
 | `memcore.line_of` | 返回 Unicode 字符偏移所在的行号，从 1 开始。 |
+| `memcore.load_json` | 从 str 或 bytes 解析一个 JSON 值；格式错误、对象键重复、非 UTF-8 字节和嵌套过深都抛出 ValueError。 |
 | `memcore.load_manifest` | 验证全部记录并返回 ID → EvidenceSpan；路径相对于清单所在目录。 |
 | `memcore.locate_quote` | 定位根目录下 UTF-8 文件中的首个逐字匹配引用；可选来源参数传给 EvidenceSpan。 |
 | `memcore.make_span` | 用文本、摘要及 [start, end) Unicode 偏移构建引用；不读取文件或计算哈希。 |
@@ -205,6 +206,7 @@ confined_reads(root: Path) -> Iterator[None]
 confinement_root() -> Path | None
 confinement_supported() -> bool
 line_of(text: str, offset: int) -> int
+load_json(data: str | bytes) -> Any
 load_manifest(manifest: Path) -> dict[str, EvidenceSpan]
 locate_quote(root: Path, relative: str, quote: str, **provenance: Any) -> EvidenceSpan
 make_span(relative: str, digest: str, text: str, start: int, end: int, **provenance: Any) -> EvidenceSpan

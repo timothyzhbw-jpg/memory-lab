@@ -31,7 +31,15 @@ class Dataset:
         policy = policy or directory / "policy.json"
         evidence = evidence or directory / "evidence.jsonl"
         parsed = load_events(events)
-        policy_model = Policy.model_validate(loads_at(policy, read_file_text(policy)))
+        try:
+            raw_policy = read_file_text(policy)
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{policy}: not UTF-8 text") from exc
+        parsed_policy = loads_at(policy, raw_policy)
+        try:
+            policy_model = Policy.model_validate(parsed_policy)
+        except RecursionError as exc:
+            raise ValueError(f"{policy}: invalid JSON: too deeply nested") from exc
         return cls(parsed, policy_model, load_manifest(evidence))
 
 
@@ -41,6 +49,8 @@ def load_events(path: Path) -> list[Event]:
     for number, record in read_jsonl(path):
         try:
             parsed.append(Event.model_validate(record))
+        except RecursionError as exc:
+            raise ValueError(f"{path}:{number}: invalid JSON: too deeply nested") from exc
         except ValueError as exc:
             raise ValueError(f"{path}:{number}: {exc}") from exc
     return parsed

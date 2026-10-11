@@ -51,7 +51,9 @@ class EvidenceSpan(BaseModel):
 
 
 def resolve_inside(root: Path, relative: str) -> Path:
-    """Resolve ``relative`` under ``root``; refuse absolute paths and escapes (incl. symlinks)."""
+    """Resolve ``relative`` under ``root``; refuse absolute paths, null bytes and escapes (incl. symlinks)."""
+    if "\x00" in relative or "\x00" in str(root):
+        raise EvidenceError("evidence path contains a null character")
     root = Path(root).resolve()
     if Path(relative).is_absolute():
         raise EvidenceError(f"evidence path must be relative: {relative}")
@@ -111,7 +113,10 @@ def verify_entry(entry: ManifestEntry, root: Path) -> EvidenceSpan:
     digest, text = read_text(root, entry.path)
     if digest != entry.sha256:
         raise EvidenceError(f"evidence hash mismatch: {entry.id}")
-    if entry.end <= entry.start or text[entry.start:entry.end] != entry.quote:
+    # Compare bounds before slicing. A hostile end must not be turned into a giant slice.
+    length = len(text)
+    if (entry.start >= length or entry.end > length or entry.end <= entry.start
+            or text[entry.start:entry.end] != entry.quote):
         raise EvidenceError(f"quote does not match recorded span: {entry.id}")
     return make_span(entry.path, digest, text, entry.start, entry.end, id=entry.id,
                      source_uri=entry.source_uri, source_kind=entry.source_kind,

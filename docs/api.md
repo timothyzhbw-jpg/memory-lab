@@ -209,6 +209,7 @@ signature means current UTC; it is an internal default implementation, not a pub
 | `memcore.confinement_root` | Return the active confinement root, or None outside a confined context. |
 | `memcore.confinement_supported` | Whether POSIX O_NOFOLLOW and dir_fd support are available. |
 | `memcore.line_of` | Return the one-based line at a Unicode character offset. |
+| `memcore.load_json` | Parse one JSON value from str or bytes; malformed JSON, a repeated object key, non-UTF-8 bytes and too-deep nesting raise ValueError. |
 | `memcore.load_manifest` | Verify all entries and return ID → EvidenceSpan; paths are relative to the manifest directory. |
 | `memcore.locate_quote` | Locate the first verbatim quote in a UTF-8 file under root; optional provenance is passed to EvidenceSpan. |
 | `memcore.make_span` | Build a span from supplied text, digest, and [start, end) Unicode offsets; does not read or hash a file. |
@@ -228,6 +229,7 @@ confined_reads(root: Path) -> Iterator[None]
 confinement_root() -> Path | None
 confinement_supported() -> bool
 line_of(text: str, offset: int) -> int
+load_json(data: str | bytes) -> Any
 load_manifest(manifest: Path) -> dict[str, EvidenceSpan]
 locate_quote(root: Path, relative: str, quote: str, **provenance: Any) -> EvidenceSpan
 make_span(relative: str, digest: str, text: str, start: int, end: int, **provenance: Any) -> EvidenceSpan
