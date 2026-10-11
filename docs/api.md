@@ -127,10 +127,12 @@ print(explain(result, "Feature A"))
 print(audit_markdown(audit(dataset)))
 ```
 
-`Dataset(events, policy, evidence)` validates references. `Dataset.load` accepts `directory`,
-`events`, `policy`, `evidence` Paths, defaulting to directory `.`. It verifies the full manifest,
-including entries beyond an `as_of` cutoff. `replay(dataset, as_of=None)` respects authority;
-unauthorized attempts remain in the trail. `audit(dataset, as_of=None, stale_days=14, now=None)`
+`Dataset(events, policy, evidence, policy_log=None)` validates references and, with a policy log,
+that every role change was authorized when it took effect. `Dataset.load` accepts `directory`,
+`events`, `policy`, `evidence` and `policy_log` Paths, defaulting to directory `.`; a missing
+`policy-log.jsonl` means undated roles. It verifies the full manifest, including entries beyond an
+`as_of` cutoff. `replay(dataset, as_of=None)` respects authority, judging each event by the roles its
+actor held at its effective time; unauthorized attempts remain in the trail. `audit(dataset, as_of=None, stale_days=14, now=None)`
 uses `as_of`, then `now`, then current UTC as its reference time. These operations never write
 files. Validation errors are `ValueError` or `memcore.EvidenceError`; I/O can raise `OSError`.
 
@@ -330,13 +332,14 @@ to_markdown(report: AuditReport) -> str
 | API | Purpose |
 |---|---|
 | `orgmemory.Action` | Literal type for the eight event actions. |
-| `orgmemory.AuditFinding` | Decision-process finding with kind, severity, subjects, events, and citations. |
-| `orgmemory.AuditReport` | Read-only decision-process report with replay counts, findings, and severity counts. |
+| `orgmemory.AuditFinding` | Decision-process finding with kind, severity, subjects, events, citations, and the role changes it cites (dated roles only). |
+| `orgmemory.AuditReport` | Read-only decision-process report with replay counts, findings, severity and kind counts, and dated_policy when roles are effective-dated. |
 | `orgmemory.Capture` | Rendered source-file bytes, relative path, and manifest entries; not the raw capture dict. |
 | `orgmemory.CitedEvent` | Event metadata with its exact evidence quotes. |
 | `orgmemory.Client` | Construct with transport and token; optional max_wait=3600, sleep, clock, progress. get/get_json/pages perform origin-confined requests. |
 | `orgmemory.Conflict` | Recorded simultaneous decision, reversal, or invalid supersession. |
-| `orgmemory.Dataset` | Construct from events, Policy, and verified evidence; load(directory=...) reads and validates all three dataset files. |
+| `orgmemory.Dataset` | Construct from events, Policy, verified evidence and an optional policy_log (list of PolicyChange); load(directory=...) reads and validates the dataset files, including policy-log.jsonl when present. |
+| `orgmemory.DatedPolicy` | Effective-dated roles of a replay or audit: the policy.json as_of baseline (or None) and the RoleChange entries applied up to the cutoff. |
 | `orgmemory.Decision` | Authorized decision, actor roles, timestamp, and quoted evidence. |
 | `orgmemory.Event` | Validated event with aware timestamp, actor, action, subject, and evidence IDs. |
 | `orgmemory.FetchProgress` | Optional throttled progress reporter with injectable clock and stream; update/rate_limit report progress. |
@@ -345,9 +348,11 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.PendingChange` | Ignored unauthorized decision attempt and reason. |
 | `orgmemory.PersistentTransport` | Reusable HTTPS transport/context manager; timeout=30, injectable connection_factory/env, close() releases resources. |
 | `orgmemory.Plan` | Pure conversion result with events, captures, spans, drift, skips, and counts. |
-| `orgmemory.Policy` | Actor roles and action permissions; roles/allows/decision_roles expose policy checks. |
-| `orgmemory.ReplayResult` | Subject states and event audit trail, optionally cut off at as_of. |
+| `orgmemory.Policy` | Actor roles (the baseline from optional as_of), action permissions including manage_roles; roles/allows/permitted/decision_roles expose policy checks. |
+| `orgmemory.PolicyChange` | Frozen policy-log.jsonl entry: id, aware timestamp, actor, grant or revoke_role, subject_actor, role, evidence IDs and an optional note. |
+| `orgmemory.ReplayResult` | Subject states and event audit trail, optionally cut off at as_of; dated_policy is set only for effective-dated roles. |
 | `orgmemory.Risk` | Risk event, actor, and note. |
+| `orgmemory.RoleChange` | A policy-log entry as replay applied it: who changed whose role and when, the acting roles, roles before and after, and quoted evidence. |
 | `orgmemory.Stopped` | Transient fetch stop; high-level sync can return an incomplete Summary. |
 | `orgmemory.SubjectState` | Current authorized status, risks, dependencies, pending approvals, decisions, and conflicts. |
 | `orgmemory.Summary` | GitHub import capture/plan, append counts, cursor, completeness; lines() returns display text. |
@@ -359,13 +364,14 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.convert` | Purely map raw capture dict plus existing events/evidence IDs and GithubConfig into a Plan; no I/O. |
 | `orgmemory.explain` | Render one subject’s state and decision provenance from a ReplayResult. |
 | `orgmemory.load_events` | Parse events JSONL with line-numbered validation errors. |
+| `orgmemory.load_policy_log` | Parse policy-log.jsonl with line-numbered validation errors. |
 | `orgmemory.replay` | Deterministically replay a validated Dataset under its policy, with optional aware as_of cutoff. |
 | `orgmemory.run_convert` | Apply a saved capture offline, create-only; dry_run previews without writes. |
 | `orgmemory.run_sync` | Fetch and import GitHub via a supplied Client; supports full/since/issues, save_capture, and dry_run. |
 | `orgmemory.to_markdown` | Render a ReplayResult as Markdown. |
 | `orgmemory.token_from_env` | Read the first nonempty GITHUB_TOKEN or GH_TOKEN from env, or from os.environ when env is omitted. |
 | `orgmemory.urllib_transport` | Build an origin-confined transport; default opener refuses redirects, timeout=30. |
-| `orgmemory.validate` | Check event ID uniqueness, evidence references, and supersession targets across the full log. |
+| `orgmemory.validate` | Check event ID uniqueness, evidence references and supersession targets across the full log, and policy-log IDs (unique, not event IDs, no gh: prefix) and their evidence. |
 
 ```python
 audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
@@ -373,13 +379,14 @@ audit_markdown(report: AuditReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
 explain(result: ReplayResult, subject: str) -> str
 load_events(path: Path) -> list[Event]
+load_policy_log(path: Path) -> list[PolicyChange]
 replay(dataset: Dataset, as_of: datetime | None=None) -> ReplayResult
 run_convert(dataset: Path, capture_path: Path, *, dry_run: bool=False, now: Callable[[], datetime] | None=None) -> Summary
 run_sync(dataset: Path, repo: str, client: Client, *, full: bool=False, since: datetime | None=None, issues: list[int] | None=None, save_capture: Path | None=None, dry_run: bool=False, now: Callable[[], datetime]=_now) -> Summary
 to_markdown(result: ReplayResult) -> str
 token_from_env(env: Mapping[str, str] | None=None) -> str | None
 urllib_transport(opener: urllib.request.OpenerDirector | None=None, timeout: float=30) -> Transport
-validate(events: list[Event], evidence: dict[str, EvidenceSpan]) -> None
+validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Iterable[PolicyChange]=()) -> None
 ```
 
 ### `memlab_mcp`

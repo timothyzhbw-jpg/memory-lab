@@ -52,8 +52,10 @@ wheel 中包含 `py.typed`。支持 Python 3.10+。
 扫描 100 个提交，报告浅克隆／截断，不跟随文件重命名。`rollback_patch` 默认跟随链接，仅生成
 字节或 None，不应用补丁。Git 错误为 `HistoryError`／`GitError`。
 
-`Dataset` 构造时验证引用。`Dataset.load` 可指定 directory、events、policy、evidence 路径，
-默认目录 `.`，核验完整清单，包括 as_of 之后的记录。`replay` 遵守权限，未授权事件保留在轨迹中。
+`Dataset` 构造时验证引用；有角色变更日志（policy_log）时，还验证每次角色变更在生效时是否获得授权。
+`Dataset.load` 可指定 directory、events、policy、evidence、policy_log 路径，默认目录 `.`；没有
+`policy-log.jsonl` 表示角色不带生效时间。它核验完整清单，包括 as_of 之后的记录。`replay` 遵守权限，
+按参与者在事件生效时持有的角色判断每个事件，未授权事件保留在轨迹中。
 组织审计默认 `stale_days=14`，参考时间依次取 as_of、now、当前 UTC。验证错误为 `ValueError`
 或 `memcore.EvidenceError`，I/O 可能抛出 `OSError`。回放、解释与审计不写文件。
 
@@ -307,13 +309,14 @@ to_markdown(report: AuditReport) -> str
 | API | 用途 |
 |---|---|
 | `orgmemory.Action` | 八种事件操作的 Literal 类型。 |
-| `orgmemory.AuditFinding` | 决策流程发现，包含类型、严重程度、议题、事件及引用。 |
-| `orgmemory.AuditReport` | 只读决策流程报告，包含回放计数、发现及严重程度计数。 |
+| `orgmemory.AuditFinding` | 决策流程发现，包含类型、严重程度、议题、事件、引用，以及它引用的角色变更（仅限带生效时间的角色）。 |
+| `orgmemory.AuditReport` | 只读决策流程报告，包含回放计数、发现、严重程度和类型计数；角色带生效时间时还有 dated_policy。 |
 | `orgmemory.Capture` | 渲染后的源文件字节、相对路径及清单项；不是原始抓取字典。 |
 | `orgmemory.CitedEvent` | 事件元数据及其精确证据引用。 |
 | `orgmemory.Client` | 用 transport 与 token 构造；可选 max_wait=3600、sleep、clock、progress。get/get_json/pages 发起限制来源的请求。 |
 | `orgmemory.Conflict` | 记录同刻决策、决策反转或无效替代。 |
-| `orgmemory.Dataset` | 由事件、Policy 及已验证证据构造；load(directory=...) 读取并验证三个数据集文件。 |
+| `orgmemory.Dataset` | 由事件、Policy、已验证证据和可选的 policy_log（PolicyChange 列表）构造；load(directory=...) 读取并验证数据集文件，存在 policy-log.jsonl 时也会读取。 |
+| `orgmemory.DatedPolicy` | 回放或审计中带生效时间的角色：policy.json 的 as_of 基线（或 None），以及截止时间前已应用的 RoleChange 记录。 |
 | `orgmemory.Decision` | 授权决策、参与者角色、时间及证据引用。 |
 | `orgmemory.Event` | 已验证的事件，包含带时区时间、参与者、操作、议题及证据 ID。 |
 | `orgmemory.FetchProgress` | 可选的节流进度报告器，支持注入 clock 与 stream；update/rate_limit 报告进度。 |
@@ -322,9 +325,11 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.PendingChange` | 被忽略的未授权决策尝试及原因。 |
 | `orgmemory.PersistentTransport` | 可复用 HTTPS 传输／上下文管理器；timeout=30，支持注入 connection_factory/env，close() 释放资源。 |
 | `orgmemory.Plan` | 纯转换结果，包含事件、抓取文件、引用、漂移、跳过项及计数。 |
-| `orgmemory.Policy` | 参与者角色及操作权限；roles/allows/decision_roles 提供权限检查。 |
-| `orgmemory.ReplayResult` | 议题状态及事件审计轨迹，可通过 as_of 限制截止时间。 |
+| `orgmemory.Policy` | 参与者角色（从可选的 as_of 起生效的基线）与动作权限（包括 manage_roles）；roles/allows/permitted/decision_roles 提供权限检查。 |
+| `orgmemory.PolicyChange` | 不可变的 policy-log.jsonl 记录：id、带时区的时间戳、actor、grant 或 revoke_role、subject_actor、role、证据 ID 和可选的 note。 |
+| `orgmemory.ReplayResult` | 各议题状态与事件审计轨迹，可按 as_of 截止；只有角色带生效时间时才有 dated_policy。 |
 | `orgmemory.Risk` | 风险事件、参与者及备注。 |
+| `orgmemory.RoleChange` | 回放实际应用的一条角色变更：谁在何时改变了谁的角色、操作者当时的角色、变更前后的角色，以及引用的证据。 |
 | `orgmemory.Stopped` | 暂时停止抓取；高层 sync 可能返回不完整的 Summary。 |
 | `orgmemory.SubjectState` | 当前授权状态、风险、依赖、待批准项、决策及冲突。 |
 | `orgmemory.Summary` | GitHub 导入的抓取／计划、追加计数、游标及完整性；lines() 返回显示文本。 |
@@ -336,13 +341,14 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.convert` | 将原始抓取字典、已有事件／证据 ID 及 GithubConfig 纯映射为 Plan；无 I/O。 |
 | `orgmemory.explain` | 从 ReplayResult 渲染某个议题的状态与决策来源。 |
 | `orgmemory.load_events` | 解析事件 JSONL，验证错误带行号。 |
+| `orgmemory.load_policy_log` | 解析 policy-log.jsonl，验证错误会标出行号。 |
 | `orgmemory.replay` | 按权限策略确定性回放已验证 Dataset，可指定带时区的 as_of 截止时间。 |
 | `orgmemory.run_convert` | 离线应用保存的抓取结果，仅新建；dry_run 预览而不写入。 |
 | `orgmemory.run_sync` | 通过提供的 Client 抓取并导入 GitHub；支持 full/since/issues、save_capture 与 dry_run。 |
 | `orgmemory.to_markdown` | 将 ReplayResult 渲染为 Markdown。 |
 | `orgmemory.token_from_env` | 从 env 读取首个非空 GITHUB_TOKEN 或 GH_TOKEN；省略 env 时读取 os.environ。 |
 | `orgmemory.urllib_transport` | 构建限制来源的传输；默认 opener 拒绝重定向，timeout=30。 |
-| `orgmemory.validate` | 在完整日志中检查事件 ID 唯一性、证据引用及替代目标。 |
+| `orgmemory.validate` | 在完整日志范围内检查事件 ID 唯一性、证据引用与取代目标，以及角色变更日志的 ID（唯一、不与事件 ID 相同、不以 gh: 开头）和证据。 |
 
 ```python
 audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
@@ -350,13 +356,14 @@ audit_markdown(report: AuditReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
 explain(result: ReplayResult, subject: str) -> str
 load_events(path: Path) -> list[Event]
+load_policy_log(path: Path) -> list[PolicyChange]
 replay(dataset: Dataset, as_of: datetime | None=None) -> ReplayResult
 run_convert(dataset: Path, capture_path: Path, *, dry_run: bool=False, now: Callable[[], datetime] | None=None) -> Summary
 run_sync(dataset: Path, repo: str, client: Client, *, full: bool=False, since: datetime | None=None, issues: list[int] | None=None, save_capture: Path | None=None, dry_run: bool=False, now: Callable[[], datetime]=_now) -> Summary
 to_markdown(result: ReplayResult) -> str
 token_from_env(env: Mapping[str, str] | None=None) -> str | None
 urllib_transport(opener: urllib.request.OpenerDirector | None=None, timeout: float=30) -> Transport
-validate(events: list[Event], evidence: dict[str, EvidenceSpan]) -> None
+validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Iterable[PolicyChange]=()) -> None
 ```
 
 ### `memlab_mcp`

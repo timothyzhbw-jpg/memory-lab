@@ -1,0 +1,4 @@
+Org change notice, 2026-10-09 (synthetic)
+
+Chen (org admin): Wu is also product manager for Feature A from 2026-10-09 09:00 UTC.
+Chen (org admin): Zhou leaves the product manager role on 2026-10-12 09:00 UTC to join the platform team.

@@ -1,0 +1,3 @@
+Product decision log, 2026-10-07 (synthetic)
+
+Zhou (PM): Feature A is rejected for the November release until the billing migration lands.

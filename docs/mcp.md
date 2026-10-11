@@ -2,7 +2,7 @@
 
 English | [中文](mcp.zh-CN.md)
 
-`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server. It exposes MemFalsify and orgmemory to a local agent. The tools call the same library code as the `memfalsify` and `orgmemory` commands. They do not write reports, events, evidence, or policy files.
+`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server. It exposes MemFalsify and orgmemory to a local agent. The tools call the same library code as the `memfalsify` and `orgmemory` commands. They do not write reports, events, evidence, policy files or role changes.
 
 ## Tools
 
@@ -30,7 +30,7 @@ For root-relative paths, a tool returns the text the matching command prints whe
 
 `format` is `markdown` or `json` on every tool. The CLIs' `--format html` pages are for people, not agents, and the server writes no files, so to share an HTML report, run the CLI.
 
-`reviews_file` requires `evidence_dir`. Omit optional paths or pass `null`; empty paths are errors. Memory links and `@file.md` imports stay within the memory file's directory. Review references stay within the evidence directory, and dataset evidence references stay within the manifest's directory. Evidence scans skip outward file symlinks, directory symlinks and non-regular files. Media files next to transcript and OCR sidecars ([docs/multimodal.md](multimodal.md)) are hashed, only to check the binding, through the same confined reads. A dataset directory must contain `events.jsonl`, `policy.json`, and `evidence.jsonl`, with regular files as evidence sources.
+`reviews_file` requires `evidence_dir`. Omit optional paths or pass `null`; empty paths are errors. Memory links and `@file.md` imports stay within the memory file's directory. Review references stay within the evidence directory, and dataset evidence references stay within the manifest's directory. Evidence scans skip outward file symlinks, directory symlinks and non-regular files. Media files next to transcript and OCR sidecars ([docs/multimodal.md](multimodal.md)) are hashed, only to check the binding, through the same confined reads. A dataset directory must contain `events.jsonl`, `policy.json`, and `evidence.jsonl`, with regular files as evidence sources. An optional `policy-log.jsonl` (effective-dated role changes) is read when present; like the other dataset files, it must not be a symlink that leaves the server root, and it obeys the same hidden and skipped component rules.
 
 Invalid tool calls return MCP tool errors and leave the connection usable. Schema-validation errors report field names without rejected values; errors conceal outside-root path arguments, backend diagnostics and tracebacks. Model-verifier failures report a generic error suggesting SDK, credentials and backend checks.
 

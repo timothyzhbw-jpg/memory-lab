@@ -1,15 +1,36 @@
-"""Event, policy and state models. Every event is validated before any replay starts."""
+"""Event, policy and state models. Every event and policy-log entry is validated before any replay starts."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
 
 from memcore import EvidenceSpan
 
 Action = Literal["request", "reconsider", "raise_risk", "dependency", "approve", "reject", "revoke", "comment"]
 DECISIONS = {"approve", "reject", "revoke"}
+MANAGE_ROLES = "manage_roles"
+# Permissions name event actions, plus manage_roles: who may record a role change in policy-log.jsonl.
+PolicyAction = Union[Action, Literal["manage_roles"]]
+RoleAction = Literal["grant", "revoke_role"]
+
+
+def _policy_time(value):
+    """Policy dates have explicit units and zones; never infer epoch seconds or milliseconds."""
+    if isinstance(value, datetime):
+        return value  # Library callers may supply datetimes; AwareDatetime still checks the timezone.
+    if isinstance(value, str):
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+        else:
+            return value
+    raise ValueError("expected an ISO 8601 datetime with a timezone")
+
+
+PolicyTime = Annotated[AwareDatetime, BeforeValidator(_policy_time)]
 
 
 class Event(BaseModel):
@@ -39,22 +60,84 @@ class Event(BaseModel):
 
 
 class Policy(BaseModel):
-    """Trusted configuration: who holds which role, and which roles may perform which action."""
+    """Trusted configuration: who holds which role, and which roles may perform which action.
+
+    With a policy log, ``actors`` is the baseline: the roles held from ``as_of`` (or from the beginning of
+    time when it is absent) until policy-log.jsonl changes them. ``permissions`` are not dated.
+    """
     model_config = ConfigDict(extra="forbid")
 
     actors: dict[str, list[str]]
-    permissions: dict[Action, list[str]]
+    permissions: dict[PolicyAction, list[str]]
+    as_of: Optional[PolicyTime] = Field(
+        default=None, description="When the roles in 'actors' took effect; before it no actor holds a role")
 
     def roles(self, actor: str) -> list[str]:
+        """Baseline roles, ignoring any policy log."""
         return self.actors.get(actor, [])
 
     def allows(self, actor: str, action: str) -> bool:
         return bool(set(self.roles(actor)) & set(self.permissions.get(action, [])))
 
+    def permitted(self, action: str) -> list[str]:
+        """Roles that may perform ``action``."""
+        return self.permissions.get(action, [])
+
+    @property
+    def known_roles(self) -> set[str]:
+        return {role for roles in [*self.actors.values(), *self.permissions.values()] for role in roles}
+
     @property
     def decision_roles(self) -> list[str]:
         """Roles that can both approve and reject: whoever must review an open request."""
         return sorted(set(self.permissions.get("approve", [])) & set(self.permissions.get("reject", [])))
+
+
+class PolicyChange(BaseModel):
+    """One line of policy-log.jsonl: a role granted to, or removed from, an actor at an effective time."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(min_length=1)
+    timestamp: PolicyTime = Field(description="When the change took effect, with timezone")
+    actor: str = Field(min_length=1, description="Who made the change; must hold a role permitted to manage_roles")
+    action: RoleAction
+    subject_actor: str = Field(min_length=1, description="Whose roles change")
+    role: str = Field(min_length=1)
+    evidence_ids: list[str] = Field(min_length=1)
+    note: Optional[str] = None
+
+
+class RoleChange(BaseModel):
+    """A policy-log entry as replay applied it, with the roles before and after and its evidence."""
+    change_id: str
+    timestamp: datetime
+    actor: str
+    actor_roles: list[str]          # the roles ``actor`` held at that time, including one permitting manage_roles
+    action: RoleAction
+    subject_actor: str
+    role: str
+    roles_before: list[str]
+    roles_after: list[str]
+    note: Optional[str] = None
+    evidence: list[EvidenceSpan]
+
+
+class DatedPolicy(BaseModel):
+    """Present only for a dataset with policy-log.jsonl or a policy.json ``as_of``."""
+    baseline: Optional[datetime]    # policy.json as_of; None: its roles hold from the beginning of time
+    role_changes: list[RoleChange]  # applied up to the cutoff, in effective order
+
+
+def omit_empty(fields: tuple[str, ...]):
+    """A wrap serializer dropping ``fields`` when they are None or empty, so output for a dataset without a
+    policy log stays byte-identical to what it was before dated policy existed."""
+    def serialize(self, handler):
+        data = handler(self)
+        for name in fields:
+            if getattr(self, name) in (None, []):
+                data.pop(name, None)
+        return data
+    return model_serializer(mode="wrap")(serialize)
 
 
 class Decision(BaseModel):
@@ -120,3 +203,6 @@ class ReplayResult(BaseModel):
     events_replayed: int
     states: dict[str, SubjectState]
     audit_log: list[TrailEntry]
+    dated_policy: Optional[DatedPolicy] = None
+
+    _serialize = omit_empty(("dated_policy",))

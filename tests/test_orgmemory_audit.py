@@ -10,13 +10,14 @@ from typer.testing import CliRunner
 
 from conftest import EXAMPLES, snapshot
 from memcore import EvidenceSpan, ManifestEntry, locate_quote
-from orgmemory.audit import KINDS, audit, open_periods
+from orgmemory.audit import KINDS, audit, open_periods, report_kinds
 from orgmemory.cli import app
 from orgmemory.models import Event, Policy
 from orgmemory.replay import Dataset, replay
 from orgmemory.report import audit_markdown
 
 runner = CliRunner()
+UNDATED = report_kinds(False)  # every kind but those only dated roles can produce
 EVERYONE = ["customer", "account_manager", "engineer", "product_manager"]
 POLICY = {
     "actors": {"pm": ["product_manager"], "pm2": ["product_manager"], "eng": ["engineer"],
@@ -68,7 +69,7 @@ def test_clean_log_has_no_findings(tmp_path):
     report = run(tmp_path, [ev("r", 1, "cust", "request"), ev("a", 2, "pm", "approve"),
                             ev("c", 3, "sales", "comment")], as_of=at(30))
     assert report.findings == [] and report.summary == {"high": 0, "medium": 0, "low": 0}
-    assert list(report.kinds) == sorted(KINDS) and set(report.kinds.values()) == {0}
+    assert list(report.kinds) == sorted(UNDATED) and set(report.kinds.values()) == {0}
     markdown = audit_markdown(report)
     assert "| **Total** | 0 | 0 | 0 |" in markdown and "No findings." in markdown
 
@@ -338,10 +339,10 @@ def test_markdown_starts_with_the_summary_table(tmp_path):
     markdown = audit_markdown(audit(Dataset.load(build(tmp_path / "data", MIXED)), at(30)))
     lines = markdown.splitlines()
     assert lines[:4] == ["# Organizational decision audit", "", "| Kind | High | Medium | Low |", "|---|---|---|---|"]
-    assert lines[4:4 + len(KINDS)] == [f"| `{k}` | {r}" for k, r in zip(KINDS, [
+    assert lines[4:4 + len(UNDATED)] == [f"| `{k}` | {r}" for k, r in zip(UNDATED, [
         "0 | 0 | 0 |", "0 | 0 | 0 |", "1 | 0 | 0 |", "0 | 0 | 1 |", "1 | 0 | 0 |", "0 | 1 | 0 |", "0 | 0 | 0 |",
         "1 | 0 | 1 |", "0 | 0 | 0 |"])]
-    assert lines[4 + len(KINDS)] == "| **Total** | 3 | 1 | 2 |"
+    assert lines[4 + len(UNDATED)] == "| **Total** | 3 | 1 | 2 |"
     assert "### HIGH · unauthorized_attempts · actor sales" in lines
     assert "- `s1` on Y at 2026-10-04T09:00:00+00:00: sales (roles: account\\_manager) · approve · unauthorized" in lines
     assert "  - evidence `e` · `note.txt:1` · synthetic://note · sha256 `" in markdown and "    > Synthetic note" in lines
@@ -461,7 +462,7 @@ def test_cli_json_is_the_library_report(tmp_path):
     assert result.exit_code == 0
     assert result.output == audit(Dataset.load(root), at(30, 0), 20).model_dump_json(indent=2) + "\n"
     data = json.loads(result.output)
-    assert list(data["summary"]) == ["high", "medium", "low"] and list(data["kinds"]) == sorted(KINDS)
+    assert list(data["summary"]) == ["high", "medium", "low"] and list(data["kinds"]) == sorted(UNDATED)
     assert (data["mode"], data["stale_days"], data["as_of"]) == ("read_only", 20, "2026-10-30T00:00:00Z")
     assert data["findings"][0]["events"][0]["evidence"][0]["sha256"]
 

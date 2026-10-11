@@ -521,6 +521,22 @@ def test_html_cites_sidecars_frontmatter_and_api_usage_like_markdown(monkeypatch
     assert "Frontmatter: description: Rate limits" in visible and "globs: src/api/**/*.ts" in visible
 
 
+def test_html_shows_dated_roles_like_markdown():
+    # Undated datasets keep their pages byte for byte (the golden tests above); dated ones show role changes.
+    data = Dataset.load(EXAMPLES / "orgmemory" / "feature-a-dated")
+    audited = check(audit_html(decision_audit(data, OCT_31)), "orgmemory").visible
+    for expected in ("role_changed_after_decision", "Roles", "2 role change(s) from policy-log.jsonl",
+                     "pl-zhou-leaves", "removed product_manager from zhou", "moved to the platform team",
+                     "Roles are effective-dated"):
+        assert expected in audited, expected
+    replayed = check(replay_html(replay(data)), "orgmemory").visible
+    assert "Role changes of these actors" in replayed and "pl-wu-pm" in replayed
+    assert "The decision stands: it is judged by the roles held when it was made." in replayed
+    undated = check(audit_html(decision_audit(Dataset.load(EXAMPLES / "orgmemory" / "feature-a"), OCT_31)),
+                    "orgmemory").visible
+    assert "role_changed_after_decision" not in undated and "policy-log.jsonl" not in undated
+
+
 def test_style_supports_dark_mode_and_narrow_screens():
     style = htmlpage.STYLE
     assert "@media (prefers-color-scheme: dark)" in style and "color-scheme: light dark" in style

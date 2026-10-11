@@ -492,7 +492,7 @@ def test_empty_sync_creates_logs_and_targeted_does_not_move_cursor(github_datase
     assert next_since(log(github_dataset),'acme/web') == before
 
 
-@pytest.mark.parametrize('name',['policy.json','github.json','events.jsonl','evidence.jsonl','github-sync.jsonl',
+@pytest.mark.parametrize('name',['policy.json','policy-log.jsonl','github.json','events.jsonl','evidence.jsonl','github-sync.jsonl',
     '.github-sync.lock','sources/github/acme/web/raw.json'])
 def test_save_capture_cannot_overwrite_managed_files(github_dataset,name):
     if name == 'policy.json':
@@ -502,6 +502,20 @@ def test_save_capture_cannot_overwrite_managed_files(github_dataset,name):
     with pytest.raises(ValueError):
         run_sync(github_dataset,'acme/web',c,save_capture=github_dataset/name,dry_run=True)
     assert transport.calls == [] and snapshot(github_dataset) == before
+
+
+@pytest.mark.parametrize('name', ['policy.json', 'policy-log.jsonl'])
+def test_save_capture_refuses_the_target_of_a_dangling_policy_alias(github_dataset,tmp_path,name):
+    policy = github_dataset/name
+    policy.unlink(missing_ok=True)
+    target = tmp_path/'policy-target.json'
+    policy.symlink_to(target)
+    before = snapshot(github_dataset)
+    c,transport = client(recording(1))
+    with pytest.raises(ValueError, match='overlaps managed dataset files'):
+        run_sync(github_dataset,'acme/web',c,save_capture=target,dry_run=True)
+    assert transport.calls == [] and snapshot(github_dataset) == before
+    assert policy.is_symlink() and not target.exists()
 
 
 def test_orphan_temporary_file_does_not_block_recovery(github_dataset):
@@ -535,16 +549,19 @@ def test_crash_after_event_prefix_recovers(github_dataset,monkeypatch):
     assert len(data.events) == 53
 
 
+@pytest.mark.parametrize('policy_name',['policy.json','policy-log.jsonl'])
 @pytest.mark.parametrize('alias',['events.jsonl','evidence.jsonl','github-sync.jsonl','github.json',
     'capture.json','evidence-source'])
-def test_policy_aliases_are_refused_without_opening(github_dataset,monkeypatch,alias):
+def test_policy_aliases_are_refused_without_opening(github_dataset,monkeypatch,alias,policy_name):
     from memcore import ManifestEntry, append_jsonl, sha256_bytes
-    policy = github_dataset/'policy.json'
+    policy = github_dataset/policy_name
+    if policy_name == 'policy-log.jsonl':
+        policy.write_bytes(b'{}\n')
     if alias == 'github.json':
         (github_dataset/alias).unlink()
     if alias == 'evidence-source':
         data = policy.read_bytes()
-        entry = ManifestEntry(id='policy-evidence',path='policy.json',sha256=sha256_bytes(data),quote=data.decode(),
+        entry = ManifestEntry(id='policy-evidence',path=policy_name,sha256=sha256_bytes(data),quote=data.decode(),
             start=0,end=len(data.decode()),source_uri='test:policy',source_kind='test',captured_at='2026-10-09T12:00:00Z')
         append_jsonl(github_dataset/'evidence.jsonl',entry.model_dump(mode='json'))
     else:

@@ -1,0 +1,4 @@
+From: buyer@acme.example (synthetic)
+Subject: Bulk export
+
+We need Feature A (bulk export of order history) before our November audit.

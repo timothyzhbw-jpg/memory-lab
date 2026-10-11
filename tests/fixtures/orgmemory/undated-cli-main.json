@@ -1,0 +1,275 @@
+{
+  "revision": "3e3058e",
+  "cases": [
+    {
+      "dataset": "feature-a",
+      "args": [
+        "validate"
+      ],
+      "exit_code": 0,
+      "sha256": "8eb3893c2870182b771af3123ef347d591c43392e4d8788e4fe0db483e81c2c6"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "replay"
+      ],
+      "exit_code": 0,
+      "sha256": "b49a5d0cd10d1144db9fb0dbee811efc37aece986b22b0f106ba25a21b7957a0"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "replay",
+        "--format",
+        "json"
+      ],
+      "exit_code": 0,
+      "sha256": "b0283fb2e309441fbde5431f964db33649356b0d2e1611c5ebf1ab6fda5d4e32"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "explain",
+        "Feature A"
+      ],
+      "exit_code": 0,
+      "sha256": "1b6ad96a115e180d19944781c14b474fd5c100dc79fa33d83b8ed9ce64c5d25f"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "replay",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "5917da2fe9332cb211b7a219d2437dcaeef1d74b62a80097aa8e16e78ccfdcf2"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "replay",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "3530ad297f7e7d406305e08027225130a58e887f7131e2ff7c52952ff617e20e"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "explain",
+        "Feature A",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "8e90bcf904cf63881ba60fa56ba01b75e643aff7e1b75e600cf9d2a96fe650a5"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "audit",
+        "--as-of",
+        "2026-10-31T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "d836ba28d254f0c1f4911e9a2eb1bcccd68737e0bfc421c91ac5ddf401f83fd3"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "audit",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-31T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "f3bd3bede6d3a1eb495755c5fd7dd61670a13b4baa2ac62a68a04fcaf5a44b3a"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "audit",
+        "--strict",
+        "--as-of",
+        "2026-10-31T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "d836ba28d254f0c1f4911e9a2eb1bcccd68737e0bfc421c91ac5ddf401f83fd3"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "audit",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "976bffb7d684ddcf5340c4d320ddbf4dbbd891c315ffb272eda48241fe1fe345"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "audit",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "840fd4216026cb9e02aa76217d926de002c9784ddd8e6b334a4d67ccddf1c63b"
+    },
+    {
+      "dataset": "feature-a",
+      "args": [
+        "replay",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-01T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "3e9e9bfb822ca30cc54772a049c449424f63088d2d17c0a9f8bcd431d7fe8e57"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "validate"
+      ],
+      "exit_code": 0,
+      "sha256": "f00c7bdf4181a531f42b36b1ce59da4e5ae389f3f10ae56ff0bfb7cf68eef6e6"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "replay"
+      ],
+      "exit_code": 0,
+      "sha256": "275ff6ea00918e56a9a53b479ed6607413536216d2db3edf740d4c27e5f6271f"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "replay",
+        "--format",
+        "json"
+      ],
+      "exit_code": 0,
+      "sha256": "09ced8597e1ba530c0e0c168cfbe39859627ac6f35f6e885e03ecbfc8c9cd060"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "explain",
+        "acme/web#1"
+      ],
+      "exit_code": 0,
+      "sha256": "f7b25c98c6a656341774c7998024e3d9543bdd0551ba5e9398a3590063b69a8e"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "replay",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "7b8f00dff89116cea696d596ccd056793e409bd8a834951339b31568e2181056"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "replay",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "856a24318177222168eba017b49660b50b52414aec322762833f30946c399b64"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "explain",
+        "acme/web#1",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "469740efd68c27b98ba9708f72bd110e4d63a6c0c475ae40ef29e2b3d01ef437"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "audit",
+        "--as-of",
+        "2026-10-31T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "57a0e293c996f7669e563e12267bfbb7f7875ee08a5e1248f583de4ac33cf9a7"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "audit",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-31T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "595b1539f68151af8e08be23570a3caeb6094224381833e4599865de220aa5e6"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "audit",
+        "--strict",
+        "--as-of",
+        "2026-10-31T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "57a0e293c996f7669e563e12267bfbb7f7875ee08a5e1248f583de4ac33cf9a7"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "audit",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "5088527dbc05b65d88823698ed68461da38de7d95754a6236cac30680a6665a0"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "audit",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-07T23:59:59Z"
+      ],
+      "exit_code": 0,
+      "sha256": "5a9a1810fc12ecdc461061fdb71a8d7d8c1cbb7ff58a86702b5cfba8421e57d8"
+    },
+    {
+      "dataset": "github-acme-web",
+      "args": [
+        "replay",
+        "--format",
+        "json",
+        "--as-of",
+        "2026-10-01T00:00:00Z"
+      ],
+      "exit_code": 0,
+      "sha256": "f44b12bd48f24a80846ce388e704c8085dda189ca191f2c576f3c1c0e8122046"
+    }
+  ]
+}

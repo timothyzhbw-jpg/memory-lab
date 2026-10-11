@@ -16,6 +16,7 @@ from memcore.evidence import resolve_inside, verify_entry
 from memcore.jsonutil import loads_at
 from memcore.reading import read_file_bytes
 
+from .authority import POLICY_LOG
 from .github_fetch import Client, fetch
 from .github_map import GithubConfig, Plan, _int, _iso, _lower, _repo_ok, _ts, convert
 from .models import Event
@@ -26,11 +27,16 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _refuse_policy_alias(dataset: Path, path: Path) -> None:
+    for name in ("policy.json", POLICY_LOG):
+        if path.resolve() == (dataset / name).resolve():
+            raise ValueError(f"GitHub importer cannot open {name}")
+
+
 def _path(dataset: Path, relative: str) -> Path:
     """Refuse policy aliases as well as escapes, before opening anything."""
     path = resolve_inside(dataset, relative)
-    if path == (dataset / "policy.json").resolve():
-        raise ValueError("GitHub importer cannot open policy.json")
+    _refuse_policy_alias(dataset, path)
     return path
 
 
@@ -104,7 +110,7 @@ def _check_log(line: dict) -> None:
 
 
 def load_existing(dataset: Path) -> Existing:
-    """Validate logs and every old hash before making a request; never open policy.json."""
+    """Validate logs and every old hash before making a request; never open either policy file."""
     events_path = _path(dataset, "events.jsonl")
     evidence_path = _path(dataset, "evidence.jsonl")
     log_path = _path(dataset, "github-sync.jsonl")
@@ -273,8 +279,9 @@ def run_sync(dataset: Path, repo: str, client: Client, *, full: bool = False, si
         if save_capture is not None:
             saved = save_capture.resolve()
             managed = {dataset.resolve() / name for name in
-                       ("policy.json", "github.json", "events.jsonl", "evidence.jsonl",
+                       ("policy.json", POLICY_LOG, "github.json", "events.jsonl", "evidence.jsonl",
                         "github-sync.jsonl", ".github-sync.lock")}
+            managed |= {path.resolve() for path in managed}
             if save_capture.absolute() in managed or saved in managed \
                     or saved.is_relative_to(dataset.resolve() / "sources" / "github"):
                 raise ValueError("save-capture path overlaps managed dataset files")
@@ -298,8 +305,7 @@ def run_convert(dataset: Path, capture_path: Path, *, dry_run: bool = False,
                 now: Callable[[], datetime] | None = None) -> Summary:
     with nullcontext() if dry_run else lock(dataset):
         existing, config = load_existing(dataset), load_config(dataset)
-        if capture_path.resolve() == (dataset / "policy.json").resolve():
-            raise ValueError("GitHub importer cannot open policy.json")
+        _refuse_policy_alias(dataset, capture_path)
         capture = loads_at(capture_path, read_file_bytes(capture_path))
         plan = convert(capture, {e.id: e for e in existing.events}, set(existing.spans), config)
         # Offline conversions use the recording time by default, making examples reproducible.

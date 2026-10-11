@@ -184,7 +184,28 @@ orgmemory validate <dataset>                  # check every event, hash and quot
 orgmemory audit    <dataset> --as-of 2026-10-31T00:00:00Z   # where the decision process needs attention
 orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <dataset> --event '{"id": ..., ...}'
+orgmemory policy grant|revoke <dataset> ...   # record a role change from a point in time on (below)
 ```
+
+#### Roles that change over time
+
+Editing `policy.json` changes every replay, including decisions already made. Give the account manager the product manager role there and Thursday's "approval" in the example starts to count. To record a role change from a point in time on, append it to the optional `policy-log.jsonl` instead:
+
+```bash
+orgmemory policy grant  <dataset> --id pl-wu-pm --timestamp 2026-10-09T09:00:00Z --actor chen \
+  --subject-actor wu --role product_manager --evidence-id org-wu
+orgmemory policy revoke <dataset> --id pl-zhou-leaves --timestamp 2026-10-12T09:00:00Z --actor chen \
+  --subject-actor zhou --role product_manager --evidence-id org-zhou --note "moved to the platform team"
+```
+
+Each event is then judged by the roles its actor held at its effective time. In [`examples/orgmemory/feature-a-dated`](examples/orgmemory/feature-a-dated/) ([replay](examples/orgmemory/feature-a-dated/replay-report.md), [audit](examples/orgmemory/feature-a-dated/audit-report.md)), wu becomes product manager on Friday and zhou leaves the role on Monday. Thursday's "approval" by wu stays ignored, and Wednesday's rejection by zhou stands. `explain` shows the roles each actor held at each event and when they changed. The audit reports that the current decision's maker has since lost the role (`role_changed_after_decision`, low).
+
+- `policy.json` is the baseline. Its roles hold from the beginning of time, or from its optional `"as_of"` (ISO 8601 with a timezone). Before `as_of` no actor holds a role, and no change may take effect before it.
+- Changes apply in effective-time order. Changes with the same time apply in file order. A change effective at T applies to events at T. `--as-of` applies the changes up to and including the cutoff.
+- A change's `--actor` must hold, at that time, a role listed under the `manage_roles` permission in `policy.json`. The first managers are the ones `policy.json` names. A grant names a role `policy.json` mentions and the subject does not hold yet; `revoke` removes a role the subject holds.
+- `orgmemory policy grant` and `orgmemory policy revoke` check the whole log with the new entry, so a backdated entry cannot invalidate a later one, and only then append. `validate`, `replay`, `explain` and `audit` reject a dataset whose log does not hold.
+- A backdated append can change outcomes of events already recorded, including replays with a past `--as-of`. Validation protects later policy entries, not previous event outcomes. The cutoff uses effective times in the current log; it does not reconstruct which entries were known then.
+- `permissions` are not dated. A dataset with neither `policy-log.jsonl` nor `as_of` replays exactly as before. Design: [docs/design/dated-policy.md](docs/design/dated-policy.md).
 
 #### Audit the decision process
 
@@ -207,10 +228,11 @@ On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.m
 | `stale_pending_approval` | `pending_approval` has been open for more than `--stale-days` (default 14) at the reference time, and no reconsideration is open. The wait starts at the first `request`, `reconsider` or `revoke` after the last `approve` or `reject` | medium |
 | `stale_reconsideration` | `reconsideration_requested` has been open for more than `--stale-days`. The subject is then not also reported as `stale_pending_approval` | medium |
 | `self_approval` | The actor of the current approval also made an applied `request` or `reconsider` on the subject before approving it | low |
+| `role_changed_after_decision` | The actor of the current decision (`approve`, `reject` or `revoke`) later lost, by a `revoke_role` in `policy-log.jsonl`, a role that authorized it. The decision stands. Listed only for datasets with dated roles | low |
 
 - Only what replay applied counts: a risk or dependency from an actor without the permission is not on record, and appears only under `unauthorized_attempts`.
 - `--as-of` drops later events, as in `replay`, and is also the reference time for staleness. Without it the whole log is audited and staleness is measured at the current time, so pass `--as-of` for a reproducible report.
-- Findings are sorted by severity, kind, subject, actor and replay order. The Markdown report starts with a summary table: one row per kind, one column per severity. `--format json` has `summary` (findings per severity), `kinds` (every kind, sorted by name) and `findings`.
+- Findings are sorted by severity, kind, subject, actor and replay order. The Markdown report starts with a summary table: one row per kind, one column per severity. `--format json` has `summary` (findings per severity), `kinds` (every kind, sorted by name) and `findings`. With dated roles, the Markdown report also lists every role change, and the JSON adds `dated_policy` and, on findings that cite role changes, `role_changes`. Without them, neither the table nor `kinds` lists `role_changed_after_decision`.
 - Exit codes: `0`; `1` with `--strict` when any finding is high; `2` on invalid input, as for `replay`. The output is printed in every case except `2`. Invalid input includes a bad event or policy (a missing field, a wrong type, a timezone-naive timestamp, or JSON nested too deeply) and a bad evidence span. The error is one line and does not contain terminal control characters.
 
 #### Ingest GitHub issues and pull requests
@@ -231,7 +253,7 @@ orgmemory explain        <dataset> "acme/web#12"
 - Exit codes: `0` complete, including "nothing new"; `2` error, nothing appended; `3` partial: rate limiting beyond `--max-wait` (default 3600 s) or repeated server or network errors stopped the fetch, fully fetched items were applied, and the cursor did not move, so run it again later. A malformed capture, including JSON nested too deeply or a timeline id of the wrong type, is exit 2 and appends nothing.
 - The dataset directory must exist. `events.jsonl` and `evidence.jsonl` are created on first use. The import does not need `policy.json`; `replay`, `explain` and `validate` do.
 
-**The importer never reads or writes `policy.json`: map `gh:<login>:<id>` actor IDs to roles yourself.** Until an account is mapped, its events are recorded but change no state. The sync summary lists the actors in new events, and `orgmemory validate` lists every actor missing from `policy.json`.
+**The importer never reads or writes `policy.json` and never records role changes in `policy-log.jsonl`: map `gh:<login>:<id>` actor IDs to roles yourself.** Until an account is mapped, its events are recorded but change no state. The sync summary lists the actors in new events, and `orgmemory validate` lists every actor that is missing from `policy.json` and that `policy-log.jsonl` never grants a role.
 
 | GitHub | Event |
 |---|---|
@@ -286,13 +308,14 @@ keep the last value.
 
 `memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes, and a review line that still names the old ID stops the audit with an `unknown memory_id` error (exit code 2) until the memory is re-reviewed and that line updated or removed. `quote` must appear verbatim in `path`, which is relative to the evidence directory. In a transcript or OCR sidecar, the quote must lie inside one cue or line, and an optional `"locator": "t=12.5,17"` says which one.
 
-**Organizational dataset**: a directory with three files.
+**Organizational dataset**: a directory with three files, plus an optional fourth.
 
 - `events.jsonl`: one event per line, append-only. Fields: `id`, `timestamp` (with timezone; it is the effective time), `actor`, `action`, `subject`, `evidence_ids` (at least one), plus `note` (required for `raise_risk`), `dependency` (required for `dependency`) and `supersedes` (required for `revoke`, which must target the current decision). Actions: `request`, `reconsider`, `raise_risk`, `dependency`, `approve`, `reject`, `revoke`, `comment`.
-- `policy.json`: `{"actors": {actor: [roles]}, "permissions": {action: [roles]}}`. Unknown actors have no roles. `pending_approval` lists the roles that can both approve and reject.
+- `policy.json`: `{"actors": {actor: [roles]}, "permissions": {action: [roles]}}`, plus optional `"as_of"` (ISO 8601 with timezone: when the `actors` roles took effect). Unknown actors have no roles. `pending_approval` lists the roles that can both approve and reject. `permissions` may also list `manage_roles`: the roles that may record changes in `policy-log.jsonl`.
 - `evidence.jsonl`: `id`, `path`, `sha256` of the raw bytes, exact `quote` and its `[start, end)` character span, `source_uri`, `source_kind`, `captured_at`, and `locator` only for a quote from a transcript or OCR sidecar (for example `t=12.5,17`; every load checks it and the sidecar's binding to its media file again). A sidecar record that omits `locator` fails validation. Use `orgmemory evidence add` instead of hashing by hand; for a sidecar it records the locator, and `--locator` picks the cue or line.
+- `policy-log.jsonl` (optional, append-only): one role change per line. Fields: `id` (unique, not an event ID, not starting with `gh:`), `timestamp` (with timezone; the effective time), `actor` (who made the change), `action` (`grant` or `revoke_role`), `subject_actor` (whose roles change), `role`, `evidence_ids` (at least one), optional `note`. Use `orgmemory policy grant` / `orgmemory policy revoke`. Rules: [Roles that change over time](#roles-that-change-over-time).
 
-Replay rules: events are ordered by effective time, and ties keep file order. The whole log is validated before replay, including events after `--as-of`. An authorized `approve` / `reject` sets the status and clears reconsideration, pending approval and ignored attempts. Reversals and same-time conflicting decisions are recorded under `conflicts`.
+Replay rules: events are ordered by effective time, and ties keep file order. Each event is judged by the roles its actor held at its effective time (with no policy log, the `policy.json` roles). The whole log is validated before replay, including events and role changes after `--as-of`. An authorized `approve` / `reject` sets the status and clears reconsideration, pending approval and ignored attempts. Reversals and same-time conflicting decisions are recorded under `conflicts`.
 
 **GitHub import files** (in the same dataset directory):
 
@@ -414,7 +437,7 @@ and resolved symlink targets. The action also warns and skips memory symlinks th
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there. With `--batch`, Anthropic keeps the batch's requests and results for up to 29 days, visible to anyone with access to that workspace; delete the batch through the API if that is too long.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
-- Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
+- Actor IDs, `policy.json` and `policy-log.jsonl` are trusted input. There is no identity authentication or signed provenance yet. Role changes recorded in `policy-log.jsonl` are effective-dated, but editing `policy.json` (including `permissions`, which are not dated) or rewriting the policy log still changes every replay.
 - A repeated key in a JSON object is rejected, including in a nested object. Keeping the last value would let one `events.jsonl` line show one `actor` to a person reading the file and another to replay, and would let a `policy.json` that names an actor twice grant the second list of roles.
 - Evidence is UTF-8 text. Images, audio, video and PDF count only through transcript and OCR sidecars you provide, which are someone's reading of the media: a matching `source_sha256` shows which bytes a sidecar describes, not that it is accurate. Media without a usable sidecar is reported as skipped.
 - Lexical judging of Chinese has no dictionary: it misses paraphrases (冻结招聘 for 不招) and reads negation and modality from fixed cue lists. Only Han characters are split into n-grams; Japanese kana and Korean Hangul are not.
