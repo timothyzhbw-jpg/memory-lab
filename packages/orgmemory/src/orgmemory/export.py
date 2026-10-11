@@ -332,7 +332,8 @@ def create_files(dataset: Path, directory: Path, files: dict[str, bytes], force:
 
     Every name is checked before the first write: an existing file is refused unless ``force``, and even
     then only a regular file is replaced (atomically, by rename, so a symlink or hard link is never written
-    through). The directory and its parents are created as needed. Returns the written paths.
+    through). The temporary name used for that rename is removed only when this call created it. The
+    directory and its parents are created as needed. Returns the written paths.
     """
     targets = [directory / name for name in files]
     for path in (directory, *targets):
@@ -354,10 +355,17 @@ def create_files(dataset: Path, directory: Path, files: dict[str, bytes], force:
                 handle.write(data)
             continue
         temporary = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
+        created = False
         try:
             with temporary.open("xb") as handle:
+                created = True
                 handle.write(data)
             os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
+        except OSError:
+            if created:
+                try:
+                    temporary.unlink()
+                except OSError:
+                    pass
+            raise
     return targets

@@ -33,14 +33,16 @@ Release 0.3 contains:
   starts like a spreadsheet formula gets a leading `'`.
 - Export is create-only: if any target exists, nothing is written, unless `--force`, which replaces regular
   files by rename and never writes through a symlink or hard link. A target inside the dataset directory is
-  refused, also through a symlink, `..` or different letter case. Untrusted text is escaped as in the
-  reports. `examples/orgmemory/adr/` holds the output for both example datasets.
+  refused, also through a symlink, `..` or different letter case. Untrusted text is escaped as in
+  `orgmemory audit`. `examples/orgmemory/adr/` holds the output for both example datasets.
 
 #### Fixed
 
-- Markdown reports (`replay`, `explain`, `audit`): untrusted text starting with four spaces, such as an
-  indented evidence quote, became an indented code block that showed the escaping instead of the text.
-  Leading spaces are now written as character references.
+- `orgmemory audit` Markdown: untrusted text starting with four spaces, such as an indented evidence quote,
+  became an indented code block that showed the escaping instead of the text. Leading spaces are now written
+  as character references.
+- `orgmemory export --force` no longer deletes a pre-existing temporary name when that name cannot be
+  created.
 
 ## memlab-core
 

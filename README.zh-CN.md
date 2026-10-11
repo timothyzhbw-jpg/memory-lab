@@ -177,8 +177,8 @@ orgmemory export <数据集> --format csv [--out 文件] [--as-of ISO8601] [--fo
 - 文件名是 `<slug>-<hash12>.md`：议题转成小写 ASCII 字母、数字和连字符（最多 48 个字符；如果什么都不剩就用 `subject`），后接议题原文 SHA-256 的前 12 位十六进制，因此 slug 相同的议题也会得到不同的文件。`Feature A` 对应 `feature-a-5481a84ec80d.md`。记录里不含任何与本次运行有关的内容，所以对没有变化的日志再导出一次，得到的字节完全相同。
 - 只新建文件：只要有一个目标文件已存在，就什么都不写。`--force` 通过重命名替换已存在的普通文件（绝不会顺着符号链接或硬链接写到别处）；目录里的其他文件保持不动，也从不删除文件。目录不存在时会自动创建。
 - 绝不写入数据集：`--out` 位于数据集目录之内时会被拒绝，经由符号链接、`..` 或大小写不同的路径也一样。
-- 不可信文本（议题、参与者、角色、备注、ID、原文）按报告里的方式转义：保持为单行的字面 Markdown。
-- `--format csv` 为每个有决定的议题输出一行，默认写到标准输出，加 `--out` 则新建一个文件（同样只新建，规则同上）。列依次为：`subject`、`adr_file`、`status`、`current_status`、`decided_at`、`decision_event`、`decision_action`、`decided_by`、`decided_by_roles`、`supersedes`、`earlier_decisions`、`reconsideration_requested`、`pending_approval`、`dependencies`、`open_risks`、`unauthorized_change_attempts`、`conflicts`，决定所引用证据的 `evidence_ids`、`evidence_sha256`、`evidence_source_uris` 和 `evidence_quotes`，以及 `as_of`。列表列是 JSON 数组，解码后与原值完全一致。每行只占一行：其他单元格里的控制字符、双向文本字符和分隔符转义为 `\uXXXX`；以 `=`、`+`、`-` 或 `@` 开头的单元格前面加一个 `'`，避免电子表格把它当作公式执行。
+- 不可信文本（议题、参与者、角色、备注、ID、原文）按 `orgmemory audit` 的方式转义：保持为单行的字面 Markdown。
+- `--format csv` 为每个有决定的议题输出一行，默认写到标准输出，加 `--out` 则新建一个文件（同样只新建，规则同上）。列依次为：`subject`、`adr_file`、`status`、`current_status`、`decided_at`、`decision_event`、`decision_action`、`decided_by`、`decided_by_roles`、`supersedes`、`earlier_decisions`、`reconsideration_requested`、`pending_approval`、`dependencies`、`open_risks`、`unauthorized_change_attempts`、`conflicts`，决定所引用证据的 `evidence_ids`、`evidence_sha256`、`evidence_source_uris` 和 `evidence_quotes`，以及 `as_of`。列表列是 JSON 数组，解码后与原值完全一致。每行只占一行：其他单元格里的控制字符、格式字符（双向文本、零宽字符）和分隔符转义为 `\uXXXX`，U+FFFF 以上为 `\U00XXXXXX`；以 `=`、`+`、`-` 或 `@` 开头的单元格前面加一个 `'`，避免电子表格把它当作公式执行。
 - 退出码：`0`，包括还没有任何议题有决定的情况（此时不写 ADR 文件）；输入无效或写入被拒绝时为 `2`，什么都不写。
 
 示例（由两个示例数据集导出）：[Feature A 的决策记录](examples/orgmemory/adr/feature-a/feature-a-5481a84ec80d.md)、[GitHub 示例的决策记录](examples/orgmemory/adr/github-acme-web/)（包括被接受、被拒绝和被撤销的 PR 与 issue），以及 [`examples/orgmemory/adr/`](examples/orgmemory/adr/) 里对应的 CSV 表。

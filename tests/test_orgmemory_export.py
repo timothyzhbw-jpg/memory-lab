@@ -184,6 +184,23 @@ def test_create_only_refuses_before_writing_anything(tmp_path):
     assert "--force" in result.output and snapshot(out) == before  # the missing file was not created either
 
 
+def test_force_does_not_delete_a_temp_name_it_did_not_create(tmp_path, monkeypatch):
+    monkeypatch.setattr("orgmemory.export.secrets.token_hex", lambda n: "ab" * n)
+    root = build(tmp_path / "data", [ev("a", 2, "pm", "approve")])
+    out = tmp_path / "adr"
+    out.mkdir()
+    name = file_name("S")
+    (out / name).write_bytes(b"keep-target\n")
+    planted = out / f".{name}.{'ab' * 6}.tmp"
+    planted.write_bytes(b"keep-temp\n")
+    before = snapshot(root)
+    result = export(root, "--out", str(out), "--force")
+    assert result.exit_code == 2 and result.output.startswith("error:")
+    assert planted.read_bytes() == b"keep-temp\n"
+    assert (out / name).read_bytes() == b"keep-target\n"
+    assert snapshot(root) == before
+
+
 def test_force_replaces_regular_files(tmp_path):
     root, out = build(tmp_path / "data", MIXED), tmp_path / "adr"
     assert export(root, "--out", str(out)).exit_code == 0
@@ -240,6 +257,21 @@ def test_never_writes_into_the_dataset(tmp_path, target):
         assert result.exit_code == 2 and "inside the dataset directory" in result.output
         assert snapshot(tmp_path) == before
     assert not (root / "adr").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symlinks needs extra privileges on Windows")
+def test_symlink_then_dotdot_cannot_enter_the_dataset(tmp_path):
+    """Lexical ``link/..`` is outside; following the link and then ``..`` lands in the dataset."""
+    root = build(tmp_path / "data", MIXED)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "link").symlink_to(root, target_is_directory=True)
+    before = snapshot(tmp_path)
+    for args in (["--out", str(outside / "link" / ".." / "data" / "adr")],
+                 ["--format", "csv", "--out", str(outside / "link" / ".." / "data" / "d.csv")]):
+        result = export(root, *args)
+        assert result.exit_code == 2 and "inside the dataset directory" in result.output
+        assert snapshot(tmp_path) == before
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="creating symlinks needs extra privileges on Windows")
@@ -404,6 +436,22 @@ def test_csv_columns_and_lossless_lists(tmp_path):
     assert json.loads(first["decided_by_roles"]) == ["product_manager"]
     assert json.loads(first["evidence_quotes"]) == ["Synthetic note"]
     assert first["adr_file"] == file_name('=HYPERLINK("https://evil.invalid")') and first["as_of"] == ""
+
+
+def test_non_bmp_format_character_is_escaped_in_plain_cells(tmp_path):
+    """A format character above U+FFFF is escaped as ``\\U00XXXXXX`` before the formula check."""
+    tag = "\U000e0001"
+    subject = tag + "=1"
+    root = build(tmp_path / "data", [ev("a", 2, "pm", "approve", subject=subject)])
+    _, (record,) = decision_records(Dataset.load(root))
+    assert NAME.fullmatch(record.file_name)
+    markdown = adr_markdown(record)
+    csv_text = decisions_csv([record])
+    assert tag not in markdown and tag not in csv_text
+    assert "\\U000e0001" in markdown
+    row = list(csv.DictReader(io.StringIO(csv_text)))[0]
+    assert row["subject"] == "\\U000e0001=1"
+    assert not row["subject"].startswith(("=", "+", "-", "@"))
 
 
 def test_csv_goes_to_stdout_without_out(tmp_path):
