@@ -71,7 +71,7 @@ def test_golden_example_reproducible(github_dataset):
     assert relative_snapshot(github_dataset) == {
         k:v for k,v in relative_snapshot(GOLDEN).items() if k != 'replay-report.md'}
     from orgmemory.report import to_markdown
-    assert to_markdown(replay(Dataset.load(github_dataset)))+'\n' == (GOLDEN/'replay-report.md').read_text()
+    assert to_markdown(replay(Dataset.load(github_dataset)))+'\n' == (GOLDEN/'replay-report.md').read_text(encoding='utf-8')
 
 
 def test_rerun_is_idempotent(github_dataset):
