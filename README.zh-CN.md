@@ -12,8 +12,8 @@
 |---|---|---|
 | 回答的问题 | 这条记忆有证据支撑吗？ | 这是当前的、经过授权的状态吗？ |
 | 输入 | `MEMORY.md` + 一个证据文件目录 | 事件日志 + 角色权限策略 + 证据清单 |
-| 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹 |
-| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放时不写入；`append` 只追加 |
+| 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹、决策流程审计 |
+| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 只追加 |
 
 默认完全离线运行，不需要任何 API key；可以选择开启模型验证（Claude 和 TypeSafe AI 的 Jev）。需要 Python 3.10+，许可证 Apache-2.0。
 
@@ -114,9 +114,37 @@ unauthorized_change_attempts: [ev-thu-sales-approve]
 orgmemory explain  <数据集> "Feature A"      # 为什么处于当前状态，附带引用的证据
 orgmemory replay   <数据集> --as-of 2026-10-07T23:59:59Z   # 某个历史时间点的状态
 orgmemory validate <数据集>                  # 校验每个事件、哈希和引用
+orgmemory audit    <数据集> --as-of 2026-10-31T00:00:00Z   # 决策流程哪里需要关注
 orgmemory evidence add <数据集> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <数据集> --event '{"id": ..., ...}'
 ```
+
+#### 审计决策流程
+
+`replay` 回答“现在是什么状态”，`audit` 回答“决策流程哪里需要关注”。它用同样的规则只读地回放日志，然后列出发现项。每个发现项包含 `kind`（类型）、`severity`（严重程度：`high`、`medium` 或 `low`）、所涉及的议题 `subject`（如果是针对某个参与者的发现项，则为 `actor`）、涉及的 `subjects` 和 `event_ids`（事件 ID 按回放顺序排列）、一行说明 `detail`，以及每个被引用的事件及其证据原文，引用方式与 `explain` 相同。审计不引入任何新的事件语义：它只复述回放结果、回放记录的冲突和审计轨迹里已有的内容。
+
+```bash
+orgmemory audit <数据集> [--as-of ISO8601] [--stale-days 14] [--format markdown|json] [--strict]
+```
+
+以 2026-10-31 为时间点审计示例数据（[完整报告](examples/orgmemory/audit-report.md)）：客户的“申请重新考虑”已经等了产品经理超过 14 天（`stale_reconsideration`，medium）；客户经理那次被忽略的“批准”列为 `unauthorized_attempts`（medium）。[GitHub 示例的审计报告](examples/orgmemory/github-acme-web/audit-report.md)按账号列出了长期无人处理的 issue 和 PR、被忽略的审查、标签和合并，以及一位先要求修改、后又批准的审查者。
+
+| 类型 | 何时报告 | 严重程度 |
+|---|---|---|
+| `simultaneous_decisions` | 回放记录了同一生效时间、相互冲突的有权限决定，结果由文件顺序决定 | 由文件顺序选出的决定仍是当前决定时为 high；已被后来的决定取代时为 medium |
+| `decision_reversed` | 回放记录了有权限的 `reject` 之后又有有权限的 `approve`（或相反），中间没有 `revoke` | 由另一个参与者推翻时为 medium；同一参与者改变自己的决定时为 low |
+| `invalid_supersession` | 回放记录了一次有权限的 `revoke`，但它指向的不是当前决定，所以没有改变任何状态。发现项还会引用它指向的事件和当时生效的决定 | medium |
+| `risk_after_approval` | 议题已批准，且记录中有风险；每个风险一个发现项 | 风险在批准之后提出时为 high；在批准之前提出时为 medium，因为日志里没有“风险已解决”这种事件 |
+| `unresolved_dependency` | 议题已批准，但它依赖的议题没有被批准；每个依赖一个发现项，只检查直接依赖 | 依赖被拒绝时为 high；依赖仍是 proposed 时为 medium；日志里没有这个依赖的任何事件时为 low |
+| `unauthorized_attempts` | 每个参与者一个发现项：被权限策略忽略的事件，按动作计数并列出涉及的议题。`comment` 不计入，因为它从不改变状态 | 被忽略的 `approve` / `reject` / `revoke` 达到 2 次及以上为 high；1 次，或其他被忽略的事件达到 2 次及以上为 medium；只有 1 次其他被忽略的事件为 low |
+| `stale_pending_approval` | 在参考时间点，`pending_approval` 已持续超过 `--stale-days`（默认 14 天），且没有进行中的“申请重新考虑”。等待从最后一次 `approve` 或 `reject` 之后的第一个 `request`、`reconsider` 或 `revoke` 开始计算 | medium |
+| `stale_reconsideration` | `reconsideration_requested` 已持续超过 `--stale-days`。这样的议题不会再重复报告为 `stale_pending_approval` | medium |
+| `self_approval` | 当前批准的参与者在批准之前，也对这个议题提出过已生效的 `request` 或 `reconsider` | low |
+
+- 只计入回放实际生效的内容：没有权限的参与者提出的风险或依赖不会被记录，只会出现在 `unauthorized_attempts` 里。
+- `--as-of` 和 `replay` 一样会忽略之后的事件，同时也是计算是否超期的参考时间。不加时审计整个日志，并以当前时间计算超期，所以需要可复现的报告时请加 `--as-of`。
+- 发现项按严重程度、类型、议题、参与者和回放顺序排序。Markdown 报告以一张汇总表开头：每种类型一行，每个严重程度一列。`--format json` 包含 `summary`（各严重程度的数量）、`kinds`（每种类型的数量，按名称排序）和 `findings`。
+- 退出码：`0`；加 `--strict` 且存在 high 级别的发现项时为 `1`；输入无效时为 `2`，与 `replay` 相同。除了退出码 `2`，其他情况都会输出报告。
 
 #### 导入 GitHub Issues 和 Pull Request
 
@@ -214,7 +242,7 @@ cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 
 ## MCP 服务器
 
-`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供五个工具：`memfalsify_claims`、`memfalsify_audit`、`orgmemory_validate`、`orgmemory_replay` 和 `orgmemory_explain`。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内；不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭。工具、客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
+`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供六个工具：`memfalsify_claims`、`memfalsify_audit`、`orgmemory_validate`、`orgmemory_replay`、`orgmemory_explain` 和 `orgmemory_audit`。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内；不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭。工具、客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
 
 ## 验证后端：词法、LLM、Jev
 
@@ -268,6 +296,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - 哈希只能证明某段引用确实存在于特定的字节里，不能证明来源是真实的，也不能证明这段话的意思就是某人所说的那样。
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
+- `orgmemory audit` 的发现项只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
 - GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。
@@ -284,7 +313,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 |---|---|---|
 | **v0.1** | 文本记忆审计、证据追溯、人工确认流程 | 事件日志、状态机、权限规则、决策溯源 |
 | **v0.2** | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR ✓ |
-| v0.3 | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 | 状态冲突与决策审计 |
+| v0.3 | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 | 状态冲突与决策审计 ✓ |
 | v0.4 | 多模态证据（带定位的 OCR / 转写） | 跨平台组织记忆 |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |
 

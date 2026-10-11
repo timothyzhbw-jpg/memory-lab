@@ -1,6 +1,6 @@
 ---
 name: orgmemory
-description: Determine the current, authorized state of an organizational decision (feature, request, policy) by replaying an evidence-backed event log under explicit role permissions. Use when asked what was decided, whether something is still approved or rejected, who can change it, or why it is in its current state, especially when newer messages seem to contradict an earlier decision. Also covers importing a GitHub repository's issues and pull requests into a dataset when the user asks.
+description: Determine the current, authorized state of an organizational decision (feature, request, policy) by replaying an evidence-backed event log under explicit role permissions. Use when asked what was decided, whether something is still approved or rejected, who can change it, or why it is in its current state, especially when newer messages seem to contradict an earlier decision. Also use to audit where the decision process needs attention (stale requests, conflicting or reversed decisions, repeated unauthorized attempts, risks or unapproved dependencies on approved subjects), and to import a GitHub repository's issues and pull requests into a dataset when the user asks.
 ---
 
 # Verified Organizational Memory
@@ -16,6 +16,16 @@ The `orgmemory` command must be installed (`pip install -e packages/memcore -e p
 1. Validate first: `orgmemory validate <dataset>`. If it fails, report the error; do not guess around it.
 2. Explain the subject: `orgmemory explain <dataset> "<subject>"` (add `--as-of 2026-10-07T23:59:59Z` for a past point in time).
 3. Answer with: `current_status`, the authorizing decision (who, role, when) and its quoted evidence, whether reconsideration is requested, who must approve next (`pending_approval`), open risks, and any ignored unauthorized change attempts.
+
+## Auditing the decision process
+
+Use this when the user asks what is stuck, contested or risky across a dataset, rather than about one subject.
+
+1. Validate first, as above.
+2. Run `orgmemory audit <dataset> --as-of <ISO time with timezone>`. Pass the point in time the user means; without `--as-of`, staleness is measured at the current time and the report is not reproducible. Use `--stale-days N` only if the user gives a different threshold (default 14), and `--format json` when you need to process the findings.
+3. Report high findings first, then medium, then low. For each: the kind, the subject (or actor), what the `detail` says, and the event IDs with their quoted evidence. Say what the log shows, not why people acted.
+4. Findings are leads, not verdicts, and fixing them is the user's call. Do not append events, edit `policy.json` or "resolve" a finding on your own; you may name who could act (the roles in `pending_approval`). A self-approval or an ignored attempt can be legitimate under the user's policy.
+5. `--strict` exits 1 when any finding is high, for checks and CI. Exit code 2 means invalid input: report the error.
 
 ## Recording new events
 

@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -20,9 +20,12 @@ from memfalsify.memory import parse_memory  # noqa: E402
 from memfalsify.verify import LexicalVerifier  # noqa: E402
 from memlab_mcp import server as memlab_server  # noqa: E402
 from memlab_mcp.server import create_server  # noqa: E402
+from orgmemory.audit import audit as org_audit  # noqa: E402
+from orgmemory.replay import Dataset  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
-TOOLS = {"memfalsify_claims", "memfalsify_audit", "orgmemory_validate", "orgmemory_replay", "orgmemory_explain"}
+TOOLS = {"memfalsify_claims", "memfalsify_audit", "orgmemory_validate", "orgmemory_replay", "orgmemory_explain",
+         "orgmemory_audit"}
 MEMORY, EVIDENCE, REVIEWS, DATASET = "memfalsify/MEMORY.md", "memfalsify/evidence", "memfalsify/reviews.jsonl", "feature-a"
 SECRET = "outside-the-root secret: do not read"
 
@@ -156,6 +159,26 @@ def test_orgmemory_replay_and_explain(root):
         call(server, "orgmemory_explain", dataset=DATASET, subject="Feature Z"))
 
 
+@requires_confinement
+def test_orgmemory_audit_matches_the_library(root):
+    server = create_server(root)
+    as_of = "2026-10-31T00:00:00Z"
+    report = ok(call(server, "orgmemory_audit", dataset=DATASET, as_of=as_of, format="json"))
+    direct = org_audit(Dataset.load(root / DATASET), datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert report == direct.model_dump_json(indent=2)
+    assert [(f["kind"], f["severity"]) for f in json.loads(report)["findings"]] == [
+        ("stale_reconsideration", "medium"), ("unauthorized_attempts", "medium")]
+
+    markdown = ok(call(server, "orgmemory_audit", dataset=DATASET, as_of=as_of))
+    assert markdown.startswith("# Organizational decision audit\n\n| Kind | High | Medium | Low |")
+    assert "Feature A is rejected" in markdown and str(root.resolve()) not in markdown
+    relaxed = json.loads(ok(call(server, "orgmemory_audit", dataset=DATASET, as_of=as_of, stale_days=60,
+                                 format="json")))
+    assert (relaxed["stale_days"], relaxed["summary"]) == (60, {"high": 0, "medium": 1, "low": 0})
+    # Without as_of, staleness is measured at the current time.
+    assert json.loads(ok(call(server, "orgmemory_audit", dataset=DATASET, format="json")))["as_of"] is None
+
+
 # --- path safety ---------------------------------------------------------------------------
 
 def escapes(root):
@@ -191,6 +214,7 @@ def test_other_path_arguments_cannot_escape(root):
         ("orgmemory_validate", dict(dataset="..")),
         ("orgmemory_replay", dict(dataset="/")),
         ("orgmemory_explain", dict(dataset="../root/../..", subject="Feature A")),
+        ("orgmemory_audit", dict(dataset="..")),
     ]
     for name, arguments in cases:
         message = error(call(server, name, **arguments))
@@ -430,6 +454,9 @@ def test_bad_input_is_a_clear_tool_error(root):
         ("orgmemory_validate", dict(dataset="memfalsify"), "has no events.jsonl"),
         ("orgmemory_validate", dict(dataset="broken"), "broken/events.jsonl:1: invalid JSON"),
         ("orgmemory_explain", dict(dataset=DATASET), "subject"),
+        ("orgmemory_audit", dict(dataset=DATASET, stale_days=-1), "invalid arguments; check: stale_days"),
+        ("orgmemory_audit", dict(dataset=DATASET, as_of="2026-10-31"), "with a timezone"),
+        ("orgmemory_audit", dict(dataset="broken"), "broken/events.jsonl:1: invalid JSON"),
     ]
     for name, arguments, expected in cases:
         message = error(call(server, name, **arguments))
@@ -453,9 +480,12 @@ def test_no_tool_writes_anything(root):
         ("orgmemory_replay", {"dataset": DATASET}),
         ("orgmemory_replay", {"dataset": DATASET, "format": "json", "as_of": "2026-10-07T23:59:59Z"}),
         ("orgmemory_explain", {"dataset": DATASET, "subject": "Feature A"}),
+        ("orgmemory_audit", {"dataset": DATASET}),
+        ("orgmemory_audit", {"dataset": DATASET, "format": "json", "as_of": "2026-10-31T00:00:00Z"}),
         ("orgmemory_append", {"dataset": DATASET, "event": "{}"}),
     )
-    assert [r.is_error for r in results] == [False, False, False, True, False, False, False, False, True]
+    assert [r.is_error for r in results] == [False, False, False, True, False, False, False, False, False, False,
+                                             True]
     assert snapshot(root.parent) == before
 
 
@@ -489,7 +519,7 @@ def test_stdio_round_trip(root, tmp_path, allow_models):
 
 @requires_confinement
 def test_stdio_security_and_invalid_input(root, tmp_path):
-    """All five tools reject bad inputs without reads outside root, writes or noisy stderr."""
+    """Every tool rejects bad inputs without reads outside root, writes or noisy stderr."""
     outside = str(root.parent / "outside.md")
     memory_escapes = escapes(root)
     (root / "evidence-alias").symlink_to(root / EVIDENCE, target_is_directory=True)
@@ -559,6 +589,10 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
         ("orgmemory_replay", {"dataset": DATASET, "as_of": "2026-10-06"}, "timezone"),
         ("orgmemory_explain", {"dataset": DATASET, "subject": "Feature A", "as_of": "tomorrow"}, "as_of"),
         ("orgmemory_explain", {"dataset": DATASET, "subject": "Feature Z"}, "unknown subject"),
+        ("orgmemory_audit", {"dataset": DATASET, "stale_days": -1}, "stale_days"),
+        ("orgmemory_audit", {"dataset": DATASET, "stale_days": "soon"}, "stale_days"),
+        ("orgmemory_audit", {"dataset": DATASET, "as_of": "2026-10-31"}, "timezone"),
+        ("orgmemory_audit", {"dataset": DATASET, "format": "html"}, "format"),
         ("orgmemory_append", {"dataset": DATASET, "event": "{}"}, "unknown tool"),
         ("orgmemory_evidence_add", {"dataset": DATASET}, "unknown tool"),
     ])
@@ -630,6 +664,7 @@ def test_stdio_examples_end_to_end(tmp_path):
     before = snapshot(EXAMPLES)
     log = tmp_path / "server.log"
     params = StdioServerParameters(command=_script("memlab-mcp"), args=["--root", "examples"], cwd=str(REPO))
+    as_of = "2026-10-31T00:00:00Z"
     audit_args = {"memory_file": "memfalsify/MEMORY.md", "evidence_dir": "memfalsify/evidence",
                   "reviews_file": "memfalsify/reviews.jsonl", "as_of": "2026-10-10"}
 
@@ -649,6 +684,11 @@ def test_stdio_examples_end_to_end(tmp_path):
                         "orgmemory_replay", {"dataset": "orgmemory/feature-a", "format": "json"}),
                     "explain": await client.call_tool(
                         "orgmemory_explain", {"dataset": "orgmemory/feature-a", "subject": "Feature A"}),
+                    "audit_org": await client.call_tool(
+                        "orgmemory_audit", {"dataset": "orgmemory/github-acme-web", "as_of": as_of}),
+                    "audit_org_json": await client.call_tool(
+                        "orgmemory_audit", {"dataset": "orgmemory/github-acme-web", "as_of": as_of,
+                                            "stale_days": 20, "format": "json"}),
                 }
                 return info, protocol, instructions, listed, validate, outputs
 
@@ -670,4 +710,7 @@ def test_stdio_examples_end_to_end(tmp_path):
     _same_as_cli(_cli("orgmemory", "replay", "orgmemory/feature-a"), ok(outputs["replay"]))
     _same_as_cli(_cli("orgmemory", "replay", "orgmemory/feature-a", "--format", "json"), ok(outputs["replay_json"]))
     _same_as_cli(_cli("orgmemory", "explain", "orgmemory/feature-a", "Feature A"), ok(outputs["explain"]))
+    _same_as_cli(_cli("orgmemory", "audit", "orgmemory/github-acme-web", "--as-of", as_of), ok(outputs["audit_org"]))
+    _same_as_cli(_cli("orgmemory", "audit", "orgmemory/github-acme-web", "--as-of", as_of, "--stale-days", "20",
+                      "--format", "json"), ok(outputs["audit_org_json"]))
     assert snapshot(EXAMPLES) == before

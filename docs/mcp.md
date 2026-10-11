@@ -19,6 +19,7 @@ The MCP server requires POSIX `O_NOFOLLOW` and descriptor-relative opens (suppor
 | `orgmemory_validate` | `dataset` | The same lines as `orgmemory validate`. |
 | `orgmemory_replay` | `dataset`, optional `as_of` (ISO 8601 with a timezone), `format` | The same report as `orgmemory replay`. |
 | `orgmemory_explain` | `dataset`, `subject`, optional `as_of` | The same text as `orgmemory explain`. |
+| `orgmemory_audit` | `dataset`, optional `as_of`, `stale_days` (integer, at least 0, default 14), `format` | The same report as `orgmemory audit`. Without `as_of`, staleness is measured at the current time, so pass `as_of` for a reproducible result. There is no `strict`: severities are in the report. |
 
 For root-relative paths, a tool returns the text the matching command prints when run from that root. Some commands add one trailing newline. Audit report paths are canonicalized relative to the server root; a CLI invoked with absolute paths or symlink aliases can therefore print different path labels. `memfalsify claims` is the exception in shape: it prints JSONL, and `memfalsify_claims` returns those same objects as one JSON array.
 

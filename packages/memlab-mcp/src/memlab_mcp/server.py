@@ -28,8 +28,9 @@ from memfalsify.cli import VerifierChoice, build_verifier
 from memfalsify.memory import parse_memory
 from memfalsify.report import to_markdown as audit_markdown
 from memfalsify.verify import VerifierError
+from orgmemory.audit import DEFAULT_STALE_DAYS, audit as decision_audit
 from orgmemory.replay import Dataset, replay
-from orgmemory.report import explain, to_markdown as replay_markdown
+from orgmemory.report import audit_markdown as decision_audit_markdown, explain, to_markdown as replay_markdown
 
 from . import __version__
 
@@ -46,7 +47,8 @@ Read-only tools for Memory Lab.
 - memfalsify_*: audit an agent memory file (MEMORY.md, CLAUDE.md, AGENTS.md, ...) against a directory of \
 evidence files. The audit cites exact quotes and proposes actions; it never changes the memory.
 - orgmemory_*: replay an organizational decision log (events.jsonl + policy.json + evidence.jsonl) under \
-its authority policy, and explain why a subject is in its current state.
+its authority policy, explain why a subject is in its current state, and audit where the decision process \
+needs attention.
 
 Server root: {root}
 Every path argument is resolved inside this root. Paths outside it, '..' escapes and symlinks that \
@@ -189,6 +191,13 @@ def _replay(data: Dataset, moment: Optional[datetime]):
         raise ToolError("invalid replay data; check events and policy") from None
 
 
+def _audit(data: Dataset, moment: Optional[datetime], stale_days: int):
+    try:
+        return decision_audit(data, moment, stale_days)
+    except ValueError:  # includes pydantic ValidationError
+        raise ToolError("invalid replay data; check events and policy") from None
+
+
 def _annotations(title: str, open_world: bool = False) -> ToolAnnotations:
     return ToolAnnotations(title=title, read_only_hint=True, destructive_hint=False, idempotent_hint=True,
                            open_world_hint=open_world)
@@ -289,6 +298,18 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
             raise ToolError(f"unknown subject {subject!r}; known: {', '.join(result.states) or 'none'}")
         return explain(result, subject)
 
+    def orgmemory_audit(
+        dataset: Annotated[str, Field(description=dataset_help)],
+        as_of: Annotated[Optional[str], Field(
+            description=as_of_help + ". Staleness is measured at this time; without it, at the current time")] = None,
+        stale_days: Annotated[int, Field(
+            ge=0, description="Report pending approvals and reconsiderations open longer than this many days")]
+            = DEFAULT_STALE_DAYS,
+        format: Annotated[FORMATS, Field(description="markdown (readable report) or json")] = "markdown",
+    ) -> str:
+        report = _audit(ws.dataset(dataset), _moment(as_of), stale_days)
+        return decision_audit_markdown(report) if format == "markdown" else report.model_dump_json(indent=2)
+
     tools = [
         (memfalsify_claims, "MemFalsify: list claims",
          "List the claims MemFalsify extracts from a memory file (and the local .md files it links to), with "
@@ -307,6 +328,12 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         (orgmemory_explain, "orgmemory: explain a subject",
          "Explain why one subject is in its current state: the authorizing decision with its quoted "
          "evidence, ignored unauthorized attempts, conflicts, and the subject's event history."),
+        (orgmemory_audit, "orgmemory: audit the decision process",
+         "Report where the decision process needs attention: conflicting, reversed or simultaneous "
+         "decisions, invalid revokes, attempts the policy ignored (per actor), stale pending approvals and "
+         "reconsiderations, risks on approved subjects, unapproved dependencies of approved subjects and "
+         "self-approvals. Each finding has a severity (high, medium, low), the event IDs involved and their "
+         "quoted evidence. Findings are leads for a person to review; nothing is changed."),
     ]
     for fn, title, description in tools:
         open_world = fn is memfalsify_audit and allow_model_verifiers

@@ -12,8 +12,8 @@ It contains two independent tools that share one evidence core:
 |---|---|---|
 | Question | *Is this memory backed by evidence?* | *Is this the current, authorized state?* |
 | Input | `MEMORY.md` + a directory of evidence files | Event log + role policy + evidence manifest |
-| Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail |
-| Writes | Nothing (only the report you ask for) | Nothing on replay; `append` only appends |
+| Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail, decision-process audit |
+| Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` only appends |
 
 By default everything runs offline with no API keys; optional model verifiers (Claude and TypeSafe AI's Jev) can be switched on. Python 3.10+, Apache-2.0.
 
@@ -114,9 +114,37 @@ Other commands:
 orgmemory explain  <dataset> "Feature A"      # why it is in this state, with quoted evidence
 orgmemory replay   <dataset> --as-of 2026-10-07T23:59:59Z   # state at a past time
 orgmemory validate <dataset>                  # check every event, hash and quote
+orgmemory audit    <dataset> --as-of 2026-10-31T00:00:00Z   # where the decision process needs attention
 orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <dataset> --event '{"id": ..., ...}'
 ```
+
+#### Audit the decision process
+
+`replay` says what the state is; `audit` says where the decision process needs attention. It replays the log under the same rules, read-only, and reports findings. Each finding has a `kind`, a `severity` (`high`, `medium` or `low`), the `subject` it is about (or, for a finding about one actor, the `actor`), the `subjects` and `event_ids` involved (event IDs in replay order), a `detail` line, and every cited event with its evidence quotes, as `explain` cites them. The audit adds no event semantics: it only restates what replay, its conflicts and its audit trail already contain.
+
+```bash
+orgmemory audit <dataset> [--as-of ISO8601] [--stale-days 14] [--format markdown|json] [--strict]
+```
+
+On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.md)), the customer's reconsideration has waited more than 14 days for the product manager (`stale_reconsideration`, medium), and the account manager's ignored "approval" is an `unauthorized_attempts` finding (medium). The [GitHub example's audit](examples/orgmemory/github-acme-web/audit-report.md) lists stale open issues and pull requests, ignored reviews, labels and merges per account, and a reviewer who requested changes and then approved.
+
+| Kind | Reported when | Severity |
+|---|---|---|
+| `simultaneous_decisions` | Replay recorded conflicting authorized decisions at the same effective time, so file order chose the outcome | high while the order-chosen decision is still current; medium once a later decision has replaced it |
+| `decision_reversed` | Replay recorded an authorized `approve` after an authorized `reject`, or the reverse, with no `revoke` between | medium if a different actor reversed it; low if the same actor changed their own decision |
+| `invalid_supersession` | Replay recorded an authorized `revoke` that named a decision other than the current one, so it changed nothing. The finding also cites the named event and the decision in force at the time | medium |
+| `risk_after_approval` | The subject is approved and has a risk on record; one finding per risk | high if the risk was raised after the approval; medium if before it, because the log has no event that resolves a risk |
+| `unresolved_dependency` | The subject is approved but depends on a subject that is not approved; one finding per dependency, checked one level deep | high if the dependency is rejected; medium if it is proposed; low if it has no events in the log |
+| `unauthorized_attempts` | One finding per actor: the events the policy ignored, with a count per action and the subjects. `comment` is not counted, because it never changes state | high for 2 or more ignored `approve` / `reject` / `revoke`; medium for 1, or for 2 or more other ignored events; low for a single other ignored event |
+| `stale_pending_approval` | `pending_approval` has been open for more than `--stale-days` (default 14) at the reference time, and no reconsideration is open. The wait starts at the first `request`, `reconsider` or `revoke` after the last `approve` or `reject` | medium |
+| `stale_reconsideration` | `reconsideration_requested` has been open for more than `--stale-days`. The subject is then not also reported as `stale_pending_approval` | medium |
+| `self_approval` | The actor of the current approval also made an applied `request` or `reconsider` on the subject before approving it | low |
+
+- Only what replay applied counts: a risk or dependency from an actor without the permission is not on record, and appears only under `unauthorized_attempts`.
+- `--as-of` drops later events, as in `replay`, and is also the reference time for staleness. Without it the whole log is audited and staleness is measured at the current time, so pass `--as-of` for a reproducible report.
+- Findings are sorted by severity, kind, subject, actor and replay order. The Markdown report starts with a summary table: one row per kind, one column per severity. `--format json` has `summary` (findings per severity), `kinds` (every kind, sorted by name) and `findings`.
+- Exit codes: `0`; `1` with `--strict` when any finding is high; `2` on invalid input, as for `replay`. The output is printed in every case except `2`.
 
 #### Ingest GitHub issues and pull requests
 
@@ -214,7 +242,7 @@ The CLIs must be installed in the environment the agent's shell uses.
 
 ## MCP server
 
-`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent five tools: `memfalsify_claims`, `memfalsify_audit`, `orgmemory_validate`, `orgmemory_replay` and `orgmemory_explain`. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`, and the model verifiers stay off unless the server is started with `--allow-model-verifiers`. Tools, client registration and limits: [docs/mcp.md](docs/mcp.md).
+`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent six tools: `memfalsify_claims`, `memfalsify_audit`, `orgmemory_validate`, `orgmemory_replay`, `orgmemory_explain` and `orgmemory_audit`. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`, and the model verifiers stay off unless the server is started with `--allow-model-verifiers`. Tools, client registration and limits: [docs/mcp.md](docs/mcp.md).
 
 ## Verifier backends: lexical, LLM, Jev
 
@@ -270,6 +298,7 @@ unsupported claims and wording issues remain review leads.
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
+- `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
@@ -286,7 +315,7 @@ unsupported claims and wording issues remain review leads.
 |---|---|---|
 | **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
 | **v0.2** | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion ✓ |
-| v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit |
+| v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit ✓ |
 | v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
 

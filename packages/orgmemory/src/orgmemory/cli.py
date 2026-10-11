@@ -1,4 +1,4 @@
-"""orgmemory command line. Replay is read-only; `append` and `evidence add` only ever append lines."""
+"""orgmemory command line. Replay and audit are read-only; `append` and `evidence add` only ever append lines."""
 from __future__ import annotations
 
 import json
@@ -12,9 +12,10 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 
+from .audit import DEFAULT_STALE_DAYS, audit
 from .models import Event
 from .replay import Dataset, replay, validate
-from .report import explain, to_markdown
+from .report import audit_markdown, explain, to_markdown
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="Replay organizational decisions under explicit authority rules.")
@@ -68,6 +69,29 @@ def explain_command(dataset: Path = DATASET, subject: str = typer.Argument(...),
     if subject not in result.states:
         _fail(f"unknown subject {subject!r}; known: {', '.join(result.states)}")
     typer.echo(explain(result, subject))
+
+
+@app.command("audit")
+def audit_command(
+    dataset: Path = DATASET,
+    as_of: Optional[str] = typer.Option(
+        None, help="Ignore events after this time and measure staleness at it (ISO 8601 with timezone; "
+                   "default: whole log, staleness measured now)"),
+    stale_days: int = typer.Option(DEFAULT_STALE_DAYS, min=0,
+                                   help="Report pending approvals and reconsiderations open longer than this"),
+    fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
+    strict: bool = typer.Option(False, help="Exit 1 if any finding has high severity"),
+) -> None:
+    """Report where the decision process needs attention, with the evidence of every event involved."""
+    data = _load(dataset)
+    try:
+        report = audit(data, _as_of(as_of), stale_days)
+    except ValidationError as exc:
+        _fail(str(exc))
+    typer.echo(audit_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
+               nl=False)
+    if strict and report.summary["high"]:
+        raise typer.Exit(1)
 
 
 @app.command("validate")
