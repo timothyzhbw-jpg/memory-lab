@@ -24,12 +24,12 @@ def read_jsonl(path: Path) -> Iterator[tuple[int, dict]]:
 
 
 def append_jsonl(path: Path, record: dict) -> None:
-    """Append one record. Never rewrites existing lines."""
+    """Append one UTF-8/LF record. Never rewrites existing bytes."""
     path = Path(path)
-    prefix = ""
+    prefix = b""
     if path.exists() and path.stat().st_size:
         with path.open("rb") as handle:
             handle.seek(-1, 2)
-            prefix = "" if handle.read(1) == b"\n" else "\n"
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(prefix + json.dumps(record, ensure_ascii=False) + "\n")
+            prefix = b"" if handle.read(1) == b"\n" else b"\n"
+    with path.open("ab") as handle:
+        handle.write(prefix + (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8"))

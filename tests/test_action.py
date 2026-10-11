@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import shutil
 from pathlib import Path
 
@@ -36,6 +37,9 @@ def test_action_publishes_report_and_applies_strict(tmp_path, monkeypatch, capsy
     assert out["attention"] == "1"  # Action audits the named file, not linked infra.md.
     summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
     assert summary == Path(out["report"]).read_text(encoding="utf-8") and "POSSIBLE COUNTEREVIDENCE | 1" in summary
+    assert Path(out["report"]).read_bytes() == summary.encode("utf-8")
+    assert Path(env["GITHUB_STEP_SUMMARY"]).read_bytes() == summary.encode("utf-8")
+    assert Path(env["GITHUB_OUTPUT"]).read_bytes() == f"report={out['report']}\nattention=1\n".encode("utf-8")
     assert "Memory: `MEMORY.md`" in summary and "infra.md:" not in summary
     assert f"{level} title=MemFalsify::1 memory needs attention" in capsys.readouterr().out
 
@@ -119,7 +123,12 @@ def test_action_named_instruction_files_remain_evidence_for_each_other(tmp_path,
     assert "CLAUDE.md:1" in report and "AGENTS.md:1" in report
 
 
-@pytest.mark.parametrize("exists", [False, True])
+@pytest.mark.parametrize("exists", [False, pytest.param(
+    True,
+    marks=pytest.mark.skipif(
+        os.name == "nt", reason="Windows forbids control characters and colons in filenames",
+    ),
+)])
 def test_memory_progress_cannot_inject_workflow_commands(tmp_path, monkeypatch, runner_env, capsys, exists):
     monkeypatch.chdir(tmp_path)
     name = "notes\n::error::forged%\rcommand.md"

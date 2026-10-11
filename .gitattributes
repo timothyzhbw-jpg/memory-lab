@@ -1,0 +1,10 @@
+# Keep source/document text at LF, including when the repository itself is evidence.
+* text=auto eol=lf
+
+# Evidence hashes, quote offsets and golden comparisons use exact bytes. Disable
+# Git newline conversion for data (even intentionally CRLF data) on every host.
+examples/** -text
+benchmarks/memfalsify/cases/** -text
+tests/fixtures/** -text
+benchmarks/memfalsify/results-*.json -text
+benchmarks/memfalsify/RESULTS.md -text

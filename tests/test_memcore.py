@@ -4,6 +4,7 @@ import os
 import pytest
 from pydantic import ValidationError
 
+from conftest import requires_confinement
 from memcore import EvidenceError, append_jsonl, load_manifest, locate_quote, read_jsonl
 from memcore.reading import confined_reads, read_file_bytes
 
@@ -68,15 +69,20 @@ def test_duplicate_evidence_id_rejected(tmp_path):
         load_manifest(manifest)
 
 
-def test_append_jsonl_only_appends(tmp_path):
+@pytest.mark.parametrize("existing", [b"", b'{"id": 1}', b'{"id": 1}\n', b'{"id": 1}\r\n'])
+def test_append_jsonl_only_appends(tmp_path, existing):
     path = tmp_path / "log.jsonl"
-    path.write_text('{"id": 1}', encoding="utf-8")  # no trailing newline
-    append_jsonl(path, {"id": 2})
-    assert [r["id"] for _, r in read_jsonl(path)] == [1, 2]
-    assert path.read_text().startswith('{"id": 1}\n')
+    path.write_bytes(existing)
+    append_jsonl(path, {"id": 2, "text": "证据"})
+    separator = b"\n" if existing and not existing.endswith(b"\n") else b""
+    assert path.read_bytes() == existing + separator + '{"id": 2, "text": "证据"}\n'.encode("utf-8")
+    assert [r["id"] for _, r in read_jsonl(path)] == ([1, 2] if existing else [2])
 
 
-@pytest.mark.parametrize("component", ["file", "directory", "fifo"])
+@pytest.mark.parametrize("component", ["file", "directory", pytest.param(
+    "fifo", marks=pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO tests require os.mkfifo"),
+)])
+@requires_confinement
 def test_confined_open_rejects_swaps_after_resolution(tmp_path, monkeypatch, component):
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "nested").mkdir(parents=True)
@@ -109,6 +115,7 @@ def test_confined_open_rejects_swaps_after_resolution(tmp_path, monkeypatch, com
     assert triggered
 
 
+@requires_confinement
 def test_confined_reads_accept_in_root_links_and_reset_after_failure(tmp_path):
     root = tmp_path / "root"
     root.mkdir()

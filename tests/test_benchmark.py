@@ -300,6 +300,7 @@ def test_run_script_end_to_end_with_lexical_verifier(cases, tmp_path):
     assert "| negation_trap | 1 | – | 0/1 (0.00) | 1/1 (1.00) |" in markdown
     assert "| tiny | supported | contradicted | negation_trap, distractor | The cache uses Redis. |" in markdown
     result = json.loads(out.read_text(encoding="utf-8"))
+    assert out.read_bytes() == (json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     assert result["settings"] == {"min_coverage": 0.5, "max_judged": None, "verifier": "lexical"}
     assert {p["text"]: (p["predicted"], p["status"]) for p in result["predictions"]} == EXPECTED_LEXICAL
     assert [p["text"] for p in result["predictions"]] == [text for text, *_ in LABELS]

@@ -104,7 +104,7 @@ def audit_command(
         read = {(Path(memory).resolve().parent / p).resolve() for p in report.files_read}
         if output.resolve() in read:
             _fail("refusing to overwrite a memory file with the report")
-        output.write_text(text, encoding="utf-8")
+        output.write_bytes(text.encode("utf-8"))
         typer.echo(f"wrote {output}", err=True)
     else:
         typer.echo(text, nl=False)

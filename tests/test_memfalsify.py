@@ -295,6 +295,16 @@ def test_cli_json(memfalsify_demo):
     assert data["mode"] == "read_only" and data["summary"]["challenged"] == 1
 
 
+@pytest.mark.parametrize("fmt", ["markdown", "json"])
+def test_cli_output_preserves_report_bytes(memfalsify_demo, tmp_path, fmt):
+    output = tmp_path / "report"
+    report = run_demo(memfalsify_demo)
+    expected = to_markdown(report) if fmt == "markdown" else report.model_dump_json(indent=2) + "\n"
+    result = runner.invoke(app, cli_args(memfalsify_demo, "--format", fmt, "-o", str(output)))
+    assert result.exit_code == 0, result.output
+    assert output.read_bytes() == expected.encode("utf-8")
+
+
 def test_cli_refuses_to_overwrite_memory(memfalsify_demo):
     before = (memfalsify_demo / "infra.md").read_bytes()
     result = runner.invoke(app, cli_args(memfalsify_demo, "-o", str(memfalsify_demo / "infra.md")))

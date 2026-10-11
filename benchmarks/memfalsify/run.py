@@ -388,7 +388,7 @@ def main(
         result["settings"]["accept_at"] = accept_at
     typer.echo(to_markdown(result), nl=False)
     if json_out:
-        json_out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        json_out.write_bytes((json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
         typer.echo(f"wrote {json_out}", err=True)
 
 

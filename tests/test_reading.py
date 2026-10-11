@@ -4,6 +4,7 @@ from contextlib import nullcontext
 
 import pytest
 
+from conftest import requires_confinement
 from memcore.reading import confined_reads, walk_files
 from memfalsify.corpus import scan
 
@@ -51,7 +52,8 @@ class UnknownTypeEntry:
         return self.entry.is_dir(follow_symlinks=follow_symlinks)
 
 
-def test_scan_fails_closed_on_uncached_entry_type(tmp_path, wrap_scandir_entries):
+@pytest.mark.parametrize("confined", [False, pytest.param(True, marks=requires_confinement)])
+def test_scan_fails_closed_on_uncached_entry_type(tmp_path, wrap_scandir_entries, confined):
     """Port of the review's real permission-denial / DT_UNKNOWN reproduction."""
     root = tmp_path.resolve()
     docs = root / "docs"
@@ -63,15 +65,15 @@ def test_scan_fails_closed_on_uncached_entry_type(tmp_path, wrap_scandir_entries
     try:
         if os.access(docs, os.X_OK):
             pytest.skip("this user can bypass directory search permissions")
-        with pytest.raises(PermissionError):
-            scan(root)
-        with confined_reads(root), pytest.raises(PermissionError):
-            scan(root)
+        with confined_reads(root) if confined else nullcontext():
+            with pytest.raises(PermissionError):
+                scan(root)
     finally:
         docs.chmod(0o700)
 
 
 @pytest.mark.parametrize("operation", ["is_dir", "is_symlink"])
+@requires_confinement
 def test_confined_classification_error_is_reported_and_entry_retained(
     tmp_path, wrap_scandir_entries, operation,
 ):
@@ -109,6 +111,7 @@ def test_confined_classification_error_is_reported_and_entry_retained(
 
 @pytest.mark.parametrize("operation", ["scandir", "iteration", "open"])
 @pytest.mark.parametrize("target", ["root", "child"])
+@requires_confinement
 def test_confined_traversal_error_calls_onerror(tmp_path, monkeypatch, operation, target):
     root = tmp_path.resolve()
     (root / "docs").mkdir()
@@ -153,6 +156,7 @@ def test_confined_traversal_error_calls_onerror(tmp_path, monkeypatch, operation
 
 
 @pytest.mark.parametrize("pattern", ["docs/**", "docs/*", "docs", "./docs/"])
+@requires_confinement
 def test_confined_exclusion_prunes_before_open(tmp_path, monkeypatch, pattern):
     root = tmp_path.resolve()
     (root / "docs" / "nested").mkdir(parents=True)
@@ -172,7 +176,8 @@ def test_confined_exclusion_prunes_before_open(tmp_path, monkeypatch, pattern):
     assert skipped == []
 
 
-@pytest.mark.parametrize("confined", [False, True])
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO tests require os.mkfifo")
+@pytest.mark.parametrize("confined", [False, pytest.param(True, marks=requires_confinement)])
 def test_links_and_special_files(tmp_path, confined):
     root = tmp_path.resolve()
     (root / "docs").mkdir()
@@ -194,6 +199,7 @@ def test_links_and_special_files(tmp_path, confined):
     }
 
 
+@requires_confinement
 def test_confined_walk_lists_directory_links_without_descending(tmp_path, monkeypatch):
     root = tmp_path.resolve()
     (root / "docs").mkdir()
@@ -213,6 +219,7 @@ def test_confined_walk_lists_directory_links_without_descending(tmp_path, monkey
     assert [row[0] for row in rows] == [root, root / "docs"]
 
 
+@requires_confinement
 def test_confined_walk_keeps_descriptors_pinned_across_yields(tmp_path):
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "docs").mkdir(parents=True)
@@ -231,6 +238,7 @@ def test_confined_walk_keeps_descriptors_pinned_across_yields(tmp_path):
             walker.close()
 
 
+@requires_confinement
 def test_confined_walk_rejects_directory_swap_before_descent(tmp_path, monkeypatch):
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "docs").mkdir(parents=True)

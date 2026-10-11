@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
+from memcore.reading import confinement_supported
+
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+requires_confinement = pytest.mark.skipif(
+    not confinement_supported(),
+    reason="confined reads require POSIX O_NOFOLLOW and dir_fd support",
+)
 
 
 @pytest.fixture

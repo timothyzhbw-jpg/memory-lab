@@ -13,7 +13,7 @@ pytest.importorskip("mcp")
 import anyio  # noqa: E402  (an mcp dependency)
 from mcp import Client, StdioServerParameters, stdio_client  # noqa: E402
 
-from conftest import EXAMPLES, snapshot  # noqa: E402
+from conftest import EXAMPLES, requires_confinement, snapshot  # noqa: E402
 from memfalsify.audit import audit  # noqa: E402
 from memfalsify import corpus as memfalsify_corpus  # noqa: E402
 from memfalsify.memory import parse_memory  # noqa: E402
@@ -87,6 +87,7 @@ def test_startup_error_is_reported_without_a_traceback(root, monkeypatch):
     assert "Traceback" not in result.output
 
 @pytest.mark.parametrize("mode", ["legacy", "auto"])
+@requires_confinement
 def test_lists_read_only_tools_and_calls_one(root, mode):
     async def main():
         async with Client(create_server(root), mode=mode) as client:
@@ -105,12 +106,14 @@ def test_lists_read_only_tools_and_calls_one(root, mode):
     assert ok(result).startswith("ok: ")
 
 
+@requires_confinement
 def test_claims_match_the_library(root):
     claims = json.loads(ok(call(create_server(root), "memfalsify_claims", memory_file=MEMORY)))
     expected, _ = parse_memory(root / MEMORY)
     assert claims == [{"memory_id": c.id, "location": c.location, "text": c.text} for c in expected]
 
 
+@requires_confinement
 def test_audit_matches_the_library_and_hides_the_root(root):
     server = create_server(root)
     arguments = dict(memory_file=MEMORY, evidence_dir=EVIDENCE, reviews_file=REVIEWS, as_of="2026-10-10")
@@ -127,6 +130,7 @@ def test_audit_matches_the_library_and_hides_the_root(root):
     assert str(root.resolve()) not in markdown
 
 
+@requires_confinement
 def test_audit_without_evidence_and_absolute_path_inside_root(root):
     report = json.loads(ok(call(create_server(root), "memfalsify_audit",
                                 memory_file=str(root / MEMORY), format="json")))
@@ -134,6 +138,7 @@ def test_audit_without_evidence_and_absolute_path_inside_root(root):
     assert {f["status"] for f in report["findings"]} == {"insufficient_evidence"}
 
 
+@requires_confinement
 def test_orgmemory_replay_and_explain(root):
     server = create_server(root)
     state = json.loads(ok(call(server, "orgmemory_replay", dataset=DATASET, format="json")))["states"]["Feature A"]
@@ -162,6 +167,7 @@ def escapes(root):
 
 
 @pytest.mark.parametrize("index", range(5))
+@requires_confinement
 def test_memory_paths_cannot_escape_the_root(root, index):
     server, path = create_server(root), escapes(root)[index]
     for tool in ("memfalsify_claims", "memfalsify_audit"):
@@ -169,6 +175,7 @@ def test_memory_paths_cannot_escape_the_root(root, index):
         assert "outside the server root" in message and SECRET not in message
 
 
+@requires_confinement
 def test_other_path_arguments_cannot_escape(root):
     server = create_server(root)
     (root / "evil-dataset").mkdir()
@@ -192,6 +199,7 @@ def test_other_path_arguments_cannot_escape(root):
     assert "events.jsonl is a symlink that leaves the server root" in message and SECRET not in message
 
 
+@requires_confinement
 def test_evidence_symlinks_out_of_the_root_are_skipped_not_read(root):
     (root / EVIDENCE / "leak.md").symlink_to(root.parent / "outside.md")
     report = json.loads(ok(call(create_server(root), "memfalsify_audit", memory_file=MEMORY,
@@ -200,6 +208,7 @@ def test_evidence_symlinks_out_of_the_root_are_skipped_not_read(root):
     assert SECRET not in json.dumps(report)
 
 
+@requires_confinement
 def test_memory_symlink_swap_cannot_escape_root(root, monkeypatch):
     original = memlab_server.parse_memory
 
@@ -214,6 +223,7 @@ def test_memory_symlink_swap_cannot_escape_root(root, monkeypatch):
     error(result)
 
 
+@requires_confinement
 def test_evidence_directory_swap_cannot_list_outside_root(root, monkeypatch):
     outside = root.parent / "outside-evidence"
     outside.mkdir()
@@ -239,6 +249,7 @@ def test_evidence_directory_swap_cannot_list_outside_root(root, monkeypatch):
 
 
 @pytest.mark.parametrize("filename", memlab_server.DATASET_FILES)
+@requires_confinement
 def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename):
     original = memlab_server.Dataset.load
 
@@ -254,6 +265,7 @@ def test_dataset_symlink_swap_cannot_escape_root(root, monkeypatch, filename):
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs require POSIX")
+@requires_confinement
 def test_evidence_scan_does_not_open_special_files(root, monkeypatch):
     pipe = root / EVIDENCE / "pipe.txt"
     os.mkfifo(pipe)
@@ -270,6 +282,7 @@ def test_evidence_scan_does_not_open_special_files(root, monkeypatch):
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs require POSIX")
+@requires_confinement
 def test_dataset_evidence_does_not_open_special_files(root, monkeypatch):
     pipe = root / DATASET / "pipe.txt"
     os.mkfifo(pipe)
@@ -291,6 +304,7 @@ def test_dataset_evidence_does_not_open_special_files(root, monkeypatch):
 # --- verifiers -------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("verifier", ["llm", "jev", "dual", "cascade"])
+@requires_confinement
 def test_model_verifiers_refused_without_the_flag(root, monkeypatch, verifier):
     def no_models(*args, **kwargs):
         raise AssertionError("no verifier may be built when model verifiers are disabled")
@@ -302,6 +316,7 @@ def test_model_verifiers_refused_without_the_flag(root, monkeypatch, verifier):
 
 
 @pytest.mark.parametrize("verifier", ["llm", "jev", "dual", "cascade"])
+@requires_confinement
 def test_model_verifiers_allowed_with_the_flag(root, monkeypatch, verifier):
     built = []
 
@@ -324,6 +339,7 @@ def test_model_verifiers_allowed_with_the_flag(root, monkeypatch, verifier):
     assert anyio.run(annotations)["memfalsify_audit"] is True
 
 
+@requires_confinement
 def test_missing_model_sdk_is_a_tool_error(root, monkeypatch):
     def missing(*args, **kwargs):
         raise memlab_server.VerifierError("the LLM verifier needs the anthropic package")
@@ -336,6 +352,7 @@ def test_missing_model_sdk_is_a_tool_error(root, monkeypatch):
 
 # --- bad input -------------------------------------------------------------------------------
 
+@requires_confinement
 def test_rejected_paths_are_not_reflected_in_errors(root):
     outside = str(root.parent / "outside.md")
     for tool, arguments in [
@@ -351,6 +368,7 @@ def test_rejected_paths_are_not_reflected_in_errors(root):
 
 
 @pytest.mark.parametrize("stage", ["build", "judge"])
+@requires_confinement
 def test_model_failures_do_not_expose_backend_diagnostics(root, monkeypatch, caplog, stage):
     diagnostic = "synthetic-backend-diagnostic /outside/private-profile"
 
@@ -367,6 +385,7 @@ def test_model_failures_do_not_expose_backend_diagnostics(root, monkeypatch, cap
     assert diagnostic not in message and diagnostic not in caplog.text
 
 
+@requires_confinement
 def test_unexpected_failures_do_not_log_tracebacks(root, monkeypatch, caplog):
     def fail(*args, **kwargs):
         raise RuntimeError("synthetic-private-diagnostic /outside/private-profile")
@@ -377,6 +396,7 @@ def test_unexpected_failures_do_not_log_tracebacks(root, monkeypatch, caplog):
     assert all(record.exc_info is None for record in caplog.records)
 
 
+@requires_confinement
 def test_earliest_reference_date_does_not_overflow(root, caplog):
     result = call(create_server(root), "memfalsify_audit", memory_file=MEMORY,
                   as_of="0001-01-01", format="json")
@@ -385,10 +405,12 @@ def test_earliest_reference_date_does_not_overflow(root, caplog):
 
 
 @pytest.mark.parametrize("field", ["evidence_dir", "reviews_file"])
+@requires_confinement
 def test_empty_optional_paths_are_not_treated_as_omitted(root, field):
     message = error(call(create_server(root), "memfalsify_audit", memory_file=MEMORY, **{field: ""}))
     assert f"{field} is empty" in message
 
+@requires_confinement
 def test_bad_input_is_a_clear_tool_error(root):
     server = create_server(root)
     (root / "broken").mkdir()
@@ -417,6 +439,7 @@ def test_bad_input_is_a_clear_tool_error(root):
 
 # --- read-only -------------------------------------------------------------------------------
 
+@requires_confinement
 def test_no_tool_writes_anything(root):
     before = snapshot(root.parent)
     server = create_server(root)
@@ -436,9 +459,12 @@ def test_no_tool_writes_anything(root):
     assert snapshot(root.parent) == before
 
 
+# Windows asyncio creates a loopback socketpair even for stdio, which the
+# no-network fixture rejects. These tests also require the POSIX-only server.
 # --- the real server over stdio ----------------------------------------------------------------
 
 @pytest.mark.parametrize("allow_models", [False, True])
+@requires_confinement
 def test_stdio_round_trip(root, tmp_path, allow_models):
     sources = [REPO / "packages" / name / "src" for name in ("memcore", "memfalsify", "orgmemory", "memlab-mcp")]
     args = ["-m", "memlab_mcp", "--root", str(root)]
@@ -461,6 +487,7 @@ def test_stdio_round_trip(root, tmp_path, allow_models):
     assert "ev-wed-reject" in ok(result)
 
 
+@requires_confinement
 def test_stdio_security_and_invalid_input(root, tmp_path):
     """All five tools reject bad inputs without reads outside root, writes or noisy stderr."""
     outside = str(root.parent / "outside.md")
@@ -572,8 +599,13 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
 
 
 def _script(name: str) -> str:
-    path = Path(sys.executable).with_name(name)
-    assert path.is_file(), f"{name} is not installed next to {sys.executable}"
+    directory = Path(sys.executable).parent
+    if os.name == "nt":
+        name += ".exe"
+        if directory.name.lower() != "scripts":
+            directory /= "Scripts"
+    path = directory / name
+    assert path.is_file(), f"{name} is not installed in {directory}"
     return str(path)
 
 
@@ -588,6 +620,7 @@ def _same_as_cli(cli_stdout: str, tool_text: str) -> None:
     assert cli_stdout == tool_text or cli_stdout == tool_text + "\n"
 
 
+@requires_confinement
 def test_stdio_examples_end_to_end(tmp_path):
     """`memlab-mcp --root examples` over stdio: initialize, tools/list, then tools/call.
 

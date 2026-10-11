@@ -39,8 +39,8 @@ def annotate(kind: str, message: str) -> None:
 
 def _append(env: dict[str, str], variable: str, text: str) -> None:
     if target := env.get(variable):
-        with open(target, "a", encoding="utf-8") as handle:
-            handle.write(text)
+        with open(target, "ab") as handle:
+            handle.write(text.encode("utf-8"))
 
 
 def run_cli(args: list[str]) -> int:
@@ -74,7 +74,7 @@ def options(env: dict[str, str]) -> list[str]:
 
 
 def publish(env: dict[str, str], path: Path, text: str, attention: int) -> None:
-    path.write_text(text, encoding="utf-8")
+    path.write_bytes(text.encode("utf-8"))
     if len(text.encode("utf-8")) > SUMMARY_LIMIT:
         text = text.encode("utf-8")[:SUMMARY_LIMIT].decode("utf-8", "ignore")
         text += "\n\n**Report truncated for the job summary; the full report is in the `report` output file.**\n"
