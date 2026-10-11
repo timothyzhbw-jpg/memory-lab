@@ -1,0 +1,33 @@
+# https://pre-commit.com/#new-hooks
+# Claims are read from the index. Evidence is read from the working tree.
+# pre-commit hides unstaged edits to tracked files before a pre-commit-stage hook,
+# so tracked evidence matches the index for that run. See the README.
+
+- id: memfalsify-diff
+  name: MemFalsify diff
+  description: >-
+    Audit claims added or changed in staged CLAUDE.md, AGENTS.md and MEMORY.md
+    against the working tree's evidence. Fails only when one of those claims
+    needs attention.
+  entry: python -X utf8 -m memfalsify.precommit diff
+  language: python
+  files: '(^|/)(CLAUDE|AGENTS|MEMORY)\.md$'
+  types: [file]
+  pass_filenames: true
+  require_serial: true
+  stages: [pre-commit]
+  minimum_pre_commit_version: "3.2.0"
+
+- id: memfalsify-audit
+  name: MemFalsify audit
+  description: >-
+    Audit every claim in staged CLAUDE.md, AGENTS.md and MEMORY.md against the
+    working tree's evidence. Fails when any claim needs attention.
+  entry: python -X utf8 -m memfalsify.precommit audit
+  language: python
+  files: '(^|/)(CLAUDE|AGENTS|MEMORY)\.md$'
+  types: [file]
+  pass_filenames: true
+  require_serial: true
+  stages: [pre-commit]
+  minimum_pre_commit_version: "3.2.0"

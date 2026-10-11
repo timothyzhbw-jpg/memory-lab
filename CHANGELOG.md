@@ -16,7 +16,18 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- `memfalsify diff --staged` compares `--base` with the git index (the text `git commit` will record),
+  including one level of linked `.md` files read from the index. Evidence stays the working tree.
+  `--staged` does not take `--head`. In a repository with no commits, `--base HEAD` treats every staged
+  claim as added.
+- `.pre-commit-hooks.yaml` provides `memfalsify-diff` (added and changed claims) and `memfalsify-audit`
+  (every staged claim) for [pre-commit](https://pre-commit.com). Both read staged `CLAUDE.md`, `AGENTS.md`
+  and `MEMORY.md` from the index, audit them against the working tree, and fail the commit only when a
+  checked claim is challenged, conflicted, disputed or has possible counterevidence. The hook install is
+  the repository-root project `memory-lab-pre-commit`, which bundles the memfalsify and memcore sources
+  from that commit.
 
 ## memlab-core
 

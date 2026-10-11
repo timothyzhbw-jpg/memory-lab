@@ -91,10 +91,33 @@ memfalsify rollback CLAUDE.md --claim m-1a2b3c4d --to main -o restore.patch
 git apply restore.patch                                    # only after reviewing it, from the repository root
 ```
 
-- `diff` reads both versions of the memory file and the files it links to with git (nothing is checked out) and lists claims as added, changed (old → new), removed or unchanged. It audits only the added and changed ones, against the evidence directory as it is now, and takes the `audit` options (`--evidence`, `--exclude`, `--reviews`, `--verifier`, `--format`, `--output`, `--strict`, ...). With `--strict` it exits 1 when an added or changed claim needs attention; git problems and unknown revisions exit 2.
+- `diff` reads both versions of the memory file and the files it links to with git (nothing is checked out) and lists claims as added, changed (old → new), removed or unchanged. It audits only the added and changed ones, against the evidence directory as it is now, and takes the `audit` options (`--evidence`, `--exclude`, `--reviews`, `--verifier`, `--format`, `--output`, `--strict`, ...). With `--strict` it exits 1 when an added or changed claim needs attention; git problems and unknown revisions exit 2. `--staged` reads the head version, and one level of linked `.md` files, from the index (the text `git commit` will record). Evidence stays the working tree. `--staged` takes `--base` and leaves `--head` unset. In a repository with no commits, `--base HEAD` treats every staged claim as added.
 - A claim is identified by its ID, so case and whitespace edits count as unchanged. An edited claim is paired with its old version when both are in the same file and section (a heading that was renamed around unchanged claims counts as the same section) and their terms are at least 50% similar; otherwise the edit shows as removed plus added. Pairing is deterministic.
 - `history` follows the first-parent line of `HEAD`, so a change merged with a merge commit is attributed to that commit; it also lists claims removed within the scanned commits, and uncommitted edits as "uncommitted changes in the working tree". Claims older than the scanned commits (`--max-commits`, default 100, or the edge of a shallow clone) are reported as such, not attributed to the oldest commit. A renamed memory file is not followed.
 - `rollback` never applies anything: it prints a patch that restores the claim's wording as of `--to` (every copy of it, with the old markup), or re-adds a removed claim after the nearest surviving claim of its section. It accepts the current or the old claim ID. Use `-o` on Windows, where shell redirection can re-encode the patch.
+
+#### Pre-commit
+
+[pre-commit](https://pre-commit.com) can run that check on the commit itself. This repository is the hook repo; pin a full commit SHA. The manifest is [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml).
+
+```yaml
+repos:
+  - repo: https://github.com/timothyzhbw-jpg/memory-lab
+    rev: <40-character SHA>
+    hooks:
+      - id: memfalsify-diff
+      - id: memfalsify-audit
+```
+
+`memfalsify-diff` audits claims added or changed in staged `CLAUDE.md`, `AGENTS.md` and `MEMORY.md`. `memfalsify-audit` audits every claim in those staged files. A hook fails the commit when a claim it checked is challenged, conflicted, disputed, or has possible counterevidence. A claim with no evidence, and wording issues, stay in the report and the commit continues. `args: [--no-strict]` prints the report and the commit continues either way.
+
+Both hooks read memory from the index, including one level of linked `.md` files, also from the index. Evidence is the working tree. `git commit` and `pre-commit run` hide unstaged edits to tracked files before the hook, so tracked evidence matches the index and untracked evidence files stay visible. A hand-run `memfalsify diff --staged` leaves those edits in place, so an unstaged evidence change is part of that audit. The diff hook is this command:
+
+```bash
+memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict
+```
+
+A commit that stages only a linked `.md` file does not run the hook. Stage the `CLAUDE.md`, `AGENTS.md` or `MEMORY.md` that links it. The default verifier is lexical and offline. For `llm`, `jev`, `dual` or `cascade`, add the SDK in `additional_dependencies` (for example `anthropic>=1.13` or `typesafe-sdk`) and pass `--verifier` in `args`. The hook install already includes MemFalsify from this repository.
 
 ### Organizational Memory: replay decisions
 
@@ -310,7 +333,8 @@ The [GitHub Action](docs/github-action.md) audits explicitly named agent instruc
 evidence and puts the report in the job summary. Its default strict check fails on possible counterevidence;
 unsupported claims and wording issues remain review leads. With `diff-base` (for example the pull request's base
 commit, and `fetch-depth: 0` on `actions/checkout`), it runs `memfalsify diff`, so a pull request is gated only on
-the claims it adds or changes.
+the claims it adds or changes. The same gate is available on a local commit through the
+[pre-commit](#pre-commit) hooks `memfalsify-diff` and `memfalsify-audit`.
 
 ## Trust boundaries and limitations
 

@@ -1,4 +1,4 @@
-"""Read memory files from git without checking anything out, and from the working tree.
+"""Read memory files from git without checking anything out, from the index, and from the working tree.
 
 Git runs with argument lists (never a shell) and with config that could change its output pinned. Every
 user-supplied revision is validated and resolved to a commit ID first. File contents come from the object
@@ -233,6 +233,43 @@ class Objects:
             self.blobs[oid] = found[2]
         return self.blobs[oid]
 
+    def blob(self, oid: str) -> bytes:
+        """Bytes of one blob. ``oid`` is a full object name, as ``ls-files --stage`` prints it."""
+        if oid not in self.blobs:
+            if not HEX.fullmatch(oid):
+                raise HistoryError("git returned an unexpected object name")
+            found = self._request(oid)
+            if found is None or found[1] != "blob":
+                raise HistoryError(f"git object {oid} is missing from the repository")
+            self.blobs[oid] = found[2]
+        return self.blobs[oid]
+
+
+def _index_entry(data: bytes, path: str) -> tuple[str, str] | None:
+    """``(mode, oid)`` for an exact index path, or None when that path is not staged.
+
+    An unmerged path (any stage other than 0) is an error: the commit would not have one blob.
+    """
+    wanted = path.encode("utf-8")
+    found: tuple[str, str] | None = None
+    for record in data.split(b"\0"):
+        if not record:
+            continue
+        try:
+            meta, name = record.split(b"\t", 1)
+            mode_b, oid_b, stage_b = meta.split(b" ")
+            mode, oid, stage = (mode_b.decode("ascii"), oid_b.decode("ascii"), stage_b.decode("ascii"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise HistoryError("git ls-files returned an unexpected index record") from exc
+        if name != wanted:
+            continue
+        if stage != "0":
+            raise HistoryError(f"{printable(path)} is unmerged in the index; resolve the conflict before committing")
+        if found is not None or not mode.isdigit() or not HEX.fullmatch(oid):
+            raise HistoryError("git ls-files returned an unexpected index record")
+        found = (mode, oid)
+    return found
+
 
 def _tree_entries(data: bytes, oid_bytes: int) -> dict[bytes, tuple[str, str]]:
     """Parse a raw tree object: ``<mode> <name>\\0<binary object ID>`` repeated."""
@@ -319,6 +356,38 @@ class Repository:
             return read_file_text(path) if path else None
         return build_snapshot(read, self.memory_name, follow_links)
 
+    def index_file(self, objects: Objects, relative: str) -> bytes | None:
+        """Bytes of a regular file in the index, or None when it is absent, a symlink or a gitlink.
+
+        The path is the memory-directory-relative name ``build_snapshot`` asks for. Symlink blobs are
+        not read, same as ``Objects.file`` for a commit. Callers decode UTF-8 themselves.
+        """
+        if (not relative or relative in (".", "..") or relative.startswith(("-", "/", "../"))
+                or "\\" in relative or CONTROL.search(relative) or posixpath.normpath(relative) != relative):
+            raise HistoryError(f"refusing index path {printable(relative)!r}")
+        full = self.prefix + relative
+        proc = _run(self.git, self.root, [*self.options, "ls-files", "--stage", "-z", "--full-name",
+                                           "--end-of-options", "--", full])
+        if proc.returncode:
+            raise HistoryError(f"git ls-files failed: {_failure(proc)}")
+        entry = _index_entry(proc.stdout, full)
+        if entry is None or not entry[0].startswith("100"):
+            return None
+        return objects.blob(entry[1])
+
+    def index(self, objects: Objects, follow_links: bool) -> Snapshot:
+        """Claims in the index: the bytes ``git commit`` would record, including linked ``.md`` files."""
+        def read(relative: str) -> str | None:
+            data = self.index_file(objects, relative)
+            if data is None:
+                return None
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise HistoryError(f"{printable(self.prefix + relative)} in the index is not UTF-8 text") from exc
+            return text.replace("\r\n", "\n").replace("\r", "\n")
+        return build_snapshot(read, self.memory_name, follow_links)
+
 
 OUTSIDE = ("the memory file's git repository is not inside the server root: its work tree, git directory, "
            "common directory (for a worktree, the main repository's) and object store must all be inside it")
@@ -360,11 +429,15 @@ def _confine(root: Path, toplevel: Path, git_dir: Path, common_dir: Path) -> tup
 
 def open_repository(memory_file: Path) -> Repository:
     exe = _git_executable()
-    memory = Path(memory_file).resolve()
-    if not memory.parent.is_dir():
-        raise HistoryError(f"directory not found: {memory.parent}")
-    proc = _run(exe, memory.parent, ["rev-parse", "--show-toplevel", "--show-prefix", "--absolute-git-dir",
-                                     "--git-common-dir"])
+    given = Path(memory_file)
+    # Resolve parents only. Path.resolve() would follow a symlink in the last component and
+    # audit the target's git name. A staged symlink must keep the name the index records;
+    # index_file then skips it (modes other than 100644/100755 are not memory text).
+    parent = given.parent.resolve()
+    if not parent.is_dir():
+        raise HistoryError(f"directory not found: {parent}")
+    proc = _run(exe, parent, ["rev-parse", "--show-toplevel", "--show-prefix", "--absolute-git-dir",
+                              "--git-common-dir"])
     if proc.returncode:
         where = f"{printable(str(memory_file))} is not inside a git work tree"
         raise GitError(f"{where} ({_failure(proc)})", where)
@@ -379,10 +452,54 @@ def open_repository(memory_file: Path) -> Repository:
     if len(lines) != 5 or lines[4] or not all(lines[i] for i in (0, 2, 3)):  # e.g. a path holding a newline
         raise HistoryError("cannot read the repository location from git")
     toplevel, prefix, git_dir, common_dir = lines[:4]
-    if CONTROL.search(prefix + memory.name):
+    if CONTROL.search(prefix + given.name):
         raise HistoryError("the memory path contains control characters, which git batch reads cannot carry")
     options: tuple[str, ...] = ()
     if (root := confinement_root()) is not None:
-        options = _confine(root, Path(toplevel), Path(git_dir), memory.parent / common_dir)
-    return Repository(git=exe, root=Path(toplevel), prefix=prefix, memory_dir=memory.parent, memory_name=memory.name,
+        options = _confine(root, Path(toplevel), Path(git_dir), parent / common_dir)
+    return Repository(git=exe, root=Path(toplevel), prefix=prefix, memory_dir=parent, memory_name=given.name,
                       options=options)
+
+
+def repository_toplevel(start: Path) -> Path:
+    """Absolute work-tree root that contains ``start``."""
+    directory = Path(start)
+    if not directory.is_dir():
+        raise HistoryError(f"directory not found: {printable(str(start))}")
+    proc = _run(_git_executable(), directory, ["rev-parse", "--show-toplevel"])
+    if proc.returncode:
+        where = f"{printable(str(start))} is not inside a git work tree"
+        raise GitError(f"{where} ({_failure(proc)})", where)
+    try:
+        text = proc.stdout.decode("utf-8").replace("\r\n", "\n").strip("\n").rstrip("\r")
+    except UnicodeDecodeError as exc:
+        raise HistoryError("cannot read the repository location from git") from exc
+    if not text or "\n" in text or CONTROL.search(text):
+        raise HistoryError("cannot read the repository location from git")
+    return Path(text)
+
+
+def list_staged_paths(toplevel: Path) -> list[str]:
+    """Work-tree-relative paths that differ between the index and HEAD.
+
+    With no commits yet, every staged path. Names are git's, decoded as UTF-8. Deletions are included;
+    the caller decides what an absent index blob means.
+    """
+    exe = _git_executable()
+    root = Path(toplevel)
+    head = _run(exe, root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
+    args = ["diff", "--cached", "--name-only", "-z", "--end-of-options"]
+    if head.returncode == 0 and HEX.fullmatch(head.stdout.decode("ascii", "replace").strip()):
+        args.append("HEAD")
+    proc = _run(exe, root, args)
+    if proc.returncode:
+        raise GitError(f"git diff failed: {_failure(proc)}", "git diff failed")
+    paths = []
+    for raw in proc.stdout.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            paths.append(raw.decode("utf-8"))
+        except UnicodeDecodeError as exc:
+            raise HistoryError("a staged path is not UTF-8") from exc
+    return paths

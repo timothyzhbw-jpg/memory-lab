@@ -89,10 +89,33 @@ memfalsify rollback CLAUDE.md --claim m-1a2b3c4d --to main -o restore.patch
 git apply restore.patch                                    # 先审阅补丁，再在仓库根目录应用
 ```
 
-- `diff` 通过 git 读取两个版本的记忆文件及其链接的文件（不会检出任何东西），把记忆分为新增、修改（旧 → 新）、删除和未变。只审计新增和修改的记忆，证据目录按当前状态读取；`audit` 的选项都能用（`--evidence`、`--exclude`、`--reviews`、`--verifier`、`--format`、`--output`、`--strict` 等）。加 `--strict` 时，新增或修改的记忆需要关注就退出码为 1；git 出错或修订版本不存在时退出码为 2。
+- `diff` 通过 git 读取两个版本的记忆文件及其链接的文件（不会检出任何东西），把记忆分为新增、修改（旧 → 新）、删除和未变。只审计新增和修改的记忆，证据目录按当前状态读取；`audit` 的选项都能用（`--evidence`、`--exclude`、`--reviews`、`--verifier`、`--format`、`--output`、`--strict` 等）。加 `--strict` 时，新增或修改的记忆需要关注就退出码为 1；git 出错或修订版本不存在时退出码为 2。`--staged` 从索引（`git commit` 将要记录的文本）读取待比较的新版本，以及它链接的一层 `.md` 文件。证据仍是工作区。`--staged` 要配合 `--base`，并且不使用 `--head`。仓库还没有任何提交时，`--base HEAD` 会把每条已暂存的记忆都当作新增。
 - 记忆按 ID 识别，所以只改大小写或空白算作未变。修改过的记忆要和旧版本配对，两者须在同一文件、同一小节（未变记忆所在标题被改名时仍算同一小节），并且词项相似度至少 50%；否则显示为一条删除加一条新增。配对结果是确定的。
 - `history` 沿 `HEAD` 的第一父提交链追溯，所以通过合并提交并入的改动记在该合并提交名下；它还列出扫描范围内被删除的记忆，未提交的修改记为“uncommitted changes in the working tree”。早于扫描范围的记忆（受 `--max-commits` 限制，默认 100；或到了浅克隆的边界）会如实标为扫描范围之前，不会算到最早那个提交头上。记忆文件改名不会被追踪。
 - `rollback` 从不应用任何改动：它打印一个补丁，把这条记忆恢复成 `--to` 时的措辞（所有副本都恢复，并保留原来的 markdown 标记），或把已删除的记忆重新加到它所在小节里前面最近一条仍存在的记忆之后。当前 ID 和旧 ID 都可以用。在 Windows 上请用 `-o`，因为 shell 重定向可能改变补丁的编码。
+
+#### 用 pre-commit 检查提交
+
+[pre-commit](https://pre-commit.com) 可以在提交时做同样的检查。钩子仓库就是本仓库，请固定到完整的提交 SHA。清单文件是 [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml)。
+
+```yaml
+repos:
+  - repo: https://github.com/timothyzhbw-jpg/memory-lab
+    rev: <40 位 SHA>
+    hooks:
+      - id: memfalsify-diff
+      - id: memfalsify-audit
+```
+
+`memfalsify-diff` 审计暂存的 `CLAUDE.md`、`AGENTS.md`、`MEMORY.md` 里新增或修改的记忆。`memfalsify-audit` 审计这些暂存文件里的每一条记忆。钩子检查过的记忆如果是 challenged、conflicted、disputed，或有可能的反证，提交就会失败。没有证据的记忆，以及措辞问题，只出现在报告里，提交继续。`args: [--no-strict]` 只打印报告，提交照常继续。
+
+两个钩子都从索引读取记忆，包括它链接的一层 `.md` 文件，那些链接文件也从索引读取。证据是工作区。`git commit` 和 `pre-commit run` 会先藏起已跟踪文件上未暂存的修改，所以已跟踪的证据与索引一致，未跟踪的证据文件仍然可见。自己运行 `memfalsify diff --staged` 时不会藏起这些修改，因此未暂存的证据改动会进入那次审计。diff 钩子对应的命令是：
+
+```bash
+memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict
+```
+
+一次提交如果只暂存了被链接的 `.md` 文件，钩子不会运行。请同时暂存链接它的 `CLAUDE.md`、`AGENTS.md` 或 `MEMORY.md`。默认验证器是词法的，并且离线。要用 `llm`、`jev`、`dual` 或 `cascade`，把对应的 SDK 写进 `additional_dependencies`（例如 `anthropic>=1.13` 或 `typesafe-sdk`），并在 `args` 里传入 `--verifier`。钩子的安装已经带上本仓库里的 MemFalsify。
 
 ### 组织记忆：回放决策
 
@@ -308,7 +331,8 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 [GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件与仓库证据核对，并把报告放入任务摘要。
 默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。
 设置 `diff-base`（例如 PR 的基准提交，并给 `actions/checkout` 加上 `fetch-depth: 0`）后，Action 改为运行
-`memfalsify diff`，PR 只会因为它新增或修改的记忆而失败。
+`memfalsify diff`，PR 只会因为它新增或修改的记忆而失败。本地提交可以用
+[pre-commit 钩子](README.md#pre-commit) `memfalsify-diff` 和 `memfalsify-audit` 做同样的检查。
 
 ## 信任边界与局限
 

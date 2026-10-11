@@ -89,7 +89,15 @@ jobs:
 that starts with `-`, verifies it with `git rev-parse --verify --end-of-options <rev>^{commit}`, and fails with
 exit 2 if that fails. On `push` events `github.event.before` is all zeros for a new branch, so prefer
 `pull_request`. The report lists each changed claim's old and new wording, the added and removed claims, and
-the audit of the added and changed ones; the `attention` output counts only those.
+the audit of the added and changed ones; the `attention` output counts only those. For the commit still
+in the index, the [pre-commit hooks](../README.md#pre-commit) run that check locally.
+
+## Checking a commit locally
+
+Before the commit exists, [`memfalsify-diff` and `memfalsify-audit`](../.pre-commit-hooks.yaml) apply the
+same attention gate to staged `CLAUDE.md`, `AGENTS.md` and `MEMORY.md`. Setup is in the
+[README](../README.md#pre-commit). `memfalsify-diff` reads those files from the index and audits added or
+changed claims against the working tree, which is `memfalsify diff --base HEAD --staged`.
 
 ## Inputs
 
