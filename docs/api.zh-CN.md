@@ -223,7 +223,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 
 | API | 用途 |
 |---|---|
-| `memfalsify.ATTENTION` | 严格审计计数的状态集合：challenged、conflicted、candidate_counterevidence、disputed；请只读使用。 |
+| `memfalsify.ATTENTION` | 严格审计计数的冻结状态集合：challenged、conflicted、candidate_counterevidence、disputed。 |
 | `memfalsify.AuditReport` | 只读审计结果，包含发现、状态计数、跳过的证据及局限。 |
 | `memfalsify.CascadeVerifier` | 构造参数为 first、second、accept_at=0.8；首个验证器置信度不足时升级。 |
 | `memfalsify.Change` | 不可变比较结果：类型、新旧 Claim、相似度及移动标记。 |
@@ -325,12 +325,12 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.run_convert` | 离线应用保存的抓取结果，仅新建；dry_run 预览而不写入。 |
 | `orgmemory.run_sync` | 通过提供的 Client 抓取并导入 GitHub；支持 full/since/issues、save_capture 与 dry_run。 |
 | `orgmemory.to_markdown` | 将 ReplayResult 渲染为 Markdown。 |
-| `orgmemory.token_from_env` | 从提供的映射或 os.environ 读取首个非空 GITHUB_TOKEN 或 GH_TOKEN。 |
+| `orgmemory.token_from_env` | 从 env 读取首个非空 GITHUB_TOKEN 或 GH_TOKEN；省略 env 时读取 os.environ。 |
 | `orgmemory.urllib_transport` | 构建限制来源的传输；默认 opener 拒绝重定向，timeout=30。 |
 | `orgmemory.validate` | 在完整日志中检查事件 ID 唯一性、证据引用及替代目标。 |
 
 ```python
-audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=DEFAULT_STALE_DAYS, now: Optional[datetime]=None) -> AuditReport
+audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
 audit_markdown(report: AuditReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
 explain(result: ReplayResult, subject: str) -> str
@@ -339,7 +339,7 @@ replay(dataset: Dataset, as_of: datetime | None=None) -> ReplayResult
 run_convert(dataset: Path, capture_path: Path, *, dry_run: bool=False, now: Callable[[], datetime] | None=None) -> Summary
 run_sync(dataset: Path, repo: str, client: Client, *, full: bool=False, since: datetime | None=None, issues: list[int] | None=None, save_capture: Path | None=None, dry_run: bool=False, now: Callable[[], datetime]=_now) -> Summary
 to_markdown(result: ReplayResult) -> str
-token_from_env(env: Mapping[str, str]=os.environ) -> str | None
+token_from_env(env: Mapping[str, str] | None=None) -> str | None
 urllib_transport(opener: urllib.request.OpenerDirector | None=None, timeout: float=30) -> Transport
 validate(events: list[Event], evidence: dict[str, EvidenceSpan]) -> None
 ```

@@ -246,7 +246,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 
 | API | Purpose |
 |---|---|
-| `memfalsify.ATTENTION` | Statuses counted by strict audits: challenged, conflicted, candidate_counterevidence, disputed; treat as read-only. |
+| `memfalsify.ATTENTION` | Frozen set of statuses counted by strict audits: challenged, conflicted, candidate_counterevidence, disputed. |
 | `memfalsify.AuditReport` | Read-only audit result with findings, status counts, skipped evidence, and limitations. |
 | `memfalsify.CascadeVerifier` | Construct with first, second, accept_at=0.8; escalate when first has insufficient confidence. |
 | `memfalsify.Change` | Frozen comparison result: kind, old/new Claim, similarity, and moved flag. |
@@ -348,12 +348,12 @@ to_markdown(report: AuditReport) -> str
 | `orgmemory.run_convert` | Apply a saved capture offline, create-only; dry_run previews without writes. |
 | `orgmemory.run_sync` | Fetch and import GitHub via a supplied Client; supports full/since/issues, save_capture, and dry_run. |
 | `orgmemory.to_markdown` | Render a ReplayResult as Markdown. |
-| `orgmemory.token_from_env` | Read the first nonempty GITHUB_TOKEN or GH_TOKEN from a supplied mapping or os.environ. |
+| `orgmemory.token_from_env` | Read the first nonempty GITHUB_TOKEN or GH_TOKEN from env, or from os.environ when env is omitted. |
 | `orgmemory.urllib_transport` | Build an origin-confined transport; default opener refuses redirects, timeout=30. |
 | `orgmemory.validate` | Check event ID uniqueness, evidence references, and supersession targets across the full log. |
 
 ```python
-audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=DEFAULT_STALE_DAYS, now: Optional[datetime]=None) -> AuditReport
+audit(dataset: Dataset, as_of: Optional[datetime]=None, stale_days: int=14, now: Optional[datetime]=None) -> AuditReport
 audit_markdown(report: AuditReport) -> str
 convert(capture: dict, existing: dict[str, Event], evidence_ids: set[str], config: GithubConfig) -> Plan
 explain(result: ReplayResult, subject: str) -> str
@@ -362,7 +362,7 @@ replay(dataset: Dataset, as_of: datetime | None=None) -> ReplayResult
 run_convert(dataset: Path, capture_path: Path, *, dry_run: bool=False, now: Callable[[], datetime] | None=None) -> Summary
 run_sync(dataset: Path, repo: str, client: Client, *, full: bool=False, since: datetime | None=None, issues: list[int] | None=None, save_capture: Path | None=None, dry_run: bool=False, now: Callable[[], datetime]=_now) -> Summary
 to_markdown(result: ReplayResult) -> str
-token_from_env(env: Mapping[str, str]=os.environ) -> str | None
+token_from_env(env: Mapping[str, str] | None=None) -> str | None
 urllib_transport(opener: urllib.request.OpenerDirector | None=None, timeout: float=30) -> Transport
 validate(events: list[Event], evidence: dict[str, EvidenceSpan]) -> None
 ```

@@ -50,8 +50,10 @@ class Stopped(Exception):
     """Transient stop (rate limit beyond --max-wait, exhausted retries): the capture becomes partial."""
 
 
-def token_from_env(env: Mapping[str, str] = os.environ) -> str | None:
-    """The first non-empty GITHUB_TOKEN or GH_TOKEN."""
+def token_from_env(env: Mapping[str, str] | None = None) -> str | None:
+    """The first non-empty GITHUB_TOKEN or GH_TOKEN. Omit env to read os.environ at call time."""
+    if env is None:
+        env = os.environ
     for name in ("GITHUB_TOKEN", "GH_TOKEN"):
         value = (env.get(name) or "").strip()
         if value:
@@ -170,7 +172,11 @@ class PersistentTransport:
     """
 
     def __init__(self, timeout: float = 30, *, connection_factory: Callable[..., Any] | None = None,
-                 env: Mapping[str, str] = os.environ) -> None:
+                 env: Mapping[str, str] | None = None) -> None:
+        # None reads the process environment at construction. Binding os.environ as the default
+        # would embed the live mapping, including tokens, in inspect.signature and help().
+        if env is None:
+            env = os.environ
         self.timeout = timeout
         self._factory = connection_factory or http.client.HTTPSConnection
         self._connection = None

@@ -500,10 +500,14 @@ def test_fake_transport_refuses_unknown_requests():
 
 # --- token -----------------------------------------------------------------------------
 
-def test_token_from_env():
+def test_token_from_env(monkeypatch):
     assert token_from_env({"GITHUB_TOKEN": "a", "GH_TOKEN": "b"}) == "a"
     assert token_from_env({"GITHUB_TOKEN": "  ", "GH_TOKEN": "b"}) == "b"
     assert token_from_env({"PATH": "/bin"}) is None
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_from_process")
+    assert token_from_env() == "ghp_from_process"
+    assert token_from_env(None) == "ghp_from_process"
 
 
 def test_token_that_cannot_be_a_header_is_refused_without_echo():

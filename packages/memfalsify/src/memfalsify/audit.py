@@ -20,7 +20,7 @@ Status = Literal["challenged", "conflicted", "candidate_counterevidence", "dispu
                  "insufficient_evidence", "candidate_support", "supported"]
 SEVERITY: list[str] = list(Status.__args__)
 _LEXICAL = LexicalVerifier()
-ATTENTION = {"challenged", "conflicted", "candidate_counterevidence", "disputed"}
+ATTENTION = frozenset({"challenged", "conflicted", "candidate_counterevidence", "disputed"})
 
 
 class Review(BaseModel):
