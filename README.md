@@ -339,6 +339,8 @@ the claims it adds or changes.
 | v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
 
+What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
+
 ## Development
 
 ```bash

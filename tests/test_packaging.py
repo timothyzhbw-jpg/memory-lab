@@ -38,3 +38,11 @@ def test_pins_between_packages_admit_the_versions_here():
             if requirement.name in projects:
                 version = projects[requirement.name][1]
                 assert requirement.specifier.contains(version), f"{name}: {requirement} excludes {version}"
+
+
+def test_changelog_has_an_entry_for_each_current_version():
+    changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+    sections = {part.split("\n", 1)[0]: part for part in changelog.split("\n## ")[1:]}
+    for name, (_, version) in _projects().items():
+        assert name in sections, f"CHANGELOG.md has no '## {name}' section"
+        assert f"\n### {version} - " in sections[name], f"CHANGELOG.md has no {name} {version} entry"

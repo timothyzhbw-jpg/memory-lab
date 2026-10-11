@@ -337,6 +337,8 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 | v0.4 | 多模态证据（带定位的 OCR / 转写） | 跨平台组织记忆 |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |
 
+各个包每个版本的变更见 [CHANGELOG.md](CHANGELOG.md)（英文）。
+
 ## 开发
 
 ```bash
