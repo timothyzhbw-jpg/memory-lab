@@ -36,7 +36,7 @@ The default verifier is `lexical`, which runs offline. `llm`, `jev`, `dual`, and
 
 ## Resources
 
-A client that supports MCP resources can read five reports by URI instead of calling a tool. They are resource templates (`resources/templates/list`); `resources/list` is empty. Each resource runs the code of the tool named in the table, so it returns the same text, under the same confinement and evidence limits (for example, evidence files over 2 MB are skipped), with the same error messages.
+A client that supports MCP resources can read five reports by URI instead of calling a tool. They are resource templates (`resources/templates/list`); `resources/list` is empty. Each resource runs the code of the tool named in the table, so it returns the same text, under the same confinement and evidence limits (for example, evidence files over 2 MB are skipped). Its error is that tool's message, or a fixed message when the SDK refuses the URI before those checks.
 
 | URI template | MIME type | Same text as |
 |---|---|---|
@@ -50,7 +50,7 @@ With `--root examples`, for example: `memlab://memory/memfalsify/MEMORY.md/claim
 
 - Paths are relative to `--root`. Before the server's own checks run, the SDK's default resource security refuses an absolute path, a `..` that leaves the root, and a NUL character in every path (`memory_file`, `dataset`, `evidence_dir`, `reviews_file`). After that, the same checks as for tool arguments apply, including symlinks and confined reads. `subject`, `as_of` and `stale_days` are not paths, so the tools' own checks and messages apply to them.
 - Query parameters are optional and mean what the tool argument of the same name means. Unknown query parameters are ignored. `stale_days` must be a whole number of at least 0. Percent-encode the subject: a space is `%20`, `/` is `%2F` and `#` is `%23`.
-- Resources always use the offline `lexical` verifier, even on a server started with `--allow-model-verifiers`, because a client can read a resource without the model asking for it. Reports are Markdown only. There is no `exclude`, `verifier` or `format`, and there are no resources for diff, history or rollback: use the tools for those.
+- `memlab://memory/.../audit` always uses the offline `lexical` verifier, even on a server started with `--allow-model-verifiers`, because a client can read a resource without the model asking for it. Claims are JSON. The other four resources are Markdown only. There is no `exclude`, `verifier` or `format`, and there are no resources for diff, history or rollback: use the tools for those.
 - A failed read is a JSON-RPC error: `-32602` for an unknown URI, a refused path or invalid input, `-32603` when the read could not complete. The message is the one the tool would return, or a fixed one. The URI itself is not echoed back or logged.
 
 ## Prompts
@@ -65,7 +65,7 @@ Prompts are fixed instructions that a client can offer as commands. Each one ret
 
 The message quotes the arguments as one line of JSON in a code block, with control, bidirectional and other invisible characters escaped, so an argument cannot add a line or hide text. No prompt reads a file or embeds file contents. No prompt tells the agent to write a file, apply a patch, record a review or append an event: each one tells the agent to stop after reporting, and that such changes need the user's explicit approval. Text the tools quote stays untrusted, and the agent is told to report a tool error and stop rather than work around it.
 
-Arguments are checked before any text is returned, as the tools check them: paths must stay inside the root and exist, revisions follow the git tools' rules, and `as_of` must be a date (`audit_memory`) or an ISO 8601 time with a timezone (`explain_status`). An unknown prompt and a missing, unknown or invalid argument are JSON-RPC errors (`-32602`). Path, revision and date errors carry the tools' messages, which never repeat a path outside the root. Nothing is logged.
+Arguments are checked before any text is returned. Paths must stay inside the root and exist, with the same checks as the tools. A revision must be non-empty, must not start with `-`, and must not contain control characters. The prompt does not resolve it to a commit or require a git repository; `memfalsify_diff` does that when it runs. `as_of` must be a date (`audit_memory`) or an ISO 8601 time with a timezone (`explain_status`). An unknown prompt and a missing, unknown or invalid argument are JSON-RPC errors (`-32602`). Path, revision and date errors carry the tools' messages, which never repeat a path outside the root. Nothing is logged.
 
 ## Install
 

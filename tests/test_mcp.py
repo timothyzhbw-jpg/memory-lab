@@ -697,6 +697,22 @@ def test_resource_paths_cannot_escape_the_root(root):
 
 
 @requires_confinement
+def test_resources_refuse_absolute_paths_inside_the_root(root):
+    """An absolute path that stays inside the root is a legal tool argument and a refused resource URI.
+
+    The server's own resolver accepts it. Only the SDK's resource security rejects it, and only that
+    rejection produces the fixed 'relative to the server root' message. Deleting the SDK check would
+    make this read succeed.
+    """
+    memory = (root / MEMORY).as_posix()
+    result, = requests(create_server(root), ("read", f"memlab://memory/{memory}/claims"))
+    message = failure(result)
+    assert result.code == INVALID_PARAMS and "relative to the server root" in message
+    assert memory not in message and SECRET not in message
+    assert ok(call(create_server(root), "memfalsify_claims", memory_file=memory)).startswith("[")
+
+
+@requires_confinement
 def test_resource_errors_are_clean_and_not_logged(root, monkeypatch, caplog):
     outside = str(root.parent / "outside.md")
     cases = [
@@ -813,6 +829,37 @@ def test_prompt_arguments_stay_data(root):
     for invisible in ("‮", " ", "​", "\U000e0041", "\x7f", "\x1b"):
         assert invisible not in text
     assert "\\u202e" in block and "\\udb40\\udc41" in block
+
+
+@requires_confinement
+def test_prompt_escaping_ignores_the_interpreter_unicode_version(root, monkeypatch):
+    """The escape set is Unicode 15.1's format characters, not this interpreter's unassigned set.
+
+    U+0890 and U+13439 are format characters on Python 3.13 and unassigned on 3.10; U+13439 is still
+    unassigned on 3.11. U+A7F2 is a letter on 3.13 and unassigned on 3.10. U+0085 is a control that
+    json.dumps leaves raw. Treating unassigned characters as invisible would hide the letter on 3.10
+    and leave the format characters raw there.
+    """
+    letter, pound, insert, nel = "\uA7F2", "\u0890", "\U00013439", "\u0085"
+    subject = f"Feature {letter}{pound}{insert}{nel}"
+    result, = requests(create_server(root), ("prompt", "explain_status", {"dataset": DATASET, "subject": subject}))
+    text = prompt_text(result)
+    block = _fence(text)
+    assert json.loads(block) == {"dataset": DATASET, "subject": subject}
+    assert letter in block
+    for raw in (pound, insert, nel):
+        assert raw not in text
+    assert "\\u0890" in block and "\\u0085" in block and "\\ud80d\\udc39" in block
+
+    real = memlab_server.unicodedata.category
+
+    def as_unassigned(ch):
+        return "Cn" if ch in (letter, pound, insert) else real(ch)
+
+    monkeypatch.setattr(memlab_server.unicodedata, "category", as_unassigned)
+    escaped = memlab_server._escape_invisible(letter + pound + insert + nel)
+    assert letter in escaped and nel not in escaped
+    assert pound not in escaped and insert not in escaped
 
 
 @requires_confinement

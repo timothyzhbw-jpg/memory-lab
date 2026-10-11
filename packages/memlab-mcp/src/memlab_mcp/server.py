@@ -6,8 +6,9 @@ Every path argument is resolved inside one root directory fixed at startup; the 
 memory file's repository (work tree, git directory, common directory, object store) to be inside it.
 
 Resources are URI forms of some tools: each one calls the same guarded tool function, so it returns the
-same text under the same confinement and error messages. Prompts return fixed instructions for the
-report-first workflows of the skills; they quote their arguments as JSON and never embed file contents.
+same text under the same confinement. A failure is the tool's message, or a fixed one when the SDK
+refuses the URI. Prompts return fixed instructions for the report-first workflows of the skills; they
+quote their arguments as JSON and never embed file contents.
 
 No ``from __future__ import annotations`` in this module: the SDK builds each tool's input schema from
 its signature, and those annotations use descriptions computed in ``create_server``.
@@ -273,15 +274,26 @@ def _audit(data: Dataset, moment: Optional[datetime], stale_days: int):
         raise ToolError("invalid replay data; check events and policy") from None
 
 
-_INVISIBLE = {"Cc", "Cf", "Co", "Cs", "Cn", "Zl", "Zp"}
+# Cc, Zl, Zp, Co and Cs have the same members on Unicode 13.0 through 15.1 (Python 3.10–3.13).
+# Cf does not, and Cn does not either. Escaping Cn would hide letters assigned after Unicode 13
+# (U+A7F2 is a letter on 3.13 and unassigned on 3.10). The format characters below are the other
+# half of that skew: unassigned on 3.10, and the Egyptian ones still unassigned on 3.11, but format
+# characters on 3.13. Listing them keeps one escape decision on every supported interpreter.
+_INVISIBLE = {"Cc", "Cf", "Co", "Cs", "Zl", "Zp"}
+_FORMAT_SINCE_UNICODE_13 = frozenset(
+    "\u0890"  # ARABIC POUND MARK ABOVE (Unicode 14)
+    "\u0891"  # ARABIC PIASTRE MARK ABOVE (Unicode 14)
+    "\U00013439\U0001343A\U0001343B\U0001343C\U0001343D\U0001343E\U0001343F"  # hieroglyph format (Unicode 15)
+)
 
 
 def _escape_invisible(text: str) -> str:
-    """JSON text with control, format (bidi, zero-width, tag), private-use and unassigned characters as
-    \\u escapes, so no argument can hide text from the person reading a prompt."""
+    """JSON text with control, format (bidi, zero-width, tag) and private-use characters as \\u escapes,
+    so no argument can hide text from the person reading a prompt. The same characters are escaped on
+    Python 3.10 through 3.13; unassigned characters and later letters are left as written."""
     out = []
     for ch in text:
-        if unicodedata.category(ch) not in _INVISIBLE:
+        if unicodedata.category(ch) not in _INVISIBLE and ch not in _FORMAT_SINCE_UNICODE_13:
             out.append(ch)
         elif ord(ch) > 0xFFFF:
             high, low = divmod(ord(ch) - 0x10000, 0x400)
@@ -550,7 +562,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
 
 
 def _add_resources(server: MCPServer, runners: dict) -> None:
-    """Resource templates over the guarded tool functions: same text, confinement and error messages.
+    """Resource templates over the guarded tool functions: same text and confinement.
 
     Template variables carry the tool argument names, so error messages name what the URI holds. The
     SDK's default ResourceSecurity (no '..' escape, absolute path or NUL) stays on for every path, in front
@@ -622,8 +634,9 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
 
 def _add_prompts(server: MCPServer, ws: Workspace) -> None:
     """Prompts for the report-first workflows in skills/. Each returns one user message of fixed text with
-    its arguments quoted as JSON. Paths, revisions and dates are checked like the tools check them, before
-    any text is returned, and no prompt reads or embeds a file."""
+    its arguments quoted as JSON. Paths and dates are checked like the tools check them, before any text
+    is returned. A revision is only checked as a string (non-empty, no leading ``-``, no control
+    characters) and is not resolved to a commit. No prompt reads or embeds a file."""
 
     def checked(check, *args):
         try:
