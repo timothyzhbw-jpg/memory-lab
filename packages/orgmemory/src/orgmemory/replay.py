@@ -6,11 +6,10 @@ decision is recorded as a reconsideration, not as a new decision.
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 
-from memcore import EvidenceError, EvidenceSpan, load_manifest, read_jsonl
+from memcore import EvidenceError, EvidenceSpan, load_json, load_manifest, read_jsonl
 from memcore.reading import read_file_text
 
 from .models import DECISIONS, Conflict, Decision, Event, PendingChange, Policy, ReplayResult, Risk, SubjectState, TrailEntry
@@ -31,7 +30,18 @@ class Dataset:
         policy = policy or directory / "policy.json"
         evidence = evidence or directory / "evidence.jsonl"
         parsed = load_events(events)
-        policy_model = Policy.model_validate(json.loads(read_file_text(policy)))
+        try:
+            raw_policy = read_file_text(policy)
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{policy}: not UTF-8 text") from exc
+        try:
+            parsed_policy = load_json(raw_policy)
+        except ValueError as exc:
+            raise ValueError(f"{policy}: {exc}") from exc
+        try:
+            policy_model = Policy.model_validate(parsed_policy)
+        except RecursionError as exc:
+            raise ValueError(f"{policy}: invalid JSON: too deeply nested") from exc
         return cls(parsed, policy_model, load_manifest(evidence))
 
 
@@ -41,6 +51,8 @@ def load_events(path: Path) -> list[Event]:
     for number, record in read_jsonl(path):
         try:
             parsed.append(Event.model_validate(record))
+        except RecursionError as exc:
+            raise ValueError(f"{path}:{number}: invalid JSON: too deeply nested") from exc
         except ValueError as exc:
             raise ValueError(f"{path}:{number}: {exc}") from exc
     return parsed

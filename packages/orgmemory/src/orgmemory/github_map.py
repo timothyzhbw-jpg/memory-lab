@@ -438,7 +438,7 @@ def plan_item(ctx: Ctx, item: dict) -> list[Planned]:
             if rid in review_positions and review_positions[rid] > i:
                 raise ValueError("malformed capture: dismissal precedes its submitted review")
             dismissals[rid] = x
-    present = {x.get("id") for x in timeline if _event(x) == "commented"}
+    present = {_int(x.get("id")) for x in timeline if _event(x) == "commented"}
     last_close, last_label, standing = None, {}, {}
     for when, x in walk:
         e = _event(x)

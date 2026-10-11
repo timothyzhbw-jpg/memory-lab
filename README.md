@@ -80,6 +80,8 @@ Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narr
 
 Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `--format json`, `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
 
+Malformed memory, reviews, or evidence exits 2 with one line on stderr. A leading byte-order mark is ignored, and CR, CRLF, and LF are all line breaks. Stdout has control and bidi characters removed; `--output` keeps the report's exact quotes.
+
 #### Review memory changes in git
 
 When `CLAUDE.md`, `AGENTS.md` or `MEMORY.md` is versioned, review what a commit or pull request changed and audit only that:
@@ -94,7 +96,8 @@ git apply restore.patch                                    # only after reviewin
 - `diff` reads both versions of the memory file and the files it links to with git (nothing is checked out) and lists claims as added, changed (old → new), removed or unchanged. It audits only the added and changed ones, against the evidence directory as it is now, and takes the `audit` options (`--evidence`, `--exclude`, `--reviews`, `--verifier`, `--format`, `--output`, `--strict`, ...). With `--strict` it exits 1 when an added or changed claim needs attention; git problems and unknown revisions exit 2.
 - A claim is identified by its ID, so case and whitespace edits count as unchanged. An edited claim is paired with its old version when both are in the same file and section (a heading that was renamed around unchanged claims counts as the same section) and their terms are at least 50% similar; otherwise the edit shows as removed plus added. Pairing is deterministic.
 - `history` follows the first-parent line of `HEAD`, so a change merged with a merge commit is attributed to that commit; it also lists claims removed within the scanned commits, and uncommitted edits as "uncommitted changes in the working tree". Claims older than the scanned commits (`--max-commits`, default 100, or the edge of a shallow clone) are reported as such, not attributed to the oldest commit. A renamed memory file is not followed.
-- `rollback` never applies anything: it prints a patch that restores the claim's wording as of `--to` (every copy of it, with the old markup), or re-adds a removed claim after the nearest surviving claim of its section. It accepts the current or the old claim ID. Use `-o` on Windows, where shell redirection can re-encode the patch.
+- `rollback` never applies anything: it prints a patch that restores the claim's wording as of `--to` (every copy of it, with the old markup), or re-adds a removed claim after the nearest surviving claim of its section. It accepts the current or the old claim ID. Use `-o` on Windows, where shell redirection can re-encode the patch. The patch itself is exact bytes; a memory file that uses bare CR line endings is refused (LF and CRLF only).
+- Git output that is truncated, larger than 32MB, or not a normal record exits 2. History refuses an author date that is not strict ISO-8601 (`2026-10-01T00:01:00+00:00` or `Z`, no fractional seconds).
 
 ### Organizational Memory: replay decisions
 
@@ -160,7 +163,7 @@ On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.m
 - Only what replay applied counts: a risk or dependency from an actor without the permission is not on record, and appears only under `unauthorized_attempts`.
 - `--as-of` drops later events, as in `replay`, and is also the reference time for staleness. Without it the whole log is audited and staleness is measured at the current time, so pass `--as-of` for a reproducible report.
 - Findings are sorted by severity, kind, subject, actor and replay order. The Markdown report starts with a summary table: one row per kind, one column per severity. `--format json` has `summary` (findings per severity), `kinds` (every kind, sorted by name) and `findings`.
-- Exit codes: `0`; `1` with `--strict` when any finding is high; `2` on invalid input, as for `replay`. The output is printed in every case except `2`.
+- Exit codes: `0`; `1` with `--strict` when any finding is high; `2` on invalid input, as for `replay`. The output is printed in every case except `2`. Invalid input includes a bad event or policy (a missing field, a wrong type, a timezone-naive timestamp, or JSON nested too deeply) and a bad evidence span. The error is one line and does not contain terminal control characters.
 
 #### Ingest GitHub issues and pull requests
 
@@ -177,7 +180,7 @@ orgmemory explain        <dataset> "acme/web#12"
 - `sync` reuses a verified HTTPS connection to `api.github.com` (system CA store, 30-second timeout per request), and closes it when the run ends, including on errors. If the connection fails before any response bytes arrive, the GET is retried once on a fresh connection; rate limits and other retries keep their existing behavior. Setting `HTTPS_PROXY` / `https_proxy` or `ALL_PROXY` / `all_proxy` selects the existing urllib transport instead, with urllib’s proxy rules and no connection reuse. Transports never follow redirects automatically; the client permits only validated same-origin redirects.
 - During `sync`, fetch progress goes to stderr at most once every 5 seconds, showing fully fetched issues/PRs, requests and the remaining rate-limit quota (`unknown` if unavailable). Each rate-limit sleep also prints its duration and UTC wake time. Short runs may show no progress; stdout stays unchanged, including the summary and `--dry-run` JSONL.
 - `--dry-run` fetches (this spends requests), prints the summary and the planned events, and writes no dataset files or lock. `--save-capture` writes the fetched issues and timelines, as the API returned them, to a new file that `convert` can apply later; it works with `--dry-run`, so you can review a capture before applying it. The file contains raw and possibly private text. The destination is create-only and must not overlap the importer’s managed files or `policy.json` / `github.json`.
-- Exit codes: `0` complete, including "nothing new"; `2` error, nothing appended; `3` partial: rate limiting beyond `--max-wait` (default 3600 s) or repeated server or network errors stopped the fetch, fully fetched items were applied, and the cursor did not move, so run it again later.
+- Exit codes: `0` complete, including "nothing new"; `2` error, nothing appended; `3` partial: rate limiting beyond `--max-wait` (default 3600 s) or repeated server or network errors stopped the fetch, fully fetched items were applied, and the cursor did not move, so run it again later. A malformed capture, including JSON nested too deeply or a timeline id of the wrong type, is exit 2 and appends nothing.
 - The dataset directory must exist. `events.jsonl` and `evidence.jsonl` are created on first use. The import does not need `policy.json`; `replay`, `explain` and `validate` do.
 
 **The importer never reads or writes `policy.json`: map `gh:<login>:<id>` actor IDs to roles yourself.** Until an account is mapped, its events are recorded but change no state. The sync summary lists the actors in new events, and `orgmemory validate` lists every actor missing from `policy.json`.

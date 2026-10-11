@@ -8,19 +8,44 @@ from pathlib import Path
 from .reading import open_text
 
 
+def load_json(data: str | bytes):
+    """Parse one JSON value.
+
+    Malformed JSON, bytes that are not UTF-8, and values nested too deeply for the
+    parser all raise ``ValueError``. A ``ValueError`` from an over-long integer is
+    left as it is. ``JSONDecodeError`` is a ``ValueError``, so it is handled before
+    any broader ``ValueError`` handler.
+    """
+    try:
+        return json.loads(data)
+    except RecursionError as exc:
+        raise ValueError("invalid JSON: too deeply nested") from exc
+    except UnicodeDecodeError as exc:
+        raise ValueError("invalid JSON: not UTF-8 text") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON: {exc.msg}") from exc
+
+
 def read_jsonl(path: Path) -> Iterator[tuple[int, dict]]:
-    """Yield (line number, object). Malformed lines raise ValueError naming the line."""
-    with open_text(path) as handle:
-        for number, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{path}:{number}: invalid JSON: {exc.msg}") from exc
-            if not isinstance(record, dict):
-                raise ValueError(f"{path}:{number}: expected a JSON object")
-            yield number, record
+    """Yield (line number, object). Malformed lines raise ValueError naming the line.
+
+    A file that is not UTF-8 raises ``ValueError`` naming the path. Nesting that
+    overflows the JSON parser does too, instead of ``RecursionError``.
+    """
+    try:
+        with open_text(path) as handle:
+            for number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    record = load_json(line)
+                except ValueError as exc:
+                    raise ValueError(f"{path}:{number}: {exc}") from exc
+                if not isinstance(record, dict):
+                    raise ValueError(f"{path}:{number}: expected a JSON object")
+                yield number, record
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path}: not UTF-8 text") from exc
 
 
 def append_jsonl(path: Path, record: dict) -> None:

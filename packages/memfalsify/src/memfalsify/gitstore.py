@@ -23,7 +23,7 @@ from pathlib import Path, PureWindowsPath
 from memcore import EvidenceError, resolve_inside
 from memcore.reading import confinement_root, read_file_text
 
-from .memory import Claim, merge_duplicates, parse_text
+from .memory import Claim, merge_duplicates, normalize_memory, parse_text
 
 HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # C0/C1 controls and the bidi, zero-width and line-separator characters that can disguise text.
@@ -139,6 +139,38 @@ def link_path(target: str) -> str | None:
     return normal
 
 
+# git cat-file --batch prints "<oid> <type> <size>\\n" and then that many bytes. The size is
+# untrusted. Cap both so a hostile header cannot block on a huge read or a line with no newline.
+MAX_GIT_OBJECT = 32 * 1024 * 1024
+MAX_GIT_HEADER = 4096
+
+
+def read_batch_object(stdout) -> tuple[str, str, bytes] | None:
+    """One ``git cat-file --batch`` record: ``(oid, type, bytes)``, or None if git reports it missing.
+
+    An object larger than 32MB, or a header longer than 4096 bytes, raises ``HistoryError`` before
+    the body is read. A short read is ``HistoryError`` (truncated object).
+    """
+    header = stdout.readline(MAX_GIT_HEADER + 1)
+    if len(header) > MAX_GIT_HEADER:
+        raise HistoryError("git cat-file returned a malformed header")
+    if not header.endswith(b"\n"):
+        raise HistoryError("git cat-file stopped unexpectedly")
+    parts = header[:-1].split(b" ")
+    if len(parts) != 3 or parts[1] not in (b"blob", b"tree", b"commit", b"tag") or not parts[2].isdigit():
+        return None
+    size = int(parts[2])
+    if size > MAX_GIT_OBJECT:
+        raise HistoryError("git cat-file returned an object larger than 32MB")
+    data = stdout.read(size)
+    if len(data) != size or stdout.read(1) != b"\n":
+        raise HistoryError("git cat-file returned a truncated object")
+    try:
+        return parts[0].decode("ascii"), parts[1].decode("ascii"), data
+    except UnicodeDecodeError as exc:
+        raise HistoryError("git cat-file returned a malformed header") from exc
+
+
 def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool) -> Snapshot:
     """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``."""
     snapshot = Snapshot()
@@ -195,19 +227,9 @@ class Objects:
         try:
             self.proc.stdin.write(name.encode("utf-8") + b"\n")
             self.proc.stdin.flush()
-            header = self.proc.stdout.readline()
+            return read_batch_object(self.proc.stdout)
         except OSError as exc:
             raise GitError(f"git cat-file failed: {exc}", "git cat-file failed") from exc
-        if not header.endswith(b"\n"):
-            raise HistoryError("git cat-file stopped unexpectedly")
-        parts = header[:-1].split(b" ")
-        if len(parts) != 3 or parts[1] not in (b"blob", b"tree", b"commit", b"tag") or not parts[2].isdigit():
-            return None
-        size = int(parts[2])
-        data = self.proc.stdout.read(size)
-        if len(data) != size or self.proc.stdout.read(1) != b"\n":
-            raise HistoryError("git cat-file returned a truncated object")
-        return parts[0].decode("ascii"), parts[1].decode("ascii"), data
 
     def tree(self, commit: str, directory: str) -> dict[bytes, tuple[str, str]] | None:
         key = (commit, directory)
@@ -302,7 +324,7 @@ class Repository:
                 text = data.decode("utf-8")
             except UnicodeDecodeError as exc:
                 raise HistoryError(f"{printable(self.prefix + relative)} at {commit[:12]} is not UTF-8 text") from exc
-            return text.replace("\r\n", "\n").replace("\r", "\n")
+            return normalize_memory(text)
         return build_snapshot(read, self.memory_name, follow_links)
 
     def worktree_path(self, relative: str) -> Path | None:
@@ -316,7 +338,13 @@ class Repository:
     def worktree(self, follow_links: bool) -> Snapshot:
         def read(relative: str) -> str | None:
             path = self.worktree_path(relative)
-            return read_file_text(path) if path else None
+            if path is None:
+                return None
+            try:
+                text = read_file_text(path)
+            except UnicodeDecodeError as exc:
+                raise HistoryError(f"{printable(relative)} is not UTF-8 text") from exc
+            return normalize_memory(text)
         return build_snapshot(read, self.memory_name, follow_links)
 
 

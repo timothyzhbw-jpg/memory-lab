@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Iterator
 
-from memcore import EvidenceSpan, ManifestEntry, append_jsonl, load_manifest, read_jsonl
+from memcore import EvidenceSpan, ManifestEntry, append_jsonl, load_json, load_manifest, read_jsonl
 from memcore.evidence import resolve_inside, verify_entry
 
 from .github_fetch import Client, fetch
@@ -95,7 +95,12 @@ def load_existing(dataset: Path) -> Existing:
 
 def load_config(dataset: Path) -> GithubConfig:
     path = _path(dataset, "github.json")
-    return GithubConfig.model_validate_json(path.read_bytes()) if path.exists() else GithubConfig()
+    if not path.exists():
+        return GithubConfig()
+    try:
+        return GithubConfig.model_validate(load_json(path.read_bytes()))
+    except RecursionError as exc:
+        raise ValueError("invalid JSON: too deeply nested") from exc
 
 
 def next_since(sync_log: list[dict], repo: str) -> datetime | None:
@@ -265,7 +270,7 @@ def run_convert(dataset: Path, capture_path: Path, *, dry_run: bool = False,
         existing, config = load_existing(dataset), load_config(dataset)
         if capture_path.resolve() == (dataset / "policy.json").resolve():
             raise ValueError("GitHub importer cannot open policy.json")
-        capture = json.loads(capture_path.read_bytes())
+        capture = load_json(capture_path.read_bytes())
         plan = convert(capture, {e.id: e for e in existing.events}, set(existing.spans), config)
         # Offline conversions use the recording time by default, making examples reproducible.
         return apply(dataset, existing, plan, capture, source="convert", dry_run=dry_run,

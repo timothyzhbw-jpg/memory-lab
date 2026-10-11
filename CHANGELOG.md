@@ -16,7 +16,15 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- `memcore.load_json` parses one JSON value and raises `ValueError` for malformed JSON, bytes that are not UTF-8, or JSON nested too deeply.
+
+### Fixed
+
+- Memory files, reviews, evidence manifests, organizational-memory events and policy, GitHub captures, and git history output reject malformed or hostile input with `ValueError`, `EvidenceError`, or `HistoryError`. The CLIs exit 2 and print one line, instead of a traceback or a hang.
+- A leading BOM in a memory file is ignored, and CR, CRLF, and LF are line breaks.
+- `memfalsify` stdout and organizational-memory replay and explain do not emit terminal control or bidi characters. `--output`, and MemFalsify's audit Markdown, keep the original quotes.
 
 ## memlab-core
 

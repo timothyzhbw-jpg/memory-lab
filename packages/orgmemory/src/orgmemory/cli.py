@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Optional
 import typer
 from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
-from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
+from memcore import EvidenceError, ManifestEntry, append_jsonl, load_json, load_manifest, locate_quote
 
 from .audit import DEFAULT_STALE_DAYS, audit
 from .models import Event
@@ -30,8 +31,17 @@ class Format(str, Enum):
     json = "json"
 
 
+_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+
+
+def _json_shield(text: str) -> str:
+    """Replace raw C1, bidi and line-separator characters with JSON ``\\uXXXX`` escapes."""
+    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
+
+
 def _fail(message: str) -> None:
-    typer.echo(f"error: {message}", err=True)
+    flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
+    typer.echo(f"error: {flat}", err=True)
     raise typer.Exit(2)
 
 
@@ -58,7 +68,7 @@ def replay_command(
         result = replay(data, _as_of(as_of))
     except ValidationError as exc:
         _fail(str(exc))
-    typer.echo(to_markdown(result) if fmt is Format.markdown else result.model_dump_json(indent=2))
+    typer.echo(to_markdown(result) if fmt is Format.markdown else _json_shield(result.model_dump_json(indent=2)))
 
 
 @app.command("explain")
@@ -88,8 +98,8 @@ def audit_command(
         report = audit(data, _as_of(as_of), stale_days)
     except ValidationError as exc:
         _fail(str(exc))
-    typer.echo(audit_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
-               nl=False)
+    text = audit_markdown(report) if fmt is Format.markdown else _json_shield(report.model_dump_json(indent=2) + "\n")
+    typer.echo(text, nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
 
@@ -110,7 +120,10 @@ def append_command(dataset: Path = DATASET,
     """Validate one new event against the existing log and append it. Existing lines are never rewritten."""
     data = _load(dataset)
     try:
-        new = Event.model_validate(json.loads(event))
+        try:
+            new = Event.model_validate(load_json(event))
+        except RecursionError as exc:
+            raise ValueError("invalid JSON: too deeply nested") from exc
         validate(data.events + [new], data.evidence)
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
@@ -153,7 +166,7 @@ def _github_result(summary, dry_run: bool) -> None:
         typer.echo(line)
     if dry_run:
         for event in summary.plan.events:
-            typer.echo(json.dumps(event.model_dump(mode="json", exclude_none=True), ensure_ascii=True))
+            typer.echo(_json_shield(json.dumps(event.model_dump(mode="json", exclude_none=True), ensure_ascii=True)))
     if not summary.complete:
         raise typer.Exit(3)
 

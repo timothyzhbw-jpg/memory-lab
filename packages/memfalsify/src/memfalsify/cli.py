@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from datetime import date
 from enum import Enum
@@ -13,6 +14,7 @@ from pydantic import ValidationError
 
 from . import jev, llm
 from .audit import ATTENTION, audit
+from .gitstore import show_text
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
 from .memory import parse_memory
 from .report import to_markdown
@@ -59,9 +61,23 @@ def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_
             "max_judged": None if lexical else max_judged}
 
 
+# C1, bidi, zero-width and line separators. json.dumps already escapes C0. Replacing the raw
+# character with a \\uXXXX escape keeps json.loads able to restore it and a terminal unable to act on it.
+_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+
+
+def _json_shield(text: str) -> str:
+    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
+
+
 def _fail(message: str) -> None:
-    typer.echo(f"error: {message}", err=True)
+    flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
+    typer.echo(f"error: {flat}", err=True)
     raise typer.Exit(2)
+
+
+def _emit(text: str, markdown: bool) -> None:
+    typer.echo(show_text(text) if markdown else _json_shield(text), nl=False)
 
 
 def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "report") -> None:
@@ -129,7 +145,7 @@ def audit_command(
     if output:
         _write(output, text.encode("utf-8"), (Path(memory).resolve().parent / p for p in report.files_read))
     else:
-        typer.echo(text, nl=False)
+        _emit(text, fmt is Format.markdown)
     if strict and ATTENTION & report.summary.keys():
         raise typer.Exit(1)
 
@@ -171,7 +187,7 @@ def diff_command(
         root = Path(memory).resolve().parent
         _write(output, text.encode("utf-8"), (root / p for p in report.base.files + report.head.files))
     else:
-        typer.echo(text, nl=False)
+        _emit(text, fmt is Format.markdown)
     if strict and report.attention:
         raise typer.Exit(1)
 
@@ -188,8 +204,8 @@ def history_command(
         report = memory_history(memory, max_commits=max_commits, follow_links=follow_links)
     except (ValidationError, ValueError, OSError) as exc:
         _fail(str(exc))
-    typer.echo(history_to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
-               nl=False)
+    text = history_to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n"
+    _emit(text, fmt is Format.markdown)
 
 
 @app.command("rollback")
@@ -219,10 +235,13 @@ def claims_command(
     follow_links: bool = typer.Option(True),
 ) -> None:
     """List extracted claims and their IDs (use the IDs in reviews.jsonl)."""
-    claims, _ = parse_memory(memory, follow_links=follow_links)
+    try:
+        claims, _ = parse_memory(memory, follow_links=follow_links)
+    except (ValidationError, ValueError, OSError) as exc:
+        _fail(str(exc))
     for claim in claims:
-        typer.echo(json.dumps({"memory_id": claim.id, "location": claim.location, "text": claim.text},
-                              ensure_ascii=False))
+        typer.echo(_json_shield(json.dumps(
+            {"memory_id": claim.id, "location": claim.location, "text": claim.text}, ensure_ascii=False)))
 
 
 def main() -> None:
