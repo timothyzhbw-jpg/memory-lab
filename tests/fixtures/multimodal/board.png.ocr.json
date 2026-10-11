@@ -1,0 +1,65 @@
+{
+  "format": "memlab-ocr/1",
+  "source_sha256": "225877af6e885ddaa37bb559e1de846e7c1a5cbcf23f14a659467386cc7204e4",
+  "engine": "synthetic",
+  "pages": [
+    {
+      "page": 1,
+      "width": 1600,
+      "height": 1200,
+      "lines": [
+        {
+          "text": "Feature A (bulk export): rejected for November",
+          "bbox": [
+            40,
+            120,
+            610,
+            158
+          ],
+          "confidence": 0.93
+        },
+        {
+          "text": "  On-call rotation changes every Monday  ",
+          "bbox": [
+            40,
+            180,
+            520,
+            214
+          ]
+        },
+        {
+          "text": "Owner: \"Priya\"",
+          "bbox": [
+            40,
+            240,
+            300,
+            270
+          ]
+        },
+        {
+          "text": "   ",
+          "bbox": [
+            40,
+            280,
+            60,
+            290
+          ]
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "lines": [
+        {
+          "text": "公开 API 限流：每分钟 60 次",
+          "bbox": [
+            10,
+            10,
+            400,
+            40
+          ]
+        }
+      ]
+    }
+  ]
+}

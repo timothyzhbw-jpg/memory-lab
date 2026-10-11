@@ -201,8 +201,11 @@ signature means current UTC; it is an internal default implementation, not a pub
 | API | Purpose |
 |---|---|
 | `memcore.EvidenceError` | ValueError for missing, altered, or out-of-root evidence. |
-| `memcore.EvidenceSpan` | Frozen exact quote: path, SHA-256, character offsets, line, optional source provenance. |
-| `memcore.ManifestEntry` | Validated evidence.jsonl record with ID and required source provenance. |
+| `memcore.EvidenceSpan` | Frozen exact quote: path, SHA-256, character offsets, line, optional source provenance, and a MediaRef for a transcript or OCR sidecar passage; citation gives `clip.mp4#t=12.5,17` or `path:line`. |
+| `memcore.ManifestEntry` | Validated evidence.jsonl record with ID, required source provenance, and a locator only for a transcript or OCR sidecar quote. |
+| `memcore.MediaRef` | Frozen position of a sidecar passage in its media file: kind (transcript or ocr), media path or None, locator (t=START,END or page=N&xywh=X,Y,W,H) and the media SHA-256 when present and matched. |
+| `memcore.Sidecar` | Parsed transcript or OCR sidecar bound to its media file: media path and media_sha256 (None when absent), units (cues or lines with start, end, locator) and ref(unit) returning a MediaRef. |
+| `memcore.SidecarError` | ValueError for a malformed, stale, unbound or ambiguous sidecar; the message never echoes file content. |
 | `memcore.__version__` | Installed distribution version string. |
 | `memcore.append_jsonl` | Append one dict as UTF-8/LF JSONL; the parent directory must exist. |
 | `memcore.confined_reads` | Context manager pinning root and refusing symlink races during reads; unsupported platforms raise ValueError. |
@@ -211,7 +214,8 @@ signature means current UTC; it is an internal default implementation, not a pub
 | `memcore.line_of` | Return the one-based line at a Unicode character offset. |
 | `memcore.load_json` | Parse one JSON value from str or bytes; malformed JSON, a repeated object key, non-UTF-8 bytes and too-deep nesting raise ValueError. |
 | `memcore.load_manifest` | Verify all entries and return ID → EvidenceSpan; paths are relative to the manifest directory. |
-| `memcore.locate_quote` | Locate the first verbatim quote in a UTF-8 file under root; optional provenance is passed to EvidenceSpan. |
+| `memcore.load_sidecar` | Parse a sidecar's decoded text and bind it to its media file; a present media file must match the recorded source_sha256. siblings and hashes are optional listing and hash-cache inputs. |
+| `memcore.locate_quote` | Locate the first verbatim quote in a UTF-8 file under root; in a sidecar it must lie inside one cue or line (the one at locator, if given) and the span records the MediaRef. Optional provenance is passed to EvidenceSpan. |
 | `memcore.make_span` | Build a span from supplied text, digest, and [start, end) Unicode offsets; does not read or hash a file. |
 | `memcore.open_text` | Read-only text context manager; defaults to UTF-8 and honors confined_reads. |
 | `memcore.read_file_bytes` | Read bytes from a Path, honoring the active confined_reads context. |
@@ -220,6 +224,7 @@ signature means current UTC; it is an internal default implementation, not a pub
 | `memcore.read_text` | Return (SHA-256 of raw bytes, UTF-8 text) for a root-relative evidence path. |
 | `memcore.resolve_inside` | Resolve a relative path under root; reject absolute paths and symlink escapes. |
 | `memcore.sha256_bytes` | Return the hexadecimal SHA-256 digest of bytes. |
+| `memcore.sidecar_format` | Return "vtt", "srt" or "ocr" for a sidecar file name (.vtt, .srt, .ocr.json), else None. |
 | `memcore.verify_entry` | Check a ManifestEntry against root and return its verified span. |
 | `memcore.walk_files` | Yield (directory, mutable directories, files); supports pruning and an OSError callback. Confined directories are Paths, ordinary os.walk directories are strings. |
 
@@ -231,7 +236,8 @@ confinement_supported() -> bool
 line_of(text: str, offset: int) -> int
 load_json(data: str | bytes) -> Any
 load_manifest(manifest: Path) -> dict[str, EvidenceSpan]
-locate_quote(root: Path, relative: str, quote: str, **provenance: Any) -> EvidenceSpan
+load_sidecar(root: Path, relative: str, text: str, siblings: Iterable[str] | None=None, hashes: dict[Path, str] | None=None) -> Sidecar
+locate_quote(root: Path, relative: str, quote: str, locator: str | None=None, **provenance: Any) -> EvidenceSpan
 make_span(relative: str, digest: str, text: str, start: int, end: int, **provenance: Any) -> EvidenceSpan
 open_text(path: Path, encoding: str='utf-8') -> AbstractContextManager[TextIO]
 read_file_bytes(path: Path) -> bytes
@@ -240,6 +246,7 @@ read_jsonl(path: Path) -> Iterator[tuple[int, dict]]
 read_text(root: Path, relative: str) -> tuple[str, str]
 resolve_inside(root: Path, relative: str) -> Path
 sha256_bytes(data: bytes) -> str
+sidecar_format(name: str) -> str | None
 verify_entry(entry: ManifestEntry, root: Path) -> EvidenceSpan
 walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterator[tuple[str | Path, list[str], list[str]]]
 ```

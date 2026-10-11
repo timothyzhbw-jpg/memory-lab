@@ -10,9 +10,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memcore import EvidenceError, EvidenceSpan, make_span, read_jsonl, sha256_bytes
+from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
 from memcore.paths import InputPathError, input_path
-from memcore.reading import read_input_bytes
+from memcore.reading import confined_reads, confinement_root, confinement_supported
 
 from . import __version__
 from .corpus import Passage, Skipped, scan
@@ -38,6 +38,9 @@ class Review(BaseModel):
     quote: str = Field(min_length=1)
     reviewer: str = Field(min_length=1)
     note: str | None = None
+    locator: str | None = Field(default=None, min_length=1,
+                                description="For a transcript or OCR sidecar: the cue or line to look in, "
+                                            "e.g. t=12.5,17 (default: the first one containing the quote)")
 
 
 class EvidenceFinding(BaseModel):
@@ -91,6 +94,8 @@ class AuditReport(BaseModel):
 LEXICAL_NOTE = "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
 MODEL_NOTE = ("Unconfirmed matches are model judgments on passages pre-selected by term overlap; "
               "passages that share too few terms with a memory are never judged, and models can be wrong.")
+MEDIA_NOTE = ("Transcript and OCR quotes show what a sidecar says about a media file, not what was said or shown; "
+              "a matching source_sha256 ties the sidecar to the media file's bytes, not to an accurate reading.")
 LIMITATIONS = [
     "Only human reviews (reviews.jsonl) can mark a memory supported or challenged.",
     "Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.",
@@ -110,18 +115,19 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
                                 "(the memory text may have changed; re-review it)")
         # Human-confirmed evidence must obey the same policy as scanned evidence.
         try:
-            target = input_path(evidence_root, Path(evidence_root).resolve() / review.path)
-            raw = read_input_bytes(evidence_root, target)
+            input_path(evidence_root, Path(evidence_root).resolve() / review.path)
         except InputPathError as exc:
             if skipped is not None and str(exc) != "path escapes root":
                 skipped.append(Skipped(path=review.path, reason=f"review evidence skipped: {exc}"))
                 continue
             raise EvidenceError(f"review evidence skipped: {exc}") from None
-        text = raw.decode("utf-8")
-        start = text.find(review.quote)
-        if start < 0:
-            raise EvidenceError(f"quote not found verbatim in {review.path}: {review.quote!r}")
-        span = make_span(review.path, sha256_bytes(raw), text, start, start + len(review.quote), source_kind="file")
+        # Read it (and, for a sidecar, hash its media file) under descriptor confinement where supported,
+        # so a swap after the policy check cannot redirect the read.
+        if confinement_root() is None and confinement_supported():
+            with confined_reads(evidence_root):
+                span = locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+        else:
+            span = locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
         confirmed.setdefault(review.memory_id, []).append(EvidenceFinding(
             relation=review.relation, confirmed=True, reviewer=review.reviewer,
             rationale=review.note or "confirmed by reviewer", span=span))
@@ -543,9 +549,10 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
                                 status=status, evidence=evidence, issues=issues, proposals=proposals))
     findings.sort(key=lambda f: SEVERITY.index(f.status))
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
+    media = any(p.span.media for p in passages) or any(e.span.media for f in findings for e in f.evidence)
     return AuditReport(memory_file=memory_file, files_read=files_read,
                        evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,
                        verifier=verifier.name, as_of=as_of, summary=summary, findings=findings,
                        skipped_evidence=skipped,
                        limitations=[LEXICAL_NOTE if isinstance(verifier, LexicalVerifier) else MODEL_NOTE,
-                                    *LIMITATIONS])
+                                    *LIMITATIONS, *([MEDIA_NOTE] if media else [])])

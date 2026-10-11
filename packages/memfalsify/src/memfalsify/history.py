@@ -22,7 +22,7 @@ from .corpus import DIFF_HEADER, HISTORY_HEADER
 from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, open_repository, printable,
                        resolve_commit, show_text)
 from .memory import Claim
-from .report import LABELS, _finding, _quote
+from .report import LABELS, _finding, _quote, skipped_line
 from .text import terms
 from .verify import Verifier
 
@@ -255,7 +255,7 @@ def diff_to_markdown(report: DiffReport) -> str:
             out += _finding(finding, scrub=True)
     if audit.skipped_evidence:
         out += ["## Skipped evidence", ""]
-        out += [f"- `{show_text(s.path)}`: {show_text(s.reason)}" for s in audit.skipped_evidence]
+        out += [skipped_line(s.path, s.reason, show_text) for s in audit.skipped_evidence]
         out.append("")
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations + audit.limitations]
     return "\n".join(out) + "\n"

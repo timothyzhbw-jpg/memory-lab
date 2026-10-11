@@ -1,0 +1,7 @@
+1
+00:00:02,000 --> 00:00:06,500
+Customer: Your retry budget is 3 attempts per request, right?
+
+2
+00:00:06,500 --> 00:00:08,000
+Support: Yes, 3 attempts per request.

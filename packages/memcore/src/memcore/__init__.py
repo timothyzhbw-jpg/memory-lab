@@ -6,8 +6,11 @@ from .evidence import (
     EvidenceError,
     EvidenceSpan,
     ManifestEntry,
+    MediaRef,
+    Sidecar,
     line_of,
     load_manifest,
+    load_sidecar,
     locate_quote,
     make_span,
     read_text,
@@ -29,11 +32,15 @@ from .reading import (
     read_file_text,
     walk_files,
 )
+from .sidecar import SidecarError, sidecar_format
 
 __all__ = [
     "EvidenceError",
     "EvidenceSpan",
     "ManifestEntry",
+    "MediaRef",
+    "Sidecar",
+    "SidecarError",
     "__version__",
     "append_jsonl",
     "confined_reads",
@@ -42,6 +49,7 @@ __all__ = [
     "line_of",
     "load_json",
     "load_manifest",
+    "load_sidecar",
     "locate_quote",
     "make_span",
     "open_text",
@@ -51,6 +59,7 @@ __all__ = [
     "read_text",
     "resolve_inside",
     "sha256_bytes",
+    "sidecar_format",
     "verify_entry",
     "walk_files",
 ]

@@ -178,8 +178,11 @@ Change、Rollback、Capture、Plan、Summary 使用 dataclass 字段。完整函
 | API | 用途 |
 |---|---|
 | `memcore.EvidenceError` | 证据缺失、被修改或越界时抛出的 ValueError。 |
-| `memcore.EvidenceSpan` | 不可变的精确引用：路径、SHA-256、字符偏移、行号和可选的来源信息。 |
-| `memcore.ManifestEntry` | 经过验证的 evidence.jsonl 记录，包含 ID 和必填的来源信息。 |
+| `memcore.EvidenceSpan` | 不可变的精确引用：路径、SHA-256、字符偏移、行号、可选的来源信息，以及转写稿或 OCR 旁车文件段落的 MediaRef；citation 给出 `clip.mp4#t=12.5,17` 或 `路径:行号`。 |
+| `memcore.ManifestEntry` | 经过验证的 evidence.jsonl 记录，包含 ID、必填的来源信息，以及仅用于转写稿或 OCR 旁车文件引用的 locator。 |
+| `memcore.MediaRef` | 不可变的旁车文件段落在媒体文件中的位置：kind（transcript 或 ocr）、媒体路径或 None、locator（t=起,止 或 page=N&xywh=X,Y,W,H），以及媒体文件在场且匹配时的 SHA-256。 |
+| `memcore.Sidecar` | 已解析并绑定到媒体文件的转写稿或 OCR 旁车文件：媒体路径和 media_sha256（不在场时为 None）、units（带 start、end、locator 的字幕条目或文本行），以及返回 MediaRef 的 ref(unit)。 |
+| `memcore.SidecarError` | 旁车文件格式错误、过期、未绑定或有歧义时抛出的 ValueError；消息不回显文件内容。 |
 | `memcore.__version__` | 已安装发行包的版本字符串。 |
 | `memcore.append_jsonl` | 将一个字典以 UTF-8/LF JSONL 追加写入；父目录须已存在。 |
 | `memcore.confined_reads` | 固定根目录、在读取时防止符号链接竞态的上下文管理器；不支持的平台抛出 ValueError。 |
@@ -188,7 +191,8 @@ Change、Rollback、Capture、Plan、Summary 使用 dataclass 字段。完整函
 | `memcore.line_of` | 返回 Unicode 字符偏移所在的行号，从 1 开始。 |
 | `memcore.load_json` | 从 str 或 bytes 解析一个 JSON 值；格式错误、对象键重复、非 UTF-8 字节和嵌套过深都抛出 ValueError。 |
 | `memcore.load_manifest` | 验证全部记录并返回 ID → EvidenceSpan；路径相对于清单所在目录。 |
-| `memcore.locate_quote` | 定位根目录下 UTF-8 文件中的首个逐字匹配引用；可选来源参数传给 EvidenceSpan。 |
+| `memcore.load_sidecar` | 解析旁车文件的已解码文本并绑定到媒体文件；媒体文件在场时必须与记录的 source_sha256 一致。siblings 和 hashes 是可选的目录列表和哈希缓存。 |
+| `memcore.locate_quote` | 定位根目录下 UTF-8 文件中的首个逐字匹配引用；在旁车文件中引用必须位于同一个字幕条目或同一行内（给出 locator 时为该位置），引用会记录 MediaRef。可选来源参数传给 EvidenceSpan。 |
 | `memcore.make_span` | 用文本、摘要及 [start, end) Unicode 偏移构建引用；不读取文件或计算哈希。 |
 | `memcore.open_text` | 只读文本上下文管理器；默认 UTF-8，遵守 confined_reads。 |
 | `memcore.read_file_bytes` | 从 Path 读取字节，遵守当前 confined_reads 上下文。 |
@@ -197,6 +201,7 @@ Change、Rollback、Capture、Plan、Summary 使用 dataclass 字段。完整函
 | `memcore.read_text` | 读取根目录内的相对证据路径，返回（原始字节的 SHA-256、UTF-8 文本）。 |
 | `memcore.resolve_inside` | 解析根目录内的相对路径；拒绝绝对路径与符号链接越界。 |
 | `memcore.sha256_bytes` | 返回字节的十六进制 SHA-256 摘要。 |
+| `memcore.sidecar_format` | 对旁车文件名（.vtt、.srt、.ocr.json）返回 "vtt"、"srt" 或 "ocr"，否则返回 None。 |
 | `memcore.verify_entry` | 在根目录下核验 ManifestEntry 并返回验证后的引用。 |
 | `memcore.walk_files` | 返回（目录、可修改的子目录列表、文件列表）；支持剪枝与 OSError 回调。限制读取时目录为 Path，普通 os.walk 时为字符串。 |
 
@@ -208,7 +213,8 @@ confinement_supported() -> bool
 line_of(text: str, offset: int) -> int
 load_json(data: str | bytes) -> Any
 load_manifest(manifest: Path) -> dict[str, EvidenceSpan]
-locate_quote(root: Path, relative: str, quote: str, **provenance: Any) -> EvidenceSpan
+load_sidecar(root: Path, relative: str, text: str, siblings: Iterable[str] | None=None, hashes: dict[Path, str] | None=None) -> Sidecar
+locate_quote(root: Path, relative: str, quote: str, locator: str | None=None, **provenance: Any) -> EvidenceSpan
 make_span(relative: str, digest: str, text: str, start: int, end: int, **provenance: Any) -> EvidenceSpan
 open_text(path: Path, encoding: str='utf-8') -> AbstractContextManager[TextIO]
 read_file_bytes(path: Path) -> bytes
@@ -217,6 +223,7 @@ read_jsonl(path: Path) -> Iterator[tuple[int, dict]]
 read_text(root: Path, relative: str) -> tuple[str, str]
 resolve_inside(root: Path, relative: str) -> Path
 sha256_bytes(data: bytes) -> str
+sidecar_format(name: str) -> str | None
 verify_entry(entry: ManifestEntry, root: Path) -> EvidenceSpan
 walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterator[tuple[str | Path, list[str], list[str]]]
 ```

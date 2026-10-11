@@ -1,0 +1,32 @@
+{
+  "format": "memlab-ocr/1",
+  "source_sha256": "c50b7ba5f6c2c6b1c98a453e51caed354730e3019f1479de2eab6ea87a41869b",
+  "engine": "hand-written for this example",
+  "pages": [
+    {
+      "page": 1,
+      "width": 1600,
+      "height": 1200,
+      "lines": [
+        {
+          "text": "Feature A (bulk export): rejected for the November release",
+          "bbox": [
+            40,
+            120,
+            820,
+            158
+          ]
+        },
+        {
+          "text": "On-call rotation changes every Monday",
+          "bbox": [
+            40,
+            180,
+            560,
+            214
+          ]
+        }
+      ]
+    }
+  ]
+}
