@@ -123,25 +123,33 @@ def evidence_add(
     dataset: Path = DATASET,
     id: str = typer.Option(...),
     path: str = typer.Option(..., help="Source file, relative to the dataset directory"),
-    quote: str = typer.Option(..., help="Exact text to cite; must appear verbatim in the file"),
+    quote: str = typer.Option(..., help="Exact text to cite; must appear verbatim in the file (in a transcript "
+                                        "or OCR sidecar, inside one cue or line)"),
     source_uri: str = typer.Option(...),
     source_kind: str = typer.Option(...),
     captured_at: str = typer.Option(..., help="ISO 8601 with timezone"),
+    locator: Optional[str] = typer.Option(
+        None, help="Transcript or OCR sidecar only: the cue or line to quote from, e.g. 't=12.5,17' or "
+                   "'page=1&xywh=40,120,570,38' (default: the first one containing the quote)"),
 ) -> None:
-    """Hash a source file, locate the exact quote, and append the record to evidence.jsonl."""
+    """Hash a source file, locate the exact quote, and append the record to evidence.jsonl.
+
+    For a transcript (.vtt, .srt) or OCR sidecar (.ocr.json), the record also gets the cue's or line's locator,
+    and the sidecar must match the media file next to it."""
     manifest = dataset / "evidence.jsonl"
     try:
         existing = load_manifest(manifest) if manifest.exists() else {}
         if id in existing:
             raise EvidenceError(f"evidence id already exists: {id}")
-        span = locate_quote(dataset, path, quote)
+        span = locate_quote(dataset, path, quote, locator)
         entry = ManifestEntry(id=id, path=span.path, sha256=span.sha256, quote=span.quote, start=span.start,
                               end=span.end, source_uri=source_uri, source_kind=source_kind,
-                              captured_at=captured_at)
+                              captured_at=captured_at, locator=span.media.locator if span.media else None)
     except (ValidationError, ValueError, OSError) as exc:
         _fail(str(exc))
     append_jsonl(manifest, entry.model_dump(mode="json"))
-    typer.echo(f"registered {id} at {span.location}")
+    where = span.location if span.media is None else f"{span.citation} ({span.media.label} {span.location})"
+    typer.echo(f"registered {id} at {where}")
 
 
 github_app = typer.Typer(no_args_is_help=True, help="Ingest GitHub issues and pull requests.")

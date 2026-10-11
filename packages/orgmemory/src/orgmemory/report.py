@@ -25,11 +25,19 @@ def _yaml_value(value) -> str:
 
 def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = str,
          code: Callable[[str], str] | None = None) -> list[str]:
-    """One evidence citation: id, location, source, short hash, then the exact quote."""
+    """One evidence citation: id, location, source, short hash, then the exact quote.
+
+    A quote from a transcript or OCR sidecar is located in the media file first (``clip.mp4#t=12.5,17``), then
+    in the sidecar whose bytes the hash covers."""
     code = code or (lambda value: f"`{clean(value)}`")
-    return [f"{indent}- evidence {code(str(span.id))} · {code(span.location)} · {clean(str(span.source_uri))} "
+    where = code(span.location)
+    if span.media is not None:
+        when = f" ({span.media.time_range})" if span.media.time_range else ""
+        where = f"{code(span.citation)}{when} · {span.media.label} {where}"
+    quote = re.split(r"\r\n|\r|\n", clean(span.quote))  # a transcript cue can span lines
+    return [f"{indent}- evidence {code(str(span.id))} · {where} · {clean(str(span.source_uri))} "
             f"· sha256 `{span.sha256[:12]}`",
-            f"{indent}  > {clean(span.quote)}"]
+            *(f"{indent}  > {line}" for line in quote)]
 
 
 def state_block(state: SubjectState) -> list[str]:
