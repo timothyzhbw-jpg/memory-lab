@@ -16,7 +16,7 @@
 
 > Feature A (bulk export) is approved for the November release.
 
-`MEMORY.md:7` · Product decisions
+`MEMORY.md:7` · `Product decisions`
 
 **Evidence**
 - contradicts (confirmed by demo-reviewer) · `notes/2026-10-07-decision-log.md:3` · sha256 `86dc52dbbfe2` · Decision log records a rejection, not an approval.
@@ -76,7 +76,7 @@
 
 > The bulk export will ship next week.
 
-`MEMORY.md:10` · Product decisions
+`MEMORY.md:10` · `Product decisions`
 
 **Issues**
 - relative_time: 'next week' has no absolute date
@@ -89,7 +89,7 @@
 
 > 2026-03-02: Feature B was postponed to Q3.
 
-`MEMORY.md:11` · Product decisions
+`MEMORY.md:11` · `Product decisions`
 
 **Issues**
 - possibly_stale: latest date 2026-03-02 is over 180 days before 2026-10-10
@@ -102,7 +102,7 @@
 
 > Priya owns the payments integration.
 
-`MEMORY.md:15` · Team
+`MEMORY.md:15` · `Team`
 
 **Proposed actions** (not applied)
 - `attach_evidence`: No evidence found; add a source or label this memory unverified.
@@ -111,7 +111,7 @@
 
 > Feature A was rejected by the product manager.
 
-`MEMORY.md:8` · Product decisions
+`MEMORY.md:8` · `Product decisions`
 
 **Evidence**
 - supports (candidate, unconfirmed) · `notes/2026-10-07-decision-log.md:3` · sha256 `86dc52dbbfe2` · source restates the claim (term coverage 1.00)
@@ -128,7 +128,7 @@
 
 > We probably use squash merges for pull requests.
 
-`MEMORY.md:16` · Team
+`MEMORY.md:16` · `Team`
 
 **Evidence**
 - supports (candidate, unconfirmed) · `CONTRIBUTING.md:3` · sha256 `c12fb71d6a80` · source restates the claim (term coverage 1.00)
@@ -145,7 +145,7 @@
 
 > Bulk export depends on the billing schema migration.
 
-`MEMORY.md:9` · Product decisions
+`MEMORY.md:9` · `Product decisions`
 
 **Evidence**
 - supports (confirmed by demo-reviewer) · `notes/2026-10-06-standup.md:3` · sha256 `0c7d4e817311` · confirmed by reviewer

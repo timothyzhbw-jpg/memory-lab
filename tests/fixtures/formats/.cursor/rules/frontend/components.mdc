@@ -1,0 +1,9 @@
+---
+description: "Component conventions: naming, props" # quoted because of the colon
+globs: ["src/components/**/*.{ts,tsx}", src/ui/**]
+alwaysApply: true
+---
+
+# Fixture: Cursor rule in a subfolder for memfalsify format tests (not instructions for this repository)
+
+- Fixture components use PascalCase file names.

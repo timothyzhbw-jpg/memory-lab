@@ -14,7 +14,7 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 
 | 工具 | 参数 | 返回 |
 |---|---|---|
-| `memfalsify_claims` | `memory_file` | MemFalsify 拆出的记忆，一个 JSON 数组（`memory_id`、`location`、`text`）。`memfalsify claims` 把同样的对象按 JSONL 逐行打印。 |
+| `memfalsify_claims` | `memory_file` | MemFalsify 拆出的记忆，一个 JSON 数组（`memory_id`、`location`、`text`；文件带有文档规定的 frontmatter 时还有 `metadata`，例如 Cursor 规则的 `globs`）。`memfalsify claims` 把同样的对象按 JSONL 逐行打印。 |
 | `memfalsify_audit` | `memory_file`，可选 `evidence_dir`、`exclude`（相对 `evidence_dir` 的 fnmatch 通配，必须同时提供 `evidence_dir`）、`reviews_file`、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 审计报告。和同一批文件上的 `memfalsify audit` 是同一份文档。 |
 | `memfalsify_diff` | `memory_file`、`base`，可选 `head`（默认工作区）、`evidence_dir`、`exclude`（与审计相同的通配，必须同时提供 `evidence_dir`）、`reviews_file`（必须同时提供 `evidence_dir`）、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 和 `memfalsify diff` 相同的报告：比较 `base` 与 `head` 之间新增、修改（旧到新）、删除和未变的记忆，只审计新增和修改的，证据按当前目录读取。不会检出任何文件，也不写文件。没有 `strict`。 |
 | `memfalsify_history` | `memory_file`，可选 `max_commits`（不小于 1 的整数，默认 100）、`format`（`markdown` 或 `json`） | 和 `memfalsify history` 相同的报告。每条当前记忆给出引入它的提交和在 HEAD 第一父提交链上最后修改它的提交，并包含工作区里尚未提交的修改；同时列出扫描范围内被删除的记忆及删除时间。浅克隆里最老的提交如果仍记录着没有取到的父提交，历史就是不完整的。浅克隆如果已经包含根提交（提交对象没有 `parent` 行），则算完整历史。 |
@@ -26,7 +26,9 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 
 使用相对于根目录的路径时，工具返回的就是在该根目录运行对应命令打印的文本。有的命令会多一个结尾换行。审计报告中的路径会解析成相对于服务器根目录的规范路径，因此 CLI 使用绝对路径或符号链接别名时，显示的路径标签可能不同。`memfalsify claims` 的形状不同：它按 JSONL 逐行打印，`memfalsify_claims` 把同样的对象收成一个 JSON 数组。
 
-`reviews_file` 必须同时提供 `evidence_dir`。可选路径可以省略或传 `null`，空路径会报错。记忆链接只能指向记忆文件所在目录内的文件；人工复核引用只能指向证据目录内的文件；数据集证据引用只能指向清单所在目录内的文件。证据扫描会跳过指向外部文件的符号链接、目录符号链接和非普通文件。转写稿和 OCR 旁车文件（[docs/multimodal.md](multimodal.md)）旁边的媒体文件只为核对绑定而计算哈希，走的也是同样受限的读取。数据集目录里要有 `events.jsonl`、`policy.json` 和 `evidence.jsonl`，证据源必须是普通文件。
+`memory_file` 可以是命令行能审计的任何文件：`MEMORY.md`、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md`，或 Cursor、Copilot、Windsurf、Claude Code 的规则文件（见 README）。没有发现文件的工具；要列出仓库里的指令文件，请运行 `memfalsify discover`。
+
+`reviews_file` 必须同时提供 `evidence_dir`。可选路径可以省略或传 `null`，空路径会报错。记忆链接和 `@file.md` 导入只能指向记忆文件所在目录内的文件；人工复核引用只能指向证据目录内的文件；数据集证据引用只能指向清单所在目录内的文件。证据扫描会跳过指向外部文件的符号链接、目录符号链接和非普通文件。转写稿和 OCR 旁车文件（[docs/multimodal.md](multimodal.md)）旁边的媒体文件只为核对绑定而计算哈希，走的也是同样受限的读取。数据集目录里要有 `events.jsonl`、`policy.json` 和 `evidence.jsonl`，证据源必须是普通文件。
 
 无效的工具调用返回 MCP 工具错误，连接仍可继续使用。参数结构校验错误只列字段名，不回显被拒绝的值；错误会隐藏根目录外的路径参数、后端诊断和堆栈。模型验证器失败时返回通用错误，提示检查 SDK、凭据和后端服务。
 

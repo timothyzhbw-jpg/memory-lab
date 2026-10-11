@@ -19,10 +19,11 @@ from pydantic import BaseModel
 from . import __version__
 from .audit import ATTENTION, AuditReport, Status, audit_claims
 from .corpus import DIFF_HEADER, HISTORY_HEADER
-from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, open_repository, printable,
+from .formats import Value
+from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, code_span, open_repository, printable,
                        resolve_commit, show_text)
 from .memory import Claim
-from .report import LABELS, _finding, _quote, skipped_line
+from .report import LABELS, _finding, _quote, metadata_line, skipped_line
 from .text import terms
 from .verify import Verifier
 
@@ -43,7 +44,9 @@ class Change:
     old: Claim | None
     new: Claim | None
     similarity: float | None = None
-    moved: bool = False  # unchanged, but reworded (case/whitespace) or moved to another file or section
+    # unchanged, but reworded (case/whitespace), moved to another file or section, or its file's frontmatter
+    # metadata (where it applies) changed
+    moved: bool = False
 
 
 def similarity(a: str, b: str) -> float:
@@ -98,7 +101,8 @@ def compare(base: list[Claim], head: list[Claim]) -> list[Change]:
         if claim.id in old_by_id:
             old = old_by_id[claim.id]
             section = renames.get((old.path, old.section), old.section)  # a renamed heading is not a move
-            moved = old.text != claim.text or old.path != claim.path or claim.section not in (old.section, section)
+            moved = (old.text != claim.text or old.path != claim.path or claim.section not in (old.section, section)
+                     or old.metadata != claim.metadata)
             changes.append(Change("unchanged", old, claim, moved=moved))
         elif (pair := pairs.get(position[claim.id])) is not None:
             changes.append(Change("changed", removed[pair[0]], claim, pair[1]))
@@ -116,11 +120,12 @@ class ClaimVersion(BaseModel):
     location: str
     section: str | None = None
     also_at: list[str] = []
+    metadata: dict[str, Value] = {}
 
     @classmethod
     def of(cls, claim: Claim) -> "ClaimVersion":
         return cls(memory_id=claim.id, text=claim.text, location=claim.location, section=claim.section,
-                   also_at=claim.also_at)
+                   also_at=claim.also_at, metadata=claim.metadata)
 
 
 class ClaimChange(BaseModel):
@@ -200,25 +205,29 @@ def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow
 
 
 def _files(files: list[str]) -> str:
-    shown = [show_text(f) for f in files]
-    return f"{len(shown)} file(s)" + (": " + ", ".join(f"`{f}`" for f in shown) if shown else "")
+    return f"{len(files)} file(s)" + (": " + ", ".join(code_span(f) for f in files) if files else "")
 
 
 def _where(version: ClaimVersion) -> str:
-    return f"`{show_text(version.location)}`" + (f" · {show_text(version.section)}" if version.section else "")
+    return code_span(version.location) + (f" · {code_span(version.section)}" if version.section else "")
+
+
+def _meta(metadata: dict[str, Value]) -> list[str]:
+    return [metadata_line(metadata), ""] if metadata else []
 
 
 def diff_to_markdown(report: DiffReport) -> str:
     audit = report.audit
-    head = (f"`{show_text(report.head.rev)}` (commit `{report.head.commit[:12]}`)" if report.head.commit
+    head = (f"{code_span(report.head.rev)} (commit {code_span(report.head.commit[:12])})" if report.head.commit
             else "working tree")
     out = [DIFF_HEADER, "",
-           f"- Memory: `{show_text(report.memory_file)}`",
-           f"- Base: `{show_text(report.base.rev)}` (commit `{report.base.commit[:12]}`), {_files(report.base.files)}",
+           f"- Memory: {code_span(report.memory_file)}",
+           f"- Base: {code_span(report.base.rev)} (commit {code_span(report.base.commit[:12])}), "
+           f"{_files(report.base.files)}",
            f"- Head: {head}, {_files(report.head.files)}",
-           f"- Evidence root: `{show_text(audit.evidence_root)}` (as it is now)" if audit.evidence_root
+           f"- Evidence root: {code_span(audit.evidence_root)} (as it is now)" if audit.evidence_root
            else "- Evidence root: none supplied",
-           *(["- Excluded from evidence: " + ", ".join(f"`{show_text(p)}`" for p in audit.excluded)]
+           *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in audit.excluded)]
              if audit.excluded else []),
            f"- Verifier: `{audit.verifier}` · as of {audit.as_of} · mode: **{report.mode}** (no memory was modified)",
            "", "| Change | Claims |", "|---|---|"]
@@ -241,14 +250,25 @@ def diff_to_markdown(report: DiffReport) -> str:
             if kind == "changed":
                 out += [f"### `{c.old.memory_id}` → `{c.new.memory_id}` · {LABELS[c.status]}", "",
                         f"**Old** at {_where(c.old)}", "", _quote(c.old.text, scrub=True), "",
+                        *(_meta(c.old.metadata) if c.old.metadata != c.new.metadata else []),
                         f"**New** at {_where(c.new)} (similarity {c.similarity:.2f})", "",
-                        _quote(c.new.text, scrub=True), ""]
+                        _quote(c.new.text, scrub=True), "", *_meta(c.new.metadata)]
             elif kind == "added":
                 out += [f"### `{c.new.memory_id}` · {LABELS[c.status]}", "", _quote(c.new.text, scrub=True), "",
-                        _where(c.new), ""]
+                        _where(c.new), "", *_meta(c.new.metadata)]
             else:
                 out += [f"### `{c.old.memory_id}`", "", _quote(c.old.text, scrub=True), "",
-                        f"Was at {_where(c.old)}", ""]
+                        f"Was at {_where(c.old)}", "", *_meta(c.old.metadata)]
+    rescoped = [c for c in report.changes if c.change == "unchanged" and c.old.metadata != c.new.metadata]
+    if rescoped:
+        out += ["## Frontmatter changed", "",
+                "These claims kept their wording, but the frontmatter that says where they apply changed. "
+                "They were not audited.", ""]
+        for c in rescoped:
+            old = metadata_line(c.old.metadata) if c.old.metadata else "Frontmatter: none"
+            new = metadata_line(c.new.metadata).removeprefix("Frontmatter: ") if c.new.metadata else "none"
+            out.append(f"- `{c.new.memory_id}` at {_where(c.new)}: {old} → {new}")
+        out.append("")
     if audit.findings:
         out += ["## Audit of added and changed claims", ""]
         for finding in audit.findings:
@@ -278,9 +298,10 @@ class ClaimHistory(BaseModel):
     text: str
     location: str
     section: str | None = None
+    metadata: dict[str, Value] = {}
     introduced: CommitInfo | None  # first appearance of this ID; None: before the scanned commits
-    last_changed: CommitInfo | None  # latest edit, including case/whitespace edits and moves to another
-    # file or section (a renamed heading is not a move)
+    last_changed: CommitInfo | None  # latest edit, including case/whitespace edits, moves to another
+    # file or section (a renamed heading is not a move) and changes to its file's frontmatter metadata
     replaced: ClaimVersion | None = None  # the earlier version this claim was edited from, if seen
 
 
@@ -411,7 +432,8 @@ def memory_history(memory_file: Path, max_commits: int = 100, follow_links: bool
             latest.pop(removal.memory_id, None)
             latest[removal.memory_id] = removal
     claims = [ClaimHistory(memory_id=c.id, text=c.text, location=c.location, section=c.section,
-                           introduced=state[c.id].introduced, last_changed=state[c.id].last_changed,
+                           metadata=c.metadata, introduced=state[c.id].introduced,
+                           last_changed=state[c.id].last_changed,
                            replaced=ClaimVersion.of(state[c.id].replaced) if state[c.id].replaced else None)
               for c in current.claims]
     return HistoryReport(memory_file=str(memory_file), files=current.files, head=head,
@@ -438,13 +460,14 @@ def history_to_markdown(report: HistoryReport) -> str:
                       else "; the clone is shallow, so older commits were not available" if report.shallow
                       else f"; older commits were not read (`--max-commits {report.max_commits}`)"))
     out = [HISTORY_HEADER, "",
-           f"- Memory: `{show_text(report.memory_file)}` ({_files(report.files)})",
+           f"- Memory: {code_span(report.memory_file)} ({_files(report.files)})",
            f"- Scanned: {scanned}, plus the working tree",
            f"- Mode: **{report.mode}** (nothing was modified)", "",
            f"## Current claims ({len(report.claims)})", ""]
     for claim in report.claims:
         out += [f"### `{claim.memory_id}`", "", _quote(claim.text, scrub=True), "",
-                f"`{show_text(claim.location)}`" + (f" · {show_text(claim.section)}" if claim.section else ""), "",
+                code_span(claim.location) + (f" · {code_span(claim.section)}" if claim.section else ""), "",
+                *_meta(claim.metadata),
                 f"- Introduced: {_commit(claim.introduced)}",
                 "- Last changed: " + ("same as introduced" if claim.last_changed == claim.introduced
                                       else _commit(claim.last_changed))]
@@ -455,8 +478,8 @@ def history_to_markdown(report: HistoryReport) -> str:
         out += [f"## Removed claims ({len(report.removed)})", ""]
         for gone in report.removed:
             out += [f"### `{gone.memory_id}`", "", _quote(gone.text, scrub=True), "",
-                    f"Was at `{show_text(gone.location)}`"
-                    + (f" · {show_text(gone.section)}" if gone.section else ""), "",
+                    f"Was at {code_span(gone.location)}"
+                    + (f" · {code_span(gone.section)}" if gone.section else ""), "",
                     f"- Removed: {_commit(gone.removed)}", f"- Introduced: {_commit(gone.introduced)}", ""]
     out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
     return "\n".join(out) + "\n"

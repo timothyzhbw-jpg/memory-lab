@@ -15,7 +15,7 @@
 
 > The public API rate limit is 100 requests per minute.
 
-`MEMORY.md:7` · Remembered from meetings, calls and the whiteboard
+`MEMORY.md:7` · `Remembered from meetings, calls and the whiteboard`
 
 **Evidence**
 - contradicts (confirmed by demo-reviewer) · `recordings/standup-2026-10-06.mp4#t=12.5,17` (00:00:12.500-00:00:17.000) · transcript `recordings/standup-2026-10-06.mp4.vtt:7` · sha256 `92e1e06a69ee` · media sha256 `4c4369d2dc7b` · Priya states the limit in the standup recording.
@@ -28,7 +28,7 @@
 
 > Feature A (bulk export) is approved for the November release.
 
-`MEMORY.md:8` · Remembered from meetings, calls and the whiteboard
+`MEMORY.md:8` · `Remembered from meetings, calls and the whiteboard`
 
 **Evidence**
 - contradicts (candidate, unconfirmed) · `scans/whiteboard.png#page=1&xywh=40,120,780,38` · OCR `scans/whiteboard.png.ocr.json:12` · sha256 `554f2fba044f` · media sha256 `c50b7ba5f6c2` · opposing terms: claim 'approv…' vs source 'reject…'
@@ -41,7 +41,7 @@
 
 > The payments team owns the refund flow.
 
-`MEMORY.md:12` · Remembered from meetings, calls and the whiteboard
+`MEMORY.md:12` · `Remembered from meetings, calls and the whiteboard`
 
 **Proposed actions** (not applied)
 - `attach_evidence`: No evidence found; add a source or label this memory unverified.
@@ -50,7 +50,7 @@
 
 > Bulk export waits for the billing schema migration.
 
-`MEMORY.md:9` · Remembered from meetings, calls and the whiteboard
+`MEMORY.md:9` · `Remembered from meetings, calls and the whiteboard`
 
 **Evidence**
 - supports (candidate, unconfirmed) · `recordings/standup-2026-10-06.mp4#t=17.5,21.25` (00:00:17.500-00:00:21.250) · transcript `recordings/standup-2026-10-06.mp4.vtt:12` · sha256 `92e1e06a69ee` · media sha256 `4c4369d2dc7b` · source restates the claim (term coverage 1.00)
@@ -63,7 +63,7 @@
 
 > The on-call rotation changes every Monday.
 
-`MEMORY.md:10` · Remembered from meetings, calls and the whiteboard
+`MEMORY.md:10` · `Remembered from meetings, calls and the whiteboard`
 
 **Evidence**
 - supports (candidate, unconfirmed) · `scans/whiteboard.png#page=1&xywh=40,180,520,34` · OCR `scans/whiteboard.png.ocr.json:21` · sha256 `554f2fba044f` · media sha256 `c50b7ba5f6c2` · source restates the claim (term coverage 1.00)
@@ -80,7 +80,7 @@
 
 > The retry budget is 3 attempts per request.
 
-`MEMORY.md:11` · Remembered from meetings, calls and the whiteboard
+`MEMORY.md:11` · `Remembered from meetings, calls and the whiteboard`
 
 **Evidence**
 - supports (candidate, unconfirmed) · `calls/customer-call-2026-10-02.srt#t=2,6.5` (00:00:02.000-00:00:06.500) · transcript `calls/customer-call-2026-10-02.srt:3` · sha256 `bde7788fdf3f` · no media file named or found · source restates the claim (term coverage 1.00)

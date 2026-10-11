@@ -18,13 +18,14 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePath, PureWindowsPath
 
 from memcore.paths import InputPathError, component_skip_reason, input_path
 from memcore.reading import confinement_root, read_input_text
 
-from .memory import Claim, merge_duplicates, normalize_memory, parse_text
 from .corpus import Skipped
+from .formats import detect
+from .memory import Claim, merge_duplicates, normalize_memory, parse_text
 
 HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # C0/C1 controls and the bidi, zero-width and line-separator characters that can disguise text.
@@ -64,6 +65,17 @@ def printable(text: str) -> str:
 def show_text(text: str) -> str:
     """Memory or evidence text for a report: terminal and bidi controls removed, line breaks kept."""
     return DISPLAY.sub("\ufffd", text)
+
+
+def code_span(text: str) -> str:
+    """Untrusted text as one Markdown code span, whatever backticks it contains.
+
+    Whitespace is collapsed, so a newline in a path or a pattern cannot open a new Markdown line.
+    """
+    text = " ".join(show_text(text).split())
+    fence = "`" * (max((len(run) for run in re.findall(r"`+", text)), default=0) + 1)
+    pad = " " if text[:1] == "`" or text[-1:] == "`" else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
 
 
 def check_revision(rev: str) -> str:
@@ -138,7 +150,7 @@ def link_path(target: str) -> str | None:
     normal = posixpath.normpath(target)
     if normal in (".", "..") or normal.startswith(("../", "/")):
         return None
-    if component_skip_reason(Path(target)):
+    if component_skip_reason(Path(target), instructions=True):
         return None
     return normal
 
@@ -175,21 +187,23 @@ def read_batch_object(stdout) -> tuple[str, str, bytes] | None:
         raise HistoryError("git cat-file returned a malformed header") from exc
 
 
-def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool, *,
-                   skipped: list[Skipped] | None = None) -> Snapshot:
-    """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``."""
+def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: bool,
+                   directory: PurePath = PurePath(), *, skipped: list[Skipped] | None = None) -> Snapshot:
+    """Parse ``name`` and (one level deep) the local .md files it links to, exactly like ``parse_memory``.
+
+    ``directory`` is where the memory file lives; with the names, it gives each file's format."""
     snapshot = Snapshot(skipped=skipped if skipped is not None else [])
-    if reason := component_skip_reason(Path(name)):
+    if reason := component_skip_reason(Path(name), instructions=True):
         snapshot.skipped.append(Skipped(path=name, reason=reason + " in walked path"))
         return snapshot
     text = read(name)
     if text is None:
         return snapshot
     snapshot.texts[name] = text
-    claims, links = parse_text(text, name)
+    claims, links = parse_text(text, name, detect(directory / name))
     if follow_links:
         for target in dict.fromkeys(links):
-            if reason := component_skip_reason(Path(target)):
+            if reason := component_skip_reason(Path(target), instructions=True):
                 snapshot.skipped.append(Skipped(path=target, reason=reason + " in walked path"))
                 continue
             relative = link_path(target)
@@ -199,7 +213,7 @@ def build_snapshot(read: Callable[[str], str | None], name: str, follow_links: b
             if relative in snapshot.texts or (linked := read(relative)) is None:
                 continue
             snapshot.texts[relative] = linked
-            claims += parse_text(linked, relative)[0]
+            claims += parse_text(linked, relative, detect(directory / relative))[0]
     snapshot.claims = merge_duplicates(claims)
     return snapshot
 
@@ -336,12 +350,12 @@ class Repository:
             except UnicodeDecodeError as exc:
                 raise HistoryError(f"{printable(self.prefix + relative)} at {commit[:12]} is not UTF-8 text") from exc
             return normalize_memory(text)
-        return build_snapshot(read, self.memory_name, follow_links)
+        return build_snapshot(read, self.memory_name, follow_links, self.memory_dir)
 
     def worktree_path(self, relative: str) -> Path | None:
         """A memory file in the working tree, confined to the memory directory like ``parse_memory``."""
         try:
-            path = input_path(self.memory_dir, self.memory_dir / relative)
+            path = input_path(self.memory_dir, self.memory_dir / relative, instructions=True)
         except InputPathError:
             return None
         return path if path.is_file() else None
@@ -350,14 +364,14 @@ class Repository:
         skipped = []
         def read(relative: str) -> str | None:
             try:
-                path = input_path(self.memory_dir, self.memory_dir / relative)
-                return normalize_memory(read_input_text(self.memory_dir, path)) if path.is_file() else None
+                path = input_path(self.memory_dir, self.memory_dir / relative, instructions=True)
+                return normalize_memory(read_input_text(self.memory_dir, path, instructions=True)) if path.is_file() else None
             except InputPathError as exc:
                 skipped.append(Skipped(path=relative, reason=str(exc)))
                 return None
             except UnicodeDecodeError as exc:
                 raise HistoryError(f"{printable(relative)} is not UTF-8 text") from exc
-        return build_snapshot(read, self.memory_name, follow_links, skipped=skipped)
+        return build_snapshot(read, self.memory_name, follow_links, self.memory_dir, skipped=skipped)
 
 
 OUTSIDE = ("the memory file's git repository is not inside the server root: its work tree, git directory, "
@@ -403,7 +417,7 @@ def open_repository(memory_file: Path) -> Repository:
     original = Path(memory_file).absolute()
     directory = original.parent.resolve()
     try:
-        input_path(directory, directory / original.name)
+        input_path(directory, directory / original.name, instructions=True)
     except InputPathError as exc:
         raise HistoryError(f"memory skipped: {exc}") from None
     memory = directory / original.name

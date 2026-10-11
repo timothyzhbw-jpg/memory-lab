@@ -1,9 +1,10 @@
 # MemFalsify GitHub Action
 
-The action audits agent instruction files (`CLAUDE.md`, `AGENTS.md`) against the repository they describe,
-on every push or pull request. Each instruction is checked against the repository's own docs, configs and code
-comments; the evidence-cited report goes to the job summary. The action is read-only: it never edits an
-instruction file or anything else in the workspace.
+The action audits agent instruction files (`CLAUDE.md`, `AGENTS.md`, or with `memory: auto` every Claude Code,
+Codex, Cursor, GitHub Copilot, Gemini CLI and Windsurf instruction file in the repository) against the
+repository they describe, on every push or pull request. Each instruction is checked against the repository's
+own docs, configs and code comments; the evidence-cited report goes to the job summary. The action is
+read-only: it never edits an instruction file or anything else in the workspace.
 
 ## What it catches, and what it does not
 
@@ -66,6 +67,49 @@ Set `persist-credentials: false` on checkout so its job token is not stored in `
 audit runs. The action skips memory symlinks that leave the workspace or resolve into hidden or skipped
 directories, with a warning annotation. Memory, linked memory and evidence inputs are checked against
 both their original paths and resolved targets; a harmless filename cannot expose `.git/config`.
+Hidden directories are allowed only where an agent documents its instruction files (`.cursor/rules/`,
+`.github/instructions/`, `.claude/rules/`, ...), for the walked path and the resolved target alike.
+
+## Audit every agent's instruction files
+
+With `memory: auto`, the action audits every instruction file that `memfalsify discover` finds in the
+workspace, instead of a fixed list:
+
+```yaml
+      - uses: timothyzhbw-jpg/memory-lab@<sha>
+        with:
+          memory: auto
+          exclude: |
+            vendor/**
+            tests/fixtures/**
+```
+
+| Agent | Files found | Frontmatter shown in the report |
+|---|---|---|
+| Claude Code | `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/rules/**/*.md` | `paths` |
+| Codex and other `AGENTS.md` readers | `AGENTS.md`, `AGENTS.override.md`, `.claude/AGENTS.md` | |
+| Cursor | `.cursor/rules/**/*.mdc`, and `.cursorrules` at the top | `description`, `globs`, `alwaysApply` |
+| GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md` (top `.github` only) | `applyTo`, `excludeAgent` |
+| Gemini CLI | `GEMINI.md` | |
+| Windsurf (Devin Desktop) | `.windsurf/rules/*.md`, `.devin/rules/*.md`, and `.windsurfrules` at the top | `trigger`, `globs`, `description` |
+
+- Files not marked "at the top" or "top `.github` only" are found in any directory, because the agents read
+  nested ones. The step log lists every file found and every path skipped.
+- The `exclude` globs also leave instruction files out of discovery. There they are matched against paths
+  relative to the workspace, which are the same paths as for evidence when `evidence` is `.` (the default).
+  Exclude fixtures, examples and vendored code, whose instruction files are not yours.
+- Discovery skips other hidden directories, `node_modules/`, `__pycache__/`, `venv/` and nested git
+  repositories (submodules), and only follows a symlink to a regular file inside the workspace. A file
+  reachable under two names, such as a `CLAUDE.md` symlinked to `AGENTS.md`, is audited once. If the filesystem
+  reports no file index, both names are audited.
+- No file found is a notice and success, as with named files that do not exist. A directory that cannot be
+  read fails the step with exit 2.
+- With `diff-base`, discovery looks at the checked-out head: an instruction file that the pull request adds
+  is diffed (all its claims are added), but one that it deletes is not reported. Name a file in `memory` to
+  see its removal.
+- Files under hidden directories (`.cursor/`, `.github/`, `.claude/`, `.windsurf/`, `.devin/`) are never
+  evidence. When a Cursor rule contradicts `AGENTS.md`, the Cursor rule's audit reports it (`AGENTS.md` is
+  evidence), but the audit of `AGENTS.md` does not.
 
 ## Gate a pull request on the claims it changes
 
@@ -103,17 +147,17 @@ the audit of the added and changed ones; the `attention` output counts only thos
 
 | Input | Default | Meaning |
 |---|---|---|
-| `memory` | `CLAUDE.md AGENTS.md` | Files to audit, separated by spaces or newlines. Quote a path that contains spaces, shell-style: `CLAUDE.md "docs/agent notes.md"`. Missing files are skipped; if none exists, the action emits a notice and succeeds. |
+| `memory` | `CLAUDE.md AGENTS.md` | Files to audit, separated by spaces or newlines. Quote a path that contains spaces, shell-style: `CLAUDE.md "docs/agent notes.md"`. Missing files are skipped; if none exists, the action emits a notice and succeeds. `auto` (alone) audits every instruction file `memfalsify discover` finds (see above). |
 | `evidence` | `.` | Evidence directory, relative to the workspace. |
-| `exclude` | none | Globs to leave out of the evidence, one per line (see Exclusions). |
+| `exclude` | none | Globs to leave out of the evidence, one per line (see Exclusions); with `memory: auto`, also out of discovery. |
 | `strict` | `"true"` | Fail when any instruction is challenged, conflicted, disputed or has possible counterevidence. |
 | `verifier` | `lexical` | `lexical`, `llm`, `jev`, `dual` or `cascade` (see Model verifiers). |
 | `diff-base` | none | Revision to diff against, for example `${{ github.event.pull_request.base.sha }}`. When set, only claims added or changed since then are audited and can fail the step (see above). Needs that commit in the checkout. |
 | `as-of` | today | Reference date `YYYY-MM-DD` for the staleness check. |
 | `python-version` | `3.12` | Python for an isolated install under `$RUNNER_TEMP`. The job's own Python and `PATH` are not changed. |
 
-Only the files listed in `memory` are audited: Markdown links are not followed. To audit another instruction
-file, list it explicitly. Linked repository documents stay available as evidence; adding a link does not
+Only the files listed in `memory` (or discovered with `auto`) are audited: Markdown links and `@file.md`
+imports are not followed. To audit another instruction file, list it explicitly. Linked repository documents stay available as evidence; adding a link does not
 remove their counterevidence. The CLI separately supports multi-file memories with links followed by default.
 Use forward slashes in paths on every runner (`docs/AGENTS.md`). The input uses POSIX shell-style tokenization:
 an unquoted backslash escapes the next character, even on Windows.
@@ -174,10 +218,13 @@ Exclude what is not a statement about the repository as it is now: test fixtures
 vendored code, generated files, changelogs and archived notes (historical statements contradict current ones
 by design).
 
-Always skipped with a reason: hidden files and directories (`.git/`, `.github/`, ...), `node_modules/`,
-`__pycache__/`, `venv/`, and earlier MemFalsify reports. The instruction files actually read are silently
-excluded from evidence. Hidden/skipped components in resolved symlink targets are rejected too. Skipped
-memory inputs also appear in the report's skip list, with reasons prefixed by `memory skipped`.
+Always left out without configuration: hidden files and directories (`.git/`, `.github/`, ...),
+`node_modules/`, `__pycache__/`, `venv/` and earlier MemFalsify reports, each listed as skipped with a reason,
+and, silently, the instruction files being audited. So Cursor, Copilot, Windsurf and Claude Code rule files
+under `.cursor/`, `.github/`, `.windsurf/`, `.devin/` and `.claude/` are never evidence, while `CLAUDE.md`,
+`AGENTS.md` and `GEMINI.md` outside hidden directories are. Hidden/skipped components in resolved symlink
+targets are rejected too. Skipped memory inputs also appear in the report's skip list, with reasons prefixed
+by `memory skipped`.
 Media files, files over 2 MB, non-UTF-8 files, broken or cyclic file symlinks and untraversed directory symlinks
 are listed under "Skipped evidence". File symlinks escaping the evidence root are also skipped; inaccessible
 files or directory traversal errors fail the audit. When both `CLAUDE.md` and `AGENTS.md` are audited as distinct

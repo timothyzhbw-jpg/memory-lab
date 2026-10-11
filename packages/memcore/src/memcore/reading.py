@@ -81,7 +81,8 @@ def _open(path: Path, encoding: str | None = None):
     # Accept existing in-root symlinks by resolving them first. O_NOFOLLOW on
     # every subsequent component closes the check/open race on that resolution.
     try:
-        resolved = input_path(base, path)
+        # Callers decide what to read; agent instruction files in hidden directories are memory inputs.
+        resolved = input_path(base, path, instructions=True)
     except InputPathError as exc:
         if str(exc) == "path escapes root":
             raise ValueError("read path is outside the server root") from None
@@ -116,9 +117,9 @@ def read_file_text(path: Path, encoding: str = "utf-8") -> str:
         return handle.read()
 
 
-def read_input_bytes(root: Path, path: Path) -> bytes:
+def read_input_bytes(root: Path, path: Path, *, instructions: bool = False) -> bytes:
     """Read a policy-checked input, with descriptor confinement where supported."""
-    resolved = input_path(root, path)
+    resolved = input_path(root, path, instructions=instructions)
     if confinement_root() is not None:
         # Never replace the MCP root with a narrower path that may have been swapped outside it.
         return read_file_bytes(resolved)
@@ -127,15 +128,15 @@ def read_input_bytes(root: Path, path: Path) -> bytes:
             return read_file_bytes(resolved)
     # Windows has no O_NOFOLLOW. Pin the handle and verify its identity before reading.
     with resolved.open("rb") as handle:
-        input_path(root, resolved)
+        input_path(root, resolved, instructions=instructions)
         current = resolved.lstat()
         if not stat.S_ISREG(current.st_mode) or not os.path.samestat(current, os.fstat(handle.fileno())):
             raise ValueError("input changed or is not a regular file")
         return handle.read()
 
 
-def read_input_text(root: Path, path: Path, encoding: str = "utf-8") -> str:
-    return read_input_bytes(root, path).decode(encoding).replace("\r\n", "\n").replace("\r", "\n")
+def read_input_text(root: Path, path: Path, encoding: str = "utf-8", *, instructions: bool = False) -> str:
+    return read_input_bytes(root, path, instructions=instructions).decode(encoding).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def open_text(path: Path, encoding: str = "utf-8") -> AbstractContextManager[TextIO]:

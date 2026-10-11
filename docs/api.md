@@ -259,7 +259,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.AuditReport` | Read-only audit result with findings, status counts, skipped evidence, and limitations. |
 | `memfalsify.CascadeVerifier` | Construct with first, second, accept_at=0.8; escalate when first has insufficient confidence. |
 | `memfalsify.Change` | Frozen comparison result: kind, old/new Claim, similarity, and moved flag. |
-| `memfalsify.Claim` | Parsed claim with stable ID, text, path, line, section, and duplicate locations. |
+| `memfalsify.Claim` | Parsed claim with stable ID, text, path, line, section, duplicate locations, and the frontmatter metadata its file's format documents (for example a Cursor rule's globs). |
 | `memfalsify.ClaimChange` | Serialized diff entry with old/new ClaimVersion and optional audit status. |
 | `memfalsify.ClaimHistory` | One current claim’s introduction, last change, and optional replaced version. |
 | `memfalsify.ClaimVersion` | Claim wording/location at a revision; of(claim) constructs one. |
@@ -267,7 +267,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.DiffReport` | Revision comparison plus audit of added/changed claims; attention counts strict statuses. |
 | `memfalsify.DualVerifier` | Construct with first and second; disagreement yields disputed and keeps both opinions. |
 | `memfalsify.EvidenceFinding` | Candidate or human-confirmed relation, rationale, opinions, and quoted span. |
-| `memfalsify.Finding` | One claim’s status, evidence, issues, and proposed actions. |
+| `memfalsify.Finding` | One claim’s status, evidence, issues, proposed actions, and its file's frontmatter metadata. |
 | `memfalsify.GitError` | HistoryError with sanitized summary plus underlying diagnostic message. |
 | `memfalsify.HistoryError` | ValueError for invalid or unavailable Git history operations. |
 | `memfalsify.HistoryReport` | Current and removed claim provenance, scanned commits, and scan limitations. |
@@ -276,6 +276,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.Judgment` | Relation, rationale, verifier name, optional confidence, and nested opinions. |
 | `memfalsify.LLMVerifier` | Construct with model, optional client, effort="low", fallbacks=None; imports anthropic only at construction. |
 | `memfalsify.LexicalVerifier` | Offline verifier; related=0.6 and support=0.75 coverage thresholds. |
+| `memfalsify.MemoryFormat` | Frozen agent instruction format: name (for example cursor-rule), the agent that reads it, and the frontmatter fields kept as claim metadata. |
 | `memfalsify.Proposal` | Suggested action and reason; replacement is always None. |
 | `memfalsify.Relation` | Literal type: supports, contradicts, unrelated, disputed. |
 | `memfalsify.RemovedClaim` | Removed claim version and the commit that removed it. |
@@ -291,13 +292,14 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.audit_claims` | Audit parsed claims; only= selects findings while review/conflict checks retain all claims. memory_paths are excluded from evidence. |
 | `memfalsify.claim_id` | Return the normalized-text memory ID. |
 | `memfalsify.compare` | Compare two Claim lists deterministically by ID, section, and term similarity. |
+| `memfalsify.detect` | Return the MemoryFormat of a path from its exact, case-sensitive file name and directories (CLAUDE.md, AGENTS.md, GEMINI.md, .cursor/rules/*.mdc, .github/copilot-instructions.md, ...); anything else is plain Markdown. |
 | `memfalsify.diff_to_markdown` | Render a DiffReport as Markdown. |
 | `memfalsify.history_to_markdown` | Render a HistoryReport as Markdown. |
 | `memfalsify.load_reviews` | Validate review records and their verbatim quotes for a claim-ID mapping; with skipped=, review evidence excluded by the input path policy is recorded there instead of raising. |
 | `memfalsify.memory_diff` | Compare base with head or the worktree and audit only added/changed claims against current evidence. |
 | `memfalsify.memory_history` | Attribute claims on the first-parent HEAD chain; max_commits defaults to 100. |
 | `memfalsify.parse_memory` | Return (deduplicated claims, files read); follow_links=True follows local Markdown links inside the memory directory. With skipped=, memory or linked files excluded by the input path policy are recorded there instead of read. |
-| `memfalsify.parse_text` | Parse supplied text/display path into (claims, link targets), without reading files. |
+| `memfalsify.parse_text` | Parse supplied text/display path into (claims, link targets and @file.md imports), without reading files; frontmatter is skipped and fmt (default plain Markdown) selects the fields kept as metadata. |
 | `memfalsify.resolve_commit` | Resolve a validated revision to a commit ID in a repository directory. |
 | `memfalsify.rollback_patch` | Generate a patch restoring claim wording at to; accepts an old or current claim ID. |
 | `memfalsify.to_markdown` | Render an AuditReport as Markdown. |
@@ -307,13 +309,14 @@ audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=N
 audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]
+detect(path: str | PurePath) -> MemoryFormat
 diff_to_markdown(report: DiffReport) -> str
 history_to_markdown(report: HistoryReport) -> str
 load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *, skipped: list[Skipped] | None=None) -> dict[str, list[EvidenceFinding]]
 memory_diff(memory_file: Path, base: str, head: str | None=None, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> DiffReport
 memory_history(memory_file: Path, max_commits: int=100, follow_links: bool=True) -> HistoryReport
 parse_memory(memory_file: Path, follow_links: bool=True, *, skipped: list[Skipped] | None=None) -> tuple[list[Claim], list[Path]]
-parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]
+parse_text(text: str, display: str, fmt: MemoryFormat=MARKDOWN) -> tuple[list[Claim], list[str]]
 resolve_commit(directory: Path, rev: str) -> str
 rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool=True) -> Rollback
 to_markdown(report: AuditReport) -> str

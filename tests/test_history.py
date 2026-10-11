@@ -204,7 +204,7 @@ def test_diff_cli_strict_exit_codes_and_formats(repo):
     assert result.exit_code == 0, result.output
     text = result.stdout
     assert text.startswith("# MemFalsify diff report") and "| Changed | 3 |" in text
-    assert "**Old** at `MEMORY.md:5` · Infra" in text and "**New** at `MEMORY.md:5` · Infrastructure" in text
+    assert "**Old** at `MEMORY.md:5` · `Infra`" in text and "**New** at `MEMORY.md:5` · `Infrastructure`" in text
     assert "The main database runs PostgreSQL 15." not in text  # unchanged: neither listed nor audited
     assert runner.invoke(app, ["diff", memory, "--base", base, "--strict", *evidence]).exit_code == 1
     result = runner.invoke(app, ["diff", memory, "--base", base, "--format", "json", *evidence])

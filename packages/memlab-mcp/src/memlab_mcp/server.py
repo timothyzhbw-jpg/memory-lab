@@ -31,6 +31,7 @@ from memfalsify import to_markdown as audit_markdown
 from memfalsify import jev, llm
 # CLI configuration is internal; retain its shared defaults rather than duplicate behavior.
 from memfalsify.cli import VerifierChoice, build_verifier, preselection
+from memfalsify.memory import claim_record
 from orgmemory import Dataset, explain, replay
 from orgmemory import audit as decision_audit, audit_markdown as decision_audit_markdown
 from orgmemory import to_markdown as replay_markdown
@@ -54,7 +55,8 @@ REVISION = ("Branch, tag or commit; it must not start with '-' or contain contro
 
 INSTRUCTIONS = """\
 Read-only tools for Memory Lab.
-- memfalsify_*: audit an agent memory file (MEMORY.md, CLAUDE.md, AGENTS.md, ...) against a directory of \
+- memfalsify_*: audit an agent memory or instruction file (MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, \
+.cursor/rules/*.mdc, .github/copilot-instructions.md, ...) against a directory of \
 evidence files. The audit cites exact quotes and proposes actions; it never changes the memory. For memory \
 kept in git, memfalsify_diff audits only the claims a revision added or changed, memfalsify_history shows \
 which commits introduced and last changed each claim, and memfalsify_rollback returns (never applies) a \
@@ -84,7 +86,7 @@ class Workspace:
             raise ValueError(f"server root is not a directory: {root}")
         self.root = root
 
-    def resolve(self, value: str, what: str) -> Path:
+    def resolve(self, value: str, what: str, instructions: bool = False) -> Path:
         if not value.strip():
             raise ToolError(f"{what} is empty")
         if "\x00" in value:
@@ -103,13 +105,13 @@ class Workspace:
             raise ToolError(f"{what} cannot be resolved inside the server root") from None
         try:
             input_path(self.root, Path(value) if Path(value).is_absolute() else self.root / value,
-                       directory=path.is_dir())
+                       directory=path.is_dir(), instructions=instructions)
         except InputPathError as exc:
             raise ToolError(f"{what} skipped: {exc}") from None
         return path
 
-    def file(self, value: str, what: str) -> Path:
-        path = self.resolve(value, what)
+    def file(self, value: str, what: str, instructions: bool = False) -> Path:
+        path = self.resolve(value, what, instructions)
         if not path.exists():
             raise ToolError(f"{what} {self.clean(value)!r} does not exist")
         if not path.is_file():
@@ -250,13 +252,12 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
     def memfalsify_claims(
         memory_file: Annotated[str, Field(description="Memory file to split into claims, e.g. MEMORY.md. " + PATHS)],
     ) -> str:
-        path = ws.file(memory_file, "memory_file")
+        path = ws.file(memory_file, "memory_file", instructions=True)
         try:
             claims, _ = parse_memory(path)
         except (ValueError, OSError) as exc:
             raise ToolError(ws.failure(exc)) from None
-        return json.dumps([{"memory_id": c.id, "location": c.location, "text": c.text} for c in claims],
-                          ensure_ascii=False, indent=2)
+        return json.dumps([claim_record(c) for c in claims], ensure_ascii=False, indent=2)
 
     memory_help = "Memory file to audit, e.g. MEMORY.md. " + PATHS
     git_memory_help = "Memory file in a git work tree, e.g. MEMORY.md. " + PATHS + " " + GIT_ROOT
@@ -303,7 +304,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         format: Annotated[FORMATS, Field(description=format_help)] = "markdown",
     ) -> str:
         choice = checked_verifier(verifier)
-        memory = ws.file(memory_file, "memory_file")
+        memory = ws.file(memory_file, "memory_file", instructions=True)
         evidence, reviews, patterns = evidence_inputs(evidence_dir, reviews_file, exclude)
         reference = _date(as_of)
         try:
@@ -330,7 +331,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
         format: Annotated[FORMATS, Field(description=format_help)] = "markdown",
     ) -> str:
         choice = checked_verifier(verifier)
-        memory = ws.file(memory_file, "memory_file")
+        memory = ws.file(memory_file, "memory_file", instructions=True)
         evidence, reviews, patterns = evidence_inputs(evidence_dir, reviews_file, exclude)
         reference = _date(as_of)
         try:
@@ -354,7 +355,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
             ge=1, description="Read at most this many commits that touched the memory files")] = 100,
         format: Annotated[FORMATS, Field(description=format_help)] = "markdown",
     ) -> str:
-        memory = ws.file(memory_file, "memory_file")
+        memory = ws.file(memory_file, "memory_file", instructions=True)
         try:
             report = memory_history(memory, max_commits=max_commits)
         except HistoryError as exc:
@@ -370,7 +371,7 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False) -
                                                 "or memfalsify_history")],
         to: Annotated[str, Field(description="Revision whose wording of the claim to restore. " + REVISION)],
     ) -> str:
-        memory = ws.file(memory_file, "memory_file")
+        memory = ws.file(memory_file, "memory_file", instructions=True)
         try:
             result = rollback_patch(memory, claim, to)
         except HistoryError as exc:

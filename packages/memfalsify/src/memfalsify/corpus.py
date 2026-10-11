@@ -26,8 +26,9 @@ REPORT_HEADER = "# MemFalsify audit report"
 DIFF_HEADER = "# MemFalsify diff report"
 HISTORY_HEADER = "# MemFalsify claim history"
 ROLLBACK_HEADER = "# MemFalsify rollback patch"
-# Anything MemFalsify prints quotes memory; none of it may count as evidence for that memory.
-OUTPUT_HEADERS = (REPORT_HEADER, DIFF_HEADER, HISTORY_HEADER, ROLLBACK_HEADER)
+DISCOVER_HEADER = "# MemFalsify instruction files"
+# Anything MemFalsify prints is about memory; none of it may count as evidence for that memory.
+OUTPUT_HEADERS = (REPORT_HEADER, DIFF_HEADER, HISTORY_HEADER, ROLLBACK_HEADER, DISCOVER_HEADER)
 
 
 class Passage(BaseModel):

@@ -1,4 +1,8 @@
-"""Split MEMORY.md (and the local .md files it links to) into individually auditable claims."""
+"""Split a memory or agent instruction file (and the local .md files it links to) into auditable claims.
+
+MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md and the Cursor, Copilot and Windsurf rule files are all Markdown
+once their frontmatter is removed (see ``formats``); the fields a format documents become claim metadata.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -11,12 +15,16 @@ from memcore.paths import InputPathError, input_path
 from memcore.reading import confinement_root, read_input_text
 
 from .corpus import Skipped
+from .formats import MARKDOWN, MemoryFormat, Value, detect, frontmatter, metadata_of
 from .text import features, sentence_spans
 
 LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 EMPHASIS = re.compile(r"\*\*|__|`")
 FENCE = re.compile(r"^\s*(```|~~~)")
+CODE_SPAN = re.compile(r"`+[^`]*`+")
+# An ``@path.md`` import (Claude Code, Gemini CLI): at the start of a line or after whitespace, outside code spans.
+IMPORT = re.compile(r"(?<!\S)@([^\s`]+?\.md)(?=$|[\s,;:!?)\]]|\.(?:\s|$))")
 
 
 class Claim(BaseModel):
@@ -26,10 +34,19 @@ class Claim(BaseModel):
     line: int
     section: str | None = None
     also_at: list[str] = []
+    metadata: dict[str, Value] = {}  # the frontmatter fields of the claim's file that its format documents
 
     @property
     def location(self) -> str:
         return f"{self.path}:{self.line}"
+
+
+def claim_record(claim: Claim) -> dict:
+    """What ``memfalsify claims`` prints for one claim; ``metadata`` only when its file has some."""
+    record = {"memory_id": claim.id, "location": claim.location, "text": claim.text}
+    if claim.metadata:
+        record["metadata"] = claim.metadata
+    return record
 
 
 def claim_id(text: str) -> str:
@@ -38,16 +55,9 @@ def claim_id(text: str) -> str:
     return "m-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:8]
 
 
-def _strip_frontmatter(lines: list[str]) -> int:
-    if lines and lines[0].strip() == "---":
-        for index in range(1, len(lines)):
-            if lines[index].strip() == "---":
-                return index + 1
-    return 0
-
-
 def _local_md_targets(line: str) -> list[str]:
     targets = [m.group(2).split("#")[0] for m in LINK.finditer(line)]
+    targets += [m.group(1) for m in IMPORT.finditer(CODE_SPAN.sub(" ", line))]
     return [t for t in targets if t.endswith(".md") and "://" not in t]
 
 
@@ -118,15 +128,17 @@ def normalize_memory(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
+def parse_text(text: str, display: str, fmt: MemoryFormat = MARKDOWN) -> tuple[list[Claim], list[str]]:
     """Claims and local link targets of one memory file.
 
-    A single leading U+FEFF is ignored. CR, CRLF and LF are line breaks.
-    """
+    A single leading U+FEFF is ignored. CR, CRLF and LF are line breaks. Frontmatter is skipped, but lines
+    are numbered from the top of the file, so ``path:line`` points at the claim in the file as it is."""
     text = normalize_memory(text)
     lines = text.split("\n")
+    start, fields = frontmatter(lines)
+    metadata = metadata_of(fmt, fields)
     claims, links, section, fenced = [], [], None, False
-    for index in range(_strip_frontmatter(lines), len(lines)):
+    for index in range(start, len(lines)):
         raw = lines[index]
         if FENCE.match(raw):
             fenced = not fenced
@@ -139,10 +151,11 @@ def parse_text(text: str, display: str) -> tuple[list[Claim], list[str]]:
             continue
         targets = _local_md_targets(raw)
         if targets:
-            # An index entry ("- [Title](file.md) — hook") points at claims; it is not one itself.
+            # An index entry ("- [Title](file.md) — hook", "@notes.md") points at claims; it is not one itself.
             links.extend(targets)
             continue
-        claims += [Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1, section=section)
+        claims += [Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1, section=section,
+                         metadata=dict(metadata))
                    for sentence, _, _ in sentences(raw)]
     return claims, links
 
@@ -160,21 +173,22 @@ def merge_duplicates(claims: list[Claim]) -> list[Claim]:
 
 def _parse_file(root: Path, path: Path, display: str) -> tuple[list[Claim], list[str]]:
     try:
-        text = read_input_text(root, path)
+        text = read_input_text(root, path, instructions=True)
     except UnicodeDecodeError as exc:
         raise ValueError(f"{display}: not UTF-8 text") from exc
-    return parse_text(text, display)
+    return parse_text(text, display, detect(path))
 
 
 def parse_memory(memory_file: Path, follow_links: bool = True, *,
                  skipped: list[Skipped] | None = None) -> tuple[list[Claim], list[Path]]:
-    """Return (claims, files read). Links are followed one level deep and never outside the memory directory."""
+    """Return (claims, files read). Links and ``@file.md`` imports are followed one level deep and never
+    outside the memory directory."""
     # Choose the root BEFORE resolving the file: AGENTS.md -> .git/config is not a .git-rooted memory.
     original = Path(memory_file).absolute()
     root = original.parent.resolve()
     walked = root / original.name
     try:
-        memory_file = input_path(root, walked)
+        memory_file = input_path(root, walked, instructions=True)
         claims, links = _parse_file(root, memory_file, original.name)
     except InputPathError as exc:
         if confinement_root() is not None and str(exc) == "path escapes root":
@@ -188,7 +202,7 @@ def parse_memory(memory_file: Path, follow_links: bool = True, *,
             try:
                 if Path(target).is_absolute():
                     raise InputPathError("path escapes memory directory")
-                path = input_path(root, root / target)
+                path = input_path(root, root / target, instructions=True)
             except InputPathError as exc:
                 if skipped is not None:
                     skipped.append(Skipped(path=target, reason=str(exc)))

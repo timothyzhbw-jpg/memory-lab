@@ -170,6 +170,7 @@ def test_cli_help_index_sees_shipped_commands(index):
     """The command-tree walker itself still sees the commands these skills are about."""
     assert ("audit",) in index["memfalsify"].commands
     assert ("claims",) in index["memfalsify"].commands
+    assert ("discover",) in index["memfalsify"].commands
     assert "--exclude" in index["memfalsify"].flags
     assert "--no-follow-links" in index["memfalsify"].flags
     assert ("evidence", "add") in index["orgmemory"].commands

@@ -18,6 +18,10 @@ from .audit import (
 from .corpus import (
     Skipped,
 )
+from .formats import (
+    MemoryFormat,
+    detect,
+)
 from .gitstore import (
     GitError,
     HistoryError,
@@ -90,6 +94,7 @@ __all__ = [
     "Judgment",
     "LLMVerifier",
     "LexicalVerifier",
+    "MemoryFormat",
     "Proposal",
     "Relation",
     "RemovedClaim",
@@ -105,6 +110,7 @@ __all__ = [
     "audit_claims",
     "claim_id",
     "compare",
+    "detect",
     "diff_to_markdown",
     "history_to_markdown",
     "load_reviews",

@@ -14,7 +14,7 @@
 
 > 功能A（批量导出）已批准，随11月版本发布。
 
-`MEMORY.md:5` · 产品
+`MEMORY.md:5` · `产品`
 
 **Evidence**
 - contradicts (candidate, unconfirmed) · `记录/2026-10-07-决策记录.md:3` · sha256 `faf3d9030f65` · opposing terms: claim '批准…' vs source '拒绝…'
@@ -27,7 +27,7 @@
 
 > 公开 API 的限流是每分钟 100 次请求。
 
-`MEMORY.md:11` · 基础设施
+`MEMORY.md:11` · `基础设施`
 
 **Evidence**
 - contradicts (candidate, unconfirmed) · `文档/api.md:3` · sha256 `ab042ee74c57` · different values: claim ['100'] vs source ['60']
@@ -40,7 +40,7 @@
 
 > 部署总是先经过预发环境。
 
-`MEMORY.md:12` · 基础设施
+`MEMORY.md:12` · `基础设施`
 
 **Evidence**
 - contradicts (candidate, unconfirmed) · `记录/2026-09-12-事故复盘.md:3` · sha256 `b6c4a629ea08` · same subject, but only one side is negated
@@ -57,7 +57,7 @@
 
 > 批量导出下周上线。
 
-`MEMORY.md:6` · 产品
+`MEMORY.md:6` · `产品`
 
 **Issues**
 - relative_time: '下周' has no absolute date
@@ -70,7 +70,7 @@
 
 > 2026年3月2日：功能B推迟到第三季度。
 
-`MEMORY.md:7` · 产品
+`MEMORY.md:7` · `产品`
 
 **Issues**
 - possibly_stale: latest date 2026-03-02 is over 180 days before 2026-10-10
@@ -83,7 +83,7 @@
 
 > 我们可能使用 squash 合并 PR。
 
-`MEMORY.md:14` · 基础设施
+`MEMORY.md:14` · `基础设施`
 
 **Issues**
 - inference_marker: '可能' marks an inference, not an observation
@@ -96,7 +96,7 @@
 
 > 主数据库使用 PostgreSQL 16。
 
-`MEMORY.md:13` · 基础设施
+`MEMORY.md:13` · `基础设施`
 
 **Evidence**
 - supports (candidate, unconfirmed) · `文档/数据库.md:3` · sha256 `097ce7847644` · source restates the claim (term coverage 1.00)

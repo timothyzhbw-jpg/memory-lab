@@ -315,3 +315,58 @@ def test_action_diff_cannot_publish_memory_symlink_target(git_repo, tmp_path, mo
     assert action.main(env) == 0
     assert TOKEN not in (runner / "summary.md").read_text(encoding="utf-8")
     assert "::warning title=MemFalsify::AGENTS.md:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("relative, allowed", [
+    (".cursor/rules/api.mdc", True),
+    (".cursor/rules/frontend/components.mdc", True),
+    ("packages/web/.cursor/rules/vue.mdc", True),
+    (".github/copilot-instructions.md", True),
+    (".github/instructions/python.instructions.md", True),
+    (".claude/rules/api.md", True),
+    (".claude/CLAUDE.md", True),
+    (".windsurf/rules/testing.md", True),
+    (".cursorrules", True),
+    (".git/config", False),
+    (".cursor/rules/../../.git/config", False),
+    (".cursor/rules/.hidden/x.mdc", False),
+    (".cursor/rules/node_modules/x.mdc", False),
+    (".cursor/settings.mdc", False),
+    (".github/workflows/ci.yml", False),
+    (".github/copilot-instructions.txt", False),
+    (".windsurf/rules/nested/x.md", False),
+    (".env", False),
+    ("node_modules/.cursor/rules/x.mdc", False),
+])
+def test_only_documented_instruction_files_pass_the_hidden_policy(tmp_path, relative, allowed):
+    target = tmp_path / relative
+    try:
+        input_path(tmp_path, target, instructions=True)
+    except InputPathError:
+        accepted = False
+    else:
+        accepted = True
+    assert accepted is allowed
+    with pytest.raises(InputPathError):  # evidence inputs never pass instructions=True
+        input_path(tmp_path, target)
+
+
+@requires_git
+def test_a_rule_file_symlinked_to_checkout_credentials_is_never_read(credential_checkout, tmp_path, monkeypatch,
+                                                                      capsys, make_symlink):
+    root = credential_checkout
+    (root / ".cursor" / "rules").mkdir(parents=True)
+    make_symlink(root / ".cursor/rules/evil.mdc", "../../.git/config")
+    claims, files = parse_memory(root / ".cursor/rules/evil.mdc")
+    assert claims == [] and files == []
+    monkeypatch.chdir(root)
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    summary = runner / "summary.md"
+    env = {"RUNNER_TEMP": str(runner), "GITHUB_STEP_SUMMARY": str(summary),
+           "MEMFALSIFY_MEMORY": "auto", "MEMFALSIFY_EVIDENCE": ".", "MEMFALSIFY_STRICT": "false"}
+    action.main(env)
+    output = capsys.readouterr().out
+    assert TOKEN not in summary.read_text(encoding="utf-8") and TOKEN not in output
+    assert TOKEN not in (runner / "memfalsify/report.md").read_text(encoding="utf-8")
+    assert ".cursor/rules/evil.mdc" in output and "hidden component in resolved path" in output
