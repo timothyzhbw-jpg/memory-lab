@@ -8,7 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
+from memcore import EvidenceError, EvidenceSpan, make_span, read_jsonl, sha256_bytes
+from memcore.paths import InputPathError, input_path
+from memcore.reading import read_input_bytes
 
 from . import __version__
 from .corpus import Passage, Skipped, scan
@@ -93,7 +95,8 @@ LIMITATIONS = [
 ]
 
 
-def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim]) -> dict[str, list[EvidenceFinding]]:
+def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *,
+                 skipped: list[Skipped] | None = None) -> dict[str, list[EvidenceFinding]]:
     if evidence_root is None:
         raise EvidenceError("--reviews requires --evidence: review quotes are located inside the evidence root")
     confirmed: dict[str, list[EvidenceFinding]] = {}
@@ -102,7 +105,20 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
         if review.memory_id not in claims:
             raise EvidenceError(f"{path}:{number}: unknown memory_id {review.memory_id} "
                                 "(the memory text may have changed; re-review it)")
-        span = locate_quote(evidence_root, review.path, review.quote, source_kind="file")
+        # Human-confirmed evidence must obey the same policy as scanned evidence.
+        try:
+            target = input_path(evidence_root, Path(evidence_root).resolve() / review.path)
+            raw = read_input_bytes(evidence_root, target)
+        except InputPathError as exc:
+            if skipped is not None and str(exc) != "path escapes root":
+                skipped.append(Skipped(path=review.path, reason=f"review evidence skipped: {exc}"))
+                continue
+            raise EvidenceError(f"review evidence skipped: {exc}") from None
+        text = raw.decode("utf-8")
+        start = text.find(review.quote)
+        if start < 0:
+            raise EvidenceError(f"quote not found verbatim in {review.path}: {review.quote!r}")
+        span = make_span(review.path, sha256_bytes(raw), text, start, start + len(review.quote), source_kind="file")
         confirmed.setdefault(review.memory_id, []).append(EvidenceFinding(
             relation=review.relation, confirmed=True, reviewer=review.reviewer,
             rationale=review.note or "confirmed by reviewer", span=span))
@@ -200,12 +216,16 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
           max_judged: int | None = None, exclude: Iterable[str] = ()) -> AuditReport:
     """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees;
     ``exclude`` globs (relative to the evidence root) keep files out of the evidence."""
-    claims, files = parse_memory(memory_file, follow_links=follow_links)
-    base = Path(memory_file).resolve().parent
-    return audit_claims(claims, memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
+    skipped = []
+    claims, files = parse_memory(memory_file, follow_links=follow_links, skipped=skipped)
+    base = Path(memory_file).absolute().parent.resolve()
+    report = audit_claims(claims, memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
                         memory_paths=files, evidence_root=evidence_root, reviews=reviews, verifier=verifier,
                         as_of=as_of, stale_days=stale_days, max_candidates=max_candidates,
                         min_coverage=min_coverage, max_judged=max_judged, exclude=exclude)
+    # Keep the report schema stable; identify memory exclusions explicitly in the reason.
+    report.skipped_evidence[:0] = [s.model_copy(update={"reason": "memory skipped: " + s.reason}) for s in skipped]
+    return report
 
 
 def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path],
@@ -232,7 +252,7 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     passages, skipped = scan(root, exclude=exclude, memory_files=memory_paths) if scanned else ([], [])
     if targets and root is not None and exclude and not passages:
         raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
-    confirmed = load_reviews(reviews, root, by_id) if reviews else {}
+    confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
     findings = []
     for claim in targets:
         reviewed = confirmed.get(claim.id, [])

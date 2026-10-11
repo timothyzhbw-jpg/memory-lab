@@ -127,7 +127,7 @@ def audit_command(
         _fail(str(exc))
     text = to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n"
     if output:
-        _write(output, text.encode("utf-8"), (Path(memory).resolve().parent / p for p in report.files_read))
+        _write(output, text.encode("utf-8"), (Path(memory).absolute().parent.resolve() / p for p in report.files_read))
     else:
         typer.echo(text, nl=False)
     if strict and ATTENTION & report.summary.keys():

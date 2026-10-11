@@ -22,6 +22,7 @@ from mcp.types import ToolAnnotations
 from pydantic import AwareDatetime, Field, TypeAdapter, ValidationError
 
 from memcore import EvidenceError, resolve_inside
+from memcore.paths import InputPathError, input_path
 from memcore.reading import confinement_supported, confined_reads
 from memfalsify import jev, llm
 from memfalsify.audit import audit
@@ -101,6 +102,11 @@ class Workspace:
                             "including through '..' and symlinks") from None
         except (OSError, RuntimeError, ValueError):
             raise ToolError(f"{what} cannot be resolved inside the server root") from None
+        try:
+            input_path(self.root, Path(value) if Path(value).is_absolute() else self.root / value,
+                       directory=path.is_dir())
+        except InputPathError as exc:
+            raise ToolError(f"{what} skipped: {exc}") from None
         return path
 
     def file(self, value: str, what: str) -> Path:
@@ -125,6 +131,7 @@ class Workspace:
             target = (directory / name).resolve()
             if not target.is_relative_to(self.root):
                 raise ToolError(f"dataset: {name} is a symlink that leaves the server root")
+            self.resolve(str(directory / name), "dataset: " + name)
             if not target.is_file():
                 raise ToolError(f"dataset {self.clean(value)!r} has no {name}")
         try:

@@ -17,6 +17,7 @@ import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from memcore.paths import InputPathError, input_path
 from memfalsify.audit import ATTENTION, AuditReport
 from memfalsify.cli import app
 from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
@@ -108,9 +109,18 @@ def main(env: dict[str, str] | None = None) -> int:
     out_dir = Path(env.get("RUNNER_TEMP") or tempfile.mkdtemp()) / "memfalsify"
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
-    found = [m for m in memories if Path(m).is_file()]
-    for missing in (m for m in memories if m not in found):
-        print(f"MemFalsify: {_log_text(missing)} not found, skipping", flush=True)
+    found = []
+    workspace = Path(env.get("GITHUB_WORKSPACE") or Path.cwd()).resolve()
+    for memory in memories:
+        try:
+            path = input_path(workspace, Path(memory))
+        except InputPathError as exc:
+            annotate("warning", f"{memory}: {exc}; skipping memory file")
+            continue
+        if path.is_file():
+            found.append(memory)
+        else:
+            print(f"MemFalsify: {_log_text(memory)} not found, skipping", flush=True)
     if not found:
         message = "No memory file found (looked for " + (", ".join(memories) or "nothing") + "); nothing to audit."
         annotate("notice", message)

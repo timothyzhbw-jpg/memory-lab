@@ -185,6 +185,76 @@ def test_orgmemory_audit_matches_the_library(root):
 
 # --- path safety ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize("blocked", [".git", "node_modules", "__pycache__", "venv"])
+@pytest.mark.parametrize("walked", [False, True])
+def test_workspace_rejects_hidden_and_skipped_components(root, make_symlink, blocked, walked):
+    directory = root / blocked
+    directory.mkdir()
+    secret = directory / "secret.md"
+    secret.write_text(SECRET, encoding="utf-8")
+    alias = root / "innocent.md"
+    if walked:
+        alias = directory / "alias.md"
+        make_symlink(alias, root / MEMORY)
+    else:
+        make_symlink(alias, secret)
+    ws = memlab_server.Workspace(root)
+    for path in (alias.relative_to(root).as_posix(), str(alias)):
+        with pytest.raises(memlab_server.ToolError, match="skipped: (hidden component|skipped directory)") as caught:
+            ws.file(path, "memory_file")
+        assert SECRET not in str(caught.value)
+
+
+@requires_confinement
+@pytest.mark.parametrize("tool", sorted(TOOLS))
+def test_mcp_tools_refuse_hidden_input_aliases(root, make_symlink, tool):
+    (root / ".private").mkdir()
+    secret = root / ".private/secret.md"
+    secret.write_text(SECRET, encoding="utf-8")
+    make_symlink(root / "innocent.md", secret)
+    key = "memory_file" if tool.startswith("memfalsify_") else "dataset"
+    message = error(call(create_server(root), tool, **{key: "innocent.md", **REQUIRED.get(tool, {})}))
+    assert "skipped: hidden component in resolved path" in message and SECRET not in message
+
+
+@requires_confinement
+def test_mcp_evidence_aliases_into_hidden_components_are_skipped(root, make_symlink):
+    (root / EVIDENCE / ".git").mkdir()
+    secret = root / EVIDENCE / ".git/config"
+    secret.write_text(f"The public API rate limit is 60 requests per minute. {SECRET}", encoding="utf-8")
+    make_symlink(root / EVIDENCE / "innocent.md", secret)
+    report = json.loads(ok(call(create_server(root), "memfalsify_audit", memory_file=MEMORY,
+                                evidence_dir=EVIDENCE, format="json")))
+    assert {"path": "innocent.md", "reason": "hidden component in resolved path"} in report["skipped_evidence"]
+    assert SECRET not in json.dumps(report)
+
+
+@requires_confinement
+def test_mcp_dataset_members_cannot_alias_hidden_files(root, make_symlink):
+    directory = root / DATASET
+    (directory / ".private").mkdir()
+    shutil.copy(directory / "events.jsonl", directory / ".private/events.jsonl")
+    (directory / "events.jsonl").unlink()
+    make_symlink(directory / "events.jsonl", ".private/events.jsonl")
+    message = error(call(create_server(root), "orgmemory_validate", dataset=DATASET))
+    assert "dataset: events.jsonl skipped: hidden component" in message
+
+
+@requires_confinement
+@pytest.mark.parametrize("argument", ["evidence_dir", "reviews_file"])
+def test_mcp_other_inputs_cannot_alias_hidden_targets(root, make_symlink, argument):
+    directory = root / ".private"
+    directory.mkdir()
+    if argument == "evidence_dir":
+        target = directory
+    else:
+        target = directory / "reviews.jsonl"
+        target.write_text(SECRET, encoding="utf-8")
+    make_symlink(root / "innocent", target, directory=argument == "evidence_dir")
+    arguments = {"memory_file": MEMORY, "evidence_dir": EVIDENCE, argument: "innocent"}
+    message = error(call(create_server(root), "memfalsify_audit", **arguments))
+    assert "skipped: hidden component" in message and SECRET not in message
+
 def escapes(root):
     """Paths that name ../outside.md (or its directory) without staying inside the root."""
     (root / "link.md").symlink_to(root.parent / "outside.md")
@@ -243,6 +313,24 @@ def test_memory_symlink_swap_cannot_escape_root(root, monkeypatch):
     def swap_then_parse(path):
         path.unlink()
         path.symlink_to(root.parent / "outside.md")
+        return original(path)
+
+    monkeypatch.setattr(memlab_server, "parse_memory", swap_then_parse)
+    result = call(create_server(root), "memfalsify_claims", memory_file=MEMORY)
+    assert SECRET not in text(result)
+    error(result)
+
+
+@requires_confinement
+def test_memory_parent_swap_cannot_replace_mcp_confinement(root, monkeypatch, make_symlink):
+    original = memlab_server.parse_memory
+    outside = root.parent / "outside-memory"
+    outside.mkdir()
+    (outside / "MEMORY.md").write_text(f"Credentials contain {SECRET}.\n", encoding="utf-8")
+
+    def swap_then_parse(path):
+        path.parent.rename(root / "previous-memory")
+        make_symlink(path.parent, outside, directory=True)
         return original(path)
 
     monkeypatch.setattr(memlab_server, "parse_memory", swap_then_parse)

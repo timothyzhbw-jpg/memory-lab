@@ -7,9 +7,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from memcore import EvidenceError, resolve_inside
-from memcore.reading import read_file_text
+from memcore.paths import InputPathError, input_path
+from memcore.reading import confinement_root, read_input_text
 
+from .corpus import Skipped
 from .text import features, sentence_spans
 
 LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -146,23 +147,43 @@ def merge_duplicates(claims: list[Claim]) -> list[Claim]:
     return list(unique.values())
 
 
-def _parse_file(path: Path, display: str) -> tuple[list[Claim], list[str]]:
-    return parse_text(read_file_text(path), display)
+def _parse_file(root: Path, path: Path, display: str) -> tuple[list[Claim], list[str]]:
+    return parse_text(read_input_text(root, path), display)
 
 
-def parse_memory(memory_file: Path, follow_links: bool = True) -> tuple[list[Claim], list[Path]]:
+def parse_memory(memory_file: Path, follow_links: bool = True, *,
+                 skipped: list[Skipped] | None = None) -> tuple[list[Claim], list[Path]]:
     """Return (claims, files read). Links are followed one level deep and never outside the memory directory."""
-    memory_file = Path(memory_file).resolve()
-    root = memory_file.parent
-    claims, links = _parse_file(memory_file, memory_file.name)
+    # Choose the root BEFORE resolving the file: AGENTS.md -> .git/config is not a .git-rooted memory.
+    original = Path(memory_file).absolute()
+    root = original.parent.resolve()
+    walked = root / original.name
+    try:
+        memory_file = input_path(root, walked)
+        claims, links = _parse_file(root, memory_file, original.name)
+    except InputPathError as exc:
+        if confinement_root() is not None and str(exc) == "path escapes root":
+            raise  # MCP validation/read races remain errors, never a successful empty result.
+        if skipped is not None:
+            skipped.append(Skipped(path=original.name, reason=str(exc)))
+        return [], []
     files = [memory_file]
     if follow_links:
         for target in dict.fromkeys(links):
             try:
-                path = resolve_inside(root, target)
-            except EvidenceError:
+                if Path(target).is_absolute():
+                    raise InputPathError("path escapes memory directory")
+                path = input_path(root, root / target)
+            except InputPathError as exc:
+                if skipped is not None:
+                    skipped.append(Skipped(path=target, reason=str(exc)))
                 continue
             if path.is_file() and path not in files:
                 files.append(path)
-                claims.extend(_parse_file(path, path.relative_to(root).as_posix())[0])
+                try:
+                    claims.extend(_parse_file(root, path, path.relative_to(root).as_posix())[0])
+                except InputPathError as exc:
+                    files.remove(path)
+                    if skipped is not None:
+                        skipped.append(Skipped(path=target, reason=str(exc)))
     return merge_duplicates(claims), files

@@ -8,13 +8,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from memcore import EvidenceSpan, make_span, sha256_bytes
-from memcore.reading import read_file_bytes, walk_files
+from memcore.paths import InputPathError, input_path
+from memcore.reading import read_input_bytes, walk_files
 
 from .text import features, sentence_spans
 
 MEDIA = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".bmp", ".tiff", ".mp3", ".wav", ".m4a",
          ".flac", ".ogg", ".mp4", ".mov", ".webm", ".mkv", ".pdf"}
-SKIP_DIRS = {"node_modules", "__pycache__", "venv"}
 MAX_BYTES = 2_000_000
 REPORT_HEADER = "# MemFalsify audit report"
 DIFF_HEADER = "# MemFalsify diff report"
@@ -55,30 +55,33 @@ def scan(root: Path, exclude: Iterable[str] = (),
 
     for directory, dirnames, filenames in walk_files(root, onerror=walk_error):
         base = Path(directory).relative_to(root)
-        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS
-                             and not _matches((base / d).as_posix(), patterns, directory=True))
+        dirnames[:] = sorted(d for d in dirnames
+                             if not _matches((base / d).as_posix(), patterns, directory=True))
         for name in dirnames[:]:
+            # Report pruned directories without enumerating their sensitive contents.
+            try:
+                input_path(root, Path(directory) / name, directory=True)
+            except InputPathError as exc:
+                # Preserve the existing diagnostic for untraversed directory symlinks.
+                reason = "symlinked directory not followed" if str(exc) == "path escapes root" else str(exc)
+                skipped.append(Skipped(path=(base / name).as_posix(), reason=reason))
+                dirnames.remove(name)
+                continue
             if (Path(directory) / name).is_symlink():
                 skipped.append(Skipped(path=(base / name).as_posix(), reason="symlinked directory not followed"))
                 dirnames.remove(name)
         for name in sorted(filenames):
-            if name.startswith("."):
-                continue
             path = Path(directory) / name
             relative = path.relative_to(root).as_posix()
             if _matches(relative, patterns):
                 continue
             try:
-                resolved = path.resolve()
-            except (OSError, RuntimeError):
-                if not path.is_symlink():
-                    raise
-                skipped.append(Skipped(path=relative, reason="broken or cyclic symlink"))
+                resolved = input_path(root, path)
+            except InputPathError as exc:
+                reason = "symlink escapes evidence root" if str(exc) == "path escapes root" else str(exc)
+                skipped.append(Skipped(path=relative, reason=reason))
                 continue
             if resolved in excluded:
-                continue
-            if not resolved.is_relative_to(root):
-                skipped.append(Skipped(path=relative, reason="symlink escapes evidence root"))
                 continue
             if not resolved.is_file():
                 broken = path.is_symlink() and not resolved.exists()
@@ -87,7 +90,11 @@ def scan(root: Path, exclude: Iterable[str] = (),
             if path.suffix.lower() in MEDIA:
                 skipped.append(Skipped(path=relative, reason="media file: multimodal extraction not implemented"))
                 continue
-            raw = read_file_bytes(resolved)
+            try:
+                raw = read_input_bytes(root, resolved)
+            except InputPathError as exc:
+                skipped.append(Skipped(path=relative, reason=str(exc)))
+                continue
             if len(raw) > MAX_BYTES:
                 skipped.append(Skipped(path=relative, reason="larger than 2 MB"))
                 continue

@@ -17,6 +17,19 @@ requires_confinement = pytest.mark.skipif(
 
 
 @pytest.fixture
+def make_symlink():
+    """Exercise links wherever supported, including Windows with symlink privileges."""
+    def create(path, target, *, directory=False):
+        try:
+            path.symlink_to(target, target_is_directory=directory)
+        except OSError as exc:
+            if os.name == "nt" and exc.winerror == 1314:
+                pytest.skip("Windows symlinks require developer mode or symlink privileges")
+            raise
+    return create
+
+
+@pytest.fixture
 def memfalsify_demo(tmp_path):
     return Path(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "memfalsify"))
 

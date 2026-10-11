@@ -13,12 +13,15 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
+from .paths import InputPathError, input_path
+
 
 _ROOT: ContextVar[tuple[Path, int] | None] = ContextVar("memlab_read_root", default=None)
+_CONFINEMENT_SUPPORTED = hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd
 
 
 def confinement_supported() -> bool:
-    return hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd
+    return _CONFINEMENT_SUPPORTED
 
 
 def confinement_root() -> Path | None:
@@ -74,9 +77,12 @@ def _open(path: Path, encoding: str | None = None):
     base, root_fd = root
     # Accept existing in-root symlinks by resolving them first. O_NOFOLLOW on
     # every subsequent component closes the check/open race on that resolution.
-    resolved = Path(path).resolve()
-    if not resolved.is_relative_to(base):
-        raise ValueError("read path is outside the server root")
+    try:
+        resolved = input_path(base, path)
+    except InputPathError as exc:
+        if str(exc) == "path escapes root":
+            raise ValueError("read path is outside the server root") from None
+        raise
     relative = resolved.relative_to(base)
     directory_fd = _directory(relative.parts[:-1], root_fd)
     try:
@@ -105,6 +111,28 @@ def read_file_bytes(path: Path) -> bytes:
 def read_file_text(path: Path, encoding: str = "utf-8") -> str:
     with _open(path, encoding) as handle:
         return handle.read()
+
+
+def read_input_bytes(root: Path, path: Path) -> bytes:
+    """Read a policy-checked input, with descriptor confinement where supported."""
+    resolved = input_path(root, path)
+    if confinement_root() is not None:
+        # Never replace the MCP root with a narrower path that may have been swapped outside it.
+        return read_file_bytes(resolved)
+    if confinement_supported():
+        with confined_reads(root):
+            return read_file_bytes(resolved)
+    # Windows has no O_NOFOLLOW. Pin the handle and verify its identity before reading.
+    with resolved.open("rb") as handle:
+        input_path(root, resolved)
+        current = resolved.lstat()
+        if not stat.S_ISREG(current.st_mode) or not os.path.samestat(current, os.fstat(handle.fileno())):
+            raise ValueError("input changed or is not a regular file")
+        return handle.read()
+
+
+def read_input_text(root: Path, path: Path, encoding: str = "utf-8") -> str:
+    return read_input_bytes(root, path).decode(encoding).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def open_text(path: Path, encoding: str = "utf-8"):
