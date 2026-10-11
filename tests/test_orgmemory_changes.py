@@ -415,7 +415,8 @@ def test_example_changes_match_their_reports(dataset, golden, start, end):
     assert changes_markdown(report).encode("utf-8") == expected
     before = snapshot(EXAMPLES)
     result = runner.invoke(app, ["changes", str(EXAMPLES / "orgmemory" / dataset), "--from", start, "--to", end])
-    assert result.exit_code == 0 and result.stdout_bytes == expected
+    # `output` undoes the CRLF a Windows console stream would add; the bytes above are compared exactly.
+    assert result.exit_code == 0 and result.output == expected.decode("utf-8")
     assert snapshot(EXAMPLES) == before
 
 
