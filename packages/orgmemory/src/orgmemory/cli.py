@@ -1,4 +1,5 @@
-"""orgmemory command line. Replay and audit are read-only; `append` and `evidence add` only ever append lines."""
+"""orgmemory command line. Replay and audit are read-only; `append`, `evidence add` and `policy grant|revoke`
+only ever append lines."""
 from __future__ import annotations
 
 import json
@@ -13,16 +14,21 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 
 from .audit import DEFAULT_STALE_DAYS, audit
-from .models import Event
-from .replay import Dataset, replay, validate
+from .authority import POLICY_LOG
+from .models import Event, PolicyChange
+from .replay import Dataset, replay, validation_summary
 from .report import audit_markdown, explain, to_markdown
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="Replay organizational decisions under explicit authority rules.")
 evidence_app = typer.Typer(no_args_is_help=True, help="Manage the evidence manifest.")
 app.add_typer(evidence_app, name="evidence")
+policy_app = typer.Typer(no_args_is_help=True,
+                         help="Record effective-dated role changes in policy-log.jsonl (append-only).")
+app.add_typer(policy_app, name="policy")
 
-DATASET = typer.Argument(..., exists=True, file_okay=False, help="Directory with events.jsonl, policy.json, evidence.jsonl")
+DATASET = typer.Argument(..., exists=True, file_okay=False,
+                         help="Directory with events.jsonl, policy.json, evidence.jsonl and optionally policy-log.jsonl")
 
 
 class Format(str, Enum):
@@ -96,12 +102,9 @@ def audit_command(
 
 @app.command("validate")
 def validate_command(dataset: Path = DATASET) -> None:
-    """Validate every event, the policy and every evidence hash and span."""
-    data = _load(dataset)
-    unknown = sorted({e.actor for e in data.events} - data.policy.actors.keys())
-    typer.echo(f"ok: {len(data.events)} events, {len(data.evidence)} evidence records")
-    if unknown:
-        typer.echo(f"note: actors without any role (their events cannot change state): {', '.join(unknown)}")
+    """Validate every event, the policy, the policy log and every evidence hash and span."""
+    for line in validation_summary(_load(dataset)):
+        typer.echo(line)
 
 
 @app.command("append")
@@ -111,11 +114,57 @@ def append_command(dataset: Path = DATASET,
     data = _load(dataset)
     try:
         new = Event.model_validate(json.loads(event))
-        validate(data.events + [new], data.evidence)
+        Dataset(data.events + [new], data.policy, data.evidence, data.policy_log)
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
     append_jsonl(dataset / "events.jsonl", new.model_dump(mode="json", exclude_none=True))
     typer.echo(f"appended {new.id}")
+
+
+def _record_role_change(dataset: Path, action: str, id: str, timestamp: str, actor: str, subject_actor: str,
+                        role: str, evidence_id: list[str], note: Optional[str]) -> None:
+    data = _load(dataset)
+    try:
+        change = PolicyChange.model_validate({
+            "id": id, "timestamp": timestamp, "actor": actor, "action": action, "subject_actor": subject_actor,
+            "role": role, "evidence_ids": evidence_id, "note": note})
+        # The whole log is checked again, so a backdated entry cannot invalidate a later one.
+        Dataset(data.events, data.policy, data.evidence, [*(data.policy_log or []), change])
+    except (ValidationError, ValueError) as exc:
+        _fail(str(exc))
+    append_jsonl(dataset / POLICY_LOG, change.model_dump(mode="json", exclude_none=True))
+    typer.echo(f"appended {change.id} to {POLICY_LOG}")
+
+
+ROLE_CHANGE_OPTIONS = dict(
+    id=typer.Option(..., help="Unique ID, distinct from every event ID"),
+    timestamp=typer.Option(..., help="When the change takes effect (ISO 8601 with timezone)"),
+    actor=typer.Option(..., help="Who makes the change; must hold a role permitted to manage_roles at that time"),
+    subject_actor=typer.Option(..., help="Whose roles change"),
+    role=typer.Option(..., help="A role policy.json names"),
+    evidence_id=typer.Option(..., "--evidence-id", help="Evidence ID backing the change (repeatable)"),
+    note=typer.Option(None, help="Optional free-text note"),
+)
+
+
+@policy_app.command("grant")
+def policy_grant(dataset: Path = DATASET, id: str = ROLE_CHANGE_OPTIONS["id"],
+                 timestamp: str = ROLE_CHANGE_OPTIONS["timestamp"], actor: str = ROLE_CHANGE_OPTIONS["actor"],
+                 subject_actor: str = ROLE_CHANGE_OPTIONS["subject_actor"], role: str = ROLE_CHANGE_OPTIONS["role"],
+                 evidence_id: list[str] = ROLE_CHANGE_OPTIONS["evidence_id"],
+                 note: Optional[str] = ROLE_CHANGE_OPTIONS["note"]) -> None:
+    """Grant a role from an effective time on: validate against the whole policy log, then append."""
+    _record_role_change(dataset, "grant", id, timestamp, actor, subject_actor, role, evidence_id, note)
+
+
+@policy_app.command("revoke")
+def policy_revoke(dataset: Path = DATASET, id: str = ROLE_CHANGE_OPTIONS["id"],
+                  timestamp: str = ROLE_CHANGE_OPTIONS["timestamp"], actor: str = ROLE_CHANGE_OPTIONS["actor"],
+                  subject_actor: str = ROLE_CHANGE_OPTIONS["subject_actor"], role: str = ROLE_CHANGE_OPTIONS["role"],
+                  evidence_id: list[str] = ROLE_CHANGE_OPTIONS["evidence_id"],
+                  note: Optional[str] = ROLE_CHANGE_OPTIONS["note"]) -> None:
+    """Remove a role from an effective time on (a revoke_role entry). Earlier events keep their outcome."""
+    _record_role_change(dataset, "revoke_role", id, timestamp, actor, subject_actor, role, evidence_id, note)
 
 
 @evidence_app.command("add")
