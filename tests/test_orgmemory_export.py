@@ -114,6 +114,7 @@ def test_one_record_per_subject_with_an_authorized_decision(tmp_path):
     assert "No decision is in force: the next authorized `approve`" in revoked
     assert "The subject stays accepted until an authorized `reject` (roles: product\\_manager) or a `revoke` of `a`" \
         in adr_markdown(records[0])
+    assert "## Context\n\nNo request or risk is on record for this subject.\n" in adr_markdown(records[2])
 
 
 def test_context_dependencies_risks_and_conflicts(tmp_path):
