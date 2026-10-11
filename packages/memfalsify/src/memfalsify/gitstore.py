@@ -28,6 +28,8 @@ from .memory import Claim, merge_duplicates, parse_text
 HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # C0/C1 controls and the bidi, zero-width and line-separator characters that can disguise text.
 CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
+# Same set, but keep tab and newline so a Markdown report can still break lines.
+DISPLAY = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
 # Global options: literal pathspecs (file names are not globs) and no config that changes what we parse.
 GIT_OPTIONS = ("--literal-pathspecs", "-c", "core.quotePath=false", "-c", "log.showSignature=false",
                "-c", "log.follow=false")
@@ -56,6 +58,11 @@ class GitError(HistoryError):
 def printable(text: str) -> str:
     """Untrusted text (git messages, commit subjects) on one line, without terminal or bidi controls."""
     return CONTROL.sub("\ufffd", " ".join(text.split()))
+
+
+def show_text(text: str) -> str:
+    """Memory or evidence text for a report: terminal and bidi controls removed, line breaks kept."""
+    return DISPLAY.sub("\ufffd", text)
 
 
 def check_revision(rev: str) -> str:
@@ -267,12 +274,24 @@ class Repository:
         return commit if proc.returncode == 0 and HEX.fullmatch(commit) else None
 
     def cut_off(self, commit: str) -> bool:
-        """True when ``commit`` has no parent only because the clone is shallow (it may be a real root)."""
-        parent = _run(self.git, self.root, [*self.options, "rev-parse", "--verify", "--quiet", f"{commit}^1"])
-        if parent.returncode == 0:
+        """True when ``commit`` records a parent this clone does not have.
+
+        ``REV^`` fails both for a real root and for a shallow boundary, and
+        ``--is-shallow-repository`` describes the whole clone: a shallow clone can still
+        contain the true root (``clone --depth`` that reaches it). A real root's commit
+        object has no ``parent`` line; a shallow boundary still records the parent it did
+        not fetch. ``--no-replace-objects`` keeps a replace ref from hiding that line.
+        ``self.options`` keeps the call pinned to the repository checked under confined reads.
+        """
+        if _run(self.git, self.root, [*self.options, "rev-parse", "--verify", "--quiet", "--end-of-options",
+                                      f"{commit}^"]).returncode == 0:
             return False
-        shallow = _run(self.git, self.root, [*self.options, "rev-parse", "--is-shallow-repository"])
-        return shallow.returncode != 0 or shallow.stdout.strip() != b"false"
+        proc = _run(self.git, self.root, [*self.options, "--no-replace-objects", "cat-file", "commit",
+                                          "--end-of-options", commit])
+        if proc.returncode:
+            return True
+        header = proc.stdout.split(b"\n\n", 1)[0]
+        return any(line.startswith(b"parent ") for line in header.splitlines())
 
     def at(self, objects: Objects, commit: str, follow_links: bool) -> Snapshot:
         def read(relative: str) -> str | None:
@@ -350,7 +369,11 @@ def open_repository(memory_file: Path) -> Repository:
         where = f"{printable(str(memory_file))} is not inside a git work tree"
         raise GitError(f"{where} ({_failure(proc)})", where)
     try:
-        lines = proc.stdout.decode("utf-8").split("\n")
+        # Accept CRLF. A trailing CR would sit on the prefix, fail the control-character
+        # check below, and reject every repository. The same CR on the git directory or
+        # common directory would pin later calls to a path that does not exist. Piped git
+        # normally writes LF.
+        lines = [line.rstrip("\r") for line in proc.stdout.decode("utf-8").replace("\r\n", "\n").split("\n")]
     except UnicodeDecodeError as exc:
         raise HistoryError("cannot read the repository location from git") from exc
     if len(lines) != 5 or lines[4] or not all(lines[i] for i in (0, 2, 3)):  # e.g. a path holding a newline

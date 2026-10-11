@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .audit import AuditReport, Finding
 from .corpus import REPORT_HEADER
+from .gitstore import show_text
 
 LABELS = {
     "challenged": "CHALLENGED",
@@ -15,28 +16,34 @@ LABELS = {
 }
 
 
-def _quote(text: str) -> str:
+def _quote(text: str, *, scrub: bool = False) -> str:
+    if scrub:
+        text = show_text(text)
     return "> " + text.replace("\n", "\n> ")
 
 
-def _finding(f: Finding) -> list[str]:
-    where = f"`{f.location}`" + (f" · {f.section}" if f.section else "")
-    out = [f"### {LABELS[f.status]} · `{f.memory_id}`", "", _quote(f.text), "", where, ""]
+def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
+    def show(text: str) -> str:
+        return show_text(text) if scrub else text
+
+    where = f"`{show(f.location)}`" + (f" · {show(f.section)}" if f.section else "")
+    out = [f"### {LABELS[f.status]} · `{f.memory_id}`", "", _quote(f.text, scrub=scrub), "", where, ""]
     if f.evidence:
         out.append("**Evidence**")
         for e in f.evidence:
-            who = f"confirmed by {e.reviewer}" if e.confirmed else "candidate, unconfirmed"
-            out.append(f"- {e.relation} ({who}) · `{e.span.location}` · sha256 `{e.span.sha256[:12]}` · {e.rationale}")
-            out += [f"  - {o.verifier}: {o.relation} · {o.rationale}" for o in e.opinions]
-            out.append(f"  > {e.span.quote}")
+            who = f"confirmed by {show(e.reviewer)}" if e.confirmed else "candidate, unconfirmed"
+            out.append(f"- {show(e.relation)} ({who}) · `{show(e.span.location)}` · "
+                       f"sha256 `{e.span.sha256[:12]}` · {show(e.rationale)}")
+            out += [f"  - {show(o.verifier)}: {show(o.relation)} · {show(o.rationale)}" for o in e.opinions]
+            out.append(f"  > {show(e.span.quote)}")
         out.append("")
     if f.issues:
         out.append("**Issues**")
-        out += [f"- {i.kind}: {i.detail}" for i in f.issues]
+        out += [f"- {show(i.kind)}: {show(i.detail)}" for i in f.issues]
         out.append("")
     if f.proposals:
         out.append("**Proposed actions** (not applied)")
-        out += [f"- `{p.action}`: {p.reason}" for p in f.proposals]
+        out += [f"- `{p.action}`: {show(p.reason)}" for p in f.proposals]
         out.append("")
     return out
 

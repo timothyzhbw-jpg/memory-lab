@@ -15,7 +15,10 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 | 工具 | 参数 | 返回 |
 |---|---|---|
 | `memfalsify_claims` | `memory_file` | MemFalsify 拆出的记忆，一个 JSON 数组（`memory_id`、`location`、`text`）。`memfalsify claims` 把同样的对象按 JSONL 逐行打印。 |
-| `memfalsify_audit` | `memory_file`，可选 `evidence_dir`、`reviews_file`、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 审计报告。和同一批文件上的 `memfalsify audit` 是同一份文档。 |
+| `memfalsify_audit` | `memory_file`，可选 `evidence_dir`、`exclude`（相对 `evidence_dir` 的 fnmatch 通配，必须同时提供 `evidence_dir`）、`reviews_file`、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 审计报告。和同一批文件上的 `memfalsify audit` 是同一份文档。 |
+| `memfalsify_diff` | `memory_file`、`base`，可选 `head`（默认工作区）、`evidence_dir`、`exclude`（与审计相同的通配，必须同时提供 `evidence_dir`）、`reviews_file`（必须同时提供 `evidence_dir`）、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 和 `memfalsify diff` 相同的报告：比较 `base` 与 `head` 之间新增、修改（旧到新）、删除和未变的记忆，只审计新增和修改的，证据按当前目录读取。不会检出任何文件，也不写文件。没有 `strict`。 |
+| `memfalsify_history` | `memory_file`，可选 `max_commits`（不小于 1 的整数，默认 100）、`format`（`markdown` 或 `json`） | 和 `memfalsify history` 相同的报告。每条当前记忆给出引入它的提交和在 HEAD 第一父提交链上最后修改它的提交，并包含工作区里尚未提交的修改；同时列出扫描范围内被删除的记忆及删除时间。浅克隆里最老的提交如果仍记录着没有取到的父提交，历史就是不完整的。浅克隆如果已经包含根提交（提交对象没有 `parent` 行），则算完整历史。 |
+| `memfalsify_rollback` | `memory_file`、`claim`（形如 `m-1a2b3c4d` 的 ID）、`to` | `memfalsify rollback` 会打印的补丁文本：把该记忆恢复成 `to` 时的措辞（包括只包住这一条记忆的标记，例如它原来的链接目标），或把已删除的记忆重新加回去。如果措辞已经相同，则返回一句说明而不是补丁。文本只返回，不写入、不应用。 |
 | `orgmemory_validate` | `dataset` | 和 `orgmemory validate` 相同的几行文本。 |
 | `orgmemory_replay` | `dataset`，可选 `as_of`（带时区的 ISO 8601）、`format` | 和 `orgmemory replay` 相同的报告。 |
 | `orgmemory_explain` | `dataset`、`subject`，可选 `as_of` | 和 `orgmemory explain` 相同的文本。 |
@@ -27,7 +30,9 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 
 无效的工具调用返回 MCP 工具错误，连接仍可继续使用。参数结构校验错误只列字段名，不回显被拒绝的值；错误会隐藏根目录外的路径参数、后端诊断和堆栈。模型验证器失败时返回通用错误，提示检查 SDK、凭据和后端服务。
 
-默认验证器是 `lexical`，完全离线。`llm`、`jev`、`dual`、`cascade` 会把记忆和证据文本发到外部 API，并且产生费用。除非启动时加了 `--allow-model-verifiers`，服务器会拒绝它们。加上这个旗标后，`memfalsify_audit` 会被标成会访问本机以外的服务。
+默认验证器是 `lexical`，完全离线。`llm`、`jev`、`dual`、`cascade` 会把记忆和证据文本发到外部 API，并且产生费用。除非启动时加了 `--allow-model-verifiers`，服务器会拒绝它们。加上这个旗标后，`memfalsify_audit` 和 `memfalsify_diff` 会被标成会访问本机以外的服务。`memfalsify_diff` 上的模型验证器使用命令行的默认模型名和段落上限（每条记忆最多 8 段，覆盖率 0.2）。没有 `--llm-model`、`--jev-model`、`--accept-at`、`--max-judged`、`--min-coverage` 这些参数。
+
+`base`、`head` 和 `to` 必须非空，不能以 `-` 开头，也不能包含控制字符。每个修订版本都会先解析成一个提交。记忆文件必须位于一个 git 工作区中，且该仓库的顶层目录、git 目录、公共目录（链接工作区指向主仓库的那个）和对象库都解析到 `--root` 之内，对象库里不能有 `objects/info/alternates`，也不能有符号链接。否则这三个 git 工具会拒绝该文件。`GIT_DIR` 以及其他指向仓库位置的变量会被忽略。git 自己的诊断信息不会返回，因为它可能点名根目录之外的路径。结果里的提交说明和作者名不可信。这三个工具会跟随本地 `.md` 链接，和命令行的默认行为一致。它们没有 `follow_links` 开关，也没有 `--output`、`--strict` 或 `--stale-days`。diff 审计使用 180 天的过期窗口。
 
 ## 安装
 

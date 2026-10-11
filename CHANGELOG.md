@@ -113,6 +113,18 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 - The LLM verifier crashed with a traceback when Anthropic credentials could not be resolved. It now
   exits 2 with a message. For every model verifier, a missing SDK, missing key or API error exits 2 and
   writes no partial report.
+- Adversarial review of history, diff and rollback:
+  - A shallow clone that contains the root commit is complete history. `history` looks at the commit
+    object (`--no-replace-objects`): no `parent` line means the root was fetched, even when
+    `--is-shallow-repository` is true. A boundary commit that still records an unfetched parent stays
+    incomplete.
+  - Rollback of a changed claim restores markup that wraps that claim alone, including its old link
+    target. Markup shared with a neighboring sentence on the same line is left in place.
+  - Diff and history Markdown neutralize terminal and bidi controls in memory text, headings and
+    evidence quotes. JSON keeps the original text.
+  - CRLF answers from `git rev-parse` (toplevel, prefix, git directory and common directory) are
+    accepted. A trailing CR is not left on the prefix, where it would fail the control-character check
+    and reject every repository.
 
 ### 0.1.0 - 2026-10-10
 
