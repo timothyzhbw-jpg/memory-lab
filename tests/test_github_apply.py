@@ -249,7 +249,7 @@ def test_fails_closed(github_dataset,kind,tmp_path,monkeypatch):
     assert snapshot(github_dataset) == before
     if kind in ('tampered','duplicate','bad_log','malformed_events'):
         transport = FakeTransport({})
-        monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+        monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
         monkeypatch.setattr(github_fetch,'token_from_env',lambda:None)
         result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web'])
         assert result.exit_code == 2 and transport.calls == []
@@ -335,7 +335,7 @@ def test_cursor_rules():
 def test_since_with_cursor_exits_2(github_dataset,monkeypatch):
     sync(github_dataset,recording(1))
     transport = FakeTransport({})
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
     monkeypatch.setattr(github_fetch,'token_from_env',lambda:None)
     before = snapshot(github_dataset)
     result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web','--since','2026-10-11T00:00:00Z'])
@@ -353,7 +353,7 @@ def test_partial_run_cursor_unchanged_and_clean_rerun(github_dataset,monkeypatch
     routes['GET /repos/acme/web/issues/5/timeline?per_page=100'] = reply(
         {'message':'API rate limit exceeded'},status=403,headers={'retry-after':'99999'})
     transport = FakeTransport(routes)
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
     monkeypatch.setattr(github_fetch,'token_from_env',lambda:TOKEN)
     result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web','--max-wait','0'])
     assert result.exit_code == 3, result.output
@@ -361,7 +361,7 @@ def test_partial_run_cursor_unchanged_and_clean_rerun(github_dataset,monkeypatch
     assert next_since(log(github_dataset),'acme/web') == previous
     Dataset.load(github_dataset)
     transport = FakeTransport(routes_from_capture(cap))
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
     result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web'])
     assert result.exit_code == 0, result.output
     current = load_existing(github_dataset)
@@ -381,7 +381,7 @@ def test_fetch_convert_round_trip():
 
 def test_no_network_and_no_token_leak(github_dataset,tmp_path,monkeypatch):
     monkeypatch.setattr(github_fetch,'token_from_env',lambda:TOKEN)
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:FakeTransport(routes_from_capture(recording(1))))
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:FakeTransport(routes_from_capture(recording(1))))
     saved = tmp_path/'saved.json'
     result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web','--save-capture',str(saved)])
     assert result.exit_code == 0, result.output
@@ -390,7 +390,7 @@ def test_no_network_and_no_token_leak(github_dataset,tmp_path,monkeypatch):
         assert TOKEN.encode() not in data
     # An API error echoing credentials is scrubbed by the client.
     routes = {'GET /repos/acme/web':reply({'message':TOKEN+'\n\x1b[31m bad'},status=403)}
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:FakeTransport(routes))
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:FakeTransport(routes))
     result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web','--full'])
     assert result.exit_code == 2 and TOKEN not in result.output and '\x1b' not in result.output
 
@@ -408,7 +408,7 @@ def test_cli_sync_and_convert(github_dataset,tmp_path,monkeypatch):
     assert 'appended 53 events' in result.output and 'gh:zhou-pm:5003' in result.output
     other = dataset(tmp_path,'sync')
     transport = FakeTransport(routes_from_capture(recording(1)))
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
     monkeypatch.setattr(github_fetch,'token_from_env',lambda:None)
     saved = tmp_path/'dry-capture.json'
     before = snapshot(other)
@@ -424,7 +424,7 @@ def test_cli_sync_and_convert(github_dataset,tmp_path,monkeypatch):
     ['--issue','1','--since','2026-10-09T00:00:00Z'],['--since','2026-10-09'],['--issue','0'],['--max-wait','-1']])
 def test_cli_invalid_options_before_requests(github_dataset,monkeypatch,options):
     transport = FakeTransport({})
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
     monkeypatch.setattr(github_fetch,'token_from_env',lambda:None)
     before = snapshot(github_dataset)
     result = RUNNER.invoke(app,['github','sync',str(github_dataset),'acme/web',*options])
@@ -551,7 +551,7 @@ def test_escaped_credential_reflection_is_refused(github_dataset,tmp_path,monkey
     body = ('{"message":"'+escaped+'"}').encode()
     assert TOKEN.encode() not in body
     transport = FakeTransport({'GET /repos/acme/web':reply(body,status=status)})
-    monkeypatch.setattr(github_fetch,'urllib_transport',lambda:transport)
+    monkeypatch.setattr(github_fetch,'PersistentTransport',lambda:transport)
     monkeypatch.setattr(github_fetch,'token_from_env',lambda:TOKEN)
     saved = tmp_path/'saved.json'
     before = snapshot(github_dataset)

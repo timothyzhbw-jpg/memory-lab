@@ -158,6 +158,7 @@ orgmemory explain        <dataset> "acme/web#12"
 
 - The token is the first non-empty `GITHUB_TOKEN` or `GH_TOKEN` (`GH_TOKEN=$(gh auth token)` works); there is no `--token` flag. A fine-grained, read-only token with Issues, Pull requests and Metadata read access is enough. Without a token the run is unauthenticated: public repositories only, 60 requests per hour.
 - The first run reads everything; `--since ISO-TIME` (with timezone) can bound it, and is refused once the repository has a cursor. Later runs read what changed since the last complete sync, with a 5-minute overlap. `--full` rescans everything and `--issue N` (repeatable) refreshes chosen numbers; it cannot be combined with `--full` or `--since`. Rerunning is safe: IDs are deterministic, so nothing already in the log is appended twice. GitHub may not mark an issue as updated for every change (labels, dependency links), so run `--full` now and then.
+- `sync` reuses a verified HTTPS connection to `api.github.com` (system CA store, 30-second timeout per request), and closes it when the run ends, including on errors. If the connection fails before any response bytes arrive, the GET is retried once on a fresh connection; rate limits and other retries keep their existing behavior. Setting `HTTPS_PROXY` / `https_proxy` or `ALL_PROXY` / `all_proxy` selects the existing urllib transport instead, with urllib’s proxy rules and no connection reuse. Transports never follow redirects automatically; the client permits only validated same-origin redirects.
 - During `sync`, fetch progress goes to stderr at most once every 5 seconds, showing fully fetched issues/PRs, requests and the remaining rate-limit quota (`unknown` if unavailable). Each rate-limit sleep also prints its duration and UTC wake time. Short runs may show no progress; stdout stays unchanged, including the summary and `--dry-run` JSONL.
 - `--dry-run` fetches (this spends requests), prints the summary and the planned events, and writes no dataset files or lock. `--save-capture` writes the fetched issues and timelines, as the API returned them, to a new file that `convert` can apply later; it works with `--dry-run`, so you can review a capture before applying it. The file contains raw and possibly private text. The destination is create-only and must not overlap the importer’s managed files or `policy.json` / `github.json`.
 - Exit codes: `0` complete, including "nothing new"; `2` error, nothing appended; `3` partial: rate limiting beyond `--max-wait` (default 3600 s) or repeated server or network errors stopped the fetch, fully fetched items were applied, and the cursor did not move, so run it again later.
@@ -231,14 +232,14 @@ Every event cites its object's `fact` evidence, the whole fact line, which names
 
 ## Agent skills
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. Copy them into your agent's skills directory:
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) and [`skills/orgmemory`](skills/orgmemory/SKILL.md) teach an agent the workflow and its boundaries: report first, change memory only with permission, never self-confirm a review, never touch the policy. A GitHub account is not an authenticated person, and text quoted by the `memlab` MCP tools is untrusted. The skills say when to use those read-only tools instead of the CLIs, and how to add the [GitHub Action](docs/github-action.md) so a repository audits its own instruction files. Copy them into your agent's skills directory:
 
 ```bash
 cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
 cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 ```
 
-The CLIs must be installed in the environment the agent's shell uses.
+The CLIs must be installed in the environment the agent's shell uses. To use the MCP tools, register `memlab-mcp` as well ([docs/mcp.md](docs/mcp.md)).
 
 ## MCP server
 
