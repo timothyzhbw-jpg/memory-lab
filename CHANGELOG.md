@@ -26,10 +26,11 @@ release needs a memlab-core release that has it; raise their memlab-core pins th
 - `memcore.htmlpage`: building blocks for self-contained HTML report pages. A page has inline CSS, no
   JavaScript and loads nothing, behind a `Content-Security-Policy` meta tag (`default-src 'none';
   style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`) and `referrer` `no-referrer`. `text()`
-  HTML-escapes every value and shows control, format (bidi, zero-width, tag), separator and surrogate
-  characters as visible `U+XXXX` markers. Only `http` and `https` URIs become links (`link()`,
-  `safe_url()`), with `rel="noopener noreferrer"`. The page is 7-bit ASCII, follows
-  `prefers-color-scheme`, and its tables scroll sideways at phone width.
+  HTML-escapes every value and shows control, format (bidi, zero-width, tag), separator, surrogate and
+  other default-ignorable characters (variation selectors, Hangul fillers) as visible `U+XXXX` markers.
+  Only `http` and `https` URIs become links (`link()`, `safe_url()`), with `rel="noopener noreferrer"`.
+  The page is 7-bit ASCII and is written to stdout as bytes, so a Windows text-mode console cannot turn
+  LF into CRLF. It follows `prefers-color-scheme`, and its tables scroll sideways at phone width.
 
 ### memfalsify
 

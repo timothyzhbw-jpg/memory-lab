@@ -1,16 +1,19 @@
 """Self-contained HTML report pages: one file, inline CSS, no script, every value escaped.
 
 A page loads nothing: no fonts, scripts, images or external style sheets, so it works offline and as an
-e-mail attachment. A Content-Security-Policy meta tag (``default-src 'none'; style-src 'unsafe-inline'``)
-forbids loading resources and running scripts, in case escaping is ever missed. The document is 7-bit
+e-mail attachment. A Content-Security-Policy meta tag (``default-src 'none'; style-src
+'unsafe-inline'; base-uri 'none'; form-action 'none'``) forbids loading resources and running
+scripts, in case escaping is ever missed. The document is 7-bit
 ASCII: every other character is a numeric character reference, so a shell redirect, a console code page
 or a mail relay cannot re-encode it.
 
 Data goes into a page only through ``text`` (or ``code``, ``quote``, ``link``, ``span_ref``). It is
-HTML-escaped, and control, format (bidi, zero-width, tag), line/paragraph-separator and surrogate
-characters are replaced with a visible ``U+XXXX`` marker, so they cannot reorder, hide or forge what a
-reader sees. Only ``http`` and ``https`` URIs become links, with ``rel="noopener noreferrer"``. These
-functions return markup for element content: never put their output in an attribute value.
+HTML-escaped, and control, format (bidi, zero-width, tag), line/paragraph-separator, surrogate and
+other default-ignorable characters (variation selectors, Hangul fillers) are replaced with a visible
+``U+XXXX`` marker, so they cannot reorder, hide or forge what a reader sees. Only ``http`` and
+``https`` URIs become links, with ``rel="noopener noreferrer"``; a URI containing one of those
+characters stays text. These functions return markup for element content: never put their output in
+an attribute value.
 """
 from __future__ import annotations
 
@@ -25,6 +28,13 @@ from .evidence import EvidenceSpan
 
 CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
 HIDDEN = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+# No glyph, but not Cc/Cf/Cs/Zl/Zp: variation selectors, Hangul fillers and a few other
+# default-ignorable marks. Fixed code points so Unicode 13 (Python 3.10) and 15.1 (3.13) agree.
+# U+180F is unassigned before Unicode 14 and is still invisible.
+_INVISIBLE = frozenset({
+    0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x180B, 0x180C, 0x180D, 0x180F, 0x3164, 0xFFA0,
+    *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0),
+})
 TONES = ("red", "amber", "blue", "green", "gray")
 
 _CANDIDATE = re.compile(r"[^\t\n\x20-\x7e]")
@@ -103,9 +113,13 @@ time { white-space: nowrap; }
 """
 
 
+def _hidden(char: str) -> bool:
+    return unicodedata.category(char) in HIDDEN or ord(char) in _INVISIBLE
+
+
 def _mark(match: re.Match) -> str:
     char = match.group()
-    if unicodedata.category(char) in HIDDEN:
+    if _hidden(char):
         return f'<span class="ctl">U+{ord(char):04X}</span>'
     return char
 
@@ -145,7 +159,7 @@ def safe_url(uri: object) -> str | None:
     """``uri`` if it is an absolute http(s) URL that can be a link as written, else None."""
     if not isinstance(uri, str) or not _URL.fullmatch(uri):
         return None
-    if any(unicodedata.category(c) in HIDDEN for c in uri):
+    if any(_hidden(c) for c in uri):
         return None
     try:
         parts = urlsplit(uri)

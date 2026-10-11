@@ -41,6 +41,11 @@ def _fail(message: str) -> None:
     raise typer.Exit(2)
 
 
+def _echo_exact(text: str) -> None:
+    """ASCII report bytes. Windows text-mode stdout would otherwise turn LF into CRLF."""
+    typer.echo(text.encode("ascii"), nl=False)
+
+
 def _as_of(value: Optional[str]) -> Optional[datetime]:
     return TypeAdapter(AwareDatetime).validate_python(value) if value else None
 
@@ -65,7 +70,7 @@ def replay_command(
     except ValidationError as exc:
         _fail(str(exc))
     if fmt is Format.html:
-        typer.echo(replay_html(result), nl=False)
+        _echo_exact(replay_html(result))
     else:
         typer.echo(to_markdown(result) if fmt is Format.markdown else result.model_dump_json(indent=2))
 
@@ -98,10 +103,11 @@ def audit_command(
     except ValidationError as exc:
         _fail(str(exc))
     if fmt is Format.json:
-        text = report.model_dump_json(indent=2) + "\n"
+        typer.echo(report.model_dump_json(indent=2) + "\n", nl=False)
+    elif fmt is Format.html:
+        _echo_exact(audit_html(report))
     else:
-        text = audit_html(report) if fmt is Format.html else audit_markdown(report)
-    typer.echo(text, nl=False)
+        typer.echo(audit_markdown(report), nl=False)
     if strict and report.summary["high"]:
         raise typer.Exit(1)
 

@@ -50,6 +50,12 @@ STYLE_BREAK = "</style><style>*{display:none}</style>"
 JS_URL = "javascript:alert(3)"
 HIDDEN_TEXT = "admin\u202eevil\u202c\u200bzero\U000e0041tag\x1b[31m"
 MARKERS = ["U+202E", "U+202C", "U+200B", "U+E0041", "U+001B"]
+# Default-ignorable characters whose category is not Cc/Cf/Cs/Zl/Zp. Listed here, not taken from
+# htmlpage, so dropping one from the renderer still fails.
+INVISIBLE = frozenset({
+    0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x180B, 0x180C, 0x180D, 0x180F, 0x3164, 0xFFA0,
+    *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0),
+})
 
 
 class Page(HTMLParser):
@@ -135,6 +141,8 @@ def check(document: str, generator: str) -> Page:
             assert link["rel"] == "noopener noreferrer"
     hidden = {c for c in page.visible if unicodedata.category(c) in htmlpage.HIDDEN and c not in "\n\t"}
     assert not hidden, sorted(map(hex, map(ord, hidden)))
+    invisible = {c for c in page.visible if ord(c) in INVISIBLE}
+    assert not invisible, sorted(map(hex, map(ord, invisible)))
     assert page.counts.get("table", 0) == page.counts.get("caption", 0) == page.counts.get("thead", 0)
     assert page.counts["h1"] == 1 and page.counts["main"] == 1
     return page
@@ -203,10 +211,23 @@ def test_cli_html_matches_the_examples(monkeypatch, tmp_path):
 
 
 def test_html_is_offered_only_where_documented(memfalsify_demo):
-    result = runner.invoke(memfalsify_app, ["history", str(memfalsify_demo / "MEMORY.md"), "--format", "html"])
+    memory = str(memfalsify_demo / "MEMORY.md")
+    result = runner.invoke(memfalsify_app, ["history", memory, "--format", "html"])
     assert result.exit_code == 2 and "html" in result.output
+    for command in (["claims", memory], ["rollback", memory, "--claim", "m-1", "--to", "HEAD"]):
+        result = runner.invoke(memfalsify_app, [*command, "--format", "html"])
+        assert result.exit_code == 2 and "No such option" in result.stderr
     result = runner.invoke(memfalsify_app, ["audit", "--help"])
     assert "html" in result.output
+    result = runner.invoke(memfalsify_app, ["diff", "--help"])
+    assert "html" in result.output
+    result = runner.invoke(orgmemory_app, ["replay", "--help"])
+    assert "html" in result.output
+    result = runner.invoke(orgmemory_app, ["audit", "--help"])
+    assert "html" in result.output
+    for command in (["explain", "--help"], ["validate", "--help"]):
+        result = runner.invoke(orgmemory_app, command)
+        assert "--format" not in result.output
 
 
 def test_html_output_never_overwrites_memory(memfalsify_demo):
@@ -290,6 +311,8 @@ SOURCES = {
     "angle": "https://example.com/<b>", "bidi": "https://exa\u202emple.com/", "space": " https://example.com/",
     "relative": "//example.com/x", "nohost": "http:///x", "synthetic": "synthetic://notes/1",
     "ok": "https://example.com/issues/1?a=1&b=2#c", "upper": "HTTP://EXAMPLE.COM/A",
+    # Looks like google.com. The variation selector has no glyph, so it must not become a link.
+    "selector": "https://goog\uFE0Fle.com/",
 }
 
 
@@ -344,6 +367,7 @@ def test_hostile_dataset_renders_as_text(tmp_path):
         assert set(hrefs) == {SOURCES["ok"], SOURCES["upper"]}
         for key in ("data", "quote", "angle", "space", "relative", "nohost", "synthetic"):
             assert SOURCES[key].strip() in page.visible
+        assert "U+FE0F" in page.visible and "\uFE0F" not in page.visible
         assert "\r" not in page.visible and "U+000D" not in page.visible  # a CRLF in a quote is one line break
 
 
@@ -405,8 +429,76 @@ def test_text_escapes_markup_and_marks_hidden_characters():
     assert "\tj" in marked
     assert htmlpage.text("one\ntwo") == 'one<span class="ctl">U+000A</span>two'
     assert htmlpage.text("one\r\ntwo\rthree", lines=True) == 'one\ntwo<span class="ctl">U+000D</span>three'
+    assert '<span class="ctl">U+2029</span>' in htmlpage.text("a\u2029b", lines=True)
     assert htmlpage.text("名前 é ✓") == "名前 é ✓"  # page() turns these into character references
     assert htmlpage.page("t", htmlpage.text("名"), "g").count("&#21517;") == 1
+
+
+def test_default_ignorable_characters_cannot_hide_or_become_links():
+    """Variation selectors and fillers have no glyph but are not control or format characters."""
+    for code in sorted(INVISIBLE):
+        char = chr(code)
+        rendered = htmlpage.text(f"a{char}b")
+        assert f"U+{code:04X}" in rendered and char not in rendered
+        assert htmlpage.text(f"a{char}b", lines=True) == rendered
+        uri = f"https://example.com/{char}"
+        assert htmlpage.safe_url(uri) is None and "<a " not in htmlpage.link(uri)
+    # A visible combining accent is not one of those characters.
+    assert htmlpage.text("e\u0301") == "e\u0301"
+    assert htmlpage.safe_url("https://example.com/e\u0301") == "https://example.com/e\u0301"
+    document = htmlpage.page("t", "<h1>Report</h1>\n" + htmlpage.link("https://goog\uFE0Fle.com/"), "memfalsify")
+    page = check(document, "memfalsify")
+    assert page.links == [] and "U+FE0F" in page.visible and "google.com" not in page.visible
+
+
+def _windows_stdout(message) -> bytes:
+    """What a Windows text-mode console writes. ``newline='\\r\\n'`` translates str, not bytes."""
+    import io
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="utf-8", newline="\r\n")
+    if isinstance(message, (bytes, bytearray)):
+        stream.flush()
+        stream.buffer.write(message)
+        stream.buffer.flush()
+    else:
+        stream.write(message)
+        stream.flush()
+    return raw.getvalue()
+
+
+def test_html_stdout_keeps_lf_when_windows_translates_newlines(tmp_path, monkeypatch):
+    import memfalsify.cli as memfalsify_cli
+    import orgmemory.cli as orgmemory_cli
+
+    captured = []
+    real_echo = memfalsify_cli.typer.echo
+
+    def spy(message=None, nl=True, err=False, **kwargs):
+        if not err:
+            captured.append((message, nl))
+        return real_echo(message, nl=nl, err=err, **kwargs)
+
+    monkeypatch.setattr(memfalsify_cli.typer, "echo", spy)
+    root = hostile_memory(tmp_path / "hostile")
+    result = runner.invoke(memfalsify_app, ["audit", str(root / "MEMORY.md"), "-e", str(root / "evidence"),
+                                            "-r", str(root / "reviews.jsonl"), "--as-of", "2026-10-10",
+                                            "--format", "html"])
+    assert result.exit_code == 0, result.output
+    message, nl = captured[-1]
+    assert nl is False and isinstance(message, bytes) and _windows_stdout(message) == message
+    assert result.stdout_bytes == message
+
+    captured.clear()
+    data = EXAMPLES / "orgmemory" / "feature-a"
+    result = runner.invoke(orgmemory_app, ["replay", str(data), "--format", "html"])
+    assert result.exit_code == 0, result.output
+    message, nl = captured[-1]
+    assert nl is False and isinstance(message, bytes) and b"\r" not in _windows_stdout(message)
+    assert result.stdout_bytes == message == (EXAMPLES / "orgmemory" / "replay-report.html").read_bytes()
+    result = runner.invoke(orgmemory_app, ["audit", str(data), "--as-of", "2026-10-31T00:00:00Z", "-f", "html"])
+    assert result.exit_code == 0, result.output
+    message, nl = captured[-1]
+    assert isinstance(message, bytes) and _windows_stdout(message) == message
 
 
 def test_style_supports_dark_mode_and_narrow_screens():

@@ -80,6 +80,11 @@ def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "re
     typer.echo(f"wrote {output}", err=True)
 
 
+def _echo_exact(text: str) -> None:
+    """ASCII report bytes. Windows text-mode stdout would otherwise turn LF into CRLF."""
+    typer.echo(text.encode("ascii"), nl=False)
+
+
 def _render(fmt: ReportFormat, report, markdown: Callable[..., str], html: Callable[..., str]) -> str:
     if fmt is ReportFormat.json:
         return report.model_dump_json(indent=2) + "\n"
@@ -145,6 +150,8 @@ def audit_command(
     text = _render(fmt, report, to_markdown, to_html)
     if output:
         _write(output, text.encode("utf-8"), (Path(memory).resolve().parent / p for p in report.files_read))
+    elif fmt is ReportFormat.html:
+        _echo_exact(text)
     else:
         typer.echo(text, nl=False)
     if strict and ATTENTION & report.summary.keys():
@@ -187,6 +194,8 @@ def diff_command(
     if output:
         root = Path(memory).resolve().parent
         _write(output, text.encode("utf-8"), (root / p for p in report.base.files + report.head.files))
+    elif fmt is ReportFormat.html:
+        _echo_exact(text)
     else:
         typer.echo(text, nl=False)
     if strict and report.attention:

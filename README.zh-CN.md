@@ -212,9 +212,9 @@ memfalsify audit MEMORY.md --evidence evidence --format html -o report.html
 orgmemory audit <数据集> --as-of 2026-10-31T00:00:00Z --format html > audit-report.html
 ```
 
-- 内容与 Markdown 报告相同：先是汇总表，然后按状态（MemFalsify）或严重程度（`orgmemory audit`）分组列出发现项，每条证据引文都带 `路径:行号`、字符范围和完整的 SHA-256；`orgmemory replay` 列出每个议题的状态、授权决定和决策轨迹。汇总表的每一行都链接到对应小节。
-- 自包含：CSS 内联，没有 JavaScript，不加载任何东西（字体、图片、脚本都没有），离线也能看。`Content-Security-Policy` meta 标签（`default-src 'none'; style-src 'unsafe-inline'`）即使某个值漏了转义，也会阻止加载资源和执行脚本。文件是 7 位 ASCII（其他字符写成 `&#...;` 字符引用），重定向和邮件中转都不会改坏编码。
-- 不可信文本只当文本显示：记忆、证据、文件名、审核记录、事件日志、策略里的名字和来源 URI 都做 HTML 转义。控制字符、双向文本（bidi）字符、零宽字符等不可见字符显示为 `U+XXXX` 标记，而不会被渲染。只有 `http` 和 `https` 来源 URI 会变成链接，并带 `rel="noopener noreferrer"`；`javascript:`、`data:` 等其他协议都只显示为纯文本。
+- 内容与 Markdown 报告相同：先是汇总表，然后按状态（MemFalsify）或严重程度（`orgmemory audit`）分组列出发现项，每条证据引文都带 `路径:行号`、字符范围和完整的 SHA-256；`orgmemory replay` 列出每个议题的状态、授权决定和决策轨迹。有对应小节的汇总项会链接过去（状态、变更分组、议题，或严重程度的合计）。
+- 自包含：CSS 内联，没有 JavaScript，不加载任何东西（字体、图片、脚本都没有），离线也能看。`Content-Security-Policy` meta 标签（`default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`）即使某个值漏了转义，也会阻止加载资源和执行脚本。文件是 7 位 ASCII（其他字符写成 `&#...;` 字符引用），重定向和邮件中转都不会改坏编码。
+- 不可信文本只当文本显示：记忆、证据、文件名、审核记录、事件日志、策略里的名字和来源 URI 都做 HTML 转义。控制字符、双向文本（bidi）字符、零宽字符、变体选择符等不可见字符显示为 `U+XXXX` 标记，而不会被渲染。只有 `http` 和 `https` 来源 URI 会变成链接，并带 `rel="noopener noreferrer"`；`javascript:`、`data:` 等其他协议只显示为纯文本。来源 URI 里若藏着不可见字符，也只显示为纯文本。
 - 浅色和深色模式跟随系统（`prefers-color-scheme`）；在手机上表格横向滚动，页面本身不会横向滚动；表格带标题（caption）和表头作用域（scope）。
 - 输出确定：同样的输入得到同样的字节。示例目录里，HTML 报告就放在 Markdown 报告旁边（[`examples/memfalsify/report.html`](examples/memfalsify/report.html)、[`examples/orgmemory/audit-report.html`](examples/orgmemory/audit-report.html) 等）；GitHub 只显示其源码，下载后再打开查看。
 - MemFalsify 的 HTML 报告和它的 Markdown、JSON 报告一样，永远不会被当作证据读取。`memfalsify history` 和 MCP 工具仍只输出 Markdown 或 JSON。
