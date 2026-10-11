@@ -183,7 +183,8 @@ def test_duplicate_event_key_exits_2(org_demo, line_text):
     path.write_bytes(before + line_text.encode())
     result = runner.invoke(app, ["validate", str(org_demo)])
     assert result.exit_code == 2, result.output
-    assert f"{path}:{before.count(b'\n') + 1}: invalid JSON: duplicate key" in result.output
+    line_number = before.count(b"\n") + 1
+    assert f"{path}:{line_number}: invalid JSON: duplicate key" in result.output
     assert path.read_bytes() == before + line_text.encode()
 
 
@@ -230,7 +231,8 @@ def test_duplicate_evidence_key_exits_2(org_demo, line_text):
     path.write_bytes(before + line_text.encode())
     result = runner.invoke(app, ["replay", str(org_demo)])
     assert result.exit_code == 2, result.output
-    assert f"{path}:{before.count(b'\n') + 1}: invalid JSON: duplicate key" in result.output
+    line_number = before.count(b"\n") + 1
+    assert f"{path}:{line_number}: invalid JSON: duplicate key" in result.output
 
 
 @pytest.mark.parametrize("event,line", [

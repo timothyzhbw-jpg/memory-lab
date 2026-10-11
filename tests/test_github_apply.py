@@ -295,7 +295,8 @@ def test_duplicate_key_in_sync_log_exits_2(github_dataset, tmp_path):
     path.write_bytes(b'{}\n')
     result = RUNNER.invoke(app, ['github', 'convert', str(github_dataset), str(path)])
     assert result.exit_code == 2, result.output
-    assert f'{log.resolve()}:{text.count(b"\n") + 1}: invalid JSON: duplicate key' in result.output
+    line_number = text.count(b"\n") + 1
+    assert f'{log.resolve()}:{line_number}: invalid JSON: duplicate key' in result.output
     assert snapshot(github_dataset) == before
 
 
