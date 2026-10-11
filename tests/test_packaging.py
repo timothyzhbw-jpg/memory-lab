@@ -40,6 +40,13 @@ def test_pins_between_packages_admit_the_versions_here():
                 assert requirement.specifier.contains(version), f"{name}: {requirement} excludes {version}"
 
 
+def test_each_package_ships_the_license():
+    """setuptools puts packages/<name>/LICENSE into the sdist and wheel; it must be the repository's."""
+    license_text = (REPO / "LICENSE").read_bytes()
+    for directory, _ in PACKAGES.values():
+        assert (REPO / "packages" / directory / "LICENSE").read_bytes() == license_text, directory
+
+
 def test_changelog_has_an_entry_for_each_current_version():
     changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
     sections = {part.split("\n", 1)[0]: part for part in changelog.split("\n## ")[1:]}

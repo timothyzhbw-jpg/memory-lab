@@ -11,5 +11,9 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = ["pydantic>=2.5"]
 
+[project.urls]
+Homepage = "https://github.com/timothyzhbw-jpg/memory-lab"
+Changelog = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.md"
+
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -18,6 +18,10 @@ dependencies = [
     "typer>=0.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/timothyzhbw-jpg/memory-lab"
+Changelog = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 models = ["memfalsify[llm,jev]"]
 
