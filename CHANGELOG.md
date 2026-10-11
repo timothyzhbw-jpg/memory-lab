@@ -33,8 +33,8 @@ Release 0.3 contains:
 
 - Resource and prompt errors carry the tools' messages or a fixed one. They do not echo the requested URI
   or arguments, and they are not logged, so neither a client nor stderr sees a path outside the root or a
-  traceback. The SDK's default resource security (no `..` escape, absolute path or NUL) runs before the
-  server's own path checks.
+  traceback. The SDK's default resource security (no `..` escape, absolute path or NUL) runs on every
+  resource path before the server's own path checks.
 
 ## memlab-core
 

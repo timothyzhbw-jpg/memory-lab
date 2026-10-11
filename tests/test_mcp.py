@@ -711,6 +711,11 @@ def test_resource_errors_are_clean_and_not_logged(root, monkeypatch, caplog):
         (uri("dataset_audit", dataset=DATASET, stale_days="-1"), "stale_days must be a whole number"),
         (uri("dataset_audit", dataset=DATASET, stale_days="soon"), "stale_days must be a whole number"),
         (uri("dataset_explain", dataset=DATASET, subject="Feature Z"), "unknown subject 'Feature Z'"),
+        # Names, times and numbers are not paths: they get the tools' messages, not the path refusal.
+        (uri("dataset_explain", dataset=DATASET, subject="A: ../../launch"), "unknown subject 'A: ../../launch'"),
+        (uri("dataset_state", dataset=DATASET, as_of="C:/2026"), "with a timezone"),
+        (uri("memory_audit", memory_file=MEMORY, as_of="/2026"), "as_of must be a date"),
+        (uri("dataset_audit", dataset=DATASET, stale_days="../1"), "stale_days must be a whole number"),
         ("memlab://memory" + outside + "/history", "unknown resource"),
         ("file://" + outside, "unknown resource"),
         ("memlab://memory/" + "a" * 70_000 + "/claims", "unknown resource"),

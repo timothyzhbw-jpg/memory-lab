@@ -48,7 +48,7 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 
 以 `--root examples` 为例：`memlab://memory/memfalsify/MEMORY.md/claims`、`memlab://memory/memfalsify/MEMORY.md/audit?evidence_dir=memfalsify%2Fevidence&as_of=2026-10-10`、`memlab://dataset/orgmemory/feature-a/state` 和 `memlab://dataset/orgmemory/github-acme-web/explain/acme%2Fweb%2312`。
 
-- 路径相对于 `--root`。在服务器自己的检查之前，SDK 默认的资源安全检查会拒绝任何路径变量里的绝对路径、离开根目录的 `..` 和 NUL 字符。之后再做和工具参数相同的检查，包括符号链接检查和受限读取。
+- 路径相对于 `--root`。在服务器自己的检查之前，SDK 默认的资源安全检查会拒绝每个路径（`memory_file`、`dataset`、`evidence_dir`、`reviews_file`）里的绝对路径、离开根目录的 `..` 和 NUL 字符。之后再做和工具参数相同的检查，包括符号链接检查和受限读取。`subject`、`as_of` 和 `stale_days` 不是路径，由工具自己的检查和错误信息处理。
 - 查询参数都是可选的，含义和同名的工具参数相同。未知的查询参数会被忽略。`stale_days` 必须是不小于 0 的整数。subject 要做百分号编码：空格写成 `%20`，`/` 写成 `%2F`，`#` 写成 `%23`。
 - 资源一律使用离线的 `lexical` 验证器，即使服务器启动时加了 `--allow-model-verifiers` 也一样，因为客户端可能在模型没有要求的情况下读取资源。报告只有 Markdown 格式。没有 `exclude`、`verifier` 和 `format`，也没有 diff、history 和 rollback 的资源：这些请用工具。
 - 读取失败时返回 JSON-RPC 错误：URI 未知、路径被拒绝或输入无效时是 `-32602`，读取无法完成时是 `-32603`。错误信息就是工具会返回的那条，或者一条固定的信息。URI 本身不会被回显，也不会写进日志。
@@ -63,9 +63,9 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 | `review_memory_changes` | `memory_file`、`base`，可选 `head`、`evidence_dir` | 运行 `memfalsify_diff`，复核新增和修改的记忆，指出被删除的记忆，并说明未变的记忆没有重新检查。用户问某条记忆从哪里来时用 `memfalsify_history`；`memfalsify_rollback` 只用来展示补丁。 |
 | `explain_status` | `dataset`、`subject`，可选 `as_of` | 先运行 `orgmemory_validate`，再运行 `orgmemory_explain`，回答当前状态、授权决定及其证据、待审批、风险和被忽略的越权尝试。 |
 
-消息把参数写成代码块里的一行 JSON，控制字符、双向文本字符和其他不可见字符都会转义，因此参数无法另起一行，也无法藏起文字。提示词不读取文件，也不嵌入文件内容。提示词不会让 Agent 写文件、应用补丁、记录人工复核或追加事件：每个提示词最后都要求 Agent 报告之后就停下，并说明这类修改需要用户明确批准。工具引用的文本仍然不可信；Agent 被要求遇到工具报错时如实报告并停下，而不是绕过去。
+消息把参数写成代码块里的一行 JSON，控制字符、双向文本字符和其他不可见字符都会转义，因此参数无法另起一行，也无法藏起文字。提示词不读取文件，也不嵌入文件内容。提示词不会让 Agent 写文件、应用补丁、记录人工复核或追加事件：每个提示词都要求 Agent 报告之后就停下，并说明这类修改需要用户明确批准。工具引用的文本仍然不可信；Agent 被要求遇到工具报错时如实报告并停下，而不是绕过去。
 
-在返回任何文本之前，参数会按工具的方式检查：路径必须在根目录内且存在，修订版本遵守 git 工具的规则，`as_of` 必须是日期（`audit_memory`）或带时区的 ISO 8601 时间（`explain_status`）。未知的提示词，以及缺少、未知或无效的参数，都返回 JSON-RPC 错误（`-32602`），错误信息与工具相同，从不回显根目录之外的路径。
+在返回任何文本之前，参数会按工具的方式检查：路径必须在根目录内且存在，修订版本遵守 git 工具的规则，`as_of` 必须是日期（`audit_memory`）或带时区的 ISO 8601 时间（`explain_status`）。未知的提示词，以及缺少、未知或无效的参数，都返回 JSON-RPC 错误（`-32602`）。路径、修订版本和日期的错误信息与工具相同，从不回显根目录之外的路径。服务器不会记录这些错误。
 
 ## 安装
 

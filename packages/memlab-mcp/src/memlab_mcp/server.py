@@ -553,8 +553,10 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
     """Resource templates over the guarded tool functions: same text, confinement and error messages.
 
     Template variables carry the tool argument names, so error messages name what the URI holds. The
-    SDK's default ResourceSecurity stays on for every path variable (no '..' escape, absolute path or
-    NUL) in front of the server's own checks. Resources never call a model verifier."""
+    SDK's default ResourceSecurity (no '..' escape, absolute path or NUL) stays on for every path, in front
+    of the server's own checks. Values that are not paths are exempt and get the tools' own messages: a
+    subject is a name ('A: launch' would trip the drive-letter check), and as_of and stale_days are a
+    time and a number. Resources never call a model verifier."""
 
     def read(tool: str, **arguments) -> str:
         try:
@@ -571,9 +573,10 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
 
     trailer = " Read-only. " + UNTRUSTED
     markdown = "text/markdown"
+    paths = ResourceSecurity(exempt_params=frozenset({"subject", "as_of", "stale_days"}))
 
     @server.resource("memlab://memory/{+memory_file}/claims", name="memory_claims", title="MemFalsify: claims",
-                     mime_type="application/json",
+                     mime_type="application/json", security=paths,
                      description="The claims MemFalsify extracts from a memory file, as the JSON array "
                                  "memfalsify_claims returns. memory_file is relative to the server root, e.g. "
                                  "memlab://memory/MEMORY.md/claims." + trailer)
@@ -581,7 +584,7 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
         return read("memfalsify_claims", memory_file=memory_file)
 
     @server.resource("memlab://memory/{+memory_file}/audit{?evidence_dir,reviews_file,as_of}",
-                     name="memory_audit", title="MemFalsify: audit report", mime_type=markdown,
+                     name="memory_audit", title="MemFalsify: audit report", mime_type=markdown, security=paths,
                      description="The Markdown report memfalsify_audit returns for this memory file, always with "
                                  "the offline lexical verifier. Optional query parameters: evidence_dir, "
                                  "reviews_file (requires evidence_dir) and as_of (YYYY-MM-DD). Without "
@@ -592,7 +595,7 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
                     reviews_file=reviews_file, verifier="lexical", as_of=as_of, format="markdown")
 
     @server.resource("memlab://dataset/{+dataset}/state{?as_of}", name="dataset_state",
-                     title="orgmemory: current state", mime_type=markdown,
+                     title="orgmemory: current state", mime_type=markdown, security=paths,
                      description="The Markdown replay report orgmemory_replay returns: the current state of "
                                  "every subject under the authority policy. Optional as_of: ISO 8601 with a "
                                  "timezone." + trailer)
@@ -600,7 +603,7 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
         return read("orgmemory_replay", dataset=dataset, as_of=as_of, format="markdown")
 
     @server.resource("memlab://dataset/{+dataset}/audit{?as_of,stale_days}", name="dataset_audit",
-                     title="orgmemory: decision audit", mime_type=markdown,
+                     title="orgmemory: decision audit", mime_type=markdown, security=paths,
                      description="The Markdown report orgmemory_audit returns: where the decision process needs "
                                  "attention. Optional as_of (ISO 8601 with a timezone; without it staleness is "
                                  f"measured now) and stale_days (default {DEFAULT_STALE_DAYS})." + trailer)
@@ -608,11 +611,8 @@ def _add_resources(server: MCPServer, runners: dict) -> None:
         return read("orgmemory_audit", dataset=dataset, as_of=as_of, stale_days=stale(stale_days),
                     format="markdown")
 
-    # A subject is a name, not a path: 'acme/web#12' arrives percent-encoded and decoded, and a name such as
-    # 'A: launch' would trip the drive-letter check. explain only looks it up among the replayed subjects.
     @server.resource("memlab://dataset/{+dataset}/explain/{subject}{?as_of}", name="dataset_explain",
-                     title="orgmemory: explain a subject", mime_type=markdown,
-                     security=ResourceSecurity(exempt_params=frozenset({"subject"})),
+                     title="orgmemory: explain a subject", mime_type=markdown, security=paths,
                      description="Why one subject is in its current state, as orgmemory_explain returns. "
                                  "Percent-encode the subject (space %20, '/' %2F, '#' %23). Optional as_of: ISO "
                                  "8601 with a timezone." + trailer)
