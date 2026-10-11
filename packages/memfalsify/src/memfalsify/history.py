@@ -18,9 +18,9 @@ from pydantic import BaseModel
 from . import __version__
 from .audit import ATTENTION, AuditReport, Status, audit_claims
 from .corpus import DIFF_HEADER, HISTORY_HEADER
+from .formats import Value
 from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, open_repository, printable,
                        resolve_commit, show_text)
-from .formats import Value
 from .memory import Claim
 from .report import LABELS, _finding, _quote, metadata_line
 from .text import terms
@@ -409,7 +409,8 @@ def memory_history(memory_file: Path, max_commits: int = 100, follow_links: bool
             latest.pop(removal.memory_id, None)
             latest[removal.memory_id] = removal
     claims = [ClaimHistory(memory_id=c.id, text=c.text, location=c.location, section=c.section,
-                           metadata=c.metadata, introduced=state[c.id].introduced, last_changed=state[c.id].last_changed,
+                           metadata=c.metadata, introduced=state[c.id].introduced,
+                           last_changed=state[c.id].last_changed,
                            replaced=ClaimVersion.of(state[c.id].replaced) if state[c.id].replaced else None)
               for c in current.claims]
     return HistoryReport(memory_file=str(memory_file), files=current.files, head=head,
