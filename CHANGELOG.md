@@ -16,7 +16,31 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### orgmemory
+
+#### Added
+
+- `orgmemory export DATASET --out DIR [--as-of T] [--force]` writes one Architecture Decision Record per
+  subject whose replay has a current authorized decision. The layout is Michael Nygard's, as adr-tools
+  writes it (title, `Date:`, Status, Context, Decision, Consequences), with MADR's status words
+  (`approved` is Accepted, `rejected` Rejected, revoked back to `proposed` Proposed) and an Evidence section
+  with every cited quote, its file, line, character range, full SHA-256 and source URI. Context lists the
+  requests and risks on record; Consequences lists who may change the status, dependencies, ignored change
+  attempts and conflicts. File names are `<slug>-<hash12>.md`, from the subject alone, and records contain
+  nothing from the run, so an unchanged log exports to the same bytes.
+- `orgmemory export --format csv [--out FILE]`: the same decisions as one table, to stdout or a new file.
+  List columns are JSON arrays that decode to the exact values; other cells are one line, and a cell that
+  starts like a spreadsheet formula gets a leading `'`.
+- Export is create-only: if any target exists, nothing is written, unless `--force`, which replaces regular
+  files by rename and never writes through a symlink or hard link. A target inside the dataset directory is
+  refused, also through a symlink, `..` or different letter case. Untrusted text is escaped as in the
+  reports. `examples/orgmemory/adr/` holds the output for both example datasets.
+
+#### Fixed
+
+- Markdown reports (`replay`, `explain`, `audit`): untrusted text starting with four spaces, such as an
+  indented evidence quote, became an indented code block that showed the escaping instead of the text.
+  Leading spaces are now written as character references.
 
 ## memlab-core
 

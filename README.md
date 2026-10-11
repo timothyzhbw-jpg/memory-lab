@@ -12,8 +12,8 @@ It contains two independent tools that share one evidence core:
 |---|---|---|
 | Question | *Is this memory backed by evidence?* | *Is this the current, authorized state?* |
 | Input | `MEMORY.md` + a directory of evidence files | Event log + role policy + evidence manifest |
-| Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail, decision-process audit |
-| Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` only appends |
+| Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail, decision-process audit, ADR export |
+| Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` only appends; `export` only creates new files outside the dataset |
 
 By default everything runs offline with no API keys; optional model verifiers (Claude and TypeSafe AI's Jev) can be switched on. Python 3.10+, Apache-2.0.
 
@@ -131,6 +131,7 @@ orgmemory explain  <dataset> "Feature A"      # why it is in this state, with qu
 orgmemory replay   <dataset> --as-of 2026-10-07T23:59:59Z   # state at a past time
 orgmemory validate <dataset>                  # check every event, hash and quote
 orgmemory audit    <dataset> --as-of 2026-10-31T00:00:00Z   # where the decision process needs attention
+orgmemory export   <dataset> --out docs/adr      # one Architecture Decision Record per decided subject
 orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <dataset> --event '{"id": ..., ...}'
 ```
@@ -161,6 +162,26 @@ On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.m
 - `--as-of` drops later events, as in `replay`, and is also the reference time for staleness. Without it the whole log is audited and staleness is measured at the current time, so pass `--as-of` for a reproducible report.
 - Findings are sorted by severity, kind, subject, actor and replay order. The Markdown report starts with a summary table: one row per kind, one column per severity. `--format json` has `summary` (findings per severity), `kinds` (every kind, sorted by name) and `findings`.
 - Exit codes: `0`; `1` with `--strict` when any finding is high; `2` on invalid input, as for `replay`. The output is printed in every case except `2`.
+
+#### Export decisions as ADRs
+
+`export` writes each subject's current authorized decision as an Architecture Decision Record (ADR) for a directory such as `docs/adr`, or all of them as one CSV table. Like `audit`, it only restates replay, and it never modifies the dataset.
+
+```bash
+orgmemory export <dataset> --out DIR [--as-of ISO8601] [--force]
+orgmemory export <dataset> --format csv [--out FILE] [--as-of ISO8601] [--force]
+```
+
+- One Markdown file per subject whose replay has a current authorized decision; subjects without one are left out. The layout is Michael Nygard's, as adr-tools writes it: the subject as the title, `Date:` (the day of the decision), then `Status`, `Context`, `Decision`, `Consequences`, plus `Evidence`. The status uses MADR's words: `approved` is `Accepted`, `rejected` is `Rejected`, and a subject whose last decision was revoked is `Proposed`.
+- **Status**: the deciding event, the cutoff, and any open reconsideration or pending approval with the roles it awaits. **Context**: the applied requests, reconsiderations and risks, in replay order, marked when they came after the decision. **Decision**: who (with roles) decided what and when, what a `revoke` withdrew, and the earlier authorized decisions. **Consequences**: which roles the policy lets change the status, dependencies and their status, ignored change attempts, and replay's conflicts. **Evidence**: every quote those events cite, with file, line, character range, full SHA-256, source URI, source kind and capture time, and the events that cite it.
+- File names are `<slug>-<hash12>.md`: the subject in lowercase ASCII letters, digits and hyphens (at most 48 characters; `subject` if none are left), then the first 12 hex digits of the SHA-256 of the exact subject, so subjects that slug alike still get different files. `Feature A` is `feature-a-5481a84ec80d.md`. A record contains nothing from the run itself, so exporting an unchanged log again gives the same bytes.
+- Create-only: if any of the files exists, nothing is written. `--force` replaces existing regular files by rename (never writing through a symlink or hard link); it leaves other files alone and never deletes one. The directory is created if needed.
+- The dataset is never written: an `--out` inside the dataset directory is refused, including through a symlink, `..` or different letter case.
+- Untrusted text (subjects, actors, roles, notes, IDs, quotes) is escaped as in the reports: it stays literal Markdown on one line.
+- `--format csv` writes one row per decided subject to stdout, or to a new file with `--out` (create-only, as above). Columns: `subject`, `adr_file`, `status`, `current_status`, `decided_at`, `decision_event`, `decision_action`, `decided_by`, `decided_by_roles`, `supersedes`, `earlier_decisions`, `reconsideration_requested`, `pending_approval`, `dependencies`, `open_risks`, `unauthorized_change_attempts`, `conflicts`, the decision's `evidence_ids`, `evidence_sha256`, `evidence_source_uris` and `evidence_quotes`, and `as_of`. List columns are JSON arrays that decode to the exact values. Each row is one line: control, bidi and separator characters in other cells are escaped as `\uXXXX`, and a cell that starts with `=`, `+`, `-` or `@` gets a leading `'` so a spreadsheet does not run it as a formula.
+- Exit codes: `0`, including when no subject has a decision yet (then no ADR file is written); `2` on invalid input or a refused write, with nothing written.
+
+Examples, from the two example datasets: the [Feature A record](examples/orgmemory/adr/feature-a/feature-a-5481a84ec80d.md), the [GitHub records](examples/orgmemory/adr/github-acme-web/) (accepted, rejected and revoked pull requests and issues), and their CSV tables in [`examples/orgmemory/adr/`](examples/orgmemory/adr/).
 
 #### Ingest GitHub issues and pull requests
 
@@ -318,6 +339,7 @@ the claims it adds or changes.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
+- An exported ADR restates the replayed log. Its Context lists recorded requests and risks, not anyone's reasoning, and a record does not update itself: export again after the log changes.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
