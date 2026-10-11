@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Any, Literal, Optional, get_args
 
@@ -42,17 +44,34 @@ STATE_FIELDS = ("status", "pending_approval", "reconsideration_requested", "risk
                 "last_authorized_decision")
 DECISIONS = {"approve", "reject", "revoke"}
 VARIANT_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+# Cc covers CR/LF/ESC, Cf bidi and zero-width, Zl/Zp Unicode line and paragraph separators.
+_LINE_BREAK = {"Cc", "Zl", "Zp"}
 
 
 class BenchmarkError(ValueError):
     """A case or the case selection is malformed; the message lists every problem found."""
 
 
+def _breaks_line(text: str) -> bool:
+    return any(unicodedata.category(char) in _LINE_BREAK for char in text)
+
+
 def _note() -> Any:
     return Field(min_length=1, description="One line on why the label is right")
 
 
-class StateLabel(BaseModel):
+class _WithNote(BaseModel):
+    """Label text is data. A note stays one physical line so it cannot open a new record."""
+    note: str = _note()
+
+    @model_validator(mode="after")
+    def _note_is_one_line(self) -> "_WithNote":
+        if _breaks_line(self.note):
+            raise ValueError("note is one line")
+        return self
+
+
+class StateLabel(_WithNote):
     """A subject's replayed state. All six fields are required, so a label states the whole state."""
     model_config = ConfigDict(extra="forbid")
 
@@ -62,17 +81,15 @@ class StateLabel(BaseModel):
     risks: list[str]                      # ids of the raise_risk events on record
     dependencies: list[str]
     last_authorized_decision: Optional[str]
-    note: str = _note()
 
 
-class TrailLabel(BaseModel):
+class TrailLabel(_WithNote):
     model_config = ConfigDict(extra="forbid")
 
     outcome: Outcome
-    note: str = _note()
 
 
-class FindingLabel(BaseModel):
+class FindingLabel(_WithNote):
     model_config = ConfigDict(extra="forbid")
 
     kind: Kind
@@ -126,7 +143,7 @@ class Snapshot(BaseModel):
         return self
 
 
-class LoadLabel(BaseModel):
+class LoadLabel(_WithNote):
     """Load the dataset with these files; it must fail with an error containing ``error``, or load if null."""
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +152,6 @@ class LoadLabel(BaseModel):
     policy: str = "policy.json"
     evidence: str = "evidence.jsonl"
     error: Optional[str] = Field(..., min_length=1)
-    note: str = _note()
 
     @model_validator(mode="after")
     def _name(self) -> "LoadLabel":
@@ -153,7 +169,7 @@ class Expected(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "Expected":
-        if "\n" in self.description:
+        if _breaks_line(self.description):
             raise ValueError("description is one line")
         if not self.validation and not self.snapshots:
             raise ValueError("a case needs validation labels or snapshots")
@@ -494,9 +510,29 @@ def evaluate(cases: list[Case]) -> dict:
 
 # --- output ------------------------------------------------------------------------------------------------
 
+def _one_line(text: str) -> str:
+    """Untrusted text on one line: control, bidi, zero-width and separator characters are escaped.
+
+    Same character classes as ``orgmemory.report._one_line``. The benchmark prints case descriptions,
+    notes, subjects, actors and exception text; those bytes are data, never terminal or markdown syntax.
+    """
+    return "".join(char if unicodedata.category(char) not in ("Cc", "Cf", "Zl", "Zp")
+                   else f"\\u{ord(char):04x}" if ord(char) <= 0xFFFF else f"\\U{ord(char):08x}"
+                   for char in text)
+
+
 def _cell(value: Any) -> str:
+    """One markdown table cell. Escaping matches ``orgmemory.report._safe`` so the cell stays literal."""
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    return " ".join(text.split()).replace("|", "\\|")
+    text = escape(_one_line(text), quote=False)
+    text = re.sub(r"([\\`*_{}\[\]#|~])", r"\\\1", text)
+    text = re.sub(r"^(\s*)([-+=])", r"\1\\\2", text)
+    return re.sub(r"^(\s*\d+)([.)])(?=\s)", r"\1\\\2", text)
+
+
+def _terminal(text: str) -> str:
+    """Stderr stays multi-line, but each line is inert if a runner or terminal prints it."""
+    return "\n".join(_one_line(line) for line in text.splitlines())
 
 
 def to_markdown(result: dict) -> str:
@@ -506,17 +542,17 @@ def to_markdown(result: dict) -> str:
            f"checks: {totals['checks']}",
            f"- Result: {totals['passed']}/{totals['checks']} checks pass, {totals['failed']} fail", "",
            "## By check kind", "", "| Kind | Checks | Pass | Fail |", "|---|---|---|---|"]
-    out += [f"| {kind} | {t['checks']} | {t['passed']} | {t['failed']} |"
+    out += [f"| {_cell(kind)} | {t['checks']} | {t['passed']} | {t['failed']} |"
             for kind, t in result["by_kind"].items() if t["checks"]]
     out += ["", "## By case", "", "| Case | Labels | Checks | Pass | Fail | What it tests |",
             "|---|---|---|---|---|---|"]
-    out += [f"| {c['id']} | {c['labels']} | {c['checks']} | {c['passed']} | {c['failed']} | {_cell(c['description'])} |"
+    out += [f"| {_cell(c['id'])} | {c['labels']} | {c['checks']} | {c['passed']} | {c['failed']} | {_cell(c['description'])} |"
             for c in result["cases"]]
     failed = [c for c in result["checks"] if not c["passed"]]
     out += ["", "## Mismatches", ""]
     if failed:
         out += ["| Case | When | Check | Expected | Actual | Label note |", "|---|---|---|---|---|---|"]
-        out += [f"| {c['case']} | {c['when']} | {_cell(' '.join([c['kind'], c['target']] + ([c['field']] if c['field'] else [])))} "
+        out += [f"| {_cell(c['case'])} | {_cell(c['when'])} | {_cell(' '.join([c['kind'], c['target']] + ([c['field']] if c['field'] else [])))} "
                 f"| {_cell(c['expected'])} | {_cell(c['actual'])} | {_cell(c['note'])} |" for c in failed]
     else:
         out.append("None: every check matches its label.")
@@ -540,21 +576,23 @@ def main(
     try:
         cases = load_cases(cases_dir, case)
     except (ValueError, OSError) as exc:
-        typer.echo(f"error: {exc}", err=True)
+        typer.echo(f"error: {_terminal(str(exc))}", err=True)
         raise typer.Exit(2)
     if check:
         labels, checks = map(sum, zip(*(count_labels(c.expected) for c in cases)))
         typer.echo(f"{len(cases)} case(s), {labels} labels, {checks} checks: expectations OK")
         return
     result = evaluate(cases)
-    data = json.dumps(result, indent=2, ensure_ascii=False, default=str) + "\n"
+    # ASCII JSON: bidi and homoglyphs in subjects, actors and notes cannot reorder a terminal.
+    # json.loads restores the original characters.
+    data = json.dumps(result, indent=2, ensure_ascii=True, default=str) + "\n"
     if json_out is not None and str(json_out) == "-":
         typer.echo(data, nl=False)
     else:
         typer.echo(to_markdown(result), nl=False)
         if json_out is not None:
             json_out.write_bytes(data.encode("utf-8"))
-            typer.echo(f"wrote {json_out}", err=True)
+            typer.echo(f"wrote {_one_line(str(json_out))}", err=True)
     if result["totals"]["failed"]:
         raise typer.Exit(1)
 

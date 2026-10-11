@@ -56,7 +56,7 @@ benchmarks/orgmemory/cases/<case-id>/
 
 `github-acme-api` also holds `capture.json`, `github.json` and `github-sync.jsonl`: it was built with `orgmemory github convert` from that capture, and a test rebuilds it byte for byte.
 
-`expected.json` has a one-line `description`, `validation` labels and `snapshots`; a case needs at least one of the two lists. Every label has a `note`: one line on why it is right. Duplicate JSON keys anywhere in the file are an error.
+`expected.json` has a one-line `description`, `validation` labels and `snapshots`; a case needs at least one of the two lists. Every label has a `note`: one line on why it is right. A description or note that contains a control character (including a carriage return or escape) or a Unicode line separator is invalid. Duplicate JSON keys anywhere in the file are an error.
 
 ```json
 {
@@ -85,7 +85,7 @@ benchmarks/orgmemory/cases/<case-id>/
 
 ### Validation labels
 
-Each loads the dataset with `Dataset.load`, as `orgmemory validate` does. `events`, `policy` and `evidence` default to the case's own files; a label replaces any of them with a file named relative to the case directory, which must exist and stay inside it. An evidence manifest's paths are relative to the manifest's directory, so variant manifests sit next to `evidence.jsonl`. `error` is a substring the error message must contain, or `null` when the files must load. `name` is lowercase words joined by hyphens, unique in the case.
+Each loads the dataset with `Dataset.load`, as `orgmemory validate` does. `events`, `policy` and `evidence` default to the case's own files; a label replaces any of them with a file named relative to the case directory, which must exist and stay inside it. The path is resolved, so a symlink that leaves the case directory is invalid and is not read. An evidence manifest's paths are relative to the manifest's directory, so variant manifests sit next to `evidence.jsonl`. `error` is a substring the error message must contain, or `null` when the files must load. `name` is lowercase words joined by hyphens, unique in the case.
 
 A case whose own dataset is invalid (`invalid-log`) has only validation labels.
 
@@ -117,7 +117,7 @@ Every label becomes one check, except a state label, which is one check per fiel
 
 A failure inside `orgmemory` (an exception from `replay` or `audit`, or a labeled dataset that does not load) fails the affected checks with the error as the actual value; it does not stop the run.
 
-The markdown report has totals per check kind and per case, then every mismatch with the expected and actual values and the label's note. `--json` adds every check with an `id` (`case | when | kind | target | field`), `expected`, `actual`, `passed` and `note`.
+The markdown report has totals per check kind and per case, then every mismatch with the expected and actual values and the label's note. Every cell is escaped the same way as an `orgmemory audit` report: control characters, bidi and zero-width characters, HTML and markdown syntax stay literal, so a subject, actor, note or exception cannot break the table or the terminal. `--json` writes ASCII-only JSON (`ensure_ascii`); `json.loads` restores the original characters, including letters such as the Cyrillic look-alike in `unauthorized-actors`. The JSON object for each check has an `id` (`case | when | kind | target | field`), `expected`, `actual`, `passed` and `note`.
 
 ## Adding a case
 

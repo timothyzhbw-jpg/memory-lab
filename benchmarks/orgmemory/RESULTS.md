@@ -68,19 +68,19 @@ The README states the limitation: there is no policy versioning yet, and changin
 | revoke-chains | 23 | 56 | 56 | 0 | Revoke chains and invalid supersession: a revoke must name the decision in force on its own subject at its effective time; stale, cross-subject, backdated and unauthorized revokes change nothing, and reversals are reported unless a revoke came between. |
 | role-change | 12 | 34 | 26 | 8 | Role changes are not retroactive: policy.json holds today's roles (Lin promoted to product manager and Zhou moved to advisor on 2026-10-10, per the dated announcement), but each act should be judged by the role held when it took effect. |
 | simultaneous-decisions | 23 | 76 | 76 | 0 | Conflicting authorized decisions at the same instant (also written in different UTC offsets, and three at once): file order decides and the conflict is reported; same-instant agreement or an ignored attempt is no conflict. |
-| unauthorized-actors | 31 | 76 | 76 | 0 | Unauthorized and unknown actors, a look-alike actor id, a role that differs only in case, a listed actor with no roles, and split approve/reject authority: none of the ignored events may change state, and pending_approval names only roles that may both approve and reject. |
+| unauthorized-actors | 31 | 76 | 76 | 0 | Unauthorized and unknown actors, a look-alike actor id, a role that differs only in case, a listed actor with no roles, and split approve/reject authority: none of the ignored events may change state, and pending\_approval names only roles that may both approve and reject. |
 
 ## Mismatches
 
 | Case | When | Check | Expected | Actual | Label note |
 |---|---|---|---|---|---|
 | invalid-log | load | validation duplicate-key-event | error containing 'duplicate' | loads | the approve line names its actor twice ('lin', then 'zhou'); JSON parsers disagree on which one wins, so an authority log must refuse the line rather than silently pick the authorized one |
-| invalid-log | load | validation duplicate-key-policy | error containing 'duplicate' | loads | 'lin' is listed twice in actors (engineer, then product_manager); an ambiguous grant must fail closed rather than silently grant the last one |
+| invalid-log | load | validation duplicate-key-policy | error containing 'duplicate' | loads | 'lin' is listed twice in actors (engineer, then product\_manager); an ambiguous grant must fail closed rather than silently grant the last one |
 | role-change | 2026-10-09T00:00:00+00:00 | trail c02 outcome | applied | unauthorized | Zhou was product manager on 2026-10-03; the later move to advisor does not undo that approval |
 | role-change | 2026-10-09T00:00:00+00:00 | trail c04 outcome | unauthorized | applied | Lin was an engineer on 2026-10-05; the later promotion does not make that approval authorized |
 | role-change | 2026-10-20T00:00:00+00:00 | state Audit log export status | approved | proposed | Approved by Zhou while Zhou was product manager. |
-| role-change | 2026-10-20T00:00:00+00:00 | state Audit log export pending_approval | [] | ["product_manager"] | Approved by Zhou while Zhou was product manager. |
-| role-change | 2026-10-20T00:00:00+00:00 | state Audit log export last_authorized_decision | c02 | null | Approved by Zhou while Zhou was product manager. |
-| role-change | 2026-10-20T00:00:00+00:00 | audit unauthorized_attempts zhou severity | medium | high | only the post-change approve of Webhooks was outside Zhou's role |
-| role-change | 2026-10-20T00:00:00+00:00 | audit unauthorized_attempts lin severity | medium | not reported | Lin's approve of Bulk delete came before the promotion |
-| role-change | 2026-10-20T00:00:00+00:00 | audit * unexpected findings | [] | ["decision_reversed Bulk delete (medium)", "stale_pending_approval Audit log export (medium)"] | the labeled findings are all the audit should report |
+| role-change | 2026-10-20T00:00:00+00:00 | state Audit log export pending\_approval | \[\] | \["product\_manager"\] | Approved by Zhou while Zhou was product manager. |
+| role-change | 2026-10-20T00:00:00+00:00 | state Audit log export last\_authorized\_decision | c02 | null | Approved by Zhou while Zhou was product manager. |
+| role-change | 2026-10-20T00:00:00+00:00 | audit unauthorized\_attempts zhou severity | medium | high | only the post-change approve of Webhooks was outside Zhou's role |
+| role-change | 2026-10-20T00:00:00+00:00 | audit unauthorized\_attempts lin severity | medium | not reported | Lin's approve of Bulk delete came before the promotion |
+| role-change | 2026-10-20T00:00:00+00:00 | audit \* unexpected findings | \[\] | \["decision\_reversed Bulk delete (medium)", "stale\_pending\_approval Audit log export (medium)"\] | the labeled findings are all the audit should report |

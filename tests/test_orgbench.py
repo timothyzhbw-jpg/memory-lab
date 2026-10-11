@@ -298,6 +298,10 @@ def test_check_lists_every_problem(tmp_path):
     (lambda e: e["snapshots"][0].update(order=["e1"]), "order lists at least two distinct event ids"),
     (lambda e: e["validation"][0].update(name="Main"), "name is lowercase words joined by hyphens"),
     (lambda e: e.update(description="two\nlines"), "description is one line"),
+    (lambda e: e.update(description="two\rlines"), "description is one line"),
+    (lambda e: e.update(description="two\u2028lines"), "description is one line"),
+    (lambda e: e.update(description="bad\x1b[2J"), "description is one line"),
+    (lambda e: e["validation"][0].update(note="bad\nnote"), "note is one line"),
     (lambda e: e.update(validation=[], snapshots=[]), "a case needs validation labels or snapshots"),
     (lambda e: e.update(extra=1), "extra: Extra inputs are not permitted"),
 ])
@@ -345,3 +349,78 @@ def test_implementation_errors_fail_checks_instead_of_the_run(tmp_path, monkeypa
     first, *rest = result["checks"]
     assert first["kind"] == "validation" and "validation errors for Policy" in first["actual"]
     assert all(c["actual"] == f"dataset did not load: {first['actual']}" for c in rest)
+
+
+def _columns(row: str) -> int:
+    """Table columns, not counting a pipe that was escaped as part of a cell."""
+    pipes, index = 0, 0
+    while index < len(row):
+        if row[index] == "\\":
+            index += 2
+            continue
+        pipes += row[index] == "|"
+        index += 1
+    return pipes - 1
+
+
+def test_variant_symlink_outside_the_case_is_not_read(tmp_path):
+    root = write_case(tmp_path / "cases" / "tiny")
+    secret = tmp_path / "secret.jsonl"
+    secret.write_bytes(b"SECRET-TOKEN\n")
+    (root / "evidence.linked.jsonl").symlink_to(secret)
+    labels = expected()
+    labels["validation"].append({"name": "linked", "evidence": "evidence.linked.jsonl", "error": "x", "note": "-"})
+    (root / "expected.json").write_bytes(json.dumps(labels).encode("utf-8"))
+    with pytest.raises(bench.BenchmarkError) as caught:
+        bench.load_cases(tmp_path / "cases")
+    message = str(caught.value)
+    assert "evidence path escapes its root" in message
+    assert "SECRET-TOKEN" not in message and secret.read_bytes() == b"SECRET-TOKEN\n"
+
+
+def test_untrusted_text_stays_inert_in_markdown_and_json(tmp_path):
+    """Subjects, notes and descriptions are data: they cannot change the terminal, HTML or the table."""
+    payload = "Evil\x1b[2J\u202e\n| <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED** \\|"
+    markup = "\u202e <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED** \\|"
+    root = write_case(tmp_path / "cases" / "tiny")
+    events = [dict(event) for event in EVENTS]
+    for event in events:
+        if event["subject"] == "X":
+            event["subject"] = payload
+    (root / "events.jsonl").write_bytes("".join(json.dumps(event) + "\n" for event in events).encode("utf-8"))
+    labels = expected()
+    labels["description"] = "desc " + markup
+    state = labels["snapshots"][0]["states"].pop("X")
+    state["status"] = "rejected"
+    state["note"] = "note " + markup
+    labels["snapshots"][0]["states"][payload] = state
+    (root / "expected.json").write_bytes(json.dumps(labels).encode("utf-8"))
+    case, = bench.load_cases(tmp_path / "cases")
+    result = bench.evaluate([case])
+    failed = [c for c in result["checks"] if not c["passed"]]
+    assert any(c["target"] == payload and c["expected"] == "rejected" and c["actual"] == "approved" for c in failed)
+    report = bench.to_markdown(result)
+    rendered = runner.invoke(bench.app, ["--cases-dir", str(tmp_path / "cases")])
+    listed = runner.invoke(bench.app, ["--cases-dir", str(tmp_path / "cases"), "--json", "-"])
+    assert rendered.exit_code == 1 and listed.exit_code == 1, listed.output
+    parsed = json.loads(listed.output)
+    assert any(c["target"] == payload and c["actual"] == "approved" for c in parsed["checks"])
+    for text in (report, rendered.output):
+        assert "\x1b" not in text and "\u202e" not in text
+        assert "<img" not in text and "**FORGED**" not in text and "[forged](https://evil.invalid)" not in text
+        assert "FORGED" in text and "u001b" in text and "u202e" in text
+    assert "\x1b" not in listed.output and "\u202e" not in listed.output
+    assert "\\u001b" in listed.output and "\\u202e" in listed.output
+    rows = [line for line in report.splitlines() if line.startswith("| tiny |")]
+    assert rows and all(_columns(row) == 6 for row in rows)
+    assert all("\x1b" not in line and "\u202e" not in line for line in report.splitlines())
+
+
+def test_rejected_label_text_cannot_control_the_terminal(tmp_path):
+    labels = expected()
+    labels["description"] = "bad\x1b[2J\u202e"
+    write_case(tmp_path / "cases" / "tiny", labels)
+    out = runner.invoke(bench.app, ["--cases-dir", str(tmp_path / "cases"), "--check"])
+    assert out.exit_code == 2
+    assert "\x1b" not in out.output and "\u202e" not in out.output
+    assert "description is one line" in out.output
