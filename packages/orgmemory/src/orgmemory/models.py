@@ -111,7 +111,7 @@ class DatedPolicy(BaseModel):
     role_changes: list[RoleChange]  # applied up to the cutoff, in effective order
 
 
-def omit_none(fields: tuple[str, ...]):
+def omit_empty(fields: tuple[str, ...]):
     """A wrap serializer dropping ``fields`` when they are None or empty, so output for a dataset without a
     policy log stays byte-identical to what it was before dated policy existed."""
     def serialize(self, handler):
@@ -188,4 +188,4 @@ class ReplayResult(BaseModel):
     audit_log: list[TrailEntry]
     dated_policy: Optional[DatedPolicy] = None
 
-    _serialize = omit_none(("dated_policy",))
+    _serialize = omit_empty(("dated_policy",))

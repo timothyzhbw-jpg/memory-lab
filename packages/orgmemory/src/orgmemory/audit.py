@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from memcore import EvidenceSpan
 
-from .models import DECISIONS, Conflict, DatedPolicy, ReplayResult, RoleChange, SubjectState, TrailEntry, omit_none
+from .models import DECISIONS, Conflict, DatedPolicy, ReplayResult, RoleChange, SubjectState, TrailEntry, omit_empty
 from .replay import Dataset, replay
 
 Severity = Literal["high", "medium", "low"]
@@ -61,7 +61,7 @@ class AuditFinding(BaseModel):
     events: list[CitedEvent]       # the same events, in the same order, with their evidence
     role_changes: list[RoleChange] = []  # policy-log entries the finding relies on; omitted when none
 
-    _serialize = omit_none(("role_changes",))
+    _serialize = omit_empty(("role_changes",))
 
 
 class AuditReport(BaseModel):
@@ -78,7 +78,7 @@ class AuditReport(BaseModel):
     findings: list[AuditFinding]
     dated_policy: Optional[DatedPolicy] = None  # as in ReplayResult; omitted when roles are not dated
 
-    _serialize = omit_none(("dated_policy",))
+    _serialize = omit_empty(("dated_policy",))
 
 
 def _duration(delta: timedelta) -> str:
