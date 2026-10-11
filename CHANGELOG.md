@@ -16,7 +16,27 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### orgmemory
+
+#### Added
+
+- `orgmemory changes <dataset> --from T1 --to T2 [--format markdown|json]` reports what changed between
+  two times. It replays the log at T1 and at T2 and lists, per subject, the authorized decisions in the
+  period (status before and after, actor, roles, quoted evidence), pending approvals and reconsiderations
+  opened or resolved, new risks, dependencies and conflicts, and attempts the policy ignored, under a
+  summary table. The period holds the events after T1, up to and including T2. Like the audit, it is
+  built only on `replay()` and its audit trail, is deterministic and escapes untrusted text. Golden reports:
+  `examples/orgmemory/changes-report.md` and `examples/orgmemory/github-acme-web/changes-report.md`.
+- `orgmemory.audit.periods()`: every pending-approval and reconsideration period of a subject's trail.
+  `open_periods()` is now built on it and returns the same events as before.
+
+### memlab-mcp
+
+#### Added
+
+- `orgmemory_changes` (`dataset`, `from_time`, `to_time`, `format`): the read-only tool over
+  `orgmemory changes`, with the same root confinement as the other dataset tools. Requires the orgmemory
+  release that adds `changes`.
 
 ## memlab-core
 

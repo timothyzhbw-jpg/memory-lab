@@ -131,6 +131,7 @@ orgmemory explain  <数据集> "Feature A"      # 为什么处于当前状态，
 orgmemory replay   <数据集> --as-of 2026-10-07T23:59:59Z   # 某个历史时间点的状态
 orgmemory validate <数据集>                  # 校验每个事件、哈希和引用
 orgmemory audit    <数据集> --as-of 2026-10-31T00:00:00Z   # 决策流程哪里需要关注
+orgmemory changes  <数据集> --from 2026-10-05T23:59:59Z --to 2026-10-08T23:59:59Z   # 两个时间点之间发生了什么变化
 orgmemory evidence add <数据集> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <数据集> --event '{"id": ..., ...}'
 ```
@@ -161,6 +162,31 @@ orgmemory audit <数据集> [--as-of ISO8601] [--stale-days 14] [--format markdo
 - `--as-of` 和 `replay` 一样会忽略之后的事件，同时也是计算是否超期的参考时间。不加时审计整个日志，并以当前时间计算超期，所以需要可复现的报告时请加 `--as-of`。
 - 发现项按严重程度、类型、议题、参与者和回放顺序排序。Markdown 报告以一张汇总表开头：每种类型一行，每个严重程度一列。`--format json` 包含 `summary`（各严重程度的数量）、`kinds`（每种类型的数量，按名称排序）和 `findings`。
 - 退出码：`0`；加 `--strict` 且存在 high 级别的发现项时为 `1`；输入无效时为 `2`，与 `replay` 相同。除了退出码 `2`，其他情况都会输出报告。
+
+#### 两个时间点之间发生了什么变化
+
+`changes` 分别在 `--from` 和 `--to` 两个时间点回放日志，按议题报告这段时间里发生的变化：时间段包含 `--from` 之后、直到 `--to`（含）的事件，与 `replay --as-of` 的截止规则相同。和审计一样，它是只读的，不引入新的事件语义，并引用每个相关事件及其证据原文。
+
+```bash
+orgmemory changes <数据集> --from ISO8601 --to ISO8601 [--format markdown|json]
+```
+
+示例数据从周一晚上到周四晚上（[完整报告](examples/orgmemory/changes-report.md)）：产品经理的决定让功能A从 `proposed` 变成 `rejected`；工程师提出了一个风险；客户的第一次请求有了结论，第二次请求则开启了“申请重新考虑”；客户经理的“批准”被忽略。[GitHub 示例的变化报告](examples/orgmemory/github-acme-web/changes-report.md)（2026-10-05T23:59:59Z 到 2026-10-10T23:59:59Z）把审查、合并、关闭和重新打开都按权限策略下的决定列出，并略去没有任何变化的议题，例如 `acme/web#4`：它的关闭记为评论，重新打开只是重复了一个已在等待决定的请求。
+
+| 类型 | 在时间段内何时列出 |
+|---|---|
+| `decision` | 生效了一次有权限的 `approve`、`reject` 或 `revoke`，列出它之前和之后的状态、参与者、其角色和证据。确认现有状态的决定也会列出，因为它成了新的授权决定 |
+| `pending_approval_opened` | `pending_approval` 开启：引用开启它并让它保持开启的事件，并说明到时间段结束时是否仍未关闭 |
+| `pending_approval_resolved` | 一次 `approve` 或 `reject` 关闭了等待中的批准：引用开启它的事件和这个决定 |
+| `reconsideration_opened` / `reconsideration_resolved` | 对 `reconsideration_requested` 的同样处理 |
+| `risk_raised` | 记录了一个风险 |
+| `dependency_added` | 新增的依赖，附带该依赖在时间段结束时的状态 |
+| `conflict` | 回放记录了一个冲突：`simultaneous_decisions`、`decision_reversed` 或 `invalid_supersession` |
+| `unauthorized_attempt` | 权限策略忽略了一个事件，每个事件一项。`comment` 不列出，因为它从不改变状态 |
+
+- Markdown 报告以一张汇总表开头：每个有变化的议题一行，列出它之前和之后的状态、按类型统计的变化，最后是合计行。议题有变化，或者在时间段之前没有任何事件时，才会列出。议题按名称排序，每个议题的变化先按类型（上表顺序）、再按回放顺序排列。
+- `--format json` 包含 `from_time`、`to_time`、事件和议题的计数、`summary`（各类型的变化数量，列出所有类型）和 `subjects`；每个议题有 `status_before`（时间段内新出现的议题为 `null`）、`status_after` 和 `changes`。
+- `--from` 和 `--to` 都必须提供，并且要带时区；`--from` 不能晚于 `--to`。退出码：`0`；输入无效时为 `2`，与 `replay` 相同。
 
 #### 导入 GitHub Issues 和 Pull Request
 
@@ -259,7 +285,7 @@ cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 
 ## MCP 服务器
 
-`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供九个工具：`memfalsify_claims`、`memfalsify_audit`、`memfalsify_diff`、`memfalsify_history`、`memfalsify_rollback`、`orgmemory_validate`、`orgmemory_replay`、`orgmemory_explain` 和 `orgmemory_audit`。`memfalsify_diff` 比较 git 里一份记忆文件的基准修订版本和另一端（默认是工作区），只审计新增或修改过的记忆。`memfalsify_history` 给出每条记忆由哪个提交引入、最后由哪个提交修改，并列出被删除的记忆。`memfalsify_rollback` 返回一条记忆的补丁，从不应用它。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内。这三个 git 工具还会拒绝工作区、git 目录、公共目录或对象库落在该根目录之外的仓库。不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭；加上之后，`memfalsify_audit` 和 `memfalsify_diff` 才能使用它们。工具参数、客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
+`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供十个工具：`memfalsify_claims`、`memfalsify_audit`、`memfalsify_diff`、`memfalsify_history`、`memfalsify_rollback`、`orgmemory_validate`、`orgmemory_replay`、`orgmemory_explain`、`orgmemory_audit` 和 `orgmemory_changes`。`memfalsify_diff` 比较 git 里一份记忆文件的基准修订版本和另一端（默认是工作区），只审计新增或修改过的记忆。`memfalsify_history` 给出每条记忆由哪个提交引入、最后由哪个提交修改，并列出被删除的记忆。`memfalsify_rollback` 返回一条记忆的补丁，从不应用它。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内。这三个 git 工具还会拒绝工作区、git 目录、公共目录或对象库落在该根目录之外的仓库。不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭；加上之后，`memfalsify_audit` 和 `memfalsify_diff` 才能使用它们。工具参数、客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
 
 ## 验证后端：词法、LLM、Jev
 
@@ -315,7 +341,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - 哈希只能证明某段引用确实存在于特定的字节里，不能证明来源是真实的，也不能证明这段话的意思就是某人所说的那样。
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
-- `orgmemory audit` 的发现项只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
+- `orgmemory audit` 的发现项和 `orgmemory changes` 只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
 - `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。

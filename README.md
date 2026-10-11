@@ -131,6 +131,7 @@ orgmemory explain  <dataset> "Feature A"      # why it is in this state, with qu
 orgmemory replay   <dataset> --as-of 2026-10-07T23:59:59Z   # state at a past time
 orgmemory validate <dataset>                  # check every event, hash and quote
 orgmemory audit    <dataset> --as-of 2026-10-31T00:00:00Z   # where the decision process needs attention
+orgmemory changes  <dataset> --from 2026-10-05T23:59:59Z --to 2026-10-08T23:59:59Z   # what changed in between
 orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <dataset> --event '{"id": ..., ...}'
 ```
@@ -161,6 +162,31 @@ On the example as of 2026-10-31 ([full report](examples/orgmemory/audit-report.m
 - `--as-of` drops later events, as in `replay`, and is also the reference time for staleness. Without it the whole log is audited and staleness is measured at the current time, so pass `--as-of` for a reproducible report.
 - Findings are sorted by severity, kind, subject, actor and replay order. The Markdown report starts with a summary table: one row per kind, one column per severity. `--format json` has `summary` (findings per severity), `kinds` (every kind, sorted by name) and `findings`.
 - Exit codes: `0`; `1` with `--strict` when any finding is high; `2` on invalid input, as for `replay`. The output is printed in every case except `2`.
+
+#### What changed between two times
+
+`changes` replays the log at `--from` and at `--to` and reports, per subject, what changed in between: the events after `--from`, up to and including `--to` (the cutoff `replay --as-of` uses). Like the audit, it is read-only, adds no event semantics, and cites every event involved with its evidence quotes.
+
+```bash
+orgmemory changes <dataset> --from ISO8601 --to ISO8601 [--format markdown|json]
+```
+
+On the example from Monday night to Thursday night ([full report](examples/orgmemory/changes-report.md)), Feature A went from `proposed` to `rejected` by the product manager's decision, the engineer raised a risk, the customer's first request was settled and their second one opened a reconsideration, and the account manager's "approval" was ignored. The [GitHub example's changes](examples/orgmemory/github-acme-web/changes-report.md) from 2026-10-05T23:59:59Z to 2026-10-10T23:59:59Z show reviews, merges, closes and reopens as policy decisions, and leave out subjects where nothing changed, such as `acme/web#4`: its closes are comments, and its reopens repeat a request that was already pending.
+
+| Kind | Listed when, in the period |
+|---|---|
+| `decision` | An authorized `approve`, `reject` or `revoke` was applied, with the status before and after it, the actor, their roles and the evidence. A decision that confirms the status is listed too, because it becomes the authorizing decision |
+| `pending_approval_opened` | `pending_approval` opened: cites the events that opened and kept it open, and says whether it was still open at the end |
+| `pending_approval_resolved` | An `approve` or `reject` closed a pending approval: cites the event that opened it and the decision |
+| `reconsideration_opened` / `reconsideration_resolved` | The same for `reconsideration_requested` |
+| `risk_raised` | A risk was put on record |
+| `dependency_added` | A new dependency, with the dependency's status at the end of the period |
+| `conflict` | Replay recorded a conflict: `simultaneous_decisions`, `decision_reversed` or `invalid_supersession` |
+| `unauthorized_attempt` | The policy ignored an event, one change per event. `comment` is not listed, because it never changes state |
+
+- The Markdown report starts with a summary table: one row per changed subject, with its status before and after and its changes per kind, and a total row. A subject is listed when something changed or when it had no events before the period. Subjects are sorted by name, and each subject's changes by kind (in the order above), then replay order.
+- `--format json` has `from_time`, `to_time`, event and subject counts, `summary` (changes per kind, every kind listed) and `subjects`, each with `status_before` (`null` for a subject new in the period), `status_after` and `changes`.
+- `--from` and `--to` are required and need a timezone; `--from` must not be after `--to`. Exit codes: `0`, or `2` on invalid input, as for `replay`.
 
 #### Ingest GitHub issues and pull requests
 
@@ -259,7 +285,7 @@ The CLIs must be installed in the environment the agent's shell uses. To use the
 
 ## MCP server
 
-`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent nine tools: `memfalsify_claims`, `memfalsify_audit`, `memfalsify_diff`, `memfalsify_history`, `memfalsify_rollback`, `orgmemory_validate`, `orgmemory_replay`, `orgmemory_explain` and `orgmemory_audit`. `memfalsify_diff` compares a memory file in git between a base revision and a head (default: the working tree) and audits only the claims that were added or changed. `memfalsify_history` reports the commits that introduced and last changed each claim, plus removals. `memfalsify_rollback` returns a patch for one claim and never applies it. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`. The three git tools also refuse a repository whose work tree, git directory, common directory or object store lies outside that root. Model verifiers stay off unless the server is started with `--allow-model-verifiers`, which enables them for `memfalsify_audit` and `memfalsify_diff`. Tools, arguments and client registration: [docs/mcp.md](docs/mcp.md).
+`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent ten tools: `memfalsify_claims`, `memfalsify_audit`, `memfalsify_diff`, `memfalsify_history`, `memfalsify_rollback`, `orgmemory_validate`, `orgmemory_replay`, `orgmemory_explain`, `orgmemory_audit` and `orgmemory_changes`. `memfalsify_diff` compares a memory file in git between a base revision and a head (default: the working tree) and audits only the claims that were added or changed. `memfalsify_history` reports the commits that introduced and last changed each claim, plus removals. `memfalsify_rollback` returns a patch for one claim and never applies it. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`. The three git tools also refuse a repository whose work tree, git directory, common directory or object store lies outside that root. Model verifiers stay off unless the server is started with `--allow-model-verifiers`, which enables them for `memfalsify_audit` and `memfalsify_diff`. Tools, arguments and client registration: [docs/mcp.md](docs/mcp.md).
 
 ## Verifier backends: lexical, LLM, Jev
 
@@ -317,7 +343,7 @@ the claims it adds or changes.
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
-- `orgmemory audit` findings restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
+- `orgmemory audit` findings and `orgmemory changes` restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
