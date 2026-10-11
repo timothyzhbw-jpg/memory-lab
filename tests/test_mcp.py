@@ -219,17 +219,23 @@ def test_evidence_directory_swap_cannot_list_outside_root(root, monkeypatch):
     outside.mkdir()
     (outside / "private-filename.png").write_bytes(b"synthetic")
     original = memfalsify_corpus.walk_files
+    called = []
 
-    def swap_then_walk(path):
+    def swap_then_walk(path, onerror=None):
+        called.append(path)
         path.rename(path.with_name("previous-evidence"))
         path.symlink_to(outside, target_is_directory=True)
-        return original(path)
+        return original(path, onerror=onerror)
 
     monkeypatch.setattr(memfalsify_corpus, "walk_files", swap_then_walk)
     result = call(create_server(root), "memfalsify_audit", memory_file=MEMORY,
                   evidence_dir=EVIDENCE, format="json")
     assert "private-filename" not in text(result)
     error(result)
+    assert called == [root / EVIDENCE]
+    assert (root / EVIDENCE).is_symlink()
+    assert (root / EVIDENCE).resolve() == outside.resolve()
+    assert (root / EVIDENCE).with_name("previous-evidence").is_dir()
 
 
 @pytest.mark.parametrize("filename", memlab_server.DATASET_FILES)

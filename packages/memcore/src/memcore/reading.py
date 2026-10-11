@@ -6,6 +6,7 @@ symlinks at the syscall boundary, including files replaced after validation.
 """
 from __future__ import annotations
 
+import errno
 import os
 import stat
 from contextlib import contextmanager
@@ -101,6 +102,57 @@ def open_text(path: Path, encoding: str = "utf-8"):
     return _open(path, encoding)
 
 
+def _walk_directory(path: Path, descriptor: int, onerror):
+    """Yield before descent, keeping the directory pinned while callers prune."""
+    try:
+        with os.scandir(descriptor) as iterator:
+            entries = list(iterator)
+    except OSError as error:
+        if onerror is None:
+            raise
+        onerror(error)
+        return
+
+    directories, files, descend = [], [], set()
+    for entry in entries:
+        is_link = False
+        try:
+            is_link = entry.is_symlink()
+            is_directory = entry.is_dir()
+        except OSError as error:
+            # A known cyclic link belongs in files for the reader to report.
+            if not (is_link and error.errno == errno.ELOOP):
+                if onerror is None:
+                    raise
+                onerror(error)
+            # If the callback returns, retain unknown entries like os.walk does.
+            files.append(entry.name)
+            continue
+        if is_directory:
+            directories.append(entry.name)
+            if not is_link:
+                descend.add(entry.name)
+        else:
+            files.append(entry.name)
+
+    yield path, directories, files
+    for name in directories:
+        if name not in descend:
+            continue  # Directory symlinks are listed but never opened.
+        try:
+            child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                            dir_fd=descriptor)
+        except OSError as error:
+            if onerror is None:
+                raise
+            onerror(error)
+            continue
+        try:
+            yield from _walk_directory(path / name, child, onerror)
+        finally:
+            os.close(child)
+
+
 def walk_files(path: Path, onerror=None):
     """Walk from a pinned descriptor so directory swaps cannot disclose outside filenames."""
     root = _ROOT.get()
@@ -111,9 +163,14 @@ def walk_files(path: Path, onerror=None):
     resolved = Path(path).resolve()
     if not resolved.is_relative_to(base):
         raise ValueError("directory is outside the server root")
-    descriptor = _directory(resolved.relative_to(base).parts, root_fd)
     try:
-        for relative, directories, files, _ in os.fwalk(".", onerror=onerror, follow_symlinks=False, dir_fd=descriptor):
-            yield resolved / relative, directories, files
+        descriptor = _directory(resolved.relative_to(base).parts, root_fd)
+    except OSError as error:
+        if onerror is None:
+            raise
+        onerror(error)
+        return
+    try:
+        yield from _walk_directory(resolved, descriptor, onerror)
     finally:
         os.close(descriptor)
