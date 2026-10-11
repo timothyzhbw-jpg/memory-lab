@@ -173,6 +173,7 @@ orgmemory explain        <数据集> "acme/web#12"
 ```
 
 - token 取 `GITHUB_TOKEN`、`GH_TOKEN` 中第一个非空的值（可以用 `GH_TOKEN=$(gh auth token)`）；没有 `--token` 参数。一个只读的细粒度（fine-grained）token，带 Issues、Pull requests 和 Metadata 的读权限就够了。没有 token 时以未认证方式运行：只能访问公开仓库，每小时 60 次请求。
+- 分页链接必须保持原请求的列表端点和查询条件。响应的 JSON 字符串或响应头如果包含 token（包括百分号编码形式），会被拒绝。两种 HTTP 传输都将每个响应体限制为 8 MiB；超过限制时 sync 以退出码 2 结束，不追加数据，也不保存 capture。
 - 第一次运行读取全部内容；可以用 `--since ISO时间`（必须带时区）限定范围，但仓库一旦有了游标（完成过一次完整同步），这个参数就会被拒绝。之后每次只读取上一次完整同步以来变化的内容，并往前多重叠 5 分钟。`--full` 重新扫描全部，`--issue N`（可重复）只刷新指定编号，不能与 `--full` 或 `--since` 同用。重复运行是安全的：ID 是确定的，日志里已有的内容不会被追加第二次。GitHub 不一定会因为每种变化（标签、依赖关系）都把 issue 标为已更新，所以隔一段时间跑一次 `--full`。
 - `sync` 会复用到 `api.github.com` 的 HTTPS 连接，使用系统 CA 存储校验证书，每次请求超时为 30 秒；运行结束（包括出错）时关闭连接。连接在收到任何响应字节之前失败时，会新建连接重试一次 GET；限流和其他重试行为保持原样。设置 `HTTPS_PROXY` / `https_proxy` 或 `ALL_PROXY` / `all_proxy` 时回退到原有 urllib 传输，按 urllib 的代理规则处理，不复用连接。传输层不会自动跟随重定向；客户端只允许经过校验的同源重定向。
 - `sync` 抓取期间最多每 5 秒向 stderr 输出一次进度，显示已完整抓取的 issue/PR 数、请求数和剩余限额（不可用时为 `unknown`）。每次因速率限制休眠时还会输出休眠时长和 UTC 唤醒时间。短运行可能不显示进度；stdout 保持不变，包括摘要和 `--dry-run` JSONL。

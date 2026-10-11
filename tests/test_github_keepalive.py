@@ -7,6 +7,7 @@ from urllib.error import URLError
 import pytest
 from typer.testing import CliRunner
 
+from conftest import snapshot
 from github_fakes import API, DATE, FakeClock, FakeTransport, build_capture, reply, routes_from_capture
 from orgmemory import github_apply, github_fetch
 from orgmemory.cli import app
@@ -26,6 +27,7 @@ class ScriptedReader(io.RawIOBase):
 
     def __init__(self, steps):
         self.steps = list(steps)
+        self.bytes_read = 0
 
     def readable(self):
         return True
@@ -38,6 +40,7 @@ class ScriptedReader(io.RawIOBase):
             raise step
         count = min(len(step), len(buffer))
         buffer[:count] = step[:count]
+        self.bytes_read += count
         if count < len(step):
             self.steps.insert(0, step[count:])
         return count
@@ -203,6 +206,62 @@ def test_full_large_binary_body_and_chunked_framing_unchanged(chunked):
         assert len(factory.calls) == 1
 
 
+@pytest.mark.parametrize("framing", ["length", "chunked", "eof"])
+@pytest.mark.parametrize("status", [200, 403, 404, 410])
+def test_persistent_response_size_cap_stops_reading_early(framing, status):
+    cap = 8 * 1024 * 1024
+    body = b'x' * (cap * 2)
+    response = wire(body, status=status)
+    if framing == "chunked":
+        response = (f"HTTP/1.1 {status} OK\r\nTransfer-Encoding: chunked\r\n\r\n".encode() +
+                    f"{len(body):x}\r\n".encode() + body + b"\r\n0\r\n\r\n")
+    elif framing == "eof":
+        response = f"HTTP/1.1 {status} OK\r\nConnection: close\r\n\r\n".encode() + body
+    sock, fresh = ScriptedSocket([response]), ScriptedSocket([wire()])
+    factory, clock = Connections(sock, fresh), FakeClock()
+    with persistent(factory) as transport:
+        with pytest.raises(GitHubError, match="response body exceeds") as raised:
+            Client(transport, TOKEN, sleep=clock.sleep, clock=clock.clock).get(URL)
+        assert raised.value.status is None
+        assert cap < sock.readers[0].bytes_read < cap + 16 * 1024 < len(response)
+        assert sock.readers[0].steps  # The unread tail was not drained on close.
+        assert sock.closed and sock.readers[0].closed and transport._connection is None
+        assert len(factory.calls) == 1 and clock.sleeps == []
+        assert transport(URL, {})[2] == b"{}"  # Oversized responses cannot contaminate a reused connection.
+        assert len(factory.calls) == 2
+
+
+@pytest.mark.parametrize("chunked", [False, True])
+def test_persistent_response_at_size_cap_is_accepted(chunked):
+    body = b'x' * (8 * 1024 * 1024)
+    response = wire(body)
+    if chunked:
+        response = (b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" +
+                    f"{len(body):x}\r\n".encode() + body + b"\r\n0\r\n\r\n")
+    sock = ScriptedSocket([response, wire()])
+    factory = Connections(sock)
+    with persistent(factory) as transport:
+        assert transport(URL, {})[2] == body
+        assert transport(URL, {})[2] == b"{}" and len(factory.calls) == 1
+
+
+@pytest.mark.parametrize("status", [200, 404, 410])
+def test_cli_oversized_timeline_is_an_error_without_writes(github_dataset, tmp_path, monkeypatch, status):
+    sock = ScriptedSocket([wire(reply({"id": 1001, "full_name": "acme/web"})[2]),
+                           wire(reply({"number": 5})[2]), wire(b'x' * (16 * 1024 * 1024), status=status)])
+    transport = persistent(Connections(sock))
+    monkeypatch.setattr(github_fetch, "PersistentTransport", lambda: transport)
+    monkeypatch.setattr(github_fetch, "token_from_env", lambda: TOKEN)
+    before = snapshot(github_dataset)
+    capture = tmp_path / "oversized-capture.json"
+    result = CliRunner().invoke(app, ["github", "sync", str(github_dataset), "acme/web", "--issue", "5",
+                                    "--save-capture", str(capture)])
+    assert result.exit_code == 2 and "response body exceeds" in result.output
+    assert TOKEN not in result.output
+    assert snapshot(github_dataset) == before and not capture.exists()
+    assert sock.closed and all(reader.closed for reader in sock.readers)
+
+
 def test_partial_response_error_uses_existing_client_backoff():
     first = ScriptedSocket([[b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n{}", TimeoutError()]])
     second = ScriptedSocket([wire()])
@@ -283,15 +342,24 @@ def test_redirect_policy_remains_in_client_and_never_sends_auth_elsewhere():
         assert all(b"Authorization: Bearer ghp_TESTTOKEN\r\n" in data for data in sock.sent)
 
 
-@pytest.mark.parametrize("where", ["raw-body", "escaped-body", "header"])
+@pytest.mark.parametrize("where", ["raw-body", "escaped-body", "header", "percent-body", "percent-header",
+                                   "header-name", "percent-header-name"])
 def test_credential_reflection_still_rejected_by_client(where):
     body, headers = b"{}", b""
     if where == "raw-body":
         body = ('{"message":"' + TOKEN + '"}').encode()
     elif where == "escaped-body":
         body = ('{"message":"' + ''.join('\\u%04x' % ord(ch) for ch in TOKEN) + '"}').encode()
-    else:
+    elif where == "header":
         headers = f"X-Reflected: {TOKEN}\r\n".encode()
+    else:
+        encoded = ''.join(f'%{ord(ch):02X}' for ch in TOKEN)
+        if where == "percent-body":
+            body = ('{"body":"' + encoded + '"}').encode()
+        elif where == "percent-header":
+            headers = f"X-Reflected: {encoded}\r\n".encode()
+        else:
+            headers = f"{TOKEN if where == 'header-name' else encoded}: ok\r\n".encode()
     sock = ScriptedSocket([wire(body, headers=headers)])
     with persistent(Connections(sock)) as transport:
         with pytest.raises(GitHubError, match="reflected the credential") as exc:

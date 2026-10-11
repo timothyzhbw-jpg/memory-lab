@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, TextIO
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit
 
 from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
@@ -31,6 +31,7 @@ USER_AGENT = "orgmemory/0.2"
 MAX_PAGES = 1000
 MAX_HOPS = 3
 ATTEMPTS = 5
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024  # 8 MiB: room for a 100-item GitHub page with long bodies.
 REPO = re.compile(r"[a-z0-9][a-z0-9_-]{0,99}/[a-z0-9._-]{1,100}")
 PRINTABLE = re.compile(r"[\x21-\x7e]+")  # visible ASCII: tokens, Link and Location URLs
 NEXT = re.compile(r'<([^>]+)>;\s*rel="next"')
@@ -85,12 +86,30 @@ def _message(body: bytes) -> str:
 
 def _contains_token(value: Any, token: str) -> bool:
     if isinstance(value, str):
-        return token in value
+        return token in value or token in unquote(value)
     if isinstance(value, dict):
         return any(_contains_token(k, token) or _contains_token(v, token) for k, v in value.items())
     if isinstance(value, list):
         return any(_contains_token(v, token) for v in value)
     return False
+
+
+def _read_body(response) -> bytes:
+    """Read at most the cap plus one detection byte, then close without draining the tail."""
+    chunks, size = [], 0
+    while True:
+        chunk = response.read(min(64 * 1024, MAX_RESPONSE_BYTES + 1 - size))
+        if not chunk:
+            # HTTPResponse.read(amt), unlike read(), does not flag a truncated Content-Length body.
+            remaining = getattr(response, "length", None)
+            if remaining:
+                raise http.client.IncompleteRead(b"".join(chunks), remaining)
+            return b"".join(chunks)
+        size += len(chunk)
+        if size > MAX_RESPONSE_BYTES:
+            # No HTTP status: even an oversized 404/410 is a failure, not a skippable missing timeline.
+            raise GitHubError(f"GitHub response body exceeds {MAX_RESPONSE_BYTES} bytes; refused")
+        chunks.append(chunk)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -121,7 +140,7 @@ def urllib_transport(opener: urllib.request.OpenerDirector | None = None, timeou
             except HTTPError as exc:
                 response = exc
             with response:
-                return response.status, _lower(response.headers), response.read()
+                return response.status, _lower(response.headers), _read_body(response)
         except URLError:
             raise
         except (OSError, http.client.HTTPException) as exc:
@@ -228,7 +247,7 @@ class PersistentTransport:
                 connection.response_class = response_class
                 connection.request("GET", target, headers=headers)
                 with connection.getresponse() as response:
-                    result = response.status, _lower(response.headers), response.read()
+                    result = response.status, _lower(response.headers), _read_body(response)
                     if response.will_close:
                         self._disconnect()
                     return result
@@ -256,15 +275,30 @@ def _http_date(value: str | None) -> datetime | None:
     return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
 
 
-def _next_url(link: str, repo: str, repo_id: int, path: str) -> str:
+def _next_url(link: str, repo: str, repo_id: int, path: str, params: dict[str, str]) -> str:
     parts = urlsplit(link)
-    segments = unquote(parts.path).split("/")
+    prefix = f"/repos/{repo}/"
+    listing = path.removeprefix(prefix)
+    named_path = parts.path[:len(prefix)].lower() == prefix.lower() and parts.path[len(prefix):] == listing
+    id_path = parts.path == f"/repositories/{repo_id}/{listing}"
+    try:
+        query = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
+    except ValueError:
+        query = []
+    pages = [value for name, value in query if name == "page"]
+    cursors = [value for name, value in query if name == "after"]
+    same_query = sorted((name, value) for name, value in query if name not in {"page", "after"}) == sorted(
+        (name, value) for name, value in params.items() if name not in {"page", "after"})
+    valid_pagination = (
+        bool(pages or cursors)
+        and len(pages) <= 1 and all(re.fullmatch(r"0*[1-9][0-9]*", value) for value in pages)
+        and len(cursors) <= 1 and all(re.fullmatch(r"[A-Za-z0-9+/=_-]{1,512}", value) for value in cursors)
+    )
     if (PRINTABLE.fullmatch(link) and parts.scheme == "https" and parts.netloc == "api.github.com"
-            and not {".", ".."} & set(segments)
-            and (parts.path.lower().startswith(f"/repos/{repo.lower()}/")
-                 or parts.path.startswith(f"/repositories/{repo_id}/"))):
+            and not parts.fragment and (named_path or id_path) and same_query
+            and valid_pagination):
         return link
-    raise GitHubError(f"GET {path}: refusing a Link next URL outside {API}/repos/{repo}/")
+    raise GitHubError(f"GET {path}: refusing a Link next URL outside the requested listing or query")
 
 
 class FetchProgress:
@@ -371,7 +405,10 @@ class Client:
                     except ValueError:
                         decoded = None
                     if self.token.encode("ascii") in body or _contains_token(decoded, self.token) \
-                            or any(self.token in value for value in headers.values()):
+                            or any(_contains_token(value, self.token) for value in headers.values()) \
+                            or any(self.token.lower() in name.lower() or self.token.lower() in unquote(name).lower()
+                                   for name in headers):
+                        # Header names are case-insensitive and transports have already lower-cased them.
                         raise GitHubError("GitHub response reflected the credential; refused", status)
                 self._note(headers)
             if self.progress is not None:
@@ -428,7 +465,7 @@ class Client:
             match = NEXT.search(headers.get("link", ""))
             if not match:
                 return
-            url = _next_url(match.group(1), repo, repo_id, _path(url))
+            url = _next_url(match.group(1), repo, repo_id, path, params)
         raise GitHubError(f"GET {path}: more than {MAX_PAGES} pages")
 
 

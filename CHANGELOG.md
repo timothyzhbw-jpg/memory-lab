@@ -18,6 +18,13 @@ Release 0.3 contains:
 
 ### Security
 
+- GitHub fetch rejects percent-encoded credential reflection in JSON strings and response headers,
+  including header names. Pagination stays on the original listing endpoint and preserves its query
+  filters, allowing only pagination changes: at most one positive `page` and one `after` cursor
+  (decoded `[A-Za-z0-9+/=_-]{1,512}`), with at least one present. This accepts GitHub's cursor-bearing
+  next links on both named and repository-ID paths; changed filters and invalid or duplicated cursors
+  are refused. Both HTTP transports cap response bodies at 8 MiB, stop reading on excess and fail the
+  sync without appending records or saving a capture.
 - MemFalsify applies one shared path policy to memory, linked memory and evidence inputs (including
   review evidence), and MCP path resolution: both the walked and resolved paths must stay inside their
   root and contain no hidden component or skipped directory. Rejected inputs carry a skip reason;
