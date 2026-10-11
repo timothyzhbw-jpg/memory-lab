@@ -26,11 +26,11 @@ claude plugin marketplace add timothyzhbw-jpg/memory-lab
 claude plugin install memory-lab@memory-lab
 ```
 
-The first command registers this repository as the `memory-lab` marketplace in your user settings. The second installs the `memory-lab` plugin from it. Inside a session, `/plugin marketplace add timothyzhbw-jpg/memory-lab` and `/plugin install memory-lab@memory-lab` do the same. Claude Code v2.1.292 or later also accepts both steps as one command, `claude plugin install memory-lab --marketplace timothyzhbw-jpg/memory-lab`.
+The first command registers this repository as the `memory-lab` marketplace in your user settings. The second installs the `memory-lab` plugin from it at user scope. Inside a session, `/plugin marketplace add timothyzhbw-jpg/memory-lab` registers the marketplace, and `/plugin install memory-lab@memory-lab` opens the plugin's details so you can review it and choose a scope; it does not install by itself. From the shell, Claude Code v2.1.292 or later also accepts both steps as one command, `claude plugin install memory-lab --marketplace timothyzhbw-jpg/memory-lab`.
 
 To install from your checkout instead of GitHub, pass its path: `claude plugin marketplace add ./`, run from the checkout. Claude Code then reads the plugin in place, so edits to the skills apply at the next session or after `/reload-plugins`.
 
-To share the plugin with everyone who works in a repository, run both commands there with `--scope project` and commit the `.claude/settings.json` they write. Each teammate still needs the commands from step 1.
+To share the plugin with everyone who works in a repository, run both commands there with `--scope project` and commit the `.claude/settings.json` they write. The plugin source is a relative path, so after a teammate accepts the workspace trust dialog for that folder, Claude Code loads the plugin from the marketplace copy and does not need a separate install record. Each teammate still needs the commands from step 1. Until they trust the folder, Claude Code ignores the marketplace entry silently.
 
 ### What the plugin adds
 

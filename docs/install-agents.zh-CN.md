@@ -26,11 +26,11 @@ claude plugin marketplace add timothyzhbw-jpg/memory-lab
 claude plugin install memory-lab@memory-lab
 ```
 
-第一条命令把本仓库登记为名叫 `memory-lab` 的插件市场，写进你的用户设置。第二条从这个市场安装 `memory-lab` 插件。在会话里，`/plugin marketplace add timothyzhbw-jpg/memory-lab` 和 `/plugin install memory-lab@memory-lab` 效果相同。Claude Code v2.1.292 及以上版本还可以一条命令完成两步：`claude plugin install memory-lab --marketplace timothyzhbw-jpg/memory-lab`。
+第一条命令把本仓库登记为名叫 `memory-lab` 的插件市场，写进你的用户设置。第二条从这个市场安装 `memory-lab` 插件，范围是用户。在会话里，`/plugin marketplace add timothyzhbw-jpg/memory-lab` 登记市场，`/plugin install memory-lab@memory-lab` 打开插件详情，让你查看它会添加什么并选择安装范围；它自己不会完成安装。在 shell 里，Claude Code v2.1.292 及以上版本还可以一条命令完成两步：`claude plugin install memory-lab --marketplace timothyzhbw-jpg/memory-lab`。
 
 想从本地检出目录而不是 GitHub 安装，就传它的路径：在检出目录里运行 `claude plugin marketplace add ./`。这时 Claude Code 直接读取目录里的插件，改了技能之后，下一个会话或执行 `/reload-plugins` 后生效。
 
-要让一个仓库的所有协作者都用上，在那个仓库里给两条命令都加上 `--scope project`，再提交它们写出的 `.claude/settings.json`。每个协作者仍然需要第 1 步的命令。
+要让一个仓库的所有协作者都用上，在那个仓库里给两条命令都加上 `--scope project`，再提交它们写出的 `.claude/settings.json`。插件来源是相对路径，协作者接受该文件夹的工作区信任对话框之后，Claude Code 从市场副本加载它，不需要单独的安装记录。每个协作者仍然需要第 1 步的命令。信任该文件夹之前，Claude Code 会静默忽略这条市场登记。
 
 ### 插件包含什么
 

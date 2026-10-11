@@ -44,12 +44,11 @@ RESERVED_MARKETPLACE_NAMES = {
     "claude-plugin-test", "npm", "pip", "uv", "cargo", "github", "gh"}
 # "Plugin entries": letters, digits, ".", "_" and "-", starting with a letter or digit.
 ID_PART = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-# manifest-reference, "Fields".
-PLUGIN_KEYS = {"$schema", "name", "displayName", "version", "description", "author", "homepage", "repository",
-               "license", "keywords", "metadata", "icon", "documentationUrl", "supportUrl", "privacyPolicyUrl",
-               "termsOfServiceUrl", "defaultEnabled", "dependencies", "settings", "userConfig", "types",
-               "channels", "skills", "commands", "agents", "hooks", "mcpServers", "lspServers", "outputStyles",
-               "workflows", "experimental"}
+# manifest-reference, "Fields". Unknown keys are only a warning; the keys below are the ones this plugin ships.
+# Anything else, including hooks, monitors, commands, agents and lspServers, would run or add behavior the
+# marketplace entry does not declare.
+PLUGIN_KEYS = {"name", "displayName", "description", "author", "homepage", "repository", "license", "keywords",
+               "skills", "mcpServers"}
 KEBAB = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 # manifest-reference, "name": names that pass as one of Anthropic's own fail validation.
 RESERVED_PLUGIN_PREFIXES = ("claude-", "anthropic-", "anthropics-", "cc-plugin-")
@@ -58,6 +57,10 @@ RESERVED_PLUGIN_NAMES = {"claude", "anthropic", "anthropics", "claude-code", "cl
 # The skills are declared explicitly, so none of these may exist in the plugin root.
 DEFAULT_COMPONENTS = ("skills", "commands", "agents", "hooks", "monitors", "output-styles", "themes",
                       "workflows", "bin", "settings.json", ".mcp.json", ".lsp.json")
+# loading reference, "Node.js package dependencies": a package.json plus a lockfile makes Claude Code run
+# a package manager when it copies the plugin. Neither file may exist, so install copies files only.
+NODE_INSTALL_FILES = ("package.json", "package-lock.json", "npm-shrinkwrap.json", "bun.lock", "bun.lockb",
+                      "pnpm-lock.yaml", "yarn.lock")
 PROJECT_DIR = "${CLAUDE_PROJECT_DIR}"
 PLACEHOLDER = re.compile(r"\$\{[^}]*\}")
 
@@ -141,7 +144,7 @@ def test_entry_and_manifest_agree(entry, plugin, plugin_root):
 
 
 def test_plugin_fields(plugin):
-    assert set(plugin) <= PLUGIN_KEYS, set(plugin) - PLUGIN_KEYS
+    assert set(plugin) == PLUGIN_KEYS, (set(plugin) - PLUGIN_KEYS, PLUGIN_KEYS - set(plugin))
     name = plugin["name"]
     assert isinstance(name, str) and KEBAB.fullmatch(name)
     assert name not in RESERVED_PLUGIN_NAMES and not name.startswith(RESERVED_PLUGIN_PREFIXES)
@@ -150,7 +153,9 @@ def test_plugin_fields(plugin):
     assert plugin["license"] == "Apache-2.0"
     for key in ("homepage", "repository"):
         assert re.fullmatch(r"https://[^\s]+", plugin[key]), f"{key} must be an https URL"
-    assert all(isinstance(word, str) and word for word in plugin["keywords"])
+    keywords = plugin["keywords"]
+    assert isinstance(keywords, list) and keywords
+    assert all(isinstance(word, str) and word for word in keywords)
 
 
 def test_plugin_ships_exactly_the_repository_skills(plugin, plugin_root):
@@ -164,6 +169,8 @@ def test_plugin_ships_exactly_the_repository_skills(plugin, plugin_root):
         assert meta["name"] == directory.name
     for name in DEFAULT_COMPONENTS:
         assert not (plugin_root / name).exists(), f"{name} in the plugin root would load on its own"
+    for name in NODE_INSTALL_FILES:
+        assert not (plugin_root / name).exists(), f"{name} would make Claude Code run a package manager on install"
     assert not (plugin_root / "SKILL.md").exists()
 
 
@@ -175,10 +182,9 @@ def test_memlab_server_is_the_read_only_console_script(server):
     assert re.search(r'^memlab-mcp = "memlab_mcp\.server:main"$', section, re.MULTILINE)
     assert server["command"] == "memlab-mcp"
     args = server["args"]
-    assert isinstance(args, list) and all(isinstance(arg, str) for arg in args)
-    # The only placeholder is the project directory, as a whole argument, so substitution yields one path.
+    # Exactly one root, the project directory. No --allow-model-verifiers and no other flag.
+    assert args == ["--root", PROJECT_DIR]
     assert [arg for arg in args if PLACEHOLDER.search(arg)] == [PROJECT_DIR]
-    assert not any(arg.startswith("--allow") for arg in args)
 
 
 def test_memlab_server_arguments_parse_without_model_verifiers(server, tmp_path):
@@ -201,3 +207,26 @@ def test_install_docs_use_the_install_id(marketplace, entry):
     for name in ("README.md", "README.zh-CN.md", "docs/install-agents.md", "docs/install-agents.zh-CN.md"):
         text = (REPO / name).read_text(encoding="utf-8")
         assert f"claude plugin install {install_id}" in text, name
+
+
+def _fences(text: str, lang: str) -> list[str]:
+    return re.findall(rf"```{lang}\n(.*?)```", text, re.DOTALL)
+
+
+def test_install_docs_agree_and_distinguish_session_install():
+    """Shell install and in-session /plugin install are different commands.
+
+    Install reference: in a session, /plugin install opens the details panel and does not install until
+    a scope is chosen. Org plugin docs: project extraKnownMarketplaces apply only after workspace trust,
+    and are ignored silently before that. The two languages keep the same commands.
+    """
+    english = (REPO / "docs/install-agents.md").read_text(encoding="utf-8")
+    chinese = (REPO / "docs/install-agents.zh-CN.md").read_text(encoding="utf-8")
+    assert _fences(english, "bash") == _fences(chinese, "bash")
+    assert _fences(english, "toml") == _fences(chinese, "toml")
+    assert "opens the plugin's details" in english and "it does not install by itself" in english
+    assert "workspace trust dialog" in english and "ignores the marketplace entry silently" in english
+    assert "do the same" not in english
+    assert "打开插件详情" in chinese and "它自己不会完成安装" in chinese
+    assert "工作区信任" in chinese and "静默忽略这条市场登记" in chinese
+    assert "效果相同" not in chinese
