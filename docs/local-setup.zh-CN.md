@@ -39,7 +39,26 @@ export ANTHROPIC_API_KEY=...
 
 不要把 key 提交进仓库，也不要贴进任何聊天。key 一旦出现在不该出现的地方，就去后台作废它，重新生成一个。
 
-## 3. 跑评测
+## 3. 模型审计的成本
+
+每个模型请求只判断一条记忆和一个证据句子。请求数在发送之前就有上限：
+
+| `--verifier` | 每次审计最多发出的请求数 |
+|---|---|
+| `llm` | 记忆条数 × `--max-judged`（默认 8），发给 Claude |
+| `jev` | 同样的数量，发给 Jev |
+| `dual` | 两个后端各发这么多 |
+| `cascade` | 这么多发给 Jev，再加上 Jev 置信度低于 `--accept-at` 的每个答案各一个 Claude 请求 |
+
+记忆与证据句子的共同词语较少时（`--min-coverage`），实际请求会更少；`diff` 只判断新增和修改的记忆。使用 `--batch` 时，在支持拒答回退的模型上，被 Claude 拒答的请求会带着回退再直接发送一次。
+
+每份报告都会写明实际用量：每个后端一行“API usage”（JSON 中的 `verifier_stats`），包括请求数、其中经批处理发送的数量、输入和输出 token 数，以及 Claude 写入和读取提示缓存的 token 数。SDK 在遇到限流或服务端错误后自动重试的请求不计入。要换算成费用，请使用 [Anthropic 定价页](https://platform.claude.com/docs/en/about-claude/pricing)上的最新价格；Jev 由 TypeSafe AI 计费。本仓库不写具体价格，因为价格会变。
+
+- `--batch` 让 Claude 请求按标准价格的 50% 计费，但一个批次最长可能要 24 小时（多数在一小时内完成）。
+- 只有缓存前缀达到模型的最低可缓存长度时，提示缓存才有用。MemFalsify 的系统提示只有几百个 token，所以记忆较短时缓存计数一直是 0，费用不变。
+- `--max-concurrency`（默认 4）缩短的是等待时间，不是费用。请控制在你的速率限制之内。
+
+## 4. 跑评测
 
 评测在合并之前位于 `eval-action` 分支，见该分支的 `HANDOFF.md`。
 
@@ -50,9 +69,9 @@ python benchmarks/memfalsify/run.py --verifier cascade   # 先问 Jev，没把�
 python benchmarks/memfalsify/run.py --verifier dual --json results-dual.json
 ```
 
-[实测词法评测](../benchmarks/memfalsify/RESULTS.md)对 139 条记忆调用了 129 次 `judge()`。模型验证器使用不同的预筛选参数，每条记忆最多判断 8 个片段；实际调用次数须读取评测输出的 Cost 行或 JSON，不能用词法次数推算。可以用 `--case <id>` 只跑一部分。[评测说明](../benchmarks/memfalsify/README.md)解释了各项指标。
+[实测词法评测](../benchmarks/memfalsify/RESULTS.md)对 139 条记忆调用了 129 次 `judge()`。模型验证器使用不同的预筛选参数，每条记忆最多判断 8 个片段；实际调用次数须读取评测输出的 Cost 行或 JSON，不能用词法次数推算。评测只统计 `judge()` 调用次数，不统计 token；要看 token 数，用 `memfalsify audit` 审计某个案例，读报告里的 API usage 行。可以用 `--case <id>` 只跑一部分。[评测说明](../benchmarks/memfalsify/README.md)解释了各项指标。
 
-## 4. 继续用 Agent 开发
+## 5. 继续用 Agent 开发
 
 项目说明写在 `AGENTS.md` 里。Codex 直接读这个文件，`CLAUDE.md` 也会引入它，所以两边拿到的规则是同一份。
 

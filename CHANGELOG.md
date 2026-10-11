@@ -16,7 +16,42 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### memfalsify
+
+#### Added
+
+- `--max-concurrency N` on `audit` and `diff` (default 4) runs up to N model-verifier requests at once.
+  Results keep their order, so the report matches a serial run. Lexical judging stays serial. `audit()`,
+  `audit_claims()` and `memory_diff()` take `max_concurrency` (default 1).
+- `--batch` on `audit` and `diff`, for `--verifier llm`, `dual` or `cascade`, sends the Claude requests
+  through the [Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing).
+  Batch usage is billed at 50% of standard prices, but a batch can take up to 24 hours (most end within
+  an hour). The command polls with backoff (5 s, doubling to once a minute), maps results back by
+  `custom_id`, and splits batches below the API's limits. An errored, expired or canceled request, a
+  missing result or an unreadable verdict exits 2 with no report. An interrupt cancels the running batch.
+  The Batches API rejects the server-side refusal fallback, so a refused request is sent again directly
+  with the fallback, on models that have one. `LLMVerifier(batch=True)` does the same from Python.
+- Prompt caching for the Claude verifier. The instructions are a cached prefix, and so is the claim when
+  it is judged against more than one passage; the passage follows the last breakpoint. Requests that share
+  a claim's prefix start after the first one returns, so they can read its cache entry. The 5-minute TTL
+  is used, or 1 hour in a batch. A prefix shorter than the model's minimum cacheable length is sent
+  uncached, which is the usual case for short claims.
+- `verifier_stats` in audit reports, and an "API usage" line per model backend in Markdown: requests,
+  requests sent in a batch, input and output tokens, and for Claude the tokens written to and read from
+  the prompt cache. Counts cover that audit only.
+- Library: `verify.judge_all`, `verify.concurrently`, `VerifierStats` and `UsageMeter`. A verifier may
+  define `judge_many(pairs, max_concurrency)` to schedule a whole audit's pairs, and `usage()` to report
+  its API usage.
+
+#### Changed
+
+- The audit shortlists passages for every claim first, then sends all (claim, passage) pairs to the
+  verifier in one `judge_all` call. `dual` asks each backend in one pass. `cascade` asks Jev about every
+  pair and then Claude about the pairs Jev was unsure of. Verdicts are unchanged.
+- Claude requests send the instructions as a system text block with `cache_control`. The claim and the
+  passage are two text blocks of the user turn instead of one string. The wording, schema and effort are
+  unchanged.
+- `audit.candidates()` now ranks judged passages; selecting them moved to `audit.shortlist()`.
 
 ## memlab-core
 

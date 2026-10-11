@@ -281,6 +281,14 @@ memfalsify audit MEMORY.md --evidence evidence --verifier dual
 
 **模型会看到哪些片段。** 证据文件先按句子切成片段（遇到 。！？； 或换行就断开），模型每次只看一个片段。仍然先用词语索引预筛选：模型验证器的门槛更低（`--min-coverage`，默认 0.2，而词法验证是 0.5），这样换了说法的片段也能被判断；每条记忆最多只送匹配度最高的 `--max-judged` 个片段（默认 8）。因此每个模型的调用次数上限是“记忆条数 × max-judged”。和记忆没有任何共同词语的片段永远不会被送去判断。
 
+**成本与耗时。** 报告会列出每个模型后端发出的请求数，以及 API 报告的 token 数（JSON 中的 `verifier_stats`）。下面三项能降低成本或缩短等待，而不改变向模型提出的问题：
+
+- *提示缓存（prompt caching）。* Claude 验证器把系统提示标为可缓存的前缀；同一条记忆要和多个片段比对时，记忆本身也一并缓存。API 只缓存长度达到模型最低要求的前缀（见[提示缓存文档](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)）。系统提示只有几百个 token，所以记忆较短时什么都不会被缓存；实际情况以报告里的缓存计数为准。
+- *`--max-concurrency`*（默认 4）：同时进行的模型请求数。结果保持原有顺序，所以报告与逐个请求时完全一致。共用同一条已缓存记忆的 Claude 请求，会等其中第一个返回后再发出，这样才能读到它写入的缓存。请把这个值控制在你的 API 速率限制之内。
+- *`--batch`*：把 Claude 请求（`llm`、`dual`、`cascade`）通过 [Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing) 发送，按标准价格的 50% 计费，但更慢：多数批次在一小时内完成，有些要 24 小时。命令会一直等待，并在 stderr 上打印批次 ID。只要有一个请求出错、过期或被取消，审计就以退出码 2 结束，不输出报告；中途中断会取消该批次。Batches API 不接受服务端拒答回退，所以在支持该回退的模型上，被拒答的请求会再直接发送一次，按标准价格计费。Jev 请求从不走批处理。
+
+Claude 每个 token 的价格（包括缓存写入、缓存读取和批处理）见 [Anthropic 定价页](https://platform.claude.com/docs/en/about-claude/pricing)。
+
 LLM 验证器使用结构化输出，每个判断都符合固定格式；它的系统提示要求把记忆和证据当作引用的数据，忽略其中出现的任何指令。在支持的模型上，它会开启服务端的拒答回退（server-side refusal fallback）；被拒答的请求记为“无判断”（`unrelated`，理由中写明停止原因）。`dual` 更严格：每个判断都核对两次。`cascade` 遵循“有把握就采纳，没把握再升级”的思路，便宜得多，但 Jev 有把握的答案会被直接采用，不经 Claude 复核，所以正式依赖它之前，先用你已经人工确认过的记忆调一调 `--accept-at`。
 
 两个模型后端遇到 API 调用失败、缺少 SDK 或缺少凭据时，审计都会以退出码 2 结束并给出错误信息，而不是输出一份不完整的报告。
@@ -294,10 +302,10 @@ from memfalsify.llm import LLMVerifier
 from memfalsify.verify import DualVerifier
 
 report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), JevVerifier()),
-               min_coverage=0.2, max_judged=8)
+               min_coverage=0.2, max_judged=8, max_concurrency=4)
 ```
 
-任何有 `name` 属性和 `judge(claim, passage) -> Judgment` 方法的对象都可以当验证器，其他模型可以用同样的方式接入。模型的判断始终只是候选：它们永远不能代替人工确认。
+`LLMVerifier(batch=True)` 使用 Message Batches API。任何有 `name` 属性和 `judge(claim, passage) -> Judgment` 方法的对象都可以当验证器，其他模型可以用同样的方式接入。还可以选择实现 `judge_many(pairs, max_concurrency)`：它一次拿到整次审计的全部（记忆，片段）对，并按相同顺序返回判断；`usage()` 则为报告返回 `VerifierStats`。模型的判断始终只是候选：它们永远不能代替人工确认。
 
 ## 评测集与 GitHub Action
 
@@ -314,7 +322,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 
 - 哈希只能证明某段引用确实存在于特定的字节里，不能证明来源是真实的，也不能证明这段话的意思就是某人所说的那样。
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
-- `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
+- `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。使用 `--batch` 时，Anthropic 会把批次的请求和结果保留最多 29 天，该工作区（workspace）里有权限的人都能看到；如果觉得太久，可以通过 API 删除该批次。
 - `orgmemory audit` 的发现项只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
 - 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。

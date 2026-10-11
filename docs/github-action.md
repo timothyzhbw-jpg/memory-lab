@@ -203,7 +203,9 @@ secrets and pass them on the step. Never commit a key to the repository.
   code to get secrets: that runs untrusted code with your keys.
 - **Cost and variance.** Up to 8 passages are judged per instruction on every run (each judged by both models
   with `dual`, and by both when Jev is unsure with `cascade`), and model verdicts can change between runs. Consider `strict: "false"` or a scheduled workflow for model verifiers, and a strict `lexical`
-  job as the gate.
+  job as the gate. Up to 4 model requests run at once (the CLI default), and the report in the job summary
+  has an API usage line per backend with its requests and tokens. The action does not use the CLI's
+  `--batch`, which can wait up to 24 hours.
 
 ## Security notes
 
