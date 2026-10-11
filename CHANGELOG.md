@@ -16,7 +16,42 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### orgmemory
+
+#### Added
+
+- Effective-dated roles. An optional, append-only `policy-log.jsonl` grants roles (`grant`) and removes
+  them (`revoke_role`) from an effective time on, with evidence. Replay judges each event by the roles its
+  actor held at its effective time, so a later role change no longer rewrites past outcomes. `policy.json`
+  is the baseline, from the beginning of time or from its new optional `as_of`; before `as_of` no actor
+  holds a role. Changes apply in effective-time order (ties in file order), and a change at time T applies
+  to events at T. A change must be made by an actor whose roles allow the new `manage_roles` permission at
+  that time; the whole log is validated on every load, and a change that does not hold rejects the dataset.
+  See [docs/design/dated-policy.md](docs/design/dated-policy.md).
+- `orgmemory policy grant` and `orgmemory policy revoke` validate a role change against the whole log, then
+  append it.
+- `explain` lists the role changes of the actors in a subject's history and notes when the current
+  decision's maker's roles changed later. Replay and audit reports name the role source, and the audit lists
+  every role change.
+- Audit finding `role_changed_after_decision` (low, informational): the current decision's maker later lost
+  a role that authorized it. The decision stands.
+- Example `examples/orgmemory/feature-a-dated`.
+
+#### Changed
+
+- `validate` prints a `roles:` line for a dated dataset, notes events before the baseline, and no longer
+  lists actors the log grants a role as actors without any role. `append` refuses an event ID that a
+  policy-log entry uses.
+- `unauthorized_attempts` names the roles held at each attempt when they differ.
+- Datasets without `policy-log.jsonl` and `as_of` are unaffected: their reports and JSON are byte-identical,
+  and they do not list the new finding kind.
+
+### memlab-mcp
+
+#### Changed
+
+- The orgmemory tools read an optional `policy-log.jsonl`, refusing one that is a symlink leaving the server
+  root. `orgmemory_validate` prints the same lines as `orgmemory validate`.
 
 ## memlab-core
 

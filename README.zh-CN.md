@@ -133,7 +133,27 @@ orgmemory validate <数据集>                  # 校验每个事件、哈希和
 orgmemory audit    <数据集> --as-of 2026-10-31T00:00:00Z   # 决策流程哪里需要关注
 orgmemory evidence add <数据集> --id ... --path ... --quote "..." --source-uri ... --source-kind ... --captured-at ...
 orgmemory append   <数据集> --event '{"id": ..., ...}'
+orgmemory policy grant|revoke <数据集> ...   # 记录从某个时间点起生效的角色变更（见下文）
 ```
+
+#### 随时间变化的角色
+
+修改 `policy.json` 会改变每一次回放的结果，包括已经做出的决定。比如在里面给客户经理加上产品经理角色，示例里周四那次“批准”就会开始生效。要记录从某个时间点起生效的角色变更，请改为追加到可选的 `policy-log.jsonl`：
+
+```bash
+orgmemory policy grant  <数据集> --id pl-wu-pm --timestamp 2026-10-09T09:00:00Z --actor chen \
+  --subject-actor wu --role product_manager --evidence-id org-wu
+orgmemory policy revoke <数据集> --id pl-zhou-leaves --timestamp 2026-10-12T09:00:00Z --actor chen \
+  --subject-actor zhou --role product_manager --evidence-id org-zhou --note "moved to the platform team"
+```
+
+此后，每个事件都按参与者在该事件生效时间持有的角色来判断。在 [`examples/orgmemory/feature-a-dated`](examples/orgmemory/feature-a-dated/)（[回放报告](examples/orgmemory/feature-a-dated/replay-report.md)、[审计报告](examples/orgmemory/feature-a-dated/audit-report.md)）里，wu 从周五起成为产品经理，zhou 从周一起不再担任产品经理。wu 周四的“批准”仍然不生效，zhou 周三的拒绝仍然有效。`explain` 会显示每个参与者在每个事件发生时持有的角色，以及角色何时变化。审计会报告当前决定的做出者之后失去了相应角色（`role_changed_after_decision`，low）。
+
+- `policy.json` 是基线。其中的角色从时间起点开始生效；如果设置了可选的 `"as_of"`（ISO 8601，带时区），则从该时间开始生效。在 `as_of` 之前，任何参与者都没有角色，任何变更也不能在它之前生效。
+- 变更按生效时间排序；生效时间相同的变更按文件顺序应用。在 T 时刻生效的变更，对 T 时刻的事件同样适用。`--as-of` 会应用截止时间之前（含截止时间）的变更。
+- 变更的 `--actor` 在变更生效时，必须持有 `policy.json` 中 `manage_roles` 权限所列的某个角色。最初的管理者就是 `policy.json` 里列出的那些人。`grant` 授予的角色必须在 `policy.json` 中出现过，且对方当时尚未持有；`revoke` 移除对方当时持有的角色。
+- `orgmemory policy grant` 和 `orgmemory policy revoke` 会连同新条目一起校验整个日志（这样，补记的早期条目不会让后面的条目失效），通过后才追加。日志不成立的数据集会被 `validate`、`replay`、`explain` 和 `audit` 拒绝。
+- `permissions` 不分时间。既没有 `policy-log.jsonl` 也没有 `as_of` 的数据集，回放结果和以前完全相同。设计说明：[docs/design/dated-policy.md](docs/design/dated-policy.md)。
 
 #### 审计决策流程
 
@@ -156,10 +176,11 @@ orgmemory audit <数据集> [--as-of ISO8601] [--stale-days 14] [--format markdo
 | `stale_pending_approval` | 在参考时间点，`pending_approval` 已持续超过 `--stale-days`（默认 14 天），且没有进行中的“申请重新考虑”。等待从最后一次 `approve` 或 `reject` 之后的第一个 `request`、`reconsider` 或 `revoke` 开始计算 | medium |
 | `stale_reconsideration` | `reconsideration_requested` 已持续超过 `--stale-days`。这样的议题不会再重复报告为 `stale_pending_approval` | medium |
 | `self_approval` | 当前批准的参与者在批准之前，也对这个议题提出过已生效的 `request` 或 `reconsider` | low |
+| `role_changed_after_decision` | 当前决定（`approve`、`reject` 或 `revoke`）的做出者后来因 `policy-log.jsonl` 中的 `revoke_role` 失去了授权这个决定的角色。决定仍然有效。只有角色带时间的数据集才会列出这一类型 | low |
 
 - 只计入回放实际生效的内容：没有权限的参与者提出的风险或依赖不会被记录，只会出现在 `unauthorized_attempts` 里。
 - `--as-of` 和 `replay` 一样会忽略之后的事件，同时也是计算是否超期的参考时间。不加时审计整个日志，并以当前时间计算超期，所以需要可复现的报告时请加 `--as-of`。
-- 发现项按严重程度、类型、议题、参与者和回放顺序排序。Markdown 报告以一张汇总表开头：每种类型一行，每个严重程度一列。`--format json` 包含 `summary`（各严重程度的数量）、`kinds`（每种类型的数量，按名称排序）和 `findings`。
+- 发现项按严重程度、类型、议题、参与者和回放顺序排序。Markdown 报告以一张汇总表开头：每种类型一行，每个严重程度一列。`--format json` 包含 `summary`（各严重程度的数量）、`kinds`（每种类型的数量，按名称排序）和 `findings`。角色带时间时，Markdown 报告还会列出每一次角色变更，JSON 会增加 `dated_policy`，引用了角色变更的发现项会增加 `role_changes`。否则，汇总表和 `kinds` 都不会列出 `role_changed_after_decision`。
 - 退出码：`0`；加 `--strict` 且存在 high 级别的发现项时为 `1`；输入无效时为 `2`，与 `replay` 相同。除了退出码 `2`，其他情况都会输出报告。
 
 #### 导入 GitHub Issues 和 Pull Request
@@ -180,7 +201,7 @@ orgmemory explain        <数据集> "acme/web#12"
 - 退出码：`0` 表示完整完成（包括“没有新内容”）；`2` 表示出错，没有追加任何内容；`3` 表示只完成了一部分：限流等待超过 `--max-wait`（默认 3600 秒），或服务端、网络反复出错，导致抓取中止，已完整抓取的条目已经写入，游标没有移动，稍后再运行一次即可。
 - 数据集目录必须已存在。`events.jsonl` 和 `evidence.jsonl` 会在第一次写入时创建。导入不需要 `policy.json`；`replay`、`explain` 和 `validate` 需要。
 
-**导入工具从不读取或写入 `policy.json`：`gh:<login>:<id>` 形式的参与者 ID 对应什么角色，由你自己配置。** 账号配置角色之前，它的事件会被记录，但不会改变任何状态。同步摘要会列出新事件涉及的参与者，`orgmemory validate` 会列出所有不在 `policy.json` 里的参与者。
+**导入工具从不读取或写入 `policy.json`，也从不在 `policy-log.jsonl` 里记录角色变更：`gh:<login>:<id>` 形式的参与者 ID 对应什么角色，由你自己配置。** 账号配置角色之前，它的事件会被记录，但不会改变任何状态。同步摘要会列出新事件涉及的参与者，`orgmemory validate` 会列出所有既不在 `policy.json` 里、也从未在 `policy-log.jsonl` 中被授予角色的参与者。
 
 | GitHub | 事件 |
 |---|---|
@@ -213,13 +234,14 @@ orgmemory explain        <数据集> "acme/web#12"
 
 `memory_id` 由记忆的规范化文本生成。记忆一旦被修改，ID 就会变；`reviews.jsonl` 里仍指向旧 ID 的确认会让审计直接报错（`unknown memory_id`，退出码 2），需要重新确认并更新或删除那一行。`quote` 必须逐字出现在 `path` 指向的文件中，`path` 相对于证据目录。
 
-**组织数据集**：一个包含三个文件的目录。
+**组织数据集**：一个包含三个文件（外加一个可选文件）的目录。
 
 - `events.jsonl`：每行一个事件，只追加。字段：`id`、`timestamp`（带时区，表示生效时间）、`actor`、`action`、`subject`、`evidence_ids`（至少一个），以及 `note`（动作为 `raise_risk` 时必填）、`dependency`（动作为 `dependency` 时必填）、`supersedes`（动作为 `revoke` 时必填，且必须指向当前生效的决定）。动作：`request`、`reconsider`、`raise_risk`、`dependency`、`approve`、`reject`、`revoke`、`comment`。
-- `policy.json`：`{"actors": {人: [角色]}, "permissions": {动作: [角色]}}`。不在名单里的人没有任何角色。`pending_approval` 列出既能批准又能拒绝的角色。
+- `policy.json`：`{"actors": {人: [角色]}, "permissions": {动作: [角色]}}`，以及可选的 `"as_of"`（ISO 8601，带时区：`actors` 中的角色从何时生效）。不在名单里的人没有任何角色。`pending_approval` 列出既能批准又能拒绝的角色。`permissions` 还可以列出 `manage_roles`：哪些角色可以在 `policy-log.jsonl` 中记录变更。
 - `evidence.jsonl`：`id`、`path`、原始字节的 `sha256`、逐字的 `quote` 及其 `[start, end)` 字符区间、`source_uri`、`source_kind`、`captured_at`。请用 `orgmemory evidence add` 生成，不要手算哈希。
+- `policy-log.jsonl`（可选，只追加）：每行一次角色变更。字段：`id`（唯一，不能与事件 ID 相同，也不能以 `gh:` 开头）、`timestamp`（带时区，表示生效时间）、`actor`（做出变更的人）、`action`（`grant` 或 `revoke_role`）、`subject_actor`（角色发生变化的人）、`role`、`evidence_ids`（至少一个），以及可选的 `note`。请用 `orgmemory policy grant` / `orgmemory policy revoke` 追加。规则见[随时间变化的角色](#随时间变化的角色)。
 
-回放规则：事件按生效时间排序，时间相同时保持文件顺序。回放前会校验整个日志，包括 `--as-of` 之后的事件。有权限的 `approve` / `reject` 会设定状态，并清除“申请重新考虑”、待审批和被忽略的越权尝试。决定被推翻或同一时刻出现相互冲突的决定时，都会记录在 `conflicts` 中。
+回放规则：事件按生效时间排序，时间相同时保持文件顺序。每个事件都按参与者在该事件生效时间持有的角色来判断（没有角色变更日志时，就是 `policy.json` 里的角色）。回放前会校验整个日志，包括 `--as-of` 之后的事件和角色变更。有权限的 `approve` / `reject` 会设定状态，并清除“申请重新考虑”、待审批和被忽略的越权尝试。决定被推翻或同一时刻出现相互冲突的决定时，都会记录在 `conflicts` 中。
 
 **GitHub 导入相关文件**（在同一个数据集目录里）：
 
@@ -316,7 +338,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
 - `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。
 - `orgmemory audit` 的发现项只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
-- 参与者（`actor`）ID 和 `policy.json` 被视为可信输入。目前还没有身份认证、签名溯源或策略版本管理；修改策略会改变每一次回放的结果。
+- 参与者（`actor`）ID、`policy.json` 和 `policy-log.jsonl` 被视为可信输入。目前还没有身份认证或签名溯源。记录在 `policy-log.jsonl` 里的角色变更带有生效时间，但修改 `policy.json`（包括不分时间的 `permissions`）或改写角色变更日志，仍然会改变每一次回放的结果。
 - 证据目前只支持 UTF-8 文本。图片、音频、视频和 PDF 会在报告的 `Skipped evidence` 部分列为跳过。
 - `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。
 - GitHub 导入：GitHub 账号不等于经过认证的个人。用某人自己的 token 运行的自动化（例如使用维护者个人访问令牌的 workflow）无法与这个人区分；审查不带应用标记；合并队列和自动合并的合并者是 GitHub 记录的那个账号；由 issue 模板添加的标签可能被算在 issue 作者头上。不要在 `github.json` 里列出由模板、机器人或使用个人 token 的 workflow 添加的标签，给账号配置角色时也要谨慎。
