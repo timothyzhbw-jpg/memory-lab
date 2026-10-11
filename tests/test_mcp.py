@@ -1,4 +1,5 @@
 """The MCP server, exercised through the SDK's own client: in memory, and over real stdio."""
+import hashlib
 import json
 import os
 import shutil
@@ -801,6 +802,67 @@ def test_audit_exclude_matches_the_cli(root):
     assert report["excluded"] == patterns and report["summary"] == direct.summary
     assert not any(e["span"]["path"].startswith(("media/", "notes/"))
                    for f in report["findings"] for e in f["evidence"])
+
+
+# --- transcript and OCR sidecars -------------------------------------------------------------------
+
+MEDIA_EXAMPLE = "media-example"
+
+
+@pytest.fixture
+def media_root(root):
+    shutil.copytree(EXAMPLES / "memfalsify-media", root / MEDIA_EXAMPLE)
+    return root
+
+
+def media_call(server, **extra):
+    return call(server, "memfalsify_audit", memory_file=f"{MEDIA_EXAMPLE}/MEMORY.md",
+                evidence_dir=f"{MEDIA_EXAMPLE}/evidence", as_of="2026-10-10", **extra)
+
+
+@requires_confinement
+def test_sidecar_evidence_matches_the_library(media_root):
+    base = media_root / MEDIA_EXAMPLE
+    server = create_server(media_root)
+    report = json.loads(ok(media_call(server, reviews_file=f"{MEDIA_EXAMPLE}/reviews.jsonl", format="json")))
+    direct = audit(base / "MEMORY.md", base / "evidence", base / "reviews.jsonl", as_of=date(2026, 10, 10))
+    assert report["findings"] == json.loads(direct.model_dump_json())["findings"]
+    assert report["skipped_evidence"] == [s.model_dump() for s in direct.skipped_evidence]
+    media = [e["span"]["media"] for f in report["findings"] for e in f["evidence"]]
+    assert {"kind": "transcript", "path": "recordings/standup-2026-10-06.mp4", "locator": "t=12.5,17",
+            "sha256": hashlib.sha256((base / "evidence/recordings/standup-2026-10-06.mp4").read_bytes()).hexdigest()
+            } in media
+    assert "`recordings/standup-2026-10-06.mp4#t=12.5,17` (00:00:12.500-00:00:17.000)" in ok(media_call(server))
+
+
+@requires_confinement
+def test_a_media_symlink_out_of_the_root_is_never_hashed(media_root):
+    media = media_root / MEDIA_EXAMPLE / "evidence" / "scans" / "whiteboard.png"
+    outside = media_root.parent / "outside.png"
+    outside.write_bytes(media.read_bytes())  # would even match the recorded hash
+    media.unlink()
+    media.symlink_to(outside)
+    report = json.loads(ok(media_call(create_server(media_root), format="json")))
+    reasons = {s["path"]: s["reason"] for s in report["skipped_evidence"]}
+    assert reasons["scans/whiteboard.png"] == "symlink escapes evidence root"
+    assert "whiteboard.png is a symlink that escapes the evidence root" in reasons["scans/whiteboard.png.ocr.json"]
+    assert not any(e["span"]["path"].startswith("scans/") for f in report["findings"] for e in f["evidence"])
+
+
+@requires_confinement
+def test_media_swapped_for_an_outward_symlink_before_hashing_cannot_be_read(media_root, monkeypatch):
+    from memcore import evidence as memcore_evidence
+    original, opened = memcore_evidence.file_sha256, []
+
+    def swap_then_hash(path):
+        opened.append(path)
+        path.unlink()
+        path.symlink_to(media_root.parent / "outside.md")
+        return original(path)
+
+    monkeypatch.setattr(memcore_evidence, "file_sha256", swap_then_hash)
+    result = media_call(create_server(media_root), format="json")
+    assert opened and SECRET not in error(result)
 
 
 # Windows asyncio creates a loopback socketpair even for stdio, which the
