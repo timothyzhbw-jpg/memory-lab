@@ -1,7 +1,6 @@
 """Index a directory of evidence files into exact, hashed sentence spans."""
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from memcore import EvidenceSpan, make_span, sha256_bytes
+from memcore.reading import read_file_bytes, walk_files
 
 from .text import features, sentence_spans
 
@@ -48,7 +48,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
         # An inaccessible subtree may contain counterevidence: fail closed.
         raise error
 
-    for directory, dirnames, filenames in os.walk(root, onerror=walk_error):
+    for directory, dirnames, filenames in walk_files(root, onerror=walk_error):
         base = Path(directory).relative_to(root)
         dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS
                              and not _matches((base / d).as_posix(), patterns, directory=True))
@@ -75,13 +75,14 @@ def scan(root: Path, exclude: Iterable[str] = (),
             if not resolved.is_relative_to(root):
                 skipped.append(Skipped(path=relative, reason="symlink escapes evidence root"))
                 continue
-            if path.is_symlink() and not resolved.is_file():
-                skipped.append(Skipped(path=relative, reason="broken or cyclic symlink"))
+            if not resolved.is_file():
+                broken = path.is_symlink() and not resolved.exists()
+                skipped.append(Skipped(path=relative, reason="broken or cyclic symlink" if broken else "not a regular file"))
                 continue
             if path.suffix.lower() in MEDIA:
                 skipped.append(Skipped(path=relative, reason="media file: multimodal extraction not implemented"))
                 continue
-            raw = resolved.read_bytes()
+            raw = read_file_bytes(resolved)
             if len(raw) > MAX_BYTES:
                 skipped.append(Skipped(path=relative, reason="larger than 2 MB"))
                 continue

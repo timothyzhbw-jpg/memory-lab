@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from .jsonl import read_jsonl
+from .reading import read_file_bytes
 
 
 class EvidenceError(ValueError):
@@ -61,7 +62,10 @@ def resolve_inside(root: Path, relative: str) -> Path:
 
 def read_text(root: Path, relative: str) -> tuple[str, str]:
     """Return (sha256 of raw bytes, decoded UTF-8 text)."""
-    raw = resolve_inside(root, relative).read_bytes()
+    path = resolve_inside(root, relative)
+    if path.exists() and not path.is_file():
+        raise EvidenceError(f"evidence is not a regular file: {relative}")
+    raw = read_file_bytes(path)
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:

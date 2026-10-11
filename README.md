@@ -211,6 +211,10 @@ cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 
 The CLIs must be installed in the environment the agent's shell uses.
 
+## MCP server
+
+`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent five tools: `memfalsify_claims`, `memfalsify_audit`, `orgmemory_validate`, `orgmemory_replay` and `orgmemory_explain`. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`, and the model verifiers stay off unless the server is started with `--allow-model-verifiers`. Tools, client registration and limits: [docs/mcp.md](docs/mcp.md).
+
 ## Verifier backends: lexical, LLM, Jev
 
 A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Three backends ship; `dual` and `cascade` combine the two model backends:

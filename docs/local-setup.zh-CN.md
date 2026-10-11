@@ -12,13 +12,13 @@ git clone https://github.com/timothyzhbw-jpg/memory-lab && cd memory-lab
 source .venv/bin/activate
 ```
 
-脚本会创建 `.venv`，以可编辑模式安装 `memcore`、`memfalsify` 和 `orgmemory`，同时装上 Claude 和 Jev 的 SDK（加 `--minimal` 则不装），最后跑一遍测试。可以随时重复运行，已有的 `.venv` 会被复用。如果 `python3` 低于 3.10，可以指定更新的解释器：`PYTHON=python3.12 ./scripts/setup-local.sh`。
+脚本会创建 `.venv`，以可编辑模式安装 `memcore`、`memfalsify`、`orgmemory` 和 `memlab-mcp`，同时装上 Claude 和 Jev 的 SDK（加 `--minimal` 则不装），最后跑一遍测试。可以随时重复运行，已有的 `.venv` 会被复用。如果 `python3` 低于 3.10，可以指定更新的解释器：`PYTHON=python3.12 ./scripts/setup-local.sh`。
 
 Windows 上请在 PowerShell 里手动执行同样的步骤：
 
 ```powershell
 py -3 -m venv .venv
-.venv\Scripts\python -m pip install -e packages/memcore -e "packages/memfalsify[all]" -e packages/orgmemory pytest
+.venv\Scripts\python -m pip install -e packages/memcore -e "packages/memfalsify[all]" -e packages/orgmemory -e packages/memlab-mcp pytest
 .venv\Scripts\python -m pytest -q
 ```
 

@@ -211,6 +211,10 @@ cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
 
 命令行工具需要安装在 Agent 的 shell 所用的环境里。
 
+## MCP 服务器
+
+`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供五个工具：`memfalsify_claims`、`memfalsify_audit`、`orgmemory_validate`、`orgmemory_replay` 和 `orgmemory_explain`。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内；不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭。工具、客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
+
 ## 验证后端：词法、LLM、Jev
 
 验证器判断一条记忆和一段证据的关系：`supports`（支持）、`contradicts`（反驳）或 `unrelated`（无关），并给出理由。内置三个后端，`dual` 和 `cascade` 是两个模型后端的组合方式：

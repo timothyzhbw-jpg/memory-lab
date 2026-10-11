@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from memcore import EvidenceError, EvidenceSpan, load_manifest, read_jsonl
+from memcore.reading import read_file_text
 
 from .models import DECISIONS, Conflict, Decision, Event, PendingChange, Policy, ReplayResult, Risk, SubjectState, TrailEntry
 
@@ -30,7 +31,7 @@ class Dataset:
         policy = policy or directory / "policy.json"
         evidence = evidence or directory / "evidence.jsonl"
         parsed = load_events(events)
-        policy_model = Policy.model_validate(json.loads(Path(policy).read_text(encoding="utf-8")))
+        policy_model = Policy.model_validate(json.loads(read_file_text(policy)))
         return cls(parsed, policy_model, load_manifest(evidence))
 
 

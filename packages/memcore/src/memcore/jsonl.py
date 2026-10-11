@@ -5,10 +5,12 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
+from .reading import open_text
+
 
 def read_jsonl(path: Path) -> Iterator[tuple[int, dict]]:
     """Yield (line number, object). Malformed lines raise ValueError naming the line."""
-    with Path(path).open(encoding="utf-8") as handle:
+    with open_text(path) as handle:
         for number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue

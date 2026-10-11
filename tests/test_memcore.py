@@ -1,9 +1,11 @@
 import json
+import os
 
 import pytest
 from pydantic import ValidationError
 
 from memcore import EvidenceError, append_jsonl, load_manifest, locate_quote, read_jsonl
+from memcore.reading import confined_reads, read_file_bytes
 
 
 def write_manifest(root, **overrides):
@@ -72,3 +74,51 @@ def test_append_jsonl_only_appends(tmp_path):
     append_jsonl(path, {"id": 2})
     assert [r["id"] for _, r in read_jsonl(path)] == [1, 2]
     assert path.read_text().startswith('{"id": 1}\n')
+
+
+@pytest.mark.parametrize("component", ["file", "directory", "fifo"])
+def test_confined_open_rejects_swaps_after_resolution(tmp_path, monkeypatch, component):
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    (root / "nested").mkdir(parents=True)
+    outside.mkdir()
+    target = root / "nested" / "data.txt"
+    target.write_bytes(b"inside")
+    (outside / "data.txt").write_bytes(b"outside-sentinel")
+    original = os.open
+    triggered = []
+
+    def swap_then_open(path, flags, *args, **kwargs):
+        trigger = "nested" if component == "directory" else "data.txt"
+        if path == trigger and not triggered:
+            triggered.append(True)
+            if component == "directory":
+                (root / "nested").rename(root / "previous")
+                (root / "nested").symlink_to(outside, target_is_directory=True)
+            else:
+                target.unlink()
+                if component == "fifo":
+                    os.mkfifo(target)
+                else:
+                    target.symlink_to(outside / "data.txt")
+        return original(path, flags, *args, **kwargs)
+
+    with confined_reads(root):
+        monkeypatch.setattr(os, "open", swap_then_open)
+        with pytest.raises((OSError, ValueError)):
+            read_file_bytes(target)
+    assert triggered
+
+
+def test_confined_reads_accept_in_root_links_and_reset_after_failure(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "data.txt").write_bytes(b"inside")
+    (root / "link.txt").symlink_to(root / "data.txt")
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"outside-sentinel")
+    with pytest.raises(ValueError, match="outside the server root"):
+        with confined_reads(root):
+            assert read_file_bytes(root / "link.txt") == b"inside"
+            read_file_bytes(outside)
+    # The context must not affect the existing CLI/library behavior.
+    assert read_file_bytes(outside) == b"outside-sentinel"

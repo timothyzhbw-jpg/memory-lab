@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set up a local development environment: .venv, the three packages (editable), and the test suite.
+# Set up a local development environment: .venv, the packages (editable, including memlab-mcp), and the test suite.
 # Usage: ./scripts/setup-local.sh [--minimal]   (--minimal skips the optional Claude / Jev verifier SDKs)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,7 +15,7 @@ memfalsify="packages/memfalsify[all]"
 
 [ -d .venv ] || "$PYTHON" -m venv .venv
 .venv/bin/python -m pip install --quiet --upgrade pip
-.venv/bin/python -m pip install --quiet -e packages/memcore -e "$memfalsify" -e packages/orgmemory pytest
+.venv/bin/python -m pip install --quiet -e packages/memcore -e "$memfalsify" -e packages/orgmemory -e packages/memlab-mcp pytest
 .venv/bin/python -m pytest -q
 
 cat <<'NEXT'

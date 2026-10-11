@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -141,7 +141,7 @@ def issues_for(claim: Claim, others: list[Claim], as_of: date, stale_days: int) 
     dates = explicit_dates(text)
     if (match := RELATIVE_TIME.search(text)) and not dates:
         found.append(Issue(kind="relative_time", detail=f"'{match.group()}' has no absolute date"))
-    if dates and max(dates) < as_of - timedelta(days=stale_days):
+    if dates and (as_of - max(dates)).days > stale_days:
         found.append(Issue(kind="possibly_stale",
                            detail=f"latest date {max(dates)} is over {stale_days} days before {as_of}"))
     if match := HEDGE.search(text):

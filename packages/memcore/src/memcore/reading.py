@@ -1,0 +1,119 @@
+"""Read helpers with optional descriptor-based confinement for the MCP server.
+
+Ordinary library/CLI callers keep their existing path semantics. Within
+``confined_reads``, every open walks from a pinned root descriptor and refuses
+symlinks at the syscall boundary, including files replaced after validation.
+"""
+from __future__ import annotations
+
+import os
+import stat
+from contextlib import contextmanager
+from contextvars import ContextVar
+from pathlib import Path
+
+
+_ROOT: ContextVar[tuple[Path, int] | None] = ContextVar("memlab_read_root", default=None)
+
+
+def confinement_supported() -> bool:
+    return hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd
+
+
+def _directory(parts: tuple[str, ...], start: int) -> int:
+    """Return an owned descriptor; never traverse a symlink, even during a rename race."""
+    current = os.dup(start)
+    try:
+        for part in parts:
+            following = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+            os.close(current)
+            current = following
+        return current
+    except BaseException:
+        os.close(current)
+        raise
+
+
+@contextmanager
+def confined_reads(root: Path):
+    """Bind confinement to this execution context; no process-wide patches or disk copies."""
+    if not confinement_supported():
+        raise ValueError("confined reads require POSIX O_NOFOLLOW and dir_fd support")
+    root = Path(root).absolute()
+    anchor = os.open(root.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        descriptor = _directory(root.parts[1:], anchor)
+    finally:
+        os.close(anchor)
+    token = _ROOT.set((root, descriptor))
+    try:
+        yield
+    finally:
+        _ROOT.reset(token)
+        os.close(descriptor)
+
+
+@contextmanager
+def _open(path: Path, encoding: str | None = None):
+    root = _ROOT.get()
+    mode = "r" if encoding is not None else "rb"
+    if root is None:
+        with Path(path).open(mode, encoding=encoding) as handle:
+            yield handle
+        return
+    base, root_fd = root
+    # Accept existing in-root symlinks by resolving them first. O_NOFOLLOW on
+    # every subsequent component closes the check/open race on that resolution.
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(base):
+        raise ValueError("read path is outside the server root")
+    relative = resolved.relative_to(base)
+    directory_fd = _directory(relative.parts[:-1], root_fd)
+    try:
+        # NONBLOCK also prevents a regular file swapped for a FIFO from hanging
+        # before fstat can reject it. All handles are opened strictly read-only.
+        descriptor = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=directory_fd)
+    finally:
+        os.close(directory_fd)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError("input is not a regular file")
+        handle = os.fdopen(descriptor, mode, encoding=encoding)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    with handle:
+        yield handle
+
+
+def read_file_bytes(path: Path) -> bytes:
+    with _open(path) as handle:
+        return handle.read()
+
+
+def read_file_text(path: Path, encoding: str = "utf-8") -> str:
+    with _open(path, encoding) as handle:
+        return handle.read()
+
+
+def open_text(path: Path, encoding: str = "utf-8"):
+    return _open(path, encoding)
+
+
+def walk_files(path: Path, onerror=None):
+    """Walk from a pinned descriptor so directory swaps cannot disclose outside filenames."""
+    root = _ROOT.get()
+    if root is None:
+        yield from os.walk(path, onerror=onerror)
+        return
+    base, root_fd = root
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(base):
+        raise ValueError("directory is outside the server root")
+    descriptor = _directory(resolved.relative_to(base).parts, root_fd)
+    try:
+        for relative, directories, files, _ in os.fwalk(".", onerror=onerror, follow_symlinks=False, dir_fd=descriptor):
+            yield resolved / relative, directories, files
+    finally:
+        os.close(descriptor)

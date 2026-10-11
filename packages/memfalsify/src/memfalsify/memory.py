@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from memcore import EvidenceError, resolve_inside
+from memcore.reading import read_file_text
 
 from .text import features, sentence_spans
 
@@ -50,7 +51,7 @@ def _local_md_targets(line: str) -> list[str]:
 
 
 def _parse_file(path: Path, display: str) -> tuple[list[Claim], list[str]]:
-    lines = path.read_text(encoding="utf-8").split("\n")
+    lines = read_file_text(path).split("\n")
     claims, links, section, fenced = [], [], None, False
     for index in range(_strip_frontmatter(lines), len(lines)):
         raw = lines[index]
