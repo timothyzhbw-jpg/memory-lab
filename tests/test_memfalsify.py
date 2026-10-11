@@ -104,6 +104,36 @@ def test_memory_files_are_excluded_from_evidence(memfalsify_demo):
     assert any(s.path == "report.md" and "report" in s.reason for s in report.skipped_evidence)
 
 
+@pytest.mark.parametrize("pattern", ["docs/**", "docs/*", "docs", "./docs/"])
+def test_exclude_drops_whole_directories_silently(memfalsify_demo, pattern):
+    deep = memfalsify_demo / "evidence" / "docs" / "v1" / "old"
+    deep.mkdir(parents=True)
+    (deep / "api.md").write_text("The public API rate limit is 5 requests per minute.\n", encoding="utf-8")
+    cited = lambda report: {e.span.path for f in report.findings for e in f.evidence}
+    assert "docs/v1/old/api.md" in cited(audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence",
+                                               as_of=AS_OF))
+    report = audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence", as_of=AS_OF,
+                   exclude=[pattern, "*.png"])
+    assert not any(path.startswith("docs/") for path in cited(report))
+    assert by_text(report)["The public API rate limit is 100 requests per minute."].status == "insufficient_evidence"
+    assert report.skipped_evidence == [] and report.excluded == [pattern, "*.png"]
+
+
+def test_exclude_matches_paths_relative_to_evidence_root(memfalsify_demo):
+    report = audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence", as_of=AS_OF,
+                   exclude=["notes/2026-10-07-*.md", "evidence/docs/**"])
+    cited = {e.span.path for f in report.findings for e in f.evidence}
+    assert "notes/2026-10-07-decision-log.md" not in cited and "docs/api.md" in cited
+
+
+def test_cli_exclude_is_repeatable_and_needs_evidence(memfalsify_demo):
+    result = runner.invoke(app, cli_args(memfalsify_demo, "--exclude", "docs/**", "-x", "media/*"))
+    assert result.exit_code == 0 and "Excluded from evidence: `docs/**`, `media/*`" in result.output
+    assert "docs/api.md" not in result.output and "whiteboard.png" not in result.output
+    result = runner.invoke(app, ["audit", str(memfalsify_demo / "MEMORY.md"), "--exclude", "docs/**"])
+    assert result.exit_code == 2 and "--exclude requires --evidence" in result.output
+
+
 def test_media_is_reported_not_read(memfalsify_demo):
     skipped = run_demo(memfalsify_demo).skipped_evidence
     assert [s.path for s in skipped] == ["media/whiteboard.png"]

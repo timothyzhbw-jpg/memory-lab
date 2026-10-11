@@ -23,7 +23,7 @@ for _package in ("memcore", "memfalsify"):  # benchmark this checkout, not whate
 import typer  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, ValidationError  # noqa: E402
 
-from memcore import EvidenceError, locate_quote, read_jsonl, resolve_inside  # noqa: E402
+from memcore import EvidenceError, locate_quote, resolve_inside  # noqa: E402
 from memfalsify import __version__, jev, llm  # noqa: E402
 from memfalsify.audit import AuditReport, Issue, audit  # noqa: E402
 from memfalsify.cli import MAX_JUDGED, VerifierChoice, build_verifier, preselection  # noqa: E402
@@ -115,15 +115,12 @@ def load_case(root: Path) -> Case:
     claims = [c.text for c in parse_memory(root / "MEMORY.md")[0]]
     labels: dict[str, Label] = {}
     anchors: dict[str, tuple[str, int, int]] = {}
-    try:
-        records = list(read_jsonl(root / "labels.jsonl"))
-    except ValueError as exc:
-        problems.append(str(exc).replace(str(root / "labels.jsonl"), "labels.jsonl"))
-        records = []
-    for number, record in records:
+    for number, line in enumerate((root / "labels.jsonl").read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
         where = f"labels.jsonl:{number}"
         try:
-            label = Label.model_validate(record)
+            label = Label.model_validate_json(line)
         except ValidationError as exc:
             problems.append(f"{where}: {_errors(exc)}")
             continue
@@ -197,8 +194,9 @@ def predict(case: Case, report: AuditReport) -> list[Prediction]:
     for finding in sorted(report.findings, key=lambda f: case.claims.index(f.text)):
         label = case.labels[finding.text]
         predicted = RELATION[finding.status]
+        detected = predicted in FLAGGED if label.truth == "contradicted" else predicted == label.truth
         cites = None
-        if label.truth in CITED and (predicted == label.truth or label.truth == "contradicted" and predicted in FLAGGED):
+        if detected and label.truth in CITED:
             path, start, end = case.anchors[finding.text]
             cites = any(e.relation in CITED[label.truth] and e.span.path == path
                         and e.span.start < end and start < e.span.end for e in finding.evidence)
@@ -241,11 +239,8 @@ def score(predictions: list[Prediction]) -> dict:
     correct = sum(confusion[t][t] for t in TRUTHS)
     issues = {}
     for kind in ISSUES:
-        labeled = [kind in p.issues for p in predictions]
-        found = [kind in p.predicted_issues for p in predictions]
-        issues[kind] = prf(sum(a and b for a, b in zip(labeled, found)),
-                           sum(b and not a for a, b in zip(labeled, found)),
-                           sum(a and not b for a, b in zip(labeled, found)))
+        found = Counter((kind in p.issues, kind in p.predicted_issues) for p in predictions)
+        issues[kind] = prf(found[True, True], found[False, True], found[True, False])
     tags = {}
     for tag in TAGS:
         tagged = [p for p in predictions if tag in p.tags]
@@ -329,7 +324,7 @@ def to_markdown(result: dict) -> str:
            f"{_num(a['rate'])} ({a['correct']}/{a['total']}; disputed counts as wrong)", "",
            "| Label \\ predicted | " + " | ".join(PREDICTED) + " |", "|---" * (len(PREDICTED) + 1) + "|"]
     out += [f"| {t} | " + " | ".join(str(m["confusion"][t][q]) for q in PREDICTED) + " |" for t in TRUTHS]
-    out += ["", "Correct predictions citing the labeled passage: "
+    out += ["", "Detections citing the labeled passage: "
             + ", ".join(f"{truth} {_frac(rate)}" for truth, rate in m["citations"].items()), "",
             "## Issue detection", "", "| Issue | Labeled | Predicted | Precision | Recall |", "|---|---|---|---|---|"]
     out += [f"| {kind} | {i['tp'] + i['fn']} | {i['tp'] + i['fp']} | {_num(i['precision'])} | {_num(i['recall'])} |"
@@ -367,7 +362,8 @@ def main(
     case: Optional[list[str]] = typer.Option(None, "--case", help="Run only this case ID (repeatable)"),
     json_out: Optional[Path] = typer.Option(None, "--json", dir_okay=False,
                                             help="Also write all numbers and per-claim predictions here"),
-    cases_dir: Path = typer.Option(CASES, "--cases-dir", file_okay=False, help="Directory holding the cases"),
+    cases_dir: Path = typer.Option(CASES, "--cases-dir", file_okay=False, show_default="benchmarks/memfalsify/cases",
+                                   help="Directory holding the cases"),
     max_judged: int = typer.Option(MAX_JUDGED, min=1, help="Model verifiers: passages judged per memory"),
     min_coverage: Optional[float] = typer.Option(None, min=0.0, max=1.0,
                                                  help="Passage pre-selection (default 0.5 lexical, 0.2 models)"),
