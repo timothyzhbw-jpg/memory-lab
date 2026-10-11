@@ -9,8 +9,8 @@ from typing import Callable
 
 from memcore import EvidenceSpan
 
-from .audit import KINDS, SEVERITIES, AuditFinding, AuditReport
-from .models import ReplayResult, SubjectState
+from .audit import SEVERITIES, AuditFinding, AuditReport
+from .models import DatedPolicy, ReplayResult, RoleChange, SubjectState
 
 
 def _yaml_value(value) -> str:
@@ -47,16 +47,49 @@ def state_block(state: SubjectState) -> list[str]:
     return ["```yaml"] + [f"{k}: {_yaml_value(v)}" for k, v in fields.items()] + ["```"]
 
 
+def _role_names(roles: list[str]) -> str:
+    return ", ".join(roles) or "none"
+
+
+def role_change_text(change: RoleChange, clean: Callable[[str], str] = str,
+                     code: Callable[[str], str] | None = None) -> str:
+    """One applied policy-log entry: who changed whose role, when, and the roles before and after."""
+    code = code or (lambda value: f"`{clean(value)}`")
+    verb = (f"granted {clean(change.role)} to" if change.action == "grant"
+            else f"removed {clean(change.role)} from")
+    note = f"; note: {clean(_one_line(json.dumps(change.note, ensure_ascii=False)))}" if change.note else ""
+    return (f"{code(change.change_id)} at {change.timestamp.isoformat()}: {clean(change.actor)} "
+            f"(roles: {clean(_role_names(change.actor_roles))}) {verb} {clean(change.subject_actor)}; "
+            f"roles of {clean(change.subject_actor)}: {clean(_role_names(change.roles_before))} → "
+            f"{clean(_role_names(change.roles_after))}{note}")
+
+
+def _roles_line(dated: DatedPolicy | None) -> list[str]:
+    """The header line of a report on a dataset with dated roles; nothing otherwise."""
+    if dated is None:
+        return []
+    start = f"as of {dated.baseline.isoformat()}" if dated.baseline else "from the beginning of the log"
+    return [f"- Roles: policy.json {start}, then {len(dated.role_changes)} role change(s) from policy-log.jsonl; "
+            "each event is judged by the roles its actor held at its time"]
+
+
 def explain(result: ReplayResult, subject: str) -> str:
     state = result.states[subject]
     out = [f"## {subject}", ""] + state_block(state) + [""]
     decision = state.last_authorized_decision
+    changes = result.dated_policy.role_changes if result.dated_policy else []
     if decision:
         out += ["**Why this is the current status**", "",
                 f"- `{decision.event_id}`: {decision.actor} (roles: {', '.join(decision.roles)}) "
                 f"chose **{decision.action}** at {decision.timestamp.isoformat()}"]
         for span in decision.evidence:
             out += cite(span)
+        later = [c for c in changes if c.subject_actor == decision.actor and c.timestamp > decision.timestamp]
+        if later:
+            out.append(f"  - {decision.actor}'s roles changed later: " + "; ".join(
+                f"{'gained' if c.action == 'grant' else 'lost'} {c.role} at {c.timestamp.isoformat()} "
+                f"(`{c.change_id}`)" for c in later)
+                + ". The decision stands: it is judged by the roles held when it was made.")
         out.append("")
     else:
         out += ["No authorized decision yet.", ""]
@@ -67,6 +100,16 @@ def explain(result: ReplayResult, subject: str) -> str:
     if state.conflicts:
         out += ["**Conflicts**", ""] + [f"- {c.kind} {c.event_ids}: {c.detail}" for c in state.conflicts] + [""]
     rows = [e for e in result.audit_log if e.subject == subject]
+    actors = {e.actor for e in rows}
+    relevant = [c for c in changes if c.subject_actor in actors]
+    if relevant:
+        out += ["**Role changes of these actors**", "",
+                "Each event below was judged by the roles its actor held at its effective time.", ""]
+        for change in relevant:
+            out.append("- " + role_change_text(change))
+            for span in change.evidence:
+                out += cite(span)
+        out.append("")
     out += ["**Event history**", "", "| Time | Event | Actor | Action | Outcome | Status |", "|---|---|---|---|---|---|"]
     out += [f"| {e.timestamp.isoformat()} | `{e.event_id}` | {e.actor} ({', '.join(e.roles) or 'no role'}) | "
             f"{e.action} | {e.outcome} | {e.status_before} → {e.status_after} |" for e in rows]
@@ -77,6 +120,7 @@ def to_markdown(result: ReplayResult) -> str:
     cutoff = result.as_of.isoformat() if result.as_of else "end of log"
     out = ["# Organizational memory replay", "",
            f"- Replayed {result.events_replayed} of {result.events_total} events, as of {cutoff}",
+           *_roles_line(result.dated_policy),
            f"- Mode: **{result.mode}** (the event log was not modified)", ""]
     for subject in result.states:
         out.append(explain(result, subject))
@@ -118,14 +162,24 @@ def _audit_finding(finding: AuditFinding) -> list[str]:
                    f"(roles: {_safe(roles)}) · {event.action} · {event.outcome}")
         for span in event.evidence:
             out += cite(span, clean=_safe, code=_audit_code)
+    out += _audit_role_changes(finding.role_changes)
     out.append("")
+    return out
+
+
+def _audit_role_changes(changes: list[RoleChange]) -> list[str]:
+    out = []
+    for change in changes:
+        out.append("- role change " + role_change_text(change, clean=_safe, code=_audit_code))
+        for span in change.evidence:
+            out += cite(span, clean=_safe, code=_audit_code)
     return out
 
 
 def audit_markdown(report: AuditReport) -> str:
     """The audit as Markdown: a summary table first, then every finding with its cited evidence."""
     out = ["# Organizational decision audit", "", "| Kind | High | Medium | Low |", "|---|---|---|---|"]
-    for kind in KINDS:
+    for kind in report.kinds:
         counts = [sum(f.kind == kind and f.severity == s for f in report.findings) for s in SEVERITIES]
         out.append(f"| `{kind}` | " + " | ".join(map(str, counts)) + " |")
     out.append("| **Total** | " + " | ".join(str(report.summary[s]) for s in SEVERITIES) + " |")
@@ -134,6 +188,7 @@ def audit_markdown(report: AuditReport) -> str:
             f"- Audited {report.events_replayed} of {report.events_total} events on {report.subjects_total} "
             f"subject(s), as of {cutoff}",
             f"- Stale after {report.stale_days} days, measured at {report.reference_time.isoformat()}",
+            *_roles_line(report.dated_policy),
             f"- Mode: **{report.mode}** (the event log was not modified)", ""]
     if report.findings:
         out += ["## Findings", ""]
@@ -141,7 +196,14 @@ def audit_markdown(report: AuditReport) -> str:
             out += _audit_finding(finding)
     else:
         out += ["No findings.", ""]
+    if report.dated_policy is not None:
+        out += ["## Role changes", ""]
+        out += _audit_role_changes(report.dated_policy.role_changes) or ["No role changes up to the cutoff."]
+        out.append("")
     out += ["## Notes", "",
             "- Findings restate the replayed log and policy. They are leads for a person to review, not verdicts.",
             "- The log has no event that resolves a risk, so a risk stays on record after it is addressed."]
+    if report.dated_policy is not None:
+        out.append("- Roles are effective-dated: a role granted or removed later does not change an earlier "
+                   "event's outcome, and `role_changed_after_decision` is informational.")
     return "\n".join(out) + "\n"
