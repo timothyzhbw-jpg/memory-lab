@@ -29,6 +29,7 @@ ACCOUNT = re.compile(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,127}")
 TIME = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\.[0-9]{1,6})?(Z|[+-][0-9]{2}:?[0-9]{2})")
 ISSUE_FACT = re.compile(rf"jira:({_KEY})/issue/({_NUM})@[0-9a-f]{{12}}/fact")
 COMMENT_EVENT = re.compile(rf"jira:({_KEY})/comment/({_NUM})")
+TRANSITION_EVENT = re.compile(rf"jira:({_KEY})/transition/({_NUM})")
 HUMAN = {"atlassian", "customer"}
 ACCOUNT_TYPES = HUMAN | {"app", "unknown"}
 SEP = "--- text from Jira, flattened to plain text; untrusted ---"
@@ -118,6 +119,8 @@ def _ts(value: object, what: str) -> datetime:
     if match:
         zone = match[3]
         offset = "+00:00" if zone == "Z" else zone if ":" in zone else f"{zone[:3]}:{zone[3:]}"
+        if int(offset[1:3]) > 23 or int(offset[4:6]) > 59:
+            raise JiraCaptureError(f"malformed capture: {what} is not a timestamp with a timezone")
         fraction = (match[2] or ".")[1:].ljust(6, "0")
         try:
             when = datetime.fromisoformat(f"{match[1]}.{fraction}{offset}").astimezone(timezone.utc)
@@ -129,7 +132,7 @@ def _ts(value: object, what: str) -> datetime:
 
 
 def _iso(when: datetime) -> str:
-    return when.strftime("%Y-%m-%dT%H:%M:%S.") + f"{when.microsecond // 1000:03d}Z"
+    return when.astimezone(timezone.utc).isoformat(timespec="milliseconds").removesuffix("+00:00") + "Z"
 
 
 def _num(value: object, what: str) -> int:
@@ -182,11 +185,13 @@ def adf_text(value: object, what: str) -> str:
         if not isinstance(node, dict) or depth > 100:
             return
         kind = node.get("type")
+        if not isinstance(kind, str):
+            raise JiraCaptureError(f"malformed capture: {what} has an invalid document node type")
         attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
         piece = {"text": node.get("text"), "hardBreak": "\n", "mention": attrs.get("text"),
                  "status": attrs.get("text"), "emoji": attrs.get("text") or attrs.get("shortName"),
                  "inlineCard": attrs.get("url"), "blockCard": attrs.get("url"),
-                 "embedCard": attrs.get("url")}.get(kind) if isinstance(kind, str) else None
+                 "embedCard": attrs.get("url")}.get(kind)
         if isinstance(piece, str) and piece:
             out.append(piece)
         content = node.get("content")
@@ -236,7 +241,7 @@ class Ctx:
     """State of one convert() run: what the log holds, what this run plans, and what it reports."""
 
     def __init__(self, site: str, captured_at: datetime, existing: dict[str, Event], evidence_ids: set[str],
-                 config: JiraConfig):
+                 config: JiraConfig, issue_ids: dict[str, int], known_transitions: dict[str, datetime]):
         self.site, self.captured_at, self.existing = site, captured_at, existing
         self.evidence_ids, self.config = evidence_ids, config
         self.planned: dict[str, str] = {}
@@ -251,20 +256,31 @@ class Ctx:
         self.automated: set[str] = set()
         self.statuses: set[int] = set()
         # Which key each issue id had when this dataset first recorded it, and back.
-        self.keys: dict[int, str] = {}
-        self.ids: dict[str, int] = {}
+        self.keys: dict[int, str] = {oid: key for key, oid in issue_ids.items()}
+        self.ids: dict[str, int] = dict(issue_ids)
         for eid in sorted(evidence_ids):
             if match := ISSUE_FACT.fullmatch(eid):
                 self.keys.setdefault(int(match[2]), match[1])
                 self.ids.setdefault(match[1], int(match[2]))
-        self.comments: dict[str, set[int]] = {}
+        self.comments: dict[str, dict[int, datetime]] = {}
+        self.transitions: dict[str, dict[int, datetime]] = {}
+        self.decisions: dict[str, dict[str, tuple[datetime, int]]] = {}
+        for eid, when in {**known_transitions, **{e.id: e.timestamp for e in existing.values()}}.items():
+            if match := TRANSITION_EVENT.fullmatch(eid):
+                self.transitions.setdefault(match[1], {})[int(match[2])] = when
         for eid in existing:
             if match := COMMENT_EVENT.fullmatch(eid):
-                self.comments.setdefault(match[1], set()).add(int(match[2]))
+                self.comments.setdefault(match[1], {})[int(match[2])] = existing[eid].timestamp
+            if (match := TRANSITION_EVENT.fullmatch(eid)) and existing[eid].action in DEC:
+                self.decisions.setdefault(match[1], {})[eid] = (existing[eid].timestamp, int(match[2]))
 
-    def action_of(self, eid: str) -> str | None:
-        """The log's action for an id, else this run's: the log decides revoke targets."""
-        return self.existing[eid].action if eid in self.existing else self.planned.get(eid)
+    def decision_before(self, key: str, when: datetime, hid: int) -> str | None:
+        """Latest earlier decision in logged chronology, then this run's new acts.
+
+        Drift in a capture's timestamps must not reorder immutable decisions when choosing a revoke target.
+        """
+        candidates = [(order, eid) for eid, order in self.decisions.get(key, {}).items() if order < (when, hid)]
+        return max(candidates)[1] if candidates else None
 
     def skip(self, ref: str, why: str, *, partial: bool = False) -> None:
         line = f"{ref} ({why})"
@@ -328,7 +344,8 @@ class Ctx:
         self.planned[eid] = action
         old = self.existing.get(eid)
         if old is not None:
-            if (old.action, old.actor, old.subject, old.supersedes) != (action, who.aid, issue.key, supersedes):
+            if (old.action, old.actor, old.subject, old.supersedes, old.timestamp) != \
+                    (action, who.aid, issue.key, supersedes, when):
                 self.drift.append(eid)
             return
         if who.automated:
@@ -336,6 +353,8 @@ class Ctx:
         event = Event(id=eid, timestamp=when, actor=who.aid, action=action, subject=issue.key, evidence_ids=cites,
                       note=note, supersedes=supersedes)
         out.append(Planned(event, (when, issue.order, len(out))))
+        if kind == "transition" and action in DEC:
+            self.decisions.setdefault(issue.key, {})[eid] = (when, oid)
 
 
 def _transitions(histories: list[dict], key: str) -> tuple[list[tuple], int]:
@@ -352,7 +371,7 @@ def _transitions(histories: list[dict], key: str) -> tuple[list[tuple], int]:
             raise JiraCaptureError(f"malformed capture: history {hid} on {key} has no items")
         # Only the system status field: a custom field named "status" has fieldtype "custom".
         status = [i for i in items if i.get("fieldtype") == "jira" and i.get("field") == "status"
-                  and i.get("fieldId", "status") == "status"]
+                  and i.get("fieldId") == "status"]
         other += len(items) - len(status)
         if len(status) > 1:
             raise JiraCaptureError(f"malformed capture: history {hid} on {key} changes the status twice")
@@ -382,6 +401,12 @@ def plan_issue(ctx: Ctx, issue: Issue) -> list[Planned]:
             ctx.skip(base, found, partial=True)
             return []
     transitions, other = _transitions(histories, key)
+    found_ids = {t[1] for t in transitions}
+    missing = sorted(hid for hid, when in ctx.transitions.get(key, {}).items()
+                     if when <= ctx.captured_at and hid not in found_ids)
+    if missing:
+        ctx.skip(base, f"changelog omits previously captured transition {missing[0]}", partial=True)
+        return []
     for (_, _, _, _, _, to), (_, hid, _, _, frm, _) in zip(transitions, transitions[1:]):
         if to != frm:
             ctx.skip(base, f"status history has a gap before history {hid}", partial=True)
@@ -406,7 +431,6 @@ def plan_issue(ctx: Ctx, issue: Issue) -> list[Planned]:
                 "Jira issue created", verbatim=f"{summary}\n{description}",
                 record={"created": fields.get("created"), "creator": _user(fields.get("creator")),
                         "reporter": _user(fields.get("reporter"))})
-    last_decision = None
     for when, rank, oid, x in sorted(walk, key=lambda w: w[:3]):
         if rank == 0:
             note = "Jira comment"
@@ -425,6 +449,7 @@ def plan_issue(ctx: Ctx, issue: Issue) -> list[Planned]:
         note, action = f"Jira transition from status {frm} to {to}", "comment"
         if mapped is not None:
             note, action = f"{note}, mapped to {mapped} in jira.json", mapped
+        last_decision = ctx.decision_before(key, when, oid) if mapped == "revoke" else None
         if mapped == "revoke" and last_decision is None:
             note, action = f"{note}; no decision to withdraw", "comment"
         elif mapped == "revoke":
@@ -433,13 +458,14 @@ def plan_issue(ctx: Ctx, issue: Issue) -> list[Planned]:
                     tail=f": status {frm} to {to}", supersedes=supersedes,
                     record={"id": str(oid), "created": history.get("created"), "author": _user(history.get("author")),
                             "status": _scalars(item, "from", "fromString", "to", "toString")})
-        if ctx.action_of(eid) in DEC:
-            last_decision = eid
-    ctx.gone += [f"{base}/comment/{c}" for c in sorted(ctx.comments.get(key, set()) - seen)]
+    ctx.gone += [f"{base}/comment/{c}" for c, when in sorted(ctx.comments.get(key, {}).items())
+                 if c not in seen and when <= ctx.captured_at]
     return out
 
 
-def convert(capture: object, existing: dict[str, Event], evidence_ids: set[str], config: JiraConfig) -> JiraPlan:
+def convert(capture: object, existing: dict[str, Event], evidence_ids: set[str], config: JiraConfig, *,
+            issue_ids: dict[str, int] | None = None,
+            known_transitions: dict[str, datetime] | None = None) -> JiraPlan:
     """Plan the events and evidence of a capture. Pure: equal inputs always give an equal plan."""
     if not isinstance(capture, dict) or type(capture.get("jira_capture")) is not int \
             or capture["jira_capture"] != 1:
@@ -481,7 +507,7 @@ def convert(capture: object, existing: dict[str, Event], evidence_ids: set[str],
         + (["pages extend past the result total"] if len(positions) > covered else []) \
         + (["the result order changed between pages"]
            if reordered or len(set(positions.values())) < len(positions) else [])
-    ctx = Ctx(site, captured_at, existing, evidence_ids, config)
+    ctx = Ctx(site, captured_at, existing, evidence_ids, config, issue_ids or {}, known_transitions or {})
     planned = sorted((p for issue in sorted(issues.values(), key=lambda i: i.order) for p in plan_issue(ctx, issue)),
                      key=lambda p: p.order)
     return JiraPlan(site=site, captured_at=captured_at, pages=len(pages), issues=len(issues), total=total,

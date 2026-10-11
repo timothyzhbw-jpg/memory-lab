@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -13,7 +13,7 @@ from memcore import EvidenceSpan, ManifestEntry, append_jsonl, load_manifest, re
 from memcore.evidence import verify_entry
 
 from .ingest import create_only, dataset_path, importer_lock
-from .jira_map import SITE, JiraCaptureError, JiraConfig, JiraPlan, _ts, convert
+from .jira_map import KEY, SITE, JiraCaptureError, JiraConfig, JiraPlan, _num, _ts, convert
 from .models import Event
 from .replay import load_events, validate
 
@@ -33,7 +33,7 @@ def lock(dataset: Path) -> AbstractContextManager[None]:
 
 
 def _stamp(when: datetime) -> str:
-    return when.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return when.astimezone(timezone.utc).isoformat(timespec="seconds").removesuffix("+00:00") + "Z"
 
 
 @dataclass
@@ -41,6 +41,39 @@ class Existing:
     events: list[Event]
     spans: dict[str, EvidenceSpan]
     log: list[dict]
+    sites: set[str]
+    issue_ids: dict[str, int]
+    transitions: dict[str, datetime]
+
+
+def provenance(dataset: Path, spans: dict[str, EvidenceSpan]) -> tuple[set[str], dict[str, int], dict[str, datetime]]:
+    """Recover immutable identities from hash-verified captures, even before events or the sync log exist.
+
+    Every Jira capture records site, key and issue id; a missing creator must not disable identity checks.
+    Only the structured record line is read, never the untrusted text below the separator.
+    """
+    sites: set[str] = set()
+    issues: dict[str, int] = {}
+    keys: dict[int, str] = {}
+    transitions: dict[str, datetime] = {}
+    paths = {span.path for span in spans.values()
+             if span.source_kind in {"jira_issue", "jira_comment", "jira_transition"}}
+    for relative in sorted(paths):
+        lines = _path(dataset, relative).read_bytes().split(b"\n", 2)
+        record = json.loads(lines[1]) if len(lines) > 1 else None
+        if not isinstance(record, dict):
+            raise ValueError("invalid Jira source record")
+        site, key = record.get("site"), record.get("key")
+        if not isinstance(site, str) or not SITE.fullmatch(site) or not isinstance(key, str) or not KEY.fullmatch(key):
+            raise ValueError("invalid Jira source identity")
+        oid = _num(record.get("issue_id"), "a stored issue id")
+        if issues.setdefault(key, oid) != oid or keys.setdefault(oid, key) != key:
+            raise ValueError("conflicting Jira issue identities")
+        sites.add(site)
+        if record.get("kind") == "transition":
+            hid = _num(record.get("id"), "a stored history id")
+            transitions[f"jira:{key}/transition/{hid}"] = _ts(record.get("created"), "a stored history time")
+    return sites, issues, transitions
 
 
 def check_log(line: dict) -> None:
@@ -70,11 +103,13 @@ def load_existing(dataset: Path) -> Existing:
         validate(events, spans)
         for line in log:
             check_log(line)
-        if len({line["site"] for line in log}) > 1:
+        sites, issue_ids, transitions = provenance(dataset, spans)
+        sites.update(line["site"] for line in log)
+        if len(sites) > 1:
             raise ValueError("Jira sync log names two sites")
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, RecursionError) as exc:
         raise JiraCaptureError(UNREADABLE) from exc
-    return Existing(events, spans, log)
+    return Existing(events, spans, log, sites, issue_ids, transitions)
 
 
 def load_config(dataset: Path) -> JiraConfig:
@@ -130,7 +165,7 @@ def apply(dataset: Path, existing: Existing, plan: JiraPlan, config: JiraConfig,
         span = existing.spans.get(fact_id) or plan.spans.get(fact_id)
         if span is None or span.quote != plan.facts.get(fact_id):
             raise JiraCaptureError("a planned event's fact conflicts with existing evidence; nothing appended")
-    pinned = {line["site"] for line in existing.log}
+    pinned = existing.sites
     if pinned and pinned != {plan.site}:
         raise JiraCaptureError(f"Jira site changed: this dataset imports {min(pinned)}; one site per dataset")
     paths = [(_path(dataset, c.path), c.data) for c in plan.captures]
@@ -177,7 +212,8 @@ def run_convert(dataset: Path, capture_path: Path, *, dry_run: bool = False,
             capture = json.loads(capture_path.read_bytes())
         except (ValueError, RecursionError):
             raise JiraCaptureError("the capture is not a JSON document") from None
-        plan = convert(capture, {e.id: e for e in existing.events}, set(existing.spans), config)
+        plan = convert(capture, {e.id: e for e in existing.events}, set(existing.spans), config,
+                       issue_ids=existing.issue_ids, known_transitions=existing.transitions)
         # Offline conversion records the capture time as the finish time, so examples are reproducible.
         return apply(dataset, existing, plan, config, dry_run=dry_run,
                      finished_at=now() if now else plan.captured_at)

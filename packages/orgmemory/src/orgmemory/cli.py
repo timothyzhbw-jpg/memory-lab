@@ -238,8 +238,7 @@ def jira_convert(dataset: Path = DATASET,
     except (ValueError, OSError, RecursionError) as exc:
         # Other messages may embed capture or dataset text; only importer constants are shown.
         safe = {LOCK_HELD, "content-addressed capture tamper conflict"}
-        _fail(str(exc) if str(exc) in safe else "Jira import failed: invalid input, dataset or filesystem; "
-                                                "nothing appended")
+        _fail(str(exc) if str(exc) in safe else "Jira import failed: invalid input, dataset or filesystem")
     for line in summary.lines():
         typer.echo(line)
     if dry_run:

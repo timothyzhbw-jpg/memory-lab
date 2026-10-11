@@ -33,8 +33,9 @@ The README has the curl and jq recipe. The importer contains no network code and
    noted, and the editor is named. A transition is attributed to its changelog history's `author`. Display
    names, mentions and text are never read for identity. The actor ID is `jira:<accountId>`.
 3. **`revoke` needs a decision to withdraw.** A transition into a `revoke` status supersedes the latest
-   earlier transition on the same issue whose action is `approve` or `reject`. That action is read from
-   the log first and from this run second, so changing `jira.json` never changes the target of an event
+   earlier transition on the same issue whose action is `approve` or `reject`. The action and ordering
+   time are read from the log first and from this run second, so changing `jira.json` or drifting capture
+   timestamps never changes the target of an event
    already in the log. With no such transition, it is a `comment`. Replay then checks that the revoker
    may revoke and that the target is the current decision (`invalid_supersession` otherwise).
 4. **Automation is comment-only.** Only `accountType` `atlassian` (people) and `customer` (Service
@@ -67,9 +68,13 @@ leaves the subject `proposed`. Problems are therefore handled as follows.
 | Pages do not cover `[0, total)`, disagree on `total`, extend past it, or put two issues at one position (or one issue at two) | Incomplete: exit 3, and the issues present are applied |
 | An issue without `changelog` or `comment`, or with either truncated (`startAt` > 0 or `total` > length) | That issue is skipped whole; incomplete |
 | Consecutive status changes do not chain (`to` of one is not `from` of the next), or the last one does not end at `fields.status.id` | That issue is skipped whole; incomplete |
+| A re-capture omits a previously recorded transition that predates its capture time (including evidence recorded before an interrupted event append) | That issue is skipped whole; incomplete |
 | An issue id recorded under another key (a moved issue), or a key recorded for another id | That issue is skipped and reported; the run can still be complete |
 
-The status chain check also catches a truncated changelog when `total` is wrong. A run that is incomplete
+The status chain check also catches gaps in a truncated changelog when `total` is wrong; checking prior
+captures catches omitted prefixes and cycles that still chain. On a first import, a capture with a false
+`total` and a self-consistent omitted prefix or cycle cannot be distinguished from a complete history.
+A run that is incomplete
 still appends its `jira-sync.jsonl` line, with `complete: false` and the reasons.
 
 ## Identity and re-imports
@@ -85,10 +90,13 @@ still appends its `jira-sync.jsonl` line, with `complete: false` and the reasons
 - Timestamps are normalized to UTC with milliseconds, so a capture made in another profile time zone yields
   the same ids and facts.
 - Re-importing appends only what is new. An existing event is never rewritten. If its recomputed action,
-  actor, subject or target differs (for example after a `jira.json` change), it is listed under `drift`.
+  actor, subject, timestamp or target differs (for example after a `jira.json` change), it is listed under `drift`.
 - An edited summary, description or comment gets a new evidence version and no event. A logged comment
-  that is missing from a complete re-capture of its issue is reported as `gone` and kept.
-- `jira-sync.jsonl` pins the site: one dataset imports one Jira site, because subjects are bare keys.
+  that predates the capture time and is missing from a complete re-capture of its issue is reported as
+  `gone` and kept. Re-importing an older snapshot does not report later comments as deleted.
+- `jira-sync.jsonl` and hash-verified Jira source records pin the site: one dataset imports one Jira site,
+  because subjects are bare keys. Source records also pin issue ids to keys when a creator is absent and
+  preserve the site and identity checks after interrupted appends.
 - The GitHub and Jira importers each hold a lock. Neither starts while the other's lock exists.
 
 ## Residual risks
