@@ -77,6 +77,7 @@ No package changes yet.
 - MemFalsify benchmark cases `en-units-scope`, `zh-units-negation` and `es-operacion-alcance`: 63 labeled
   claims for paraphrased support and contradiction, unit conflicts, date and version arithmetic, scope swaps
   between services, and negation and modality. The lexical baseline was measured again on all 202 claims.
+- English and Chinese 15-minute tutorials (`docs/tutorial.md`, `docs/tutorial.zh-CN.md`), linked from both READMEs. The walkthrough installs the CLIs, audits `examples/memfalsify`, records a review, diffs a `CLAUDE.md` and `AGENTS.md` change in a throwaway git repository, checks `history` and `rollback`, replays and audits `examples/orgmemory/feature-a`, converts the GitHub example captures, and registers the read-only MCP server. `tests/test_tutorial.py` runs the English page's bash blocks in order and checks the exit code each block states.
 
 ### Changed
 
