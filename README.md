@@ -335,7 +335,7 @@ the claims it adds or changes.
 |---|---|---|
 | **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
 | **v0.2** | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion ✓ |
-| v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit ✓ |
+| **v0.3** | Git history of memory: diff, review, rollback; cross-agent skill polish ✓ | State conflicts and decision audit ✓ |
 | v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
 

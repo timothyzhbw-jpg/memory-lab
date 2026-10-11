@@ -333,7 +333,7 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 |---|---|---|
 | **v0.1** | 文本记忆审计、证据追溯、人工确认流程 | 事件日志、状态机、权限规则、决策溯源 |
 | **v0.2** | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR ✓ |
-| v0.3 | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 | 状态冲突与决策审计 ✓ |
+| **v0.3** | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 ✓ | 状态冲突与决策审计 ✓ |
 | v0.4 | 多模态证据（带定位的 OCR / 转写） | 跨平台组织记忆 |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |
 
