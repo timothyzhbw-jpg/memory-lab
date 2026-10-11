@@ -118,6 +118,45 @@ orgmemory evidence add <dataset> --id ... --path ... --quote "..." --source-uri 
 orgmemory append   <dataset> --event '{"id": ..., ...}'
 ```
 
+#### Ingest GitHub issues and pull requests
+
+`orgmemory github` turns one repository's issues and pull requests into events, evidence and source captures in a dataset. Each issue or PR is one subject (`acme/web#12`). The import is deterministic and uses no model.
+
+```bash
+orgmemory github sync    <dataset> OWNER/REPO [--full] [--issue N] [--dry-run] [--save-capture f.json]
+orgmemory github convert <dataset> f.json       # apply a saved capture offline
+orgmemory explain        <dataset> "acme/web#12"
+```
+
+- The token is the first non-empty `GITHUB_TOKEN` or `GH_TOKEN` (`GH_TOKEN=$(gh auth token)` works); there is no `--token` flag. A fine-grained, read-only token with Issues, Pull requests and Metadata read access is enough. Without a token the run is unauthenticated: public repositories only, 60 requests per hour.
+- The first run reads everything; `--since ISO-TIME` can bound it, and is refused once the repository has a cursor. Later runs read what changed since the last complete sync, with a 5-minute overlap. `--full` rescans everything and `--issue N` (repeatable) refreshes chosen numbers. Rerunning is safe: IDs are deterministic, so nothing already in the log is appended twice. GitHub may not mark an issue as updated for every change (labels, dependency links), so run `--full` now and then.
+- `--dry-run` fetches (this spends requests), prints the summary and the planned events, and writes nothing. `--save-capture` writes the fetched issues and timelines, as the API returned them, to a new file that `convert` can apply later; it works with `--dry-run`, so you can review a capture before applying it. The file contains raw and possibly private text.
+- Exit codes: `0` complete, including "nothing new"; `2` error, nothing appended; `3` partial: rate limiting beyond `--max-wait` (default 3600 s) or repeated server or network errors stopped the fetch, fully fetched items were applied, and the cursor did not move, so run it again later.
+- The dataset directory must exist. `events.jsonl` and `evidence.jsonl` are created on first use. The import does not need `policy.json`; `replay`, `explain` and `validate` do.
+
+**The importer never reads or writes `policy.json`: map `gh:<login>:<id>` actor IDs to roles yourself.** Until an account is mapped, its events are recorded but change no state. The sync summary lists the actors in new events, and `orgmemory validate` lists every actor missing from `policy.json`.
+
+| GitHub | Event |
+|---|---|
+| Issue or PR opened | `request` |
+| Review approved / changes requested | `approve` / `reject` by the reviewer |
+| Approving or rejecting review dismissed by a person | `revoke` of that review by the dismisser |
+| Issue closed as not planned | `reject` by the closer |
+| PR merged / closed without merging | `approve` by the merger / `reject` by the closer |
+| Reopened after a close recorded as `reject` / any other reopen | `revoke` of that close, then `request` / `request` |
+| Review re-requested from a reviewer whose review requested changes | `request` |
+| Label listed in `github.json` added / removed | its `approve`, `reject` or `raise_risk` / `revoke` of the decision that label made, otherwise `comment` (a risk cannot be withdrawn) |
+| Blocked-by link added | `dependency` |
+| Comments, commenting reviews, other closes, stale-review auto-dismissals, removed blocked-by links | `comment` |
+| Anything done by a bot, an app, an agent or a deleted account | `comment` only |
+| Everything else (assignments, mentions, cross-references, other review requests, unlisted labels, edits) | nothing |
+
+Text is never parsed: "LGTM", "/approve", "approved by @pm" or "depends on #3" anywhere is just a `comment` by its author. A dismissed review keeps its original verdict, so the log does not depend on when you synced. An edit adds a new evidence version, not an event; a deleted comment stays in the dataset and is reported as gone when its issue is refreshed.
+
+A reopen by someone who may `revoke` returns the subject to `proposed`. Otherwise the revoke is an ignored attempt, and the `request` after it marks a reconsideration only if the reopener's role permits `request`. Expect two kinds of noise: a merge by someone without approve authority is listed as an ignored attempt even after an authorized approval, and reopening a close that was not the current decision (an unauthorized close, for example) shows `invalid_supersession` when the reopener may revoke.
+
+Example: [`examples/orgmemory/github-acme-web`](examples/orgmemory/github-acme-web/) is built with `orgmemory github convert` from two synthetic captures of `acme/web` (in `tests/fixtures/github/`), with its [replay report](examples/orgmemory/github-acme-web/replay-report.md). In it, `acme/web#1` is the Feature A story on GitHub: the product manager closes the issue as not planned, an account manager adds the `approved` label, and the customer reopens it. The issue stays `rejected` with `reconsideration_requested: true` and `pending_approval: [product_manager]`; the label and the reopen's `revoke` are listed as ignored attempts.
+
 ## Data formats
 
 **`reviews.jsonl`** (MemFalsify, optional): human-confirmed assertions.
@@ -135,6 +174,31 @@ orgmemory append   <dataset> --event '{"id": ..., ...}'
 - `evidence.jsonl`: `id`, `path`, `sha256` of the raw bytes, exact `quote` and its `[start, end)` character span, `source_uri`, `source_kind`, `captured_at`. Use `orgmemory evidence add` instead of hashing by hand.
 
 Replay rules: events are ordered by effective time, and ties keep file order. The whole log is validated before replay, including events after `--as-of`. An authorized `approve` / `reject` sets the status and clears reconsideration, pending approval and ignored attempts. Reversals and same-time conflicting decisions are recorded under `conflicts`.
+
+**GitHub import files** (in the same dataset directory):
+
+- `github.json` (optional, yours; the importer only reads it): `{"labels": {"<label>": "approve" | "reject" | "raise_risk"}}`. Label names match case-insensitively, and unlisted labels produce nothing. A change affects only events not yet in the log (`--full` backfills); an existing event whose mapping would now differ is reported as drift and never rewritten.
+- `github-sync.jsonl`: one line per applied run (none for `--dry-run`) with `repo`, `repo_id`, `source` (`sync` or `convert`), `mode`, `since`, `started_at` (the server `Date` of the run's first response), `finished_at`, `complete`, `items`, `requests`, `events_appended`, `evidence_appended`, `gone`, `drift` and `importer`. The next cursor is the latest complete `sync` line's `started_at` minus 5 minutes; targeted, partial, `convert` and dry runs never move it. The recorded `repo_id` pins the repository: if the name later resolves to a different ID (deleted and recreated), the import is refused. A renamed or transferred repository also fails closed and needs a deliberate re-import.
+- `sources/github/<owner>/<repo>/<n>/<object>-<hash12>.txt`: one create-only file per version of each issue or PR, comment and review, and per mapped issue event, where `<object>` is `issue-<n>`, `comment-<id>`, `review-<id>` or `event-<id>` and `<hash12>` starts the file's SHA-256. Line 1 is an ASCII fact line built only from validated fields; line 2 is an ASCII-escaped JSON record of whitelisted API fields; line 3 is a fixed separator; the rest is GitHub's text (title and body, comment or review body, dismissal message) exactly as returned, except that a lone surrogate becomes U+FFFD and the record says `"lossy": true`. Review 206 on `acme/web#2` in the example:
+
+```text
+GitHub review 206 on acme/web#2 by gh:zhou-pm:5003 (User) at 2026-10-07T09:00:00Z: approved on commit 54bb654c9e60
+{"author_association":"MEMBER","commit_id":"54bb654c9e6025347f57900a4a5c2313a96b8035","event":"reviewed","id":206,...}
+--- verbatim from GitHub; untrusted ---
+Approved now that export waits for the billing migration.
+```
+
+Every event cites its object's `fact` evidence, the whole fact line, which names the same actor as the event. When the text allows it, the event also cites `text`: the first non-empty line of the verbatim section that does not start with `<!--`, trimmed and cut to 200 characters. It is left out if the comment is minimized or the line contains a control character other than tab, or a bidi, zero-width or line-separator character. A review whose verdict was recovered from its dismissal also cites the dismissal's `fact`.
+
+| GitHub IDs | Format | Example |
+|---|---|---|
+| Subject | `<owner>/<repo>#<number>`, lowercase | `acme/web#12` |
+| Actor | `gh:<login>:<user id>`, login lowercased; `gh:~:<id>` if the login is not a valid GitHub login | `gh:zhou-pm:5003` |
+| Event | `gh:<subject>/` + `opened`, `comment/<id>`, `review/<id>`, `event/<id>`, or `event/<id>/request` (the request after a reopen) | `gh:acme/web#1/event/108/request` |
+| Evidence | `gh:<subject>/` + `issue@<th12>`, `comment/<id>@<th12>`, `review/<id>@<th12>` or `event/<id>`, then `/fact` or `/text` | `gh:acme/web#2/review/206@67c4aa9e1b3a/fact` |
+| Dependency | the blocking issue as a subject | `acme/billing#3` |
+
+`<th12>` is the first 12 hex digits of the SHA-256 of the verbatim text alone, so an edit creates a new evidence version and a login rename does not. A renamed or recycled login gives a new actor ID with no role.
 
 ## Agent skills
 
@@ -192,6 +256,12 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there.
 - Actor IDs and `policy.json` are trusted input. There is no identity authentication, signed provenance or policy versioning yet, and changing the policy changes every replay.
 - Evidence is UTF-8 text only. Images, audio, video and PDF are reported as skipped.
+- GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
+- `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
+- On public repositories anyone can open issues, comment, review pull requests and close their own issues. All of it is recorded under the real account and ignored by replay unless that account is mapped, so expect `unauthorized_change_attempts`. That is accurate, not a bug.
+- Capture hashes prove the bytes the importer rendered from the API, not what GitHub served, and a capture given to `convert` is trusted as what GitHub said: convert only captures you made. Captured GitHub text is untrusted, and prompt injection in issue bodies is expected. It never becomes IDs, notes, actors or importer output, but `replay` and `explain` print evidence quotes as they are (single-line, with no terminal escapes or bidi characters, but possibly with markdown or HTML).
+- The GitHub token is read from the environment only, sent only to `https://api.github.com` (redirects are never followed to another host), and never written or printed.
+- Datasets imported from private repositories, and `--save-capture` files, contain private text: never commit them. There is no redaction workflow: removing a secret from a capture means editing it by hand, after which `validate` fails on purpose.
 - This is a research MVP, not production infrastructure.
 
 ## Roadmap
@@ -199,7 +269,7 @@ Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a v
 | | MemFalsify | Organizational Memory |
 |---|---|---|
 | **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
-| **v0.2** (in progress) | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion (in development) |
+| **v0.2** | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion ✓ |
 | v0.3 | Git history of memory: diff, review, rollback; cross-agent skill polish | State conflicts and decision audit |
 | v0.4 | Multimodal evidence (OCR / transcription with locators) | Cross-platform organizational memory |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
