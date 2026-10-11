@@ -4,6 +4,8 @@ English | [中文](README.zh-CN.md)
 
 Agent memory tools mostly store and retrieve. This project is about **keeping what an agent remembers true**: every memory should have evidence, a place in time, and a traceable origin, and information without authority should not be able to change the current state.
 
+The [15-minute tutorial](docs/tutorial.md) walks through both tools on a temporary copy of `examples/`.
+
 `Remember → Verify → Challenge → Resolve → Evolve`
 
 It contains two independent tools that share one evidence core:

@@ -16,7 +16,9 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- English and Chinese 15-minute tutorials (`docs/tutorial.md`, `docs/tutorial.zh-CN.md`), linked from both READMEs. The walkthrough installs the CLIs, audits `examples/memfalsify`, records a review, diffs a `CLAUDE.md` and `AGENTS.md` change in a throwaway git repository, checks `history` and `rollback`, replays and audits `examples/orgmemory/feature-a`, converts the GitHub example captures, and registers the read-only MCP server. `tests/test_tutorial.py` runs the English page's bash blocks in order and checks the exit code each block states.
 
 ## memlab-core
 
