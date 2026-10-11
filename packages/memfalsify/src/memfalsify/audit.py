@@ -17,8 +17,8 @@ from memcore.reading import read_input_bytes
 from . import __version__
 from .corpus import Passage, Skipped, scan
 from .memory import Claim, parse_memory
-from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, HEDGE, RELATIVE_TIME, explicit_dates, features,
-                   has_negation)
+from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, CJK, HEDGE, RELATIVE_TIME, coverage_units,
+                   explicit_dates, features, has_negation, normalize)
 from .verify import Judgment, LexicalVerifier, Verifier, coverage
 
 Status = Literal["challenged", "conflicted", "candidate_counterevidence", "disputed",
@@ -159,6 +159,10 @@ class _Lex:
     numbers: frozenset[str]
     negated: bool
     zh: frozenset[str]
+    # Chinese text is judged by character coverage, per-clause negation and modality, which the
+    # term-count shortcut below does not model; pairs that involve it go to the verifier itself.
+    cjk: bool = False
+    chars: frozenset[str] = frozenset()
 
 
 _ZH_TERMS = tuple(dict.fromkeys(term for pair in ANTONYMS_ZH for term in pair))
@@ -182,7 +186,10 @@ def _zh_present(text: str) -> frozenset[str]:
 
 def _lex_of(text: str) -> _Lex:
     words, numbers = features(text)
-    return _Lex(words, numbers, has_negation(text), _zh_present(text))
+    if not CJK.search(text):
+        return _Lex(words, numbers, has_negation(text), _zh_present(text))
+    chars = frozenset(CJK.findall(normalize(text)))
+    return _Lex(words, numbers, has_negation(text), _zh_present(text), True, chars)
 
 
 def _min_shared(size: int, related: float) -> int:
@@ -240,6 +247,12 @@ class _ConflictIndex:
     contains one of A's rarest ``len(A) - k + 1`` terms. Claims whose own threshold is lower are
     found from their prefixes. A claim of one term can also contradict a claim it shares nothing
     with, when that term and an antonym are opposed; those are probed directly.
+
+    A claim with Chinese text is measured per character (``text.char_coverage``). Its keys are its
+    terms and lone characters, each finding some of its units; ordered by rarity, the prefix is the
+    shortest one whose removal leaves too few findable units (with any opposing term) to clear the
+    threshold. Other claims find it from those keys too. Pairs with Chinese on either side are
+    judged by the verifier itself.
     """
 
     def __init__(self, claims: list[Claim]):
@@ -252,19 +265,19 @@ class _ConflictIndex:
         counts: Counter[str] = Counter()
         self.contains: dict[str, list[int]] = defaultdict(list)
         self.zh_at: dict[str, list[int]] = defaultdict(list)
+        self.chars_at: dict[str, list[int]] = defaultdict(list)
         for index, lex in enumerate(self.lex):
             counts.update(lex.words)
             for term in lex.words:
                 self.contains[term].append(index)
             for term in lex.zh:
                 self.zh_at[term].append(index)
+            for char in lex.chars:
+                self.chars_at[char].append(index)
         self._counts = counts
-        # One-term claims can contradict a claim they share nothing with, via an antonym.
-        # Everyone else has to be able to find those claims from the opposite term.
-        self.singletons: dict[str, list[int]] = defaultdict(list)
-        for index, lex in enumerate(self.lex):
-            if len(lex.words) == 1:
-                self.singletons[next(iter(lex.words))].append(index)
+        # A loose claim (one term, at the default threshold) clears it with any shared term, or with
+        # none via an antonym. Everyone else has to be able to find it from either.
+        self.loose_at: dict[str, list[int]] = defaultdict(list)
         self.prefixes: list[tuple[str, ...]] = []
         self.in_prefix: dict[str, list[int]] = defaultdict(list)
         for index, lex in enumerate(self.lex):
@@ -272,6 +285,50 @@ class _ConflictIndex:
             self.prefixes.append(prefix)
             for term in prefix:
                 self.in_prefix[term].append(index)
+            if not prefix and lex.words and 0.0 < self.related <= 1.0:
+                for term in lex.words:
+                    self.in_prefix[term].append(index)
+                    self.loose_at[term].append(index)
+                for term in lex.zh - lex.words:
+                    self.loose_at[term].append(index)
+        # Chinese claims, by the keys of their character-coverage prefix and, when an opposing term
+        # alone can clear the threshold, by that term.
+        self.cjk_prefixes: dict[int, tuple[tuple[tuple[str, str], ...], frozenset[str]]] = {}
+        self.cjk_by_key: dict[tuple[str, str], list[int]] = defaultdict(list)
+        self.cjk_by_opposable: dict[str, list[int]] = defaultdict(list)
+        if 0.0 < self.related <= 1.0:
+            for index, lex in enumerate(self.lex):
+                if lex.cjk:
+                    keys, opposable = self.cjk_prefixes[index] = self._cjk_prefix(self.claims[index].text)
+                    for key in keys:
+                        self.cjk_by_key[key].append(index)
+                    for term in opposable:
+                        self.cjk_by_opposable[term].append(index)
+
+    def _postings(self, key: tuple[str, str]) -> list[int]:
+        kind, value = key
+        return self.contains.get(value, []) if kind == "word" else self.chars_at.get(value, [])
+
+    def _cjk_prefix(self, text: str) -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
+        """(the keys one of which any passage clearing the threshold must have, the opposing terms
+        that clear it alone). Mirrors ``char_coverage``, an upper bound on the units it can find."""
+        weights, keys, opposable = coverage_units(text)
+        total = sum(weights)
+        if total == 0:
+            return (), frozenset()  # coverage 0.0 never reaches a positive threshold
+        opposed = set().union(*opposable.values())
+        order = sorted(keys, key=lambda key: (len(self._postings(key)), key))
+        # reachable[k]: units findable without order[:k], plus every opposing term's.
+        reachable = [0] * (len(order) + 1)
+        units = set(opposed)
+        reachable[len(order)] = sum(weights[unit] for unit in units)
+        for at in range(len(order) - 1, -1, -1):
+            units |= keys[order[at]]
+            reachable[at] = sum(weights[unit] for unit in units)
+        size = next((at for at in range(len(order) + 1) if reachable[at] / total < self.related), len(order))
+        alone = frozenset(term for term, found in opposable.items()
+                          if sum(weights[unit] for unit in found) / total >= self.related)
+        return tuple(order[:size]), alone
 
     def _prefix(self, words: frozenset[str]) -> tuple[str, ...]:
         size = len(words)
@@ -295,15 +352,36 @@ class _ConflictIndex:
             for opposite in _ZH_OPPOSITES.get(term, ()):
                 chosen.update(self.zh_at.get(opposite, ()))
 
-    def _antonym_singletons(self, lex: _Lex, chosen: set[int]) -> None:
+    def _antonym_loose(self, lex: _Lex, chosen: set[int]) -> None:
         for term in lex.words:
             for opposite in _EN_OPPOSITES.get(term, ()):
-                chosen.update(self.singletons.get(opposite, ()))
+                chosen.update(self.loose_at.get(opposite, ()))
         for term in lex.zh:
             for opposite in _ZH_OPPOSITES.get(term, ()):
-                chosen.update(self.singletons.get(opposite, ()))
+                chosen.update(self.loose_at.get(opposite, ()))
 
-    def _candidates(self, lex: _Lex, prefix: tuple[str, ...], skip: int | None) -> set[int]:
+    def _chinese(self, lex: _Lex, text: str, skip: int | None, chosen: set[int]) -> None:
+        """Pairs measured by character coverage: from this claim's keys, and others' keys in it."""
+        if lex.cjk:
+            keys, alone = self.cjk_prefixes[skip] if skip is not None else self._cjk_prefix(text)
+            for key in keys:
+                chosen.update(self._postings(key))
+            for term in alone:
+                for opposite in _EN_OPPOSITES.get(term, ()):
+                    chosen.update(self.contains.get(opposite, ()))
+                for opposite in _ZH_OPPOSITES.get(term, ()):
+                    chosen.update(self.zh_at.get(opposite, ()))
+        for term in lex.words:
+            chosen.update(self.cjk_by_key.get(("word", term), ()))
+            for opposite in _EN_OPPOSITES.get(term, ()):
+                chosen.update(self.cjk_by_opposable.get(opposite, ()))
+        for char in lex.chars:
+            chosen.update(self.cjk_by_key.get(("char", char), ()))
+        for term in lex.zh:
+            for opposite in _ZH_OPPOSITES.get(term, ()):
+                chosen.update(self.cjk_by_opposable.get(opposite, ()))
+
+    def _candidates(self, lex: _Lex, text: str, prefix: tuple[str, ...], skip: int | None) -> set[int]:
         chosen: set[int] = set()
         if prefix:
             for term in prefix:
@@ -315,7 +393,8 @@ class _ConflictIndex:
         for term in lex.words:
             chosen.update(self.in_prefix.get(term, ()))
         if 0.0 < self.related <= 1.0:
-            self._antonym_singletons(lex, chosen)
+            self._antonym_loose(lex, chosen)
+            self._chinese(lex, text, skip, chosen)
         if skip is not None:
             chosen.discard(skip)
         return chosen
@@ -324,19 +403,24 @@ class _ConflictIndex:
         position = self._pos.get(id(claim))
         if position is not None and self.claims[position] is claim:
             lex = self.lex[position]
-            chosen = self._candidates(lex, self.prefixes[position], position)
+            chosen = self._candidates(lex, claim.text, self.prefixes[position], position)
         else:
             lex = _lex_of(claim.text)
-            chosen = self._candidates(lex, self._prefix(lex.words), None)
+            chosen = self._candidates(lex, claim.text, self._prefix(lex.words), None)
         found = []
         for index in sorted(chosen):
             other = self.claims[index]
             if other.id == claim.id:
                 continue
             other_lex = self.lex[index]
-            shared = len(lex.words & other_lex.words)
-            if (_directed_contradicts(lex, other_lex, shared, self.related)
-                    or _directed_contradicts(other_lex, lex, shared, self.related)):
+            if lex.cjk or other_lex.cjk:
+                contradicts = any(_LEXICAL.judge(a, b).relation == "contradicts"
+                                  for a, b in ((claim.text, other.text), (other.text, claim.text)))
+            else:
+                shared = len(lex.words & other_lex.words)
+                contradicts = (_directed_contradicts(lex, other_lex, shared, self.related)
+                               or _directed_contradicts(other_lex, lex, shared, self.related))
+            if contradicts:
                 found.append(Issue(kind="internal_conflict",
                                    detail=f"may contradict {other.id} at {other.location}: \"{other.text}\""))
         return found

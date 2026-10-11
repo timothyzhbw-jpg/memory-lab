@@ -46,7 +46,7 @@ class Change:
 
 
 def similarity(a: str, b: str) -> float:
-    """Sequence similarity of the two sentences' content terms (stemmed words, CJK bigrams, numbers)."""
+    """Sequence similarity of the two sentences' content terms (stemmed words, CJK bigrams and trigrams, numbers)."""
     return difflib.SequenceMatcher(None, terms(a), terms(b), autojunk=False).ratio()
 
 

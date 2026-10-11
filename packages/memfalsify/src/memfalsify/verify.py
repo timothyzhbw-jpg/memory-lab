@@ -11,7 +11,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
-from .text import features, has_negation, opposing_terms
+from .text import CJK, char_coverage, features, modality_conflict, negation, opposing_terms
 
 Relation = Literal["supports", "contradicts", "unrelated", "disputed"]
 
@@ -44,17 +44,21 @@ class Verifier(Protocol):
 
 
 def coverage(claim: str, passage: str) -> float:
-    """Share of the claim's content terms found in the passage; an opposing term counts as a match."""
+    """Share of the claim's content terms found in the passage; an opposing term counts as a match.
+
+    A claim with CJK text is measured per character instead (``text.char_coverage``)."""
     claim_words, _ = features(claim)
     if not claim_words:
         return 0.0
+    if CJK.search(claim):
+        return char_coverage(claim, passage)
     passage_words, _ = features(passage)
     matched = len(claim_words & passage_words) + (1 if opposing_terms(claim, passage) else 0)
     return min(matched, len(claim_words)) / len(claim_words)
 
 
 class LexicalVerifier:
-    """Term overlap plus opposing terms, negation and numeric mismatches. Fast, explainable, shallow."""
+    """Term overlap plus opposing terms, numeric, modality and negation mismatches. Fast, explainable, shallow."""
     name = "lexical"
 
     def __init__(self, related: float = 0.6, support: float = 0.75) -> None:
@@ -74,7 +78,11 @@ class LexicalVerifier:
         if claim_numbers and passage_numbers and not claim_numbers & passage_numbers:
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale=f"different values: claim {sorted(claim_numbers)} vs source {sorted(passage_numbers)}")
-        if has_negation(claim) != has_negation(passage):
+        modal = modality_conflict(claim, passage)
+        if modal:
+            return Judgment(relation="contradicts", verifier=self.name,
+                            rationale=f"opposite modality: claim '{modal[0]}' vs source '{modal[1]}'")
+        if (negation(claim, passage) is None) != (negation(passage, claim) is None):
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale="same subject, but only one side is negated")
         if score >= self.support:

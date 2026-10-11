@@ -107,6 +107,49 @@ def test_indexed_conflicts_match_pairwise_reference():
         assert issues_for(claim, claims, AS_OF, 180) == reference_issues_for(claim, claims, AS_OF, 180)
 
 
+def test_one_term_claim_is_found_from_a_shared_common_term():
+    # "never billing" covers all of "billing x y z w" with its single term and only it is negated.
+    # The longer claim's rare-term prefix leaves out the common "billing", so it must find the
+    # one-term claim from that shared term, or only one side of the pair reports the conflict.
+    texts = ["billing approves export quota tenant", "billing approves gateway", "billing x y z w",
+             "billing a1 b1 c1 d1 e1", "never billing"]
+    claims = [Claim(id=f"c{index}", text=text, path="MEMORY.md", line=index + 1)
+              for index, text in enumerate(texts)]
+    for claim in claims:
+        assert issues_for(claim, claims, AS_OF, 180) == reference_issues_for(claim, claims, AS_OF, 180)
+    assert any(issue.kind == "internal_conflict" for issue in issues_for(claims[2], claims, AS_OF, 180))
+
+
+ZH_SUBJECTS = ("账单服务", "导出接口", "缓存", "网关", "队列", "租户配额", "API", "Q4 发布", "方案", "案")
+ZH_FRAGMENTS = ("必须", "无需", "不必", "所有", "任何", "仅", "只有", "不", "没有", "未", "未来", "非常", "非得", "不可",
+                "三个月", "3个月", "2个月", "百分之十", "一成", "approve", "reject", "的", "了", "是", "案", "表",
+                "，", "。", "开放", "关闭")
+
+
+def _zh_sentence(rng: random.Random) -> str:
+    parts = [rng.choice(ZH_SUBJECTS)]
+    pool = ZH_FRAGMENTS + tuple(term for pair in ZH for term in pair)
+    parts.extend(rng.choice(pool) for _ in range(rng.randint(1, 5)))
+    return rng.choice(("", " ")).join(parts)
+
+
+def test_indexed_conflicts_match_pairwise_reference_for_chinese():
+    # Character coverage, lone characters, per-clause negation and modality are not term counts:
+    # pairs with Chinese on either side must still agree with the verifier exactly.
+    rng = random.Random(4)
+    claims = _claims(7, 25)
+    claims += [Claim(id=f"zh-{index}", text=_zh_sentence(rng), path="MEMORY.md", line=100 + index)
+               for index in range(90)]
+    flagged = 0
+    for claim in claims:
+        found = issues_for(claim, claims, AS_OF, 180)
+        assert found == reference_issues_for(claim, claims, AS_OF, 180), claim.text
+        flagged += sum(issue.kind == "internal_conflict" for issue in found)
+    assert flagged > 10
+    outsider = Claim(id="outsider-zh", text="案 approve", path="MEMORY.md", line=1)
+    assert issues_for(outsider, claims, AS_OF, 180) == reference_issues_for(outsider, claims, AS_OF, 180)
+
+
 def test_random_audit_report_matches_reference(tmp_path, monkeypatch):
     rng = random.Random(20261011)
     lines = ["# Memory", ""]
