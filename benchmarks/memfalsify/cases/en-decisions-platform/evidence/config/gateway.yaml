@@ -1,0 +1,15 @@
+# Public API gateway. Deployed by the platform pipeline.
+listen: 0.0.0.0:8443
+upstream_timeout_ms: 15000
+
+rate_limits:
+  per_api_key:
+    requests_per_minute: 600
+    burst: 100
+  per_client_ip:
+    requests_per_minute: 1200
+    burst: 200
+
+logging:
+  access_log_retention_days: 7
+  sample_rate: 1.0

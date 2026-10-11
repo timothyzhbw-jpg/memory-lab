@@ -1,0 +1,16 @@
+# 生产与预发环境的部署配置（由平台组维护）
+production:
+  replicas: 6
+  # 灰度发布：先放量 5%，观察 30 分钟无异常后全量
+  canary:
+    enabled: true
+    initial_weight: 5
+    observe_minutes: 30
+  auto_rollback: false  # 2026-09-12 事故后改为人工确认回滚
+  approvals:
+    night_release: 2  # 22:00 以后的发布需要两名审批人
+staging:
+  replicas: 2
+  canary:
+    enabled: false
+  auto_rollback: true

@@ -1,0 +1,8 @@
+{
+  "route_optimization_v2": {"default": false, "enabled_accounts": ["acct_1042", "acct_2210"]},
+  "driver_tipping": {"enabled": true, "regions": ["US"]},
+  "eta_widget": {"default": false},
+  "dispatcher_console": {"default": false, "beta_accounts": ["acct_1042"]},
+  "kml_export": {"enabled": true},
+  "gpx_export": {"enabled": false}
+}

@@ -1,0 +1,1 @@
+{"as_of": "2026-10-01", "description": "Corvane platform memory: database version, backups, the RabbitMQ replacement, gateway limits, deploy and on-call policy. Evidence is ADRs, platform sync notes, a backup doc, a runbook and the gateway config; the database version, a migration owner and the per-key API limit changed in August and September 2026."}
