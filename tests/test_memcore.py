@@ -95,6 +95,59 @@ def test_manifest_reads_a_repeated_path_once(tmp_path, monkeypatch):
         load_manifest(manifest)
 
 
+def test_cached_path_still_checks_later_quotes_and_rereads(tmp_path):
+    """A repeated path is not rehashed, but each entry is still checked, and the next load reads again."""
+    from memcore import sha256_bytes
+
+    text = "alpha quote one\nbeta quote two\n"
+    source = tmp_path / "src.txt"
+    source.write_bytes(text.encode("utf-8"))
+    digest = sha256_bytes(text.encode("utf-8"))
+
+    def entry(eid, quote):
+        start = text.index(quote)
+        return {"id": eid, "path": "src.txt", "sha256": digest, "quote": quote, "start": start,
+                "end": start + len(quote), "source_uri": "synthetic://t", "source_kind": "test",
+                "captured_at": "2026-10-07T00:00:00Z"}
+
+    manifest = tmp_path / "evidence.jsonl"
+    good = [entry("e1", "alpha quote one"), entry("e2", "beta quote two")]
+    manifest.write_bytes("".join(json.dumps(record) + "\n" for record in good).encode("utf-8"))
+    assert set(load_manifest(manifest)) == {"e1", "e2"}
+    # Same cached bytes, different quote: the second entry must still fail closed.
+    borrowed = entry("e2", "beta quote two")
+    borrowed["quote"] = "alpha quote one"
+    manifest.write_bytes("".join(json.dumps(record) + "\n" for record in (good[0], borrowed)).encode("utf-8"))
+    with pytest.raises(EvidenceError, match="quote does not match recorded span: e2"):
+        load_manifest(manifest)
+    manifest.write_bytes("".join(json.dumps(record) + "\n" for record in good).encode("utf-8"))
+    source.write_bytes(b"tampered after the first load\n")
+    with pytest.raises(EvidenceError, match="hash mismatch: e1"):
+        load_manifest(manifest)
+
+
+def test_manifest_cache_does_not_accept_an_escape(tmp_path):
+    """A path already read must not satisfy a later entry whose own path leaves the root."""
+    from memcore import sha256_bytes
+
+    text = "alpha quote one\n"
+    source = tmp_path / "src.txt"
+    source.write_bytes(text.encode("utf-8"))
+    digest = sha256_bytes(text.encode("utf-8"))
+    outside = tmp_path.parent / "cache-secret.txt"
+    outside.write_bytes(text.encode("utf-8"))
+    (tmp_path / "link.txt").symlink_to(outside)
+    good = {"id": "e1", "path": "src.txt", "sha256": digest, "quote": "alpha quote one", "start": 0,
+            "end": len("alpha quote one"), "source_uri": "synthetic://t", "source_kind": "test",
+            "captured_at": "2026-10-07T00:00:00Z"}
+    manifest = tmp_path / "evidence.jsonl"
+    for path in ("link.txt", "../cache-secret.txt"):
+        escaped = {**good, "id": "e2", "path": path}
+        manifest.write_bytes("".join(json.dumps(record) + "\n" for record in (good, escaped)).encode("utf-8"))
+        with pytest.raises(EvidenceError, match="escapes|relative"):
+            load_manifest(manifest)
+
+
 def test_duplicate_evidence_id_rejected(tmp_path):
     manifest = write_manifest(tmp_path)
     manifest.write_text(manifest.read_text() * 2, encoding="utf-8")

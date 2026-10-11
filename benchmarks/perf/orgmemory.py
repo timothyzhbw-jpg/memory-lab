@@ -82,7 +82,7 @@ def layout(events: int) -> tuple[int, int, int, int]:
     subjects = max(40, events // 30)
     files = max(4, min(100, events // 1000))
     spans = 20 if events < 5000 else 50
-    # ~70 bytes per padding line, so repeated hashing has a real file to read.
+    # 62 bytes per padding line, so repeated hashing has a real file to read.
     padding = 120 if events < 5000 else 480
     return subjects, files, spans, padding
 
