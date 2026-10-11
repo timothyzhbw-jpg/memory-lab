@@ -59,6 +59,11 @@ def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_
             "max_judged": None if lexical else max_judged}
 
 
+def concurrency(choice: VerifierChoice, max_concurrency: int) -> int:
+    """Model verifiers wait on the network, so they run requests in parallel; lexical judging stays serial."""
+    return 1 if choice is VerifierChoice.lexical else max_concurrency
+
+
 def _fail(message: str) -> None:
     typer.echo(f"error: {message}", err=True)
     raise typer.Exit(2)
@@ -93,6 +98,8 @@ LLM_MODEL = typer.Option(llm.DEFAULT_MODEL, help="Claude model for --verifier ll
 JEV_MODEL = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual/cascade")
 ACCEPT_AT = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence, else ask the LLM")
 MAX_JUDGED_OPTION = typer.Option(MAX_JUDGED, min=1, help="Model verifiers: passages judged per memory (bounds API calls)")
+MAX_CONCURRENCY = typer.Option(4, min=1, help="Model verifiers: API requests in flight at once (results keep "
+                                                "their order)")
 MIN_COVERAGE = typer.Option(
     None, min=0.0, max=1.0,
     help="Share of a memory's terms a passage must contain to be judged (default 0.5 lexical, 0.2 models)")
@@ -116,12 +123,15 @@ def audit_command(
     accept_at: float = ACCEPT_AT,
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
+    max_concurrency: int = MAX_CONCURRENCY,
 ) -> None:
     """Audit MEMORY.md and print an evidence-cited report with proposed (unapplied) actions."""
     try:
         reference = date.fromisoformat(as_of) if as_of else None
-        report = audit(memory, evidence, reviews, verifier=build_verifier(verifier, llm_model, jev_model, accept_at),
-                       as_of=reference, stale_days=stale_days, follow_links=follow_links, exclude=exclude or (),
+        judge = build_verifier(verifier, llm_model, jev_model, accept_at)
+        report = audit(memory, evidence, reviews, verifier=judge, as_of=reference, stale_days=stale_days,
+                       follow_links=follow_links, exclude=exclude or (),
+                       max_concurrency=concurrency(verifier, max_concurrency),
                        **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
@@ -156,13 +166,15 @@ def diff_command(
     accept_at: float = ACCEPT_AT,
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
+    max_concurrency: int = MAX_CONCURRENCY,
 ) -> None:
     """Show which claims changed between two revisions and audit only the added and changed ones."""
     try:
         reference = date.fromisoformat(as_of) if as_of else None
+        judge = build_verifier(verifier, llm_model, jev_model, accept_at)
         report = memory_diff(memory, base, head, follow_links=follow_links, evidence_root=evidence, reviews=reviews,
-                             verifier=build_verifier(verifier, llm_model, jev_model, accept_at), as_of=reference,
-                             stale_days=stale_days, exclude=exclude or (),
+                             verifier=judge, as_of=reference, stale_days=stale_days, exclude=exclude or (),
+                             max_concurrency=concurrency(verifier, max_concurrency),
                              **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))

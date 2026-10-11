@@ -48,6 +48,21 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
     return out
 
 
+def usage_lines(report: AuditReport) -> list[str]:
+    """One line per model backend: requests, and the tokens the API reported (cache writes and reads for Claude)."""
+    out = []
+    for stats in report.verifier_stats:
+        line = f"- API usage of `{stats.verifier}`: {stats.requests} request(s)"
+        if stats.batched_requests:
+            line += f" ({stats.batched_requests} through the Message Batches API)"
+        line += f" · input tokens: {stats.input_tokens}"
+        if stats.cache_creation_input_tokens is not None:
+            line += (f" uncached, {stats.cache_creation_input_tokens} written to the prompt cache, "
+                     f"{stats.cache_read_input_tokens} read from it")
+        out.append(line + f" · output tokens: {stats.output_tokens}")
+    return out
+
+
 def to_markdown(report: AuditReport) -> str:
     out = [REPORT_HEADER, "",
            f"- Memory: `{report.memory_file}` ({len(report.files_read)} file(s): "
@@ -55,6 +70,7 @@ def to_markdown(report: AuditReport) -> str:
            f"- Evidence root: `{report.evidence_root}`" if report.evidence_root else "- Evidence root: none supplied",
            *(["- Excluded from evidence: " + ", ".join(f"`{p}`" for p in report.excluded)] if report.excluded else []),
            f"- Verifier: `{report.verifier}` · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
+           *usage_lines(report),
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]
     out.append("")

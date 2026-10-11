@@ -14,7 +14,8 @@ from . import __version__
 from .corpus import Passage, Skipped, scan
 from .memory import Claim, parse_memory
 from .text import ABSOLUTE, HEDGE, RELATIVE_TIME, explicit_dates, features
-from .verify import Judgment, LexicalVerifier, Verifier, coverage
+from .verify import (Judgment, LexicalVerifier, Verifier, VerifierStats, coverage, judge_all, usage_since,
+                     verifier_usage)
 
 Status = Literal["challenged", "conflicted", "candidate_counterevidence", "disputed",
                  "insufficient_evidence", "candidate_support", "supported"]
@@ -76,6 +77,7 @@ class AuditReport(BaseModel):
     evidence_root: str | None
     excluded: list[str] = []
     verifier: str
+    verifier_stats: list[VerifierStats] = []
     as_of: date
     summary: dict[str, int]
     findings: list[Finding]
@@ -109,24 +111,28 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
     return confirmed
 
 
-def candidates(claim: Claim, passages: list[Passage], verifier: Verifier, limit: int,
-               min_coverage: float = 0.5, max_judged: int | None = None) -> list[EvidenceFinding]:
-    """Pre-select passages by term overlap, ask the verifier about the best ``max_judged`` of them."""
+def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
+              max_judged: int | None = None) -> list[Passage]:
+    """The passages to ask the verifier about: those sharing terms with the claim, best ``max_judged`` first."""
     words, _ = features(claim.text)
     if not words:
         return []
-    shortlist = []
+    ranked = []
     for passage in passages:
         shared = len(words & passage.words)
         score = coverage(claim.text, passage.span.quote) if shared else 0.0
         if shared and score >= min_coverage:
-            shortlist.append((-score, -shared, passage.span.location, passage))
-    shortlist.sort(key=lambda item: item[:3])
-    scored = []
-    for _, negative_shared, location, passage in shortlist[:max_judged]:
-        judgment: Judgment = verifier.judge(claim.text, passage.span.quote)
-        if judgment.relation != "unrelated":
-            scored.append((judgment.relation != "contradicts", negative_shared, location, judgment, passage))
+            ranked.append((-score, -shared, passage.span.location, passage))
+    ranked.sort(key=lambda item: item[:3])
+    return [passage for *_, passage in ranked[:max_judged]]
+
+
+def candidates(claim: Claim, judged: list[tuple[Passage, Judgment]], limit: int) -> list[EvidenceFinding]:
+    """The ``limit`` most telling judged passages: contradictions first, then the most shared terms."""
+    words, _ = features(claim.text)
+    scored = [(judgment.relation != "contradicts", -len(words & passage.words), passage.span.location, judgment,
+               passage)
+              for passage, judgment in judged if judgment.relation != "unrelated"]
     scored.sort(key=lambda item: item[:3])
     return [EvidenceFinding(relation=j.relation, confirmed=False, rationale=j.rationale, opinions=j.opinions,
                             span=p.span)
@@ -197,25 +203,27 @@ ISSUE_PROPOSALS = {
 def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | None = None,
           verifier: Verifier | None = None, as_of: date | None = None, stale_days: int = 180,
           follow_links: bool = True, max_candidates: int = 3, min_coverage: float = 0.5,
-          max_judged: int | None = None, exclude: Iterable[str] = ()) -> AuditReport:
+          max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1) -> AuditReport:
     """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees;
-    ``exclude`` globs (relative to the evidence root) keep files out of the evidence."""
+    ``exclude`` globs (relative to the evidence root) keep files out of the evidence; up to ``max_concurrency``
+    verifier calls run at once."""
     claims, files = parse_memory(memory_file, follow_links=follow_links)
     base = Path(memory_file).resolve().parent
     return audit_claims(claims, memory_file=str(memory_file), files_read=[p.relative_to(base).as_posix() for p in files],
                         memory_paths=files, evidence_root=evidence_root, reviews=reviews, verifier=verifier,
                         as_of=as_of, stale_days=stale_days, max_candidates=max_candidates,
-                        min_coverage=min_coverage, max_judged=max_judged, exclude=exclude)
+                        min_coverage=min_coverage, max_judged=max_judged, exclude=exclude,
+                        max_concurrency=max_concurrency)
 
 
 def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path],
                  evidence_root: Path | None = None, reviews: Path | None = None, verifier: Verifier | None = None,
                  as_of: date | None = None, stale_days: int = 180, max_candidates: int = 3,
                  min_coverage: float = 0.5, max_judged: int | None = None, exclude: Iterable[str] = (),
-                 only: Iterable[str] | None = None) -> AuditReport:
+                 only: Iterable[str] | None = None, max_concurrency: int = 1) -> AuditReport:
     """Audit already parsed claims. With ``only`` (claim IDs), findings cover just those claims, while
     reviews and internal conflicts are still checked against every claim. ``memory_paths`` are kept out
-    of the evidence."""
+    of the evidence. The verifier gets every shortlisted (claim, passage) pair in one ``judge_all`` call."""
     verifier = verifier or LexicalVerifier()
     as_of = as_of or date.today()
     by_id = {c.id: c for c in claims}
@@ -233,11 +241,16 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     if targets and root is not None and exclude and not passages:
         raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
     confirmed = load_reviews(reviews, root, by_id) if reviews else {}
+    picked = {claim.id: shortlist(claim, passages, min_coverage, max_judged) for claim in targets}
+    pairs = [(claim.text, passage.span.quote) for claim in targets for passage in picked[claim.id]]
+    before = verifier_usage(verifier)
+    judgments = iter(judge_all(verifier, pairs, max_concurrency))
+    stats = usage_since(before, verifier_usage(verifier))
     findings = []
     for claim in targets:
         reviewed = confirmed.get(claim.id, [])
-        evidence = reviewed + [c for c in candidates(claim, passages, verifier, max_candidates,
-                                                     min_coverage, max_judged)
+        judged = [(passage, next(judgments)) for passage in picked[claim.id]]
+        evidence = reviewed + [c for c in candidates(claim, judged, max_candidates)
                                if not any(_overlaps(c.span, r.span) for r in reviewed)]
         status = status_of(evidence)
         issues = issues_for(claim, claims, as_of, stale_days)
@@ -250,7 +263,7 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
     return AuditReport(memory_file=memory_file, files_read=files_read,
                        evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,
-                       verifier=verifier.name, as_of=as_of, summary=summary, findings=findings,
-                       skipped_evidence=skipped,
+                       verifier=verifier.name, verifier_stats=stats, as_of=as_of, summary=summary,
+                       findings=findings, skipped_evidence=skipped,
                        limitations=[LEXICAL_NOTE if isinstance(verifier, LexicalVerifier) else MODEL_NOTE,
                                     *LIMITATIONS])

@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import threading
+import time
 from datetime import date
 from types import SimpleNamespace
 
@@ -12,7 +14,8 @@ from memfalsify.cli import app
 from memfalsify.jev import JevVerifier
 from memfalsify.llm import SYSTEM, LLMVerifier, Verdict
 from memfalsify.report import to_markdown
-from memfalsify.verify import RELATION_CRITERIA, CascadeVerifier, DualVerifier, LexicalVerifier, VerifierError
+from memfalsify.verify import (RELATION_CRITERIA, CascadeVerifier, DualVerifier, Judgment, LexicalVerifier,
+                               VerifierError, concurrently, judge_all)
 
 runner = CliRunner()
 CLAIM = "Customers can download every past invoice as an Excel spreadsheet."
@@ -20,14 +23,14 @@ COUNTER = "Invoice export to CSV is not available to customers."
 
 
 class FakeMessages:
-    def __init__(self, verdict=None, stop_reason="end_turn", error=None):
-        self.verdict, self.stop_reason, self.error, self.calls = verdict, stop_reason, error, []
+    def __init__(self, verdict=None, stop_reason="end_turn", error=None, usage=None):
+        self.verdict, self.stop_reason, self.error, self.usage, self.calls = verdict, stop_reason, error, usage, []
 
     def parse(self, **kwargs):
         self.calls.append(kwargs)
         if self.error:
             raise self.error
-        return SimpleNamespace(stop_reason=self.stop_reason, parsed_output=self.verdict)
+        return SimpleNamespace(stop_reason=self.stop_reason, parsed_output=self.verdict, usage=self.usage)
 
 
 def fake_client(**kwargs):
@@ -79,9 +82,14 @@ def test_llm_verifier_request_and_mapping():
     assert (judgment.relation, judgment.rationale, judgment.verifier) == \
         ("contradicts", "CSV export is not available", "llm:claude-opus-5-5")
     call = client.beta.messages.calls[0]
-    assert call["model"] == "claude-opus-5-5" and call["system"] == SYSTEM and call["output_format"] is Verdict
+    assert call["model"] == "claude-opus-5-5" and call["output_format"] is Verdict
+    assert call["output_config"] == {"effort": "low"} and call["max_tokens"] == llm.MAX_TOKENS
     assert call["fallbacks"] == "default" and call["betas"] == [llm.FALLBACK_BETA]
-    assert CLAIM in call["messages"][0]["content"] and COUNTER in call["messages"][0]["content"]
+    # The instructions are the cached prefix; claim and passage follow it, in that order.
+    assert call["system"] == [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}]
+    assert call["messages"] == [{"role": "user", "content": [
+        {"type": "text", "text": f"<claim>\n{CLAIM}\n</claim>"},
+        {"type": "text", "text": f"<passage>\n{COUNTER}\n</passage>"}]}]
 
 
 def test_llm_verifier_skips_fallbacks_for_models_without_them():
@@ -243,3 +251,217 @@ def test_cli_cascade(invoices, monkeypatch):
     assert result.exit_code == 0 and "POSSIBLE COUNTEREVIDENCE" in result.output
     assert "Verifier: `jev:jev-latest>llm:claude-opus-5-5`" in result.output
     assert "(confidence 0.55 < 0.6), escalated" in result.output
+
+
+# --- API usage, prompt caching and concurrency ---------------------------------------
+
+CSV_CLAIM = "Invoice export to CSV is available to customers."
+REDIS_CLAIM = "The cache uses Redis."
+
+
+def usage(input_tokens=100, output_tokens=20, write=0, read=0):
+    return SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens,
+                           cache_creation_input_tokens=write, cache_read_input_tokens=read)
+
+
+def unwrap(params):
+    """The claim and passage out of a request built by memfalsify.llm.prompt()."""
+    claim, passage = (block["text"] for block in params["messages"][0]["content"])
+    return claim.removeprefix("<claim>\n").removesuffix("\n</claim>"), \
+        passage.removeprefix("<passage>\n").removesuffix("\n</passage>")
+
+
+def decide(claim, passage):
+    """Stand-in Claude: a negated passage contradicts, an identical one supports, anything else is unrelated."""
+    if "not available" in passage:
+        return Verdict(relation="contradicts", rationale="not available"), "end_turn"
+    if passage == claim:
+        return Verdict(relation="supports", rationale="same words"), "end_turn"
+    return Verdict(relation="unrelated", rationale="-"), "end_turn"
+
+
+class ScriptedMessages:
+    """``parse()`` answers with ``decide(claim, passage)``; records every call and how many ran at once."""
+
+    def __init__(self, decide=decide, delay=lambda claim, passage: 0.0, usage=None):
+        self.decide, self.delay, self.usage = decide, delay, usage
+        self.calls, self.events = [], []
+        self.lock = threading.Lock()
+        self.active = self.peak = 0
+
+    def parse(self, **kwargs):
+        claim, passage = unwrap(kwargs)
+        with self.lock:
+            self.calls.append(kwargs)
+            self.events.append(("start", claim, passage))
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        time.sleep(self.delay(claim, passage))
+        with self.lock:
+            self.active -= 1
+            self.events.append(("end", claim, passage))
+        verdict, stop_reason = self.decide(claim, passage)
+        return SimpleNamespace(stop_reason=stop_reason, parsed_output=verdict, usage=self.usage)
+
+
+def scripted_client(**kwargs):
+    return SimpleNamespace(beta=SimpleNamespace(messages=ScriptedMessages(**kwargs)))
+
+
+@pytest.fixture
+def two_claims(tmp_path):
+    """The CSV claim shares terms with three evidence sentences, the Redis claim with one."""
+    (tmp_path / "MEMORY.md").write_text(f"- {CSV_CLAIM}\n- {REDIS_CLAIM}\n", encoding="utf-8")
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "evidence" / "billing.md").write_text(
+        "Invoice export to CSV is not available to customers.\n\nCustomers ask about invoice export to CSV.\n\n"
+        "Invoice export to CSV is available to admins.\n", encoding="utf-8")
+    (tmp_path / "evidence" / "infra.md").write_text(f"{REDIS_CLAIM}\n", encoding="utf-8")
+    return tmp_path
+
+
+def model_audit(root, verifier, **kwargs):
+    return audit(root / "MEMORY.md", root / "evidence", verifier=verifier, as_of=date(2026, 10, 10),
+                 min_coverage=0.2, max_judged=8, **kwargs)
+
+
+def test_report_counts_api_requests_and_cache_tokens(two_claims):
+    client = scripted_client(usage=usage(input_tokens=90, output_tokens=25, write=600, read=40))
+    report = model_audit(two_claims, LLMVerifier(client=client))
+    assert len(client.beta.messages.calls) == 4
+    [stats] = report.verifier_stats
+    assert stats.model_dump() == {"verifier": "llm:claude-opus-5-5", "requests": 4, "batched_requests": 0,
+                                  "input_tokens": 360, "output_tokens": 100,
+                                  "cache_creation_input_tokens": 2400, "cache_read_input_tokens": 160}
+    assert ("- API usage of `llm:claude-opus-5-5`: 4 request(s) · input tokens: 360 uncached, "
+            "2400 written to the prompt cache, 160 read from it · output tokens: 100") in to_markdown(report)
+    lexical = audit(two_claims / "MEMORY.md", two_claims / "evidence")
+    assert lexical.verifier_stats == [] and "API usage" not in to_markdown(lexical)
+
+
+def test_usage_is_counted_per_audit(two_claims):
+    verifier = LLMVerifier(client=scripted_client(usage=usage()))
+    first, second = model_audit(two_claims, verifier), model_audit(two_claims, verifier)
+    assert first.verifier_stats == second.verifier_stats and second.verifier_stats[0].requests == 4
+
+
+def test_cascade_reports_both_backends(two_claims):
+    unsure = lambda state: ("unrelated", 0.55, {"supports": 0.05, "contradicts": 0.40, "unrelated": 0.55})
+    cascade = CascadeVerifier(mock_jev(unsure), LLMVerifier(client=scripted_client(usage=usage())))
+    report = model_audit(two_claims, cascade)
+    jev_stats, llm_stats = report.verifier_stats
+    assert (jev_stats.verifier, jev_stats.requests, jev_stats.input_tokens, jev_stats.output_tokens) == \
+        ("jev:jev-latest", 4, 240, 4)
+    assert jev_stats.cache_read_input_tokens is None and llm_stats.requests == 4
+    markdown = to_markdown(report)
+    assert "- API usage of `jev:jev-latest`: 4 request(s) · input tokens: 240 · output tokens: 4" in markdown
+
+
+def test_claim_prefix_is_cached_only_when_judged_more_than_once(two_claims):
+    client = scripted_client()
+    model_audit(two_claims, LLMVerifier(client=client))
+    calls = client.beta.messages.calls
+    assert all(c["system"][0]["cache_control"] == {"type": "ephemeral"} for c in calls)
+    marked = {unwrap(c)[0]: "cache_control" in c["messages"][0]["content"][0] for c in calls}
+    assert marked == {CSV_CLAIM: True, REDIS_CLAIM: False}
+    assert all("cache_control" not in c["messages"][0]["content"][1] for c in calls)  # the passage is never cached
+
+
+def test_concurrent_audit_matches_serial_audit(two_claims):
+    serial = model_audit(two_claims, LLMVerifier(client=scripted_client()))
+    # Earlier passages answer slower, so requests finish out of order.
+    slow = scripted_client(delay=lambda claim, passage: 0.08 if "not available" in passage else 0.02)
+    parallel = model_audit(two_claims, LLMVerifier(client=slow), max_concurrency=3)
+    assert parallel.model_dump() == serial.model_dump()
+    assert 1 < slow.beta.messages.peak <= 3
+
+
+def test_requests_sharing_a_cached_claim_wait_for_the_first(two_claims):
+    client = scripted_client(delay=lambda claim, passage: 0.03)
+    model_audit(two_claims, LLMVerifier(client=client), max_concurrency=4)
+    csv = [(kind, passage) for kind, claim, passage in client.beta.messages.events if claim == CSV_CLAIM]
+    assert csv[0][0] == "start" and csv[1] == ("end", csv[0][1])  # nothing else for this claim ran meanwhile
+    assert len(csv) == 6
+
+
+def test_concurrently_keeps_index_order_and_bound():
+    lock, state = threading.Lock(), {"active": 0, "peak": 0}
+
+    def square(i):
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.01 * (8 - i))
+        with lock:
+            state["active"] -= 1
+        return i * i
+
+    assert concurrently(square, 8, max_concurrency=3) == [i * i for i in range(8)]
+    assert state["peak"] == 3
+
+
+def test_concurrently_starts_nothing_after_a_failure():
+    started = []
+
+    def call(i):
+        started.append(i)
+        if i == 1:
+            raise VerifierError("boom")
+        time.sleep(0.05)
+        return i
+
+    with pytest.raises(VerifierError, match="boom"):
+        concurrently(call, 10, max_concurrency=2)
+    assert sorted(started) == [0, 1]
+
+
+def test_concurrently_runs_followers_after_their_lead():
+    order = []
+    concurrently(lambda i: order.append(i) or time.sleep(0.01), 5, max_concurrency=4, after={0: [3, 4]})
+    assert order.index(0) < order.index(3) and order.index(0) < order.index(4)
+    order.clear()
+    concurrently(order.append, 5, max_concurrency=1, after={0: [3, 4]})
+    assert order == [0, 1, 2, 3, 4]
+
+
+def test_composite_judge_many_matches_judge():
+    pairs = [(CLAIM, COUNTER), (CLAIM, "Customers download invoices as PDF."), (REDIS_CLAIM, REDIS_CLAIM)]
+    unsure = lambda state: (("contradicts", 0.9, {"supports": 0.0, "contradicts": 0.9, "unrelated": 0.1})
+                            if "not available" in state["passage"]
+                            else ("unrelated", 0.5, {"supports": 0.2, "contradicts": 0.3, "unrelated": 0.5}))
+    for make in (lambda c: DualVerifier(LLMVerifier(client=c), mock_jev(unsure)),
+                 lambda c: CascadeVerifier(mock_jev(unsure), LLMVerifier(client=c))):
+        one_by_one = [make(scripted_client()).judge(*pair) for pair in pairs]
+        client = scripted_client()
+        assert judge_all(make(client), pairs, max_concurrency=2) == one_by_one
+    assert len(client.beta.messages.calls) == 2  # cascade asked Claude only about the unsure pairs
+
+
+def test_judge_all_calls_plain_verifiers_once_per_pair():
+    seen = []
+
+    class Plain:
+        name = "plain"
+
+        def judge(self, claim, passage):
+            seen.append(passage)
+            return Judgment(relation="unrelated", rationale="-", verifier=self.name)
+
+    judgments = judge_all(Plain(), [("c", str(i)) for i in range(5)], max_concurrency=2)
+    assert len(judgments) == 5 and sorted(seen) == ["0", "1", "2", "3", "4"]
+
+
+def test_cli_max_concurrency_applies_to_model_verifiers_only(two_claims, monkeypatch):
+    from memfalsify import cli
+    seen, real_audit = [], cli.audit
+    monkeypatch.setattr(cli, "audit", lambda *a, **k: seen.append(k["max_concurrency"]) or real_audit(*a, **k))
+    client = scripted_client()
+    real = llm.LLMVerifier
+    monkeypatch.setattr(llm, "LLMVerifier", lambda model: real(model, client=client))
+    args = ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence")]
+    assert runner.invoke(app, args).exit_code == 0
+    assert runner.invoke(app, args + ["--max-concurrency", "6"]).exit_code == 0
+    assert runner.invoke(app, args + ["--verifier", "llm"]).exit_code == 0
+    assert runner.invoke(app, args + ["--verifier", "llm", "--max-concurrency", "2"]).exit_code == 0
+    assert seen == [1, 1, 4, 2]
+    assert runner.invoke(app, args + ["--max-concurrency", "0"]).exit_code == 2

@@ -21,7 +21,7 @@ from .corpus import DIFF_HEADER, HISTORY_HEADER
 from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, open_repository, printable,
                        resolve_commit, show_text)
 from .memory import Claim
-from .report import LABELS, _finding, _quote
+from .report import LABELS, _finding, _quote, usage_lines
 from .text import terms
 from .verify import Verifier
 
@@ -166,7 +166,7 @@ DIFF_LIMITATIONS = [
 def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow_links: bool = True,
                 evidence_root: Path | None = None, reviews: Path | None = None, verifier: Verifier | None = None,
                 as_of: date | None = None, stale_days: int = 180, min_coverage: float = 0.5,
-                max_judged: int | None = None, exclude: Iterable[str] = ()) -> DiffReport:
+                max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1) -> DiffReport:
     """Diff the memory at ``base`` against ``head`` (default: the working tree); audit added and changed claims."""
     repo = open_repository(memory_file)
     base_commit = repo.resolve(base)
@@ -181,7 +181,7 @@ def memory_diff(memory_file: Path, base: str, head: str | None = None, *, follow
     report = audit_claims(new.claims, memory_file=str(memory_file), files_read=new.files,
                           memory_paths=memory_paths, evidence_root=evidence_root, reviews=reviews,
                           verifier=verifier, as_of=as_of, stale_days=stale_days, min_coverage=min_coverage,
-                          max_judged=max_judged, exclude=exclude, only=touched)
+                          max_judged=max_judged, exclude=exclude, only=touched, max_concurrency=max_concurrency)
     status = {f.memory_id: f.status for f in report.findings}
     entries = [ClaimChange(change=c.kind, old=ClaimVersion.of(c.old) if c.old else None,
                            new=ClaimVersion.of(c.new) if c.new else None, similarity=c.similarity,
@@ -217,6 +217,7 @@ def diff_to_markdown(report: DiffReport) -> str:
            *(["- Excluded from evidence: " + ", ".join(f"`{show_text(p)}`" for p in audit.excluded)]
              if audit.excluded else []),
            f"- Verifier: `{audit.verifier}` · as of {audit.as_of} · mode: **{report.mode}** (no memory was modified)",
+           *usage_lines(audit),
            "", "| Change | Claims |", "|---|---|"]
     out += [f"| {kind.capitalize()} | {n} |" for kind, n in report.summary.items()]
     out.append("")

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .verify import RELATION_CRITERIA, Judgment, VerifierError
+from .verify import RELATION_CRITERIA, Judgment, UsageMeter, VerifierError, VerifierStats
 
 DEFAULT_MODEL = "jev-latest"
 INSTRUCTIONS = ("Judge the claim against the passage alone, not against outside knowledge. "
@@ -37,6 +37,10 @@ class JevVerifier:
         self.model = model
         self.threshold = threshold
         self.name = f"jev:{model}"
+        self.meter = UsageMeter(self.name)
+
+    def usage(self) -> list[VerifierStats]:
+        return [self.meter.snapshot()]
 
     def judge(self, claim: str, passage: str) -> Judgment:
         try:
@@ -44,6 +48,7 @@ class JevVerifier:
                                               questions={"relation": self.question}, model=self.model)
         except self._error as exc:
             raise VerifierError(f"{self.name}: {exc}") from exc
+        self.meter.record(getattr(response, "usage", None))
         answer = response.choices.get("relation")
         if answer is None or answer.choice not in RELATION_CRITERIA:
             raise VerifierError(f"{self.name}: no usable answer in response from {response.model}")
