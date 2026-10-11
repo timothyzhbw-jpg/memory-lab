@@ -246,16 +246,27 @@ Approved now that export waits for the billing migration.
 
 `<th12>` 只取原文文本的 SHA-256 前 12 位，所以编辑会产生新的证据版本，而改登录名不会。登录名改名或被他人重新注册后，会得到一个新的参与者 ID，没有任何角色。
 
-## Agent 技能
+## Agent 技能与 Claude Code 插件
 
-[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。GitHub 账号不是已认证的人，`memlab` MCP 工具引用的文件文本也不可信。技能里写了什么时候用这些只读工具、什么时候用命令行，以及怎样把 [GitHub Action](docs/github-action.md) 加到仓库里，让仓库核对自己的指令文件。把它们复制到 Agent 的技能目录即可：
+[`skills/memfalsify`](skills/memfalsify/SKILL.md) 和 [`skills/orgmemory`](skills/orgmemory/SKILL.md) 教 Agent 怎么用这两个工具、边界在哪里：先出报告，得到许可才改记忆，绝不把自己的判断当作人工确认写入，绝不改权限策略。GitHub 账号不是已认证的人，`memlab` MCP 工具引用的文件文本也不可信。技能里写了什么时候用这些只读工具、什么时候用命令行，以及怎样把 [GitHub Action](docs/github-action.md) 加到仓库里，让仓库核对自己的指令文件。
+
+本仓库同时是一个 Claude Code 插件市场。装一个插件，就同时得到两个技能和只读的 `memlab` MCP 服务器：
 
 ```bash
-cp -r skills/memfalsify skills/orgmemory ~/.claude/skills/   # Claude Code
-cp -r skills/memfalsify skills/orgmemory ~/.codex/skills/    # Codex
+claude plugin marketplace add timothyzhbw-jpg/memory-lab
+claude plugin install memory-lab@memory-lab
 ```
 
-命令行工具需要安装在 Agent 的 shell 所用的环境里。要用 MCP 工具，还要单独注册 `memlab-mcp`（见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)）。
+技能变成 `/memory-lab:memfalsify` 和 `/memory-lab:orgmemory`。插件用 `memlab-mcp --root ${CLAUDE_PROJECT_DIR}` 启动服务器，工具只能读项目目录，而且从不传 `--allow-model-verifiers`。插件不安装 Python 包：`memfalsify`、`orgmemory` 和 `memlab-mcp` 必须在 Claude Code 启动时的 `PATH` 上，例如来自 `./scripts/setup-local.sh` 创建的虚拟环境。
+
+Codex 则把技能复制到 OpenAI 文档里的用户技能位置 `~/.agents/skills/`，再用 `codex mcp add` 注册服务器。本 README 以前写的是 `~/.codex/skills/`；请删掉那里的副本，免得 Codex 把每个技能列两次。
+
+```bash
+cp -R skills/memfalsify skills/orgmemory ~/.agents/skills/
+codex mcp add memlab -- /absolute/path/to/memory-lab/.venv/bin/memlab-mcp --root /absolute/path/to/project
+```
+
+检查安装、更新、`config.toml` 写法、Windows 等细节见 [docs/install-agents.zh-CN.md](docs/install-agents.zh-CN.md)。
 
 ## MCP 服务器
 

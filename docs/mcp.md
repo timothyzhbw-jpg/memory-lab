@@ -68,6 +68,8 @@ Model verifiers read `ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY` from the environ
 
 ## Register with Claude Code
 
+The Memory Lab plugin registers this server for you as `memlab-mcp --root ${CLAUDE_PROJECT_DIR}`, together with the two skills, and never enables model verifiers: see [install-agents.md](install-agents.md). Register it by hand when you need another root or `--allow-model-verifiers`, and then toggle the plugin's server off in `/mcp`.
+
 These commands match `claude mcp add --help` from the installed Claude Code CLI. Transport defaults to `stdio`. The `--` is required so `--root` is passed to `memlab-mcp` and not to `claude`.
 
 ```bash
@@ -92,4 +94,4 @@ These commands match `codex mcp add --help` from the installed Codex CLI. The se
 codex mcp add memlab -- /absolute/path/to/memlab-mcp --root /absolute/path/to/data
 ```
 
-`--env KEY=VALUE` sets an environment variable for a stdio server. Repeat the flag for more than one variable. Further options are in the [Codex documentation](https://developers.openai.com/codex).
+`--env KEY=VALUE` sets an environment variable for a stdio server. Repeat the flag for more than one variable. The command writes an `[mcp_servers.memlab]` table to `~/.codex/config.toml`; [install-agents.md](install-agents.md) shows it, with the Codex skill folders. Further options are in the [Codex documentation](https://developers.openai.com/codex).
