@@ -30,3 +30,6 @@ memlab-mcp = "memlab_mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+memlab_mcp = ["py.typed"]

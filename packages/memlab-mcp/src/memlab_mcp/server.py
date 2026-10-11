@@ -21,20 +21,19 @@ from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from mcp.types import ToolAnnotations
 from pydantic import AwareDatetime, Field, TypeAdapter, ValidationError
 
-from memcore import EvidenceError, resolve_inside
-from memcore.reading import confinement_supported, confined_reads
+from memcore import EvidenceError, confinement_supported, confined_reads, resolve_inside
+from memfalsify import (
+    GitError, HistoryError, VerifierError, audit, diff_to_markdown, history_to_markdown,
+    memory_diff, memory_history, parse_memory, rollback_patch,
+)
+from memfalsify import to_markdown as audit_markdown
 from memfalsify import jev, llm
-from memfalsify.audit import audit
+# CLI configuration is internal; retain its shared defaults rather than duplicate behavior.
 from memfalsify.cli import VerifierChoice, build_verifier, preselection
-from memfalsify.gitstore import GitError, HistoryError
-from memfalsify.history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
-from memfalsify.memory import parse_memory
-from memfalsify.report import to_markdown as audit_markdown
-from memfalsify.rollback import rollback_patch
-from memfalsify.verify import VerifierError
-from orgmemory.audit import DEFAULT_STALE_DAYS, audit as decision_audit
-from orgmemory.replay import Dataset, replay
-from orgmemory.report import audit_markdown as decision_audit_markdown, explain, to_markdown as replay_markdown
+from orgmemory import Dataset, explain, replay
+from orgmemory import audit as decision_audit, audit_markdown as decision_audit_markdown
+from orgmemory import to_markdown as replay_markdown
+from orgmemory.audit import DEFAULT_STALE_DAYS
 
 from . import __version__
 

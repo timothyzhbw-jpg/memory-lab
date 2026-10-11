@@ -288,12 +288,11 @@ LLM 验证器使用结构化输出，每个判断都符合固定格式；它的�
 在 Python 里使用：
 
 ```python
-from memfalsify.audit import audit
-from memfalsify.jev import JevVerifier
-from memfalsify.llm import LLMVerifier
-from memfalsify.verify import DualVerifier
+from pathlib import Path
 
-report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), JevVerifier()),
+from memfalsify import DualVerifier, JevVerifier, LLMVerifier, audit
+
+report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVerifier(), JevVerifier()),
                min_coverage=0.2, max_judged=8)
 ```
 
@@ -326,6 +325,13 @@ report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), Jev
 - GitHub token 只从环境变量读取，只发送给 `https://api.github.com`（从不跟随重定向到其他主机），也从不写入文件或打印出来。
 - 从私有仓库导入的数据集和 `--save-capture` 文件包含私密文本，绝不要提交。目前没有脱敏流程：要从存档文件里删掉泄露的密钥只能手工编辑，之后 `validate` 会按设计报错。
 - 这是一个研究用的 MVP，不是生产级基础设施。
+
+## Python API
+
+从 `memcore`、`memfalsify`、`orgmemory` 和 `memlab_mcp` 包根导入库函数与模型。
+每个包通过 `__all__` 明确列出公开名称，并附带 `py.typed`。
+[API 参考](docs/api.zh-CN.md)介绍解析、审计、Git 历史、回放、GitHub 导入和服务器构建，
+包含示例及 1.0 的稳定性政策。原有模块导入路径继续可用；CLI 配置辅助函数属于内部实现。
 
 ## 路线图
 

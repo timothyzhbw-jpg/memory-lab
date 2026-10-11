@@ -48,7 +48,7 @@ class GitError(HistoryError):
     """Git could not run or failed. The message ends with git's own diagnostics, which can name paths
     outside the memory's repository; ``summary`` is the message without them."""
 
-    def __init__(self, message: str, summary: str):
+    def __init__(self, message: str, summary: str) -> None:
         super().__init__(message)
         self.summary = summary
 

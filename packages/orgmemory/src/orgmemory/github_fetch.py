@@ -17,6 +17,7 @@ import urllib.request
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from types import TracebackType
 from typing import Any, TextIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
@@ -40,7 +41,7 @@ _TIME = TypeAdapter(AwareDatetime)
 class GitHubError(Exception):
     """Permanent failure: the run stops and appends nothing (exit 2)."""
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None) -> None:
         super().__init__(message)
         self.status = status
 
@@ -169,7 +170,7 @@ class PersistentTransport:
     """
 
     def __init__(self, timeout: float = 30, *, connection_factory: Callable[..., Any] | None = None,
-                 env: Mapping[str, str] = os.environ):
+                 env: Mapping[str, str] = os.environ) -> None:
         self.timeout = timeout
         self._factory = connection_factory or http.client.HTTPSConnection
         self._connection = None
@@ -190,7 +191,8 @@ class PersistentTransport:
     def __enter__(self) -> PersistentTransport:
         return self
 
-    def __exit__(self, exc_type, exc, traceback) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None,
+                 traceback: TracebackType | None) -> None:
         self.close()
 
     def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]:
@@ -272,7 +274,7 @@ class FetchProgress:
     Short runs stay quiet. Call update at request boundaries and after each fully fetched item.
     """
 
-    def __init__(self, *, clock: Callable[[], float] = time.monotonic, stream: TextIO | None = None):
+    def __init__(self, *, clock: Callable[[], float] = time.monotonic, stream: TextIO | None = None) -> None:
         self.clock = clock
         self.stream = sys.stderr if stream is None else stream
         self.last = clock()
@@ -303,7 +305,7 @@ class Client:
 
     def __init__(self, transport: Transport, token: str | None, *, max_wait: float = 3600,
                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time,
-                 progress: FetchProgress | None = None):
+                 progress: FetchProgress | None = None) -> None:
         if token is not None and not PRINTABLE.fullmatch(token):
             raise GitHubError("the GitHub token contains characters that cannot be sent in an HTTP header")
         self.transport, self.token, self.max_wait, self.sleep, self.clock = transport, token, max_wait, sleep, clock

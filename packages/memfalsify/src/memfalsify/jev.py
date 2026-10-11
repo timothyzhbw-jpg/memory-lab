@@ -21,7 +21,7 @@ INSTRUCTIONS = ("Judge the claim against the passage alone, not against outside 
 class JevVerifier:
     """Ask Jev to choose supports / contradicts / unrelated; below ``threshold`` confidence counts as unrelated."""
 
-    def __init__(self, model: str = DEFAULT_MODEL, client: Any = None, threshold: float = 0.5):
+    def __init__(self, model: str = DEFAULT_MODEL, client: Any = None, threshold: float = 0.5) -> None:
         try:
             from typesafe_sdk import Choice, TypeSafeClient, TypeSafeError
         except ImportError as exc:

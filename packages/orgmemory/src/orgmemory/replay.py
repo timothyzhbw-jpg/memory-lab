@@ -19,7 +19,7 @@ from .models import DECISIONS, Conflict, Decision, Event, PendingChange, Policy,
 class Dataset:
     """events.jsonl + policy.json + evidence.jsonl, validated as a whole."""
 
-    def __init__(self, events: list[Event], policy: Policy, evidence: dict[str, EvidenceSpan]):
+    def __init__(self, events: list[Event], policy: Policy, evidence: dict[str, EvidenceSpan]) -> None:
         self.events, self.policy, self.evidence = events, policy, evidence
         validate(events, evidence)
 

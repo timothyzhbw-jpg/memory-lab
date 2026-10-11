@@ -288,12 +288,11 @@ For both model backends, an API failure, a missing SDK or missing credentials st
 From Python:
 
 ```python
-from memfalsify.audit import audit
-from memfalsify.jev import JevVerifier
-from memfalsify.llm import LLMVerifier
-from memfalsify.verify import DualVerifier
+from pathlib import Path
 
-report = audit("MEMORY.md", "evidence", verifier=DualVerifier(LLMVerifier(), JevVerifier()),
+from memfalsify import DualVerifier, JevVerifier, LLMVerifier, audit
+
+report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVerifier(), JevVerifier()),
                min_coverage=0.2, max_judged=8)
 ```
 
@@ -328,6 +327,14 @@ the claims it adds or changes.
 - The GitHub token is read from the environment only, sent only to `https://api.github.com` (redirects are never followed to another host), and never written or printed.
 - Datasets imported from private repositories, and `--save-capture` files, contain private text: never commit them. There is no redaction workflow: removing a secret from a capture means editing it by hand, after which `validate` fails on purpose.
 - This is a research MVP, not production infrastructure.
+
+## Python API
+
+Import library functions and models from `memcore`, `memfalsify`, `orgmemory`, and
+`memlab_mcp`. Each package declares its public names in `__all__` and ships `py.typed`.
+The [API reference](docs/api.md) covers parsing, auditing, Git history, replay, GitHub ingestion,
+and server construction, with examples and the stability policy for 1.0. Existing module import
+paths remain available; CLI configuration helpers are internal.
 
 ## Roadmap
 

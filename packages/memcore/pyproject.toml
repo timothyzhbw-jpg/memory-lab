@@ -17,3 +17,6 @@ Changelog = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.m
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+memcore = ["py.typed"]

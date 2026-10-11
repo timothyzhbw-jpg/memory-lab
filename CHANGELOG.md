@@ -16,7 +16,18 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Explicit package-root Python APIs for `memcore`, `memfalsify`, `orgmemory`, and `memlab_mcp`,
+  including evidence reading, memory audits and Git history, organizational replay and GitHub ingestion,
+  and MCP server construction. Existing module import paths remain available.
+- Public signature annotations and wheel-included `py.typed` markers in all four packages.
+- English and Chinese API references, a 1.0 stability and deprecation policy, and pinned export tests.
+
+### Changed
+
+- MCP, Action, benchmark, and README library imports use the public package roots where possible,
+  with no behavior changes. CLI configuration and report-header helpers remain internal.
 
 ## memlab-core
 
