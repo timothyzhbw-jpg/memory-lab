@@ -4,6 +4,10 @@ Git runs with argument lists (never a shell) and with config that could change i
 user-supplied revision is validated and resolved to a commit ID first. File contents come from the object
 database through one ``git cat-file --batch`` process; trees are walked entry by entry, so symlinks and
 submodules in history are never followed.
+
+Inside ``memcore.reading.confined_reads`` (the MCP server), git may only read a repository whose work tree,
+git directory, common directory and object store all resolve inside the confinement root, without
+alternates or symlinks in the object store, and every later git call is pinned to the checked locations.
 """
 from __future__ import annotations
 
@@ -17,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
 from memcore import EvidenceError, resolve_inside
-from memcore.reading import read_file_text
+from memcore.reading import confinement_root, read_file_text
 
 from .memory import Claim, merge_duplicates, parse_text
 
@@ -29,8 +33,24 @@ GIT_OPTIONS = ("--literal-pathspecs", "-c", "core.quotePath=false", "-c", "log.s
                "-c", "log.follow=false")
 
 
+# Variables that would point git at another repository, object store or index than the one it finds
+# from the memory file. Dropped inside confined reads, where only the discovered repository is checked.
+LOCATION_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                      "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE", "GIT_NAMESPACE", "GIT_SHALLOW_FILE",
+                      "GIT_GRAFT_FILE", "GIT_REPLACE_REF_BASE")
+
+
 class HistoryError(ValueError):
     """Git is missing, the memory is not in a work tree, or a revision or claim is unusable (exit 2)."""
+
+
+class GitError(HistoryError):
+    """Git could not run or failed. The message ends with git's own diagnostics, which can name paths
+    outside the memory's repository; ``summary`` is the message without them."""
+
+    def __init__(self, message: str, summary: str):
+        super().__init__(message)
+        self.summary = summary
 
 
 def printable(text: str) -> str:
@@ -47,7 +67,11 @@ def check_revision(rev: str) -> str:
 
 
 def _env() -> dict[str, str]:
-    return {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+    if confinement_root() is not None:
+        for name in LOCATION_VARIABLES:
+            env.pop(name, None)
+    return env
 
 
 def _git_executable() -> str:
@@ -62,16 +86,17 @@ def _run(exe: str, directory: Path, args: list[str]) -> subprocess.CompletedProc
         return subprocess.run([exe, "-C", str(directory), *GIT_OPTIONS, *args], capture_output=True,
                               env=_env(), check=False)
     except OSError as exc:
-        raise HistoryError(f"cannot run git: {exc}") from exc
+        raise GitError(f"cannot run git: {exc}", "cannot run git") from exc
 
 
 def _failure(proc: subprocess.CompletedProcess) -> str:
     return printable(proc.stderr.decode("utf-8", "replace")) or f"exit code {proc.returncode}"
 
 
-def _resolve(exe: str, directory: Path, rev: str) -> str:
+def _resolve(exe: str, directory: Path, rev: str, options: tuple[str, ...] = ()) -> str:
     check_revision(rev)
-    proc = _run(exe, directory, ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{commit}}"])
+    proc = _run(exe, directory, [*options, "rev-parse", "--verify", "--quiet", "--end-of-options",
+                                 f"{rev}^{{commit}}"])
     commit = proc.stdout.decode("ascii", "replace").strip()
     if proc.returncode or not HEX.fullmatch(commit):
         raise HistoryError(f"{printable(rev)!r} is not a commit in this repository "
@@ -134,11 +159,12 @@ class Objects:
 
     def __init__(self, repo: "Repository"):
         try:
-            self.proc = subprocess.Popen([repo.git, "-C", str(repo.root), *GIT_OPTIONS, "cat-file", "--batch"],
+            self.proc = subprocess.Popen([repo.git, "-C", str(repo.root), *GIT_OPTIONS, *repo.options,
+                                          "cat-file", "--batch"],
                                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                          env=_env())
         except OSError as exc:
-            raise HistoryError(f"cannot run git: {exc}") from exc
+            raise GitError(f"cannot run git: {exc}", "cannot run git") from exc
         self.trees: dict[tuple[str, str], dict[bytes, tuple[str, str]] | None] = {}
         self.blobs: dict[str, bytes] = {}
 
@@ -164,7 +190,7 @@ class Objects:
             self.proc.stdin.flush()
             header = self.proc.stdout.readline()
         except OSError as exc:
-            raise HistoryError(f"git cat-file failed: {exc}") from exc
+            raise GitError(f"git cat-file failed: {exc}", "git cat-file failed") from exc
         if not header.endswith(b"\n"):
             raise HistoryError("git cat-file stopped unexpectedly")
         parts = header[:-1].split(b" ")
@@ -223,27 +249,29 @@ class Repository:
     prefix: str  # memory directory relative to the top level, POSIX, "" or ending in "/"
     memory_dir: Path
     memory_name: str
+    options: tuple[str, ...] = ()  # global options for every call, e.g. a pinned --git-dir and --work-tree
 
     def run(self, *args: str) -> bytes:
-        proc = _run(self.git, self.root, list(args))
+        proc = _run(self.git, self.root, [*self.options, *args])
         if proc.returncode:
-            raise HistoryError(f"git {args[0]} failed: {_failure(proc)}")
+            raise GitError(f"git {args[0]} failed: {_failure(proc)}", f"git {args[0]} failed")
         return proc.stdout
 
     def resolve(self, rev: str) -> str:
-        return _resolve(self.git, self.root, rev)
+        return _resolve(self.git, self.root, rev, self.options)
 
     def head(self) -> str | None:
         """The HEAD commit, or None in a repository without commits."""
-        proc = _run(self.git, self.root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
+        proc = _run(self.git, self.root, [*self.options, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
         commit = proc.stdout.decode("ascii", "replace").strip()
         return commit if proc.returncode == 0 and HEX.fullmatch(commit) else None
 
     def cut_off(self, commit: str) -> bool:
         """True when ``commit`` has no parent only because the clone is shallow (it may be a real root)."""
-        if _run(self.git, self.root, ["rev-parse", "--verify", "--quiet", f"{commit}^1"]).returncode == 0:
+        parent = _run(self.git, self.root, [*self.options, "rev-parse", "--verify", "--quiet", f"{commit}^1"])
+        if parent.returncode == 0:
             return False
-        shallow = _run(self.git, self.root, ["rev-parse", "--is-shallow-repository"])
+        shallow = _run(self.git, self.root, [*self.options, "rev-parse", "--is-shallow-repository"])
         return shallow.returncode != 0 or shallow.stdout.strip() != b"false"
 
     def at(self, objects: Objects, commit: str, follow_links: bool) -> Snapshot:
@@ -273,18 +301,65 @@ class Repository:
         return build_snapshot(read, self.memory_name, follow_links)
 
 
+OUTSIDE = ("the memory file's git repository is not inside the server root: its work tree, git directory, "
+           "common directory (for a worktree, the main repository's) and object store must all be inside it")
+
+
+def _raise(error: OSError) -> None:
+    raise error
+
+
+def _has_symlinks(directory: Path) -> bool:
+    """True if anything under ``directory`` is a symlink (git never creates one in an object store)."""
+    for parent, directories, files in os.walk(directory, onerror=_raise):
+        if any(os.path.islink(os.path.join(parent, name)) for name in directories + files):
+            return True
+    return False
+
+
+def _confine(root: Path, toplevel: Path, git_dir: Path, common_dir: Path) -> tuple[str, ...]:
+    """Refuse a repository that would make git read outside ``root``; return options that pin git to it."""
+    try:
+        root = root.resolve()
+        objects = common_dir / "objects"
+        work_tree, git_dir, common_dir, store = (place.resolve(strict=True)
+                                                 for place in (toplevel, git_dir, common_dir, objects))
+        inside = all(place.is_relative_to(root) for place in (work_tree, git_dir, common_dir, store))
+        alternates = os.path.lexists(store / "info" / "alternates")
+        symlinks = inside and _has_symlinks(store)
+    except (OSError, RuntimeError):
+        raise HistoryError("cannot check where the memory file's git repository is") from None
+    if not inside:
+        raise HistoryError(OUTSIDE)
+    if alternates:
+        raise HistoryError("the memory file's git repository borrows objects from another repository "
+                           "(objects/info/alternates), which the server does not read")
+    if symlinks:
+        raise HistoryError("the memory file's git object store contains symlinks, which the server does not follow")
+    return ("--git-dir", str(git_dir), "--work-tree", str(work_tree))
+
+
 def open_repository(memory_file: Path) -> Repository:
     exe = _git_executable()
     memory = Path(memory_file).resolve()
     if not memory.parent.is_dir():
         raise HistoryError(f"directory not found: {memory.parent}")
-    proc = _run(exe, memory.parent, ["rev-parse", "--show-toplevel", "--show-prefix"])
+    proc = _run(exe, memory.parent, ["rev-parse", "--show-toplevel", "--show-prefix", "--absolute-git-dir",
+                                     "--git-common-dir"])
     if proc.returncode:
-        raise HistoryError(f"{printable(str(memory_file))} is not inside a git work tree ({_failure(proc)})")
+        where = f"{printable(str(memory_file))} is not inside a git work tree"
+        raise GitError(f"{where} ({_failure(proc)})", where)
     try:
-        toplevel, prefix = proc.stdout.decode("utf-8").split("\n")[:2]
-    except (UnicodeDecodeError, ValueError) as exc:
+        lines = proc.stdout.decode("utf-8").split("\n")
+    except UnicodeDecodeError as exc:
         raise HistoryError("cannot read the repository location from git") from exc
+    if len(lines) != 5 or lines[4] or not all(lines[i] for i in (0, 2, 3)):  # e.g. a path holding a newline
+        raise HistoryError("cannot read the repository location from git")
+    toplevel, prefix, git_dir, common_dir = lines[:4]
     if CONTROL.search(prefix + memory.name):
         raise HistoryError("the memory path contains control characters, which git batch reads cannot carry")
-    return Repository(git=exe, root=Path(toplevel), prefix=prefix, memory_dir=memory.parent, memory_name=memory.name)
+    options: tuple[str, ...] = ()
+    if (root := confinement_root()) is not None:
+        options = _confine(root, Path(toplevel), Path(git_dir), memory.parent / common_dir)
+    return Repository(git=exe, root=Path(toplevel), prefix=prefix, memory_dir=memory.parent, memory_name=memory.name,
+                      options=options)

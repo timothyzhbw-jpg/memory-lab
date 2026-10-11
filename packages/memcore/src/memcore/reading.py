@@ -21,6 +21,15 @@ def confinement_supported() -> bool:
     return hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd
 
 
+def confinement_root() -> Path | None:
+    """The root of the active ``confined_reads`` context, or None outside one.
+
+    Readers that cannot use descriptor-relative opens (such as a git subprocess) check their own
+    locations against it."""
+    active = _ROOT.get()
+    return active[0] if active is not None else None
+
+
 def _directory(parts: tuple[str, ...], start: int) -> int:
     """Return an owned descriptor; never traverse a symlink, even during a rename race."""
     current = os.dup(start)
