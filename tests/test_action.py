@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -221,3 +222,83 @@ def test_action_diff_base_outside_a_repository_fails(tmp_path, monkeypatch, runn
 def test_action_passes_diff_base_through_env():
     text = (ROOT / "action.yml").read_text(encoding="utf-8")
     assert "  diff-base:\n" in text and "MEMFALSIFY_DIFF_BASE: ${{ inputs.diff-base }}" in text
+
+
+# --- memory: auto ------------------------------------------------------------------------------
+
+FORMATS = ROOT / "tests" / "fixtures" / "formats"
+needs_symlinks = pytest.mark.skipif(os.name == "nt", reason="symlinks need extra privileges on Windows")
+
+
+def audited(report: str) -> list[str]:
+    return re.findall(r"^- Memory: `([^`]+)`", report, re.M)
+
+
+@pytest.mark.parametrize("strict, code", [("true", 1), ("false", 0)])
+def test_action_memory_auto_audits_every_discovered_file(tmp_path, monkeypatch, runner_env, capsys, strict, code):
+    monkeypatch.chdir(shutil.copytree(FORMATS, tmp_path / "repo"))
+    env = {**runner_env, "MEMFALSIFY_MEMORY": " auto\n", "MEMFALSIFY_STRICT": strict,
+           "MEMFALSIFY_EXCLUDE": "packages/**", "MEMFALSIFY_AS_OF": "2026-10-10"}
+    assert action.main(env) == code
+    out = capsys.readouterr().out
+    report = Path(outputs(env)["report"]).read_text(encoding="utf-8")
+    assert audited(report) == [".claude/rules/api.md", ".cursor/rules/api.mdc", ".cursor/rules/frontend/components.mdc",
+                               ".cursorrules", ".devin/rules/deploy.md", ".github/copilot-instructions.md",
+                               ".github/instructions/python.instructions.md", ".windsurf/rules/testing.md",
+                               ".windsurfrules", "AGENTS.md", "CLAUDE.md", "GEMINI.md"]
+    assert "MemFalsify: found .cursor/rules/api.mdc (Cursor)" in out and "packages/web" not in out + report
+    # docs/api.md says 60 requests per minute; AGENTS.md and the Cursor rule say 100. The Copilot instructions
+    # say PostgreSQL 16 and CLAUDE.md, evidence for the others, says 15. CLAUDE.md is not flagged in turn:
+    # files under hidden directories (.github/) are never evidence.
+    assert outputs(env)["attention"] == "3"
+    assert "`CLAUDE.md:5` · sha256" in report and "`copilot-instructions.md:3` · sha256" not in report
+    assert "Frontmatter: `description: Rate limits and validation for the fixture API`" in report
+
+
+@needs_symlinks
+def test_action_memory_auto_audits_a_linked_file_once(tmp_path, monkeypatch, runner_env, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "AGENTS.md").write_bytes(b"- The database runs PostgreSQL 15.\n")
+    (tmp_path / "CLAUDE.md").symlink_to("AGENTS.md")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "db.md").write_bytes(b"The database runs PostgreSQL 16.\n")
+    assert action.main({**runner_env, "MEMFALSIFY_MEMORY": "auto"}) == 1
+    assert outputs(runner_env)["attention"] == "1"
+    assert audited(Path(outputs(runner_env)["report"]).read_text(encoding="utf-8")) == ["AGENTS.md"]
+    assert "MemFalsify: found CLAUDE.md (Claude Code, same file as AGENTS.md)" in capsys.readouterr().out
+
+
+def test_action_memory_auto_without_instruction_files_notices_and_succeeds(tmp_path, monkeypatch, runner_env,
+                                                                           capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "README.md").write_bytes(b"- The cache uses Redis.\n")
+    assert action.main({**runner_env, "MEMFALSIFY_MEMORY": "auto"}) == 0
+    assert outputs(runner_env)["attention"] == "0"
+    assert ("::notice title=MemFalsify::No agent instruction file found in the workspace (memory: auto)"
+            in capsys.readouterr().out)
+
+
+def test_action_memory_auto_fails_closed_when_the_workspace_cannot_be_searched(tmp_path, monkeypatch, runner_env,
+                                                                               capsys):
+    monkeypatch.chdir(tmp_path)
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "Permission denied", "private-dir")
+    monkeypatch.setattr(action, "discover", refuse)
+    assert action.main({**runner_env, "MEMFALSIFY_MEMORY": "auto"}) == 2
+    assert "::error title=MemFalsify::memory: auto could not search the workspace" in capsys.readouterr().out
+
+
+@requires_git
+def test_action_memory_auto_with_diff_base_gates_a_new_rule_file(git_repo, monkeypatch, runner_env):
+    monkeypatch.chdir(git_repo.root)
+    base = git_repo.commit("base", {"AGENTS.md": "- The database runs PostgreSQL 15.\n",
+                                    "docs/api.md": "The public API rate limit is 60 requests per minute.\n"})
+    git_repo.write({".cursor/rules/api.mdc": "---\nglobs: src/api/**\n---\n\n"
+                                             "- The public API rate limit is 100 requests per minute.\n"})
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "auto", "MEMFALSIFY_DIFF_BASE": base}
+    assert action.main(env) == 1
+    assert outputs(env)["attention"] == "1"
+    report = Path(outputs(env)["report"]).read_text(encoding="utf-8")
+    assert audited(report) == [".cursor/rules/api.mdc", "AGENTS.md"]
+    assert "| Added | 1 |" in report and "`api.mdc:5`" in report

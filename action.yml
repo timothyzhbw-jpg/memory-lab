@@ -1,5 +1,5 @@
 name: MemFalsify
-description: Audit agent instruction files (CLAUDE.md, AGENTS.md) against the repository's own docs and configs.
+description: Audit agent instruction files (CLAUDE.md, AGENTS.md, Cursor, Copilot, Gemini, Windsurf) against the repository's own docs.
 author: timothyzhbw-jpg
 branding:
   icon: check-circle
@@ -12,6 +12,9 @@ inputs:
       (shell-style, e.g. CLAUDE.md "docs/agent notes.md"). Files that do not exist are skipped;
       if none exists the action emits a notice and succeeds. Markdown links are not followed;
       list additional instruction files explicitly. Use forward slashes in paths on every runner.
+      "auto" audits every instruction file `memfalsify discover` finds in the workspace (CLAUDE.md,
+      AGENTS.md, GEMINI.md, .cursor/rules, .github/copilot-instructions.md, .windsurf/rules, ...),
+      leaving out paths that match the exclude globs.
     required: false
     default: CLAUDE.md AGENTS.md
   evidence:
@@ -21,7 +24,8 @@ inputs:
   exclude:
     description: >-
       Globs to leave out of the evidence, one per line, matched (fnmatch) against paths relative to the
-      evidence directory; "dir/**" and "dir/*" exclude everything under dir.
+      evidence directory; "dir/**" and "dir/*" exclude everything under dir. With memory "auto", the
+      same globs, matched against paths relative to the workspace, also leave instruction files out.
     required: false
     default: ""
   strict:

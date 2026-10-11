@@ -1,6 +1,7 @@
 """Run step of the MemFalsify GitHub Action (action.yml).
 
-Audits each memory file that exists, writes the Markdown report to the job summary and to a file, and sets the
+Audits each memory file that exists (with ``memory: auto``, each instruction file ``memfalsify discover`` finds
+in the workspace), writes the Markdown report to the job summary and to a file, and sets the
 ``report`` and ``attention`` outputs. With a ``diff-base`` input, runs ``memfalsify diff`` instead, so only the
 claims added or changed since that revision are audited. Inputs arrive as MEMFALSIFY_* environment variables,
 never as interpolated script text. Exit codes follow ``memfalsify audit --strict``: 1 when a memory needs
@@ -20,11 +21,13 @@ from pathlib import Path
 from memfalsify.audit import ATTENTION, AuditReport
 from memfalsify.cli import app
 from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
+from memfalsify.discover import discover
 from memfalsify.history import DiffReport, HistoryError, diff_to_markdown, resolve_commit
 from memfalsify.report import to_markdown
 
 ERROR = 2
 SUMMARY_LIMIT = 1_000_000  # GitHub rejects step summaries over 1 MiB.
+AUTO = "auto"  # memory input: audit every instruction file `memfalsify discover` finds in the workspace
 
 
 def _escape(text: str) -> str:
@@ -70,10 +73,25 @@ def options(env: dict[str, str]) -> list[str]:
     """CLI options from the action inputs; ``--name=value`` so a value can never be read as another option."""
     out = [f"--evidence={env.get('MEMFALSIFY_EVIDENCE') or '.'}",
            f"--verifier={env.get('MEMFALSIFY_VERIFIER') or 'lexical'}"]
-    out += [f"--exclude={line.strip()}" for line in env.get("MEMFALSIFY_EXCLUDE", "").splitlines() if line.strip()]
+    out += [f"--exclude={pattern}" for pattern in excludes(env)]
     if as_of := env.get("MEMFALSIFY_AS_OF", "").strip():
         out.append(f"--as-of={as_of}")
     return out
+
+
+def excludes(env: dict[str, str]) -> list[str]:
+    return [line.strip() for line in env.get("MEMFALSIFY_EXCLUDE", "").splitlines() if line.strip()]
+
+
+def discovered(env: dict[str, str]) -> list[str]:
+    """``memory: auto``: every instruction file under the workspace, each file once (raises OSError)."""
+    found = discover(Path.cwd(), exclude=excludes(env))
+    for f in found.files:
+        alias = f", same file as {_log_text(f.same_as)}" if f.same_as else ""
+        print(f"MemFalsify: found {_log_text(f.path)} ({f.agent}{alias})", flush=True)
+    for s in found.skipped:
+        print(f"MemFalsify: skipped {_log_text(s.path)}: {s.reason}", flush=True)
+    return found.distinct
 
 
 def publish(env: dict[str, str], path: Path, text: str, attention: int) -> None:
@@ -87,8 +105,10 @@ def publish(env: dict[str, str], path: Path, text: str, attention: int) -> None:
 
 def main(env: dict[str, str] | None = None) -> int:
     env = dict(os.environ if env is None else env)
+    requested = env.get("MEMFALSIFY_MEMORY", "CLAUDE.md AGENTS.md")
+    auto = requested.strip() == AUTO
     try:
-        memories = shlex.split(env.get("MEMFALSIFY_MEMORY", "CLAUDE.md AGENTS.md"))
+        memories = [] if auto else shlex.split(requested)
     except ValueError as exc:
         annotate("error", f"cannot parse the memory input: {exc}")
         return ERROR
@@ -105,6 +125,12 @@ def main(env: dict[str, str] | None = None) -> int:
             annotate("error", f"diff-base: {exc}. actions/checkout needs fetch-depth: 0 (or enough history "
                               "to include the base commit)")
             return ERROR
+    if auto:
+        try:
+            memories = discovered(env)
+        except (ValueError, OSError) as exc:
+            annotate("error", f"memory: auto could not search the workspace: {exc}")
+            return ERROR
     out_dir = Path(env.get("RUNNER_TEMP") or tempfile.mkdtemp()) / "memfalsify"
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
@@ -112,7 +138,9 @@ def main(env: dict[str, str] | None = None) -> int:
     for missing in (m for m in memories if m not in found):
         print(f"MemFalsify: {_log_text(missing)} not found, skipping", flush=True)
     if not found:
-        message = "No memory file found (looked for " + (", ".join(memories) or "nothing") + "); nothing to audit."
+        message = ("No agent instruction file found in the workspace (memory: auto); nothing to audit." if auto
+                   else "No memory file found (looked for " + (", ".join(memories) or "nothing")
+                   + "); nothing to audit.")
         annotate("notice", message)
         publish(env, report_path, f"{REPORT_HEADER}\n\n{message}\n", 0)
         return 0
