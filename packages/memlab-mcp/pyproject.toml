@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memlab-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Read-only Model Context Protocol server for MemFalsify and Verified Organizational Memory"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = [
-    "memlab-core>=0.1,<0.2",
-    "memfalsify>=0.1,<0.2",
+    "memlab-core>=0.2,<0.3",
+    "memfalsify>=0.3,<0.4",
     "orgmemory>=0.3,<0.4",
     "mcp>=2.2,<3",
     "pydantic>=2.5",
