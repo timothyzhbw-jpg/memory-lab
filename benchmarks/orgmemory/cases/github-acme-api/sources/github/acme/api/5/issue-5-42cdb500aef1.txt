@@ -1,0 +1,5 @@
+GitHub pull request acme/api#5 opened by gh:lin-eng:5002 (User) at 2026-10-02T09:00:00Z
+{"author_association":"MEMBER","created_at":"2026-10-02T09:00:00Z","draft":false,"kind":"issue","number":5,"pull_request":true,"repo":"acme/api","repo_id":2002,"state":"open","updated_at":"2026-10-03T12:00:00Z","user":{"id":5002,"login":"lin-eng","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Rate-limit dashboard
+Shows each tenant's remaining quota.

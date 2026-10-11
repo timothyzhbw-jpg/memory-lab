@@ -1,0 +1,1 @@
+{"complete": true, "drift": [], "events_appended": 24, "evidence_appended": 36, "finished_at": "2026-10-12T00:00:00Z", "gone": [], "importer": "orgmemory-github/1", "items": 5, "mode": "full", "repo": "acme/api", "repo_id": 2002, "requests": 11, "since": null, "source": "convert", "started_at": "2026-10-12T00:00:00Z"}

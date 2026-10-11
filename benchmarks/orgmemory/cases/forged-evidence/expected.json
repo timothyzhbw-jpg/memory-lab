@@ -1,0 +1,37 @@
+{
+  "description": "Forged and mismatched evidence: a changed byte, an edited source, a reworded quote, shifted or byte/UTF-16 offsets, CRLF-normalized hashes, path escapes and unknown ids must fail validation, while CRLF bytes, emoji offsets and a repeated quote stay valid and a consistent forgery shows what a hash cannot prove.",
+  "validation": [
+    {"name": "base", "error": null, "note": "the dataset as recorded: CRLF email, Chinese quote after an emoji, quote at its second occurrence"},
+    {"name": "hash-one-digit", "evidence": "evidence.hash-one-digit.jsonl", "error": "evidence hash mismatch: q-f03", "note": "one hex digit of the recorded SHA-256 changed"},
+    {"name": "edited-source", "evidence": "evidence.edited-source.jsonl", "error": "evidence hash mismatch: q-f03", "note": "the cited file says 'approved' where the hashed bytes said 'rejected'"},
+    {"name": "forged-quote", "evidence": "evidence.forged-quote.jsonl", "error": "quote does not match recorded span: q-f03", "note": "right file and hash, but the recorded quote says 'approved'"},
+    {"name": "shifted-span", "evidence": "evidence.shifted-span.jsonl", "error": "quote does not match recorded span: q-f03", "note": "the span is off by one character"},
+    {"name": "byte-offsets", "evidence": "evidence.byte-offsets.jsonl", "error": "quote does not match recorded span: q-f02", "note": "offsets counted in UTF-8 bytes instead of characters"},
+    {"name": "utf16-offsets", "evidence": "evidence.utf16-offsets.jsonl", "error": "quote does not match recorded span: q-f02", "note": "offsets counted in UTF-16 code units; the emoji before the quote is a surrogate pair"},
+    {"name": "crlf-normalized", "evidence": "evidence.crlf-normalized.jsonl", "error": "evidence hash mismatch: q-f04", "note": "hash and offsets taken from an LF-converted copy of a CRLF file"},
+    {"name": "path-escape", "evidence": "evidence.path-escape.jsonl", "error": "evidence path escapes its root", "note": "the path leaves the dataset directory"},
+    {"name": "missing-file", "evidence": "evidence.missing-file.jsonl", "error": "No such file or directory", "note": "the cited file does not exist"},
+    {"name": "directory-path", "evidence": "evidence.directory-path.jsonl", "error": "evidence is not a regular file", "note": "the path names a directory"},
+    {"name": "duplicate-id", "evidence": "evidence.duplicate-id.jsonl", "error": "duplicate evidence id q-f01", "note": "two manifest lines with one id"},
+    {"name": "not-utf8", "evidence": "evidence.not-utf8.jsonl", "error": "evidence is not UTF-8 text", "note": "a Latin-1 file with a matching hash"},
+    {"name": "naive-captured-at", "evidence": "evidence.naive-captured-at.jsonl", "error": "timezone", "note": "captured_at without a timezone"},
+    {"name": "unknown-evidence", "events": "events.unknown-evidence.jsonl", "error": "event f03 cites unknown evidence: q-f03-signed", "note": "an event cites an id the manifest does not have"},
+    {"name": "consistent-forgery", "evidence": "evidence.consistent-forgery.jsonl", "error": null, "note": "a forged file with its own correct hash and span loads: a hash proves the quote is in those bytes, not that the bytes are authentic"}
+  ],
+  "snapshots": [
+    {
+      "as_of": "2026-10-10T00:00:00Z",
+      "states": {
+        "Retention policy": {
+          "status": "rejected", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": ["f02"], "dependencies": [], "last_authorized_decision": "f03",
+          "note": "request, risk, reject, then the customer's reconsideration."
+        }
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": []
+      }
+    }
+  ]
+}

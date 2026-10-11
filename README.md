@@ -586,6 +586,15 @@ eight synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RES
 precision 0.73, recall 0.33 and 3-way accuracy 0.47, with per-language results; these cases exercise failure
 modes rather than estimate accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
 
+The [Organizational Memory benchmark](benchmarks/orgmemory/README.md) has ten labeled datasets with 233 labels
+(598 checks) on final states at chosen times, audit-trail outcomes, audit findings and validation errors. The cases
+attack the authority rules: unknown and look-alike actors, role changes, same-instant decisions, revoke chains,
+cutoffs against file order, forged evidence, malformed logs and a GitHub import. In the
+[measured results](benchmarks/orgmemory/RESULTS.md), 590 checks pass. The 8 failures come from one finding: a role
+change written into `policy.json` applies to past events too (record it in `policy-log.jsonl` instead). Duplicate
+JSON keys, the other finding of the first run, are now rejected. Run it offline with
+`python benchmarks/orgmemory/run.py`, which exits 1 on any mismatch.
+
 The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files, or with
 `memory: auto` every one that `memfalsify discover` finds, against repository evidence and puts the report in
 the job summary. Its default strict check fails on possible counterevidence;
@@ -616,7 +625,7 @@ and resolved symlink targets. The action also warns and skips memory symlinks th
 - `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there. With `--batch`, Anthropic keeps the batch's requests and results for up to 29 days, visible to anyone with access to that workspace; delete the batch through the API if that is too long.
 - `orgmemory audit` findings and `orgmemory changes` restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - An exported ADR restates the replayed log. Its Context lists recorded requests and risks, not anyone's reasoning, and a record does not update itself: export again after the log changes.
-- Actor IDs, `policy.json` and `policy-log.jsonl` are trusted input. There is no identity authentication or signed provenance yet. Role changes recorded in `policy-log.jsonl` are effective-dated, but editing `policy.json` (including `permissions`, which are not dated) or rewriting the policy log still changes every replay.
+- Actor IDs, `policy.json` and `policy-log.jsonl` are trusted input. There is no identity authentication or signed provenance yet. Role changes recorded in `policy-log.jsonl` are effective-dated, but editing `policy.json` (including `permissions`, which are not dated) or rewriting the policy log still changes every replay ([benchmark finding](benchmarks/orgmemory/RESULTS.md)).
 - A repeated key in a JSON object is rejected, including in a nested object. Keeping the last value would let one `events.jsonl` line show one `actor` to a person reading the file and another to replay, and would let a `policy.json` that names an actor twice grant the second list of roles.
 - Evidence is UTF-8 text. Images, audio, video and PDF count only through transcript and OCR sidecars you provide, which are someone's reading of the media: a matching `source_sha256` shows which bytes a sidecar describes, not that it is accurate. Media without a usable sidecar is reported as skipped.
 - Lexical judging of Chinese has no dictionary: it misses paraphrases (冻结招聘 for 不招) and reads negation and modality from fixed cue lists. Only Han characters are split into n-grams; Japanese kana and Korean Hangul are not.

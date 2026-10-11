@@ -581,6 +581,12 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
 [实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.73、召回率为 0.33，三分类准确率为 0.47，并分别列出中英文结果。
 这些案例用于检验已知失败模式，不能代表真实记忆的准确率。运行 `python benchmarks/memfalsify/run.py` 即可离线评测。
 
+[组织记忆评测集](benchmarks/orgmemory/README.md)包含十组带标注的数据集、233 条标注（598 项检查），覆盖指定时间点的最终状态、
+审计轨迹结果、`orgmemory audit` 发现项和校验错误。这些案例专门攻击权限规则：未知和仿冒的参与者、角色变更、同一时刻的决策、
+撤销链、截止时间与文件顺序、伪造证据、格式错误的日志，以及一份 GitHub 导入数据。
+[实测结果](benchmarks/orgmemory/RESULTS.md)中 590 项检查通过，8 项失败来自一个发现：写进 `policy.json` 的角色变更
+也会作用于过去的事件（请改为记录在 `policy-log.jsonl` 中）。首轮评测的另一个发现，JSON 重复键，现在会被拒绝。运行 `python benchmarks/orgmemory/run.py` 即可离线评测，任何不符都会以退出码 1 结束。
+
 [GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件（设为 `memory: auto` 时则是 `memfalsify discover`
 找到的全部指令文件）与仓库证据核对，并把报告放入任务摘要。
 默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。

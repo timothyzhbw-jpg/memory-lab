@@ -1,0 +1,15 @@
+{"id": "m01", "timestamp": "2026-09-01T09:00:00Z", "actor": "buyer@acme", "action": "request", "subject": "Mobile app", "evidence_ids": ["q-m01"]}
+{"id": "m02", "timestamp": "2026-09-02T09:00:00Z", "actor": "zhou", "action": "approve", "subject": "Mobile app", "evidence_ids": ["q-m02"]}
+{"id": "m03", "timestamp": "2026-09-03T00:00:00Z", "actor": "buyer@acme", "action": "request", "subject": "Mobile app", "evidence_ids": ["q-m03"]}
+{"id": "o01", "timestamp": "2026-09-01T10:00:00Z", "actor": "lin", "action": "request", "subject": "Offline mode", "evidence_ids": ["q-o01"]}
+{"id": "o02", "timestamp": "2026-09-02T10:00:00Z", "actor": "zhou", "action": "reject", "subject": "Offline mode", "evidence_ids": ["q-o02"]}
+{"id": "o03", "timestamp": "2026-09-04T10:00:00Z", "actor": "wu", "action": "reconsider", "subject": "Offline mode", "evidence_ids": ["q-o03"]}
+{"id": "o04", "timestamp": "2026-09-05T10:00:00Z", "actor": "buyer@acme", "action": "reconsider", "subject": "Offline mode", "evidence_ids": ["q-o04"]}
+{"id": "o05", "timestamp": "2026-09-10T10:00:00Z", "actor": "zhou", "action": "reject", "subject": "Offline mode", "evidence_ids": ["q-o05"]}
+{"id": "b01", "timestamp": "2026-09-01T11:00:00Z", "actor": "zhou", "action": "request", "subject": "Beta flag", "evidence_ids": ["q-b01"]}
+{"id": "b02", "timestamp": "2026-09-02T11:00:00Z", "actor": "zhou", "action": "approve", "subject": "Beta flag", "evidence_ids": ["q-b02"]}
+{"id": "d01", "timestamp": "2026-09-01T12:00:00Z", "actor": "lin", "action": "request", "subject": "Dark launch", "evidence_ids": ["q-d01"]}
+{"id": "d02", "timestamp": "2026-09-01T13:00:00Z", "actor": "zhou", "action": "approve", "subject": "Dark launch", "evidence_ids": ["q-d02"]}
+{"id": "d03", "timestamp": "2026-09-02T00:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Dark launch", "supersedes": "d02", "evidence_ids": ["q-d03"]}
+{"id": "d04", "timestamp": "2026-09-02T06:00:00Z", "actor": "lin", "action": "request", "subject": "Dark launch", "evidence_ids": ["q-d04"]}
+{"id": "n01", "timestamp": "2026-09-10T09:00:00Z", "actor": "lin", "action": "reconsider", "subject": "Night mode", "evidence_ids": ["q-n01"]}

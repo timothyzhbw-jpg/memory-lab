@@ -1,0 +1,4 @@
+GitHub review 2204 on acme/api#2 by gh:zhou-pm:5003 (User) at 2026-10-03T09:00:00Z: approved on commit 9b8a7c6d5e4f
+{"author_association":"MEMBER","commit_id":"9b8a7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3","event":"reviewed","id":2204,"kind":"review","number":2,"repo":"acme/api","repo_id":2002,"state":"approved","submitted_at":"2026-10-03T09:00:00Z","user":{"id":5003,"login":"zhou-pm","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Per-tenant limits look right.

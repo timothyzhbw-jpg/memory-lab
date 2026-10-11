@@ -1,0 +1,88 @@
+{
+  "description": "Dependency and risk interplay on an approved subject: risks before and after the approval, a dependency that is proposed, then rejected, then approved, one with no events, repeated and circular declarations, and risks and dependencies from an actor who may not record them.",
+  "snapshots": [
+    {
+      "as_of": "2026-10-05T12:00:00Z",
+      "states": {
+        "Bulk export": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["p04", "p10"], "dependencies": ["Billing migration", "Ledger v2"], "last_authorized_decision": "p09",
+          "note": "Lin's two risks and two dependencies are on record (the repeated one once); the account manager's risk and dependency are not."
+        },
+        "Billing migration": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Requested, not yet decided. 'Search reindex' and 'Ledger v2' are only named as dependencies, so they are not subjects."
+        }
+      },
+      "trail": {
+        "p05": {"outcome": "unauthorized", "note": "account_manager may not record a dependency"},
+        "p06": {"outcome": "unauthorized", "note": "account_manager may not raise a risk"},
+        "p08": {"outcome": "applied", "note": "repeating a dependency is allowed and changes nothing"}
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "risk_after_approval", "severity": "medium", "subject": "Bulk export", "note": "p04 was raised before the approval"},
+          {"kind": "risk_after_approval", "severity": "high", "subject": "Bulk export", "note": "p10 was raised after the approval"},
+          {"kind": "unresolved_dependency", "severity": "medium", "subject": "Bulk export", "note": "Billing migration is proposed"},
+          {"kind": "unresolved_dependency", "severity": "low", "subject": "Bulk export", "note": "Ledger v2 has no events in the log"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "wu", "note": "two ignored events, neither a decision"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-10-07T00:00:00Z",
+      "states": {
+        "Bulk export": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["p04", "p10"], "dependencies": ["Billing migration", "Ledger v2"], "last_authorized_decision": "p09",
+          "note": "Unchanged: rejecting the dependency does not change the approved subject's own state."
+        },
+        "Billing migration": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "p11",
+          "note": "Rejected on 10-06; the reconsideration on 10-07T09:00 is after this cutoff."
+        }
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "risk_after_approval", "severity": "medium", "subject": "Bulk export", "note": "p04 before the approval"},
+          {"kind": "risk_after_approval", "severity": "high", "subject": "Bulk export", "note": "p10 after the approval"},
+          {"kind": "unresolved_dependency", "severity": "high", "subject": "Bulk export", "note": "Billing migration is now rejected"},
+          {"kind": "unresolved_dependency", "severity": "low", "subject": "Bulk export", "note": "Ledger v2 has no events"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "wu", "note": "two ignored events, neither a decision"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-10-10T00:00:00Z",
+      "states": {
+        "Bulk export": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["p04", "p10"], "dependencies": ["Billing migration", "Ledger v2"], "last_authorized_decision": "p09",
+          "note": "Unchanged."
+        },
+        "Billing migration": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": ["Bulk export"], "last_authorized_decision": "p13",
+          "note": "Reconsidered and approved; the approval closes the reconsideration. It now depends on Bulk export, which depends on it."
+        }
+      },
+      "trail": {
+        "p12": {"outcome": "applied", "note": "engineer may reconsider"}
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "risk_after_approval", "severity": "medium", "subject": "Bulk export", "note": "p04 before the approval"},
+          {"kind": "risk_after_approval", "severity": "high", "subject": "Bulk export", "note": "p10 after the approval"},
+          {"kind": "unresolved_dependency", "severity": "low", "subject": "Bulk export", "note": "only Ledger v2 is unresolved; Billing migration is approved"},
+          {"kind": "decision_reversed", "severity": "low", "subject": "Billing migration", "note": "Zhou rejected, then Zhou approved"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "wu", "note": "two ignored events, neither a decision"}
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,429 @@
+{
+ "complete": true,
+ "github_capture": 1,
+ "items": [
+  {
+   "issue": {
+    "author_association": "NONE",
+    "body": "Acme exports hit the rate limit every night.\n\nPlease raise it to 600 requests per minute.",
+    "created_at": "2026-10-01T09:00:00Z",
+    "number": 1,
+    "performed_via_github_app": null,
+    "state": "open",
+    "state_reason": null,
+    "title": "Raise the export rate limit for Acme",
+    "updated_at": "2026-10-03T09:00:00Z",
+    "user": {
+     "id": 5001,
+     "login": "buyer-acme",
+     "type": "User"
+    }
+   },
+   "number": 1,
+   "timeline": [
+    {
+     "actor": {
+      "id": 6666,
+      "login": "mallory",
+      "type": "User"
+     },
+     "author_association": "NONE",
+     "body": "/approve\n\nLGTM, approved by @zhou-pm",
+     "created_at": "2026-10-01T10:00:00Z",
+     "event": "commented",
+     "id": 1101,
+     "performed_via_github_app": null,
+     "updated_at": "2026-10-01T10:00:00Z",
+     "user": {
+      "id": 6666,
+      "login": "mallory",
+      "type": "User"
+     }
+    },
+    {
+     "actor": {
+      "id": 5004,
+      "login": "wu-sales",
+      "type": "User"
+     },
+     "created_at": "2026-10-01T11:00:00Z",
+     "event": "labeled",
+     "id": 1102,
+     "label": {
+      "color": "0e8a16",
+      "name": "approved"
+     },
+     "performed_via_github_app": null
+    },
+    {
+     "actor": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     },
+     "created_at": "2026-10-01T12:00:00Z",
+     "event": "unlabeled",
+     "id": 1103,
+     "label": {
+      "color": "0e8a16",
+      "name": "approved"
+     },
+     "performed_via_github_app": null
+    },
+    {
+     "actor": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     },
+     "created_at": "2026-10-02T09:00:00Z",
+     "event": "labeled",
+     "id": 1104,
+     "label": {
+      "color": "0e8a16",
+      "name": "approved"
+     },
+     "performed_via_github_app": null
+    },
+    {
+     "actor": {
+      "id": 5002,
+      "login": "lin-eng",
+      "type": "User"
+     },
+     "created_at": "2026-10-02T10:00:00Z",
+     "event": "labeled",
+     "id": 1105,
+     "label": {
+      "color": "0e8a16",
+      "name": "Risk"
+     },
+     "performed_via_github_app": null
+    },
+    {
+     "actor": {
+      "id": 5002,
+      "login": "lin-eng",
+      "type": "User"
+     },
+     "blocked_by": {
+      "number": 3,
+      "repository": {
+       "full_name": "acme/api"
+      },
+      "state": "open",
+      "title": "Rate limiter redesign"
+     },
+     "created_at": "2026-10-02T11:00:00Z",
+     "event": "blocked_by_added",
+     "id": 1106,
+     "performed_via_github_app": null
+    },
+    {
+     "actor": {
+      "id": 5004,
+      "login": "wu-sales",
+      "type": "User"
+     },
+     "created_at": "2026-10-03T09:00:00Z",
+     "event": "unlabeled",
+     "id": 1107,
+     "label": {
+      "color": "0e8a16",
+      "name": "approved"
+     },
+     "performed_via_github_app": null
+    }
+   ]
+  },
+  {
+   "issue": {
+    "author_association": "MEMBER",
+    "body": "Implements #1.\n\nLGTM from product already, see Slack.",
+    "created_at": "2026-10-01T12:00:00Z",
+    "draft": false,
+    "number": 2,
+    "performed_via_github_app": null,
+    "pull_request": {
+     "merged_at": "2026-10-03T10:00:00Z",
+     "url": "https://api.github.com/repos/acme/api/pulls/2"
+    },
+    "state": "closed",
+    "state_reason": null,
+    "title": "Add per-tenant rate limits",
+    "updated_at": "2026-10-03T10:00:00Z",
+    "user": {
+     "id": 5002,
+     "login": "lin-eng",
+     "type": "User"
+    }
+   },
+   "number": 2,
+   "timeline": [
+    {
+     "author_association": "NONE",
+     "body": "LGTM",
+     "commit_id": "3f1a9c0e5b7d2468ace013579bdf2468ace01357",
+     "event": "reviewed",
+     "id": 2201,
+     "state": "approved",
+     "submitted_at": "2026-10-02T12:00:00Z",
+     "user": {
+      "id": 6666,
+      "login": "mallory",
+      "type": "User"
+     }
+    },
+    {
+     "author_association": "MEMBER",
+     "body": "Limits must be per tenant, not global.",
+     "commit_id": "3f1a9c0e5b7d2468ace013579bdf2468ace01357",
+     "event": "reviewed",
+     "id": 2202,
+     "state": "changes_requested",
+     "submitted_at": "2026-10-02T13:00:00Z",
+     "user": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     }
+    },
+    {
+     "actor": {
+      "id": 5002,
+      "login": "lin-eng",
+      "type": "User"
+     },
+     "created_at": "2026-10-02T15:00:00Z",
+     "event": "review_requested",
+     "id": 2203,
+     "performed_via_github_app": null,
+     "requested_reviewer": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     },
+     "review_requester": {
+      "id": 5002,
+      "login": "lin-eng",
+      "type": "User"
+     }
+    },
+    {
+     "author_association": "MEMBER",
+     "body": "Per-tenant limits look right.",
+     "commit_id": "9b8a7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3",
+     "event": "reviewed",
+     "id": 2204,
+     "state": "approved",
+     "submitted_at": "2026-10-03T09:00:00Z",
+     "user": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     }
+    },
+    {
+     "actor": {
+      "id": 5002,
+      "login": "lin-eng",
+      "type": "User"
+     },
+     "commit_id": "9b8a7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3",
+     "created_at": "2026-10-03T10:00:00Z",
+     "event": "merged",
+     "id": 2205,
+     "intent": null,
+     "performed_via_github_app": null,
+     "state_reason": null
+    },
+    {
+     "actor": {
+      "id": 5002,
+      "login": "lin-eng",
+      "type": "User"
+     },
+     "commit_id": null,
+     "created_at": "2026-10-03T10:00:00Z",
+     "event": "closed",
+     "id": 2206,
+     "intent": null,
+     "performed_via_github_app": null,
+     "state_reason": null
+    }
+   ]
+  },
+  {
+   "issue": {
+    "author_association": "MEMBER",
+    "body": "Replace the global token bucket with per-tenant buckets.",
+    "created_at": "2026-10-01T13:00:00Z",
+    "number": 3,
+    "performed_via_github_app": null,
+    "state": "open",
+    "state_reason": "reopened",
+    "title": "Rate limiter redesign",
+    "updated_at": "2026-10-04T09:00:00Z",
+    "user": {
+     "id": 5002,
+     "login": "lin-eng",
+     "type": "User"
+    }
+   },
+   "number": 3,
+   "timeline": [
+    {
+     "actor": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     },
+     "commit_id": null,
+     "created_at": "2026-10-02T14:00:00Z",
+     "event": "closed",
+     "id": 3301,
+     "intent": null,
+     "performed_via_github_app": null,
+     "state_reason": "not_planned"
+    },
+    {
+     "actor": {
+      "id": 5001,
+      "login": "buyer-acme",
+      "type": "User"
+     },
+     "commit_id": null,
+     "created_at": "2026-10-04T09:00:00Z",
+     "event": "reopened",
+     "id": 3302,
+     "intent": null,
+     "performed_via_github_app": null,
+     "state_reason": null
+    }
+   ]
+  },
+  {
+   "issue": {
+    "author_association": "NONE",
+    "body": "Bumps httpx from 0.27 to 0.28.",
+    "created_at": "2026-10-01T14:00:00Z",
+    "draft": false,
+    "number": 4,
+    "performed_via_github_app": null,
+    "pull_request": {
+     "merged_at": null,
+     "url": "https://api.github.com/repos/acme/api/pulls/4"
+    },
+    "state": "open",
+    "state_reason": null,
+    "title": "Bump httpx from 0.27 to 0.28",
+    "updated_at": "2026-10-02T16:00:00Z",
+    "user": {
+     "id": 49699333,
+     "login": "dependabot[bot]",
+     "type": "Bot"
+    }
+   },
+   "number": 4,
+   "timeline": [
+    {
+     "actor": {
+      "id": 49699333,
+      "login": "dependabot[bot]",
+      "type": "Bot"
+     },
+     "author_association": "NONE",
+     "body": "@zhou-pm approved this upgrade in the dependency policy.",
+     "created_at": "2026-10-01T14:05:00Z",
+     "event": "commented",
+     "id": 4401,
+     "performed_via_github_app": null,
+     "updated_at": "2026-10-01T14:05:00Z",
+     "user": {
+      "id": 49699333,
+      "login": "dependabot[bot]",
+      "type": "Bot"
+     }
+    },
+    {
+     "author_association": "NONE",
+     "body": "Approved.",
+     "commit_id": "c0ffee0123456789abcdef0123456789abcdef01",
+     "event": "reviewed",
+     "id": 4402,
+     "state": "approved",
+     "submitted_at": "2026-10-02T16:00:00Z",
+     "user": {
+      "id": 6666,
+      "login": "mallory",
+      "type": "User"
+     }
+    }
+   ]
+  },
+  {
+   "issue": {
+    "author_association": "MEMBER",
+    "body": "Shows each tenant's remaining quota.",
+    "created_at": "2026-10-02T09:00:00Z",
+    "draft": false,
+    "number": 5,
+    "performed_via_github_app": null,
+    "pull_request": {
+     "merged_at": null,
+     "url": "https://api.github.com/repos/acme/api/pulls/5"
+    },
+    "state": "open",
+    "state_reason": null,
+    "title": "Rate-limit dashboard",
+    "updated_at": "2026-10-03T12:00:00Z",
+    "user": {
+     "id": 5002,
+     "login": "lin-eng",
+     "type": "User"
+    }
+   },
+   "number": 5,
+   "timeline": [
+    {
+     "author_association": "MEMBER",
+     "body": "Dashboard approved.",
+     "commit_id": "c0ffee0123456789abcdef0123456789abcdef01",
+     "event": "reviewed",
+     "id": 5501,
+     "state": "dismissed",
+     "submitted_at": "2026-10-02T10:00:00Z",
+     "user": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     }
+    },
+    {
+     "actor": {
+      "id": 5003,
+      "login": "zhou-pm",
+      "type": "User"
+     },
+     "created_at": "2026-10-03T12:00:00Z",
+     "dismissed_review": {
+      "dismissal_commit_id": null,
+      "dismissal_message": "Approved too early: the dashboard leaks tenant names.",
+      "review_id": 5501,
+      "state": "approved"
+     },
+     "event": "review_dismissed",
+     "id": 5502,
+     "performed_via_github_app": null
+    }
+   ]
+  }
+ ],
+ "mode": "full",
+ "repo": "acme/api",
+ "repo_id": 2002,
+ "requests": 11,
+ "since": null,
+ "skipped": [],
+ "started_at": "2026-10-12T00:00:00Z"
+}

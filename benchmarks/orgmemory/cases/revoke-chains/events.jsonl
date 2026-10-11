@@ -1,0 +1,18 @@
+{"id": "r01", "timestamp": "2026-10-01T09:00:00Z", "actor": "lin", "action": "request", "subject": "Data retention", "evidence_ids": ["q-r01"]}
+{"id": "r02", "timestamp": "2026-10-02T09:00:00Z", "actor": "zhou", "action": "approve", "subject": "Data retention", "evidence_ids": ["q-r02"]}
+{"id": "r03", "timestamp": "2026-10-03T09:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Data retention", "supersedes": "r02", "evidence_ids": ["q-r03"]}
+{"id": "r04", "timestamp": "2026-10-04T09:00:00Z", "actor": "ana", "action": "approve", "subject": "Data retention", "evidence_ids": ["q-r04"]}
+{"id": "r05", "timestamp": "2026-10-05T09:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Data retention", "supersedes": "r02", "evidence_ids": ["q-r05"]}
+{"id": "r06", "timestamp": "2026-10-06T09:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Data retention", "supersedes": "r03", "evidence_ids": ["q-r06"]}
+{"id": "r07", "timestamp": "2026-10-07T09:00:00Z", "actor": "ana", "action": "revoke", "subject": "Data retention", "supersedes": "r04", "evidence_ids": ["q-r07"]}
+{"id": "r08", "timestamp": "2026-10-08T09:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Data retention", "supersedes": "r07", "evidence_ids": ["q-r08"]}
+{"id": "r09", "timestamp": "2026-10-09T09:00:00Z", "actor": "lin", "action": "revoke", "subject": "Data retention", "supersedes": "r08", "evidence_ids": ["q-r09"]}
+{"id": "x01", "timestamp": "2026-10-01T10:00:00Z", "actor": "lin", "action": "request", "subject": "Retention exceptions", "evidence_ids": ["q-x01"]}
+{"id": "x02", "timestamp": "2026-10-02T10:00:00Z", "actor": "zhou", "action": "approve", "subject": "Retention exceptions", "evidence_ids": ["q-x02"]}
+{"id": "x03", "timestamp": "2026-10-03T10:00:00Z", "actor": "zhou", "action": "reject", "subject": "Retention exceptions", "evidence_ids": ["q-x03"]}
+{"id": "x04", "timestamp": "2026-10-04T10:00:00Z", "actor": "ana", "action": "approve", "subject": "Retention exceptions", "evidence_ids": ["q-x04"]}
+{"id": "k01", "timestamp": "2026-10-01T11:00:00Z", "actor": "lin", "action": "request", "subject": "Key rotation", "evidence_ids": ["q-k01"]}
+{"id": "k02", "timestamp": "2026-10-02T11:00:00Z", "actor": "zhou", "action": "approve", "subject": "Key rotation", "evidence_ids": ["q-k02"]}
+{"id": "k03", "timestamp": "2026-10-03T11:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Key rotation", "supersedes": "x02", "evidence_ids": ["q-k03"]}
+{"id": "k04", "timestamp": "2026-10-04T11:00:00Z", "actor": "ana", "action": "reject", "subject": "Key rotation", "evidence_ids": ["q-k04"]}
+{"id": "k00", "timestamp": "2026-09-30T09:00:00Z", "actor": "zhou", "action": "revoke", "subject": "Key rotation", "supersedes": "k02", "evidence_ids": ["q-k00"]}

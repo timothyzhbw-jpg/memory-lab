@@ -1,0 +1,100 @@
+{
+  "description": "A GitHub import (orgmemory github convert of capture.json): approve labels added and removed by the wrong people, a dismissed review, a merge by a non-approver, an unmapped reviewer, a bot-opened PR, a reopen after a not-planned close, and a blocked-by link to a rejected issue.",
+  "validation": [
+    {"name": "imported", "error": null, "note": "the dataset exactly as the importer wrote it validates"}
+  ],
+  "snapshots": [
+    {
+      "as_of": "2026-10-02T23:59:59Z",
+      "states": {
+        "acme/api#1": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["gh:acme/api#1/event/1105"], "dependencies": ["acme/api#3"],
+          "last_authorized_decision": "gh:acme/api#1/event/1104",
+          "note": "The product manager's 'approved' label applies; the account manager's earlier label and the '/approve' comment do not. The 'Risk' label matches 'risk' case-insensitively."
+        },
+        "acme/api#2": {
+          "status": "rejected", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": [], "dependencies": [], "last_authorized_decision": "gh:acme/api#2/review/2202",
+          "note": "Changes requested by the product manager is a reject; re-requesting that reviewer is a request, so a reconsideration."
+        },
+        "acme/api#3": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "gh:acme/api#3/event/3301",
+          "note": "Closed as not planned by the product manager."
+        },
+        "acme/api#4": {
+          "status": "proposed", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "A bot's PR is only a comment, so nothing is pending; the unmapped account's approving review is ignored."
+        },
+        "acme/api#5": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "gh:acme/api#5/review/5501",
+          "note": "A review later dismissed keeps its original verdict (approved) until the dismissal takes effect."
+        }
+      },
+      "trail": {
+        "gh:acme/api#1/comment/1101": {"outcome": "unauthorized", "note": "an unmapped account's '/approve' text is a comment, and the account has no role"},
+        "gh:acme/api#1/event/1103": {"outcome": "invalid_supersession", "note": "removing the account manager's label withdraws a decision that never applied"},
+        "gh:acme/api#2/review/2201": {"outcome": "unauthorized", "note": "an unmapped account's approving review"},
+        "gh:acme/api#4/opened": {"outcome": "unauthorized", "note": "a bot's opening is recorded as a comment by an actor with no role"},
+        "gh:acme/api#5/event/5502": {"outcome": "not_replayed", "note": "the dismissal is on 10-03"}
+      }
+    },
+    {
+      "as_of": "2026-10-20T00:00:00Z",
+      "states": {
+        "acme/api#1": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["gh:acme/api#1/event/1105"], "dependencies": ["acme/api#3"],
+          "last_authorized_decision": "gh:acme/api#1/event/1104",
+          "note": "The account manager's removal of the label is an ignored revoke."
+        },
+        "acme/api#2": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "gh:acme/api#2/review/2204",
+          "note": "The product manager's approving review decides; the engineer's merge is an ignored approve."
+        },
+        "acme/api#3": {
+          "status": "rejected", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": [], "dependencies": [], "last_authorized_decision": "gh:acme/api#3/event/3301",
+          "note": "The customer's reopen cannot withdraw the close, but the request that follows is a reconsideration."
+        },
+        "acme/api#4": {
+          "status": "proposed", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Unchanged."
+        },
+        "acme/api#5": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "gh:acme/api#5/event/5502",
+          "note": "The product manager dismissed their own approving review: a valid revoke."
+        }
+      },
+      "trail": {
+        "gh:acme/api#1/event/1107": {"outcome": "unauthorized", "note": "account_manager may not revoke"},
+        "gh:acme/api#2/event/2205": {"outcome": "unauthorized", "note": "a merge by an engineer is an approve the policy ignores"},
+        "gh:acme/api#3/event/3302": {"outcome": "unauthorized", "note": "a customer's reopen is a revoke the policy ignores"},
+        "gh:acme/api#3/event/3302/request": {"outcome": "applied", "note": "customer may request"},
+        "gh:acme/api#4/review/4402": {"outcome": "unauthorized", "note": "an unmapped account's approving review"},
+        "gh:acme/api#5/event/5502": {"outcome": "applied", "note": "product_manager may revoke, and the review is the decision in force"}
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "risk_after_approval", "severity": "high", "subject": "acme/api#1", "note": "the 'Risk' label came an hour after the approval"},
+          {"kind": "unresolved_dependency", "severity": "high", "subject": "acme/api#1", "note": "blocked by acme/api#3, which is rejected"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "acme/api#1", "note": "the label removal named the ignored label"},
+          {"kind": "decision_reversed", "severity": "low", "subject": "acme/api#2", "note": "the same reviewer requested changes, then approved"},
+          {"kind": "stale_reconsideration", "severity": "medium", "subject": "acme/api#3", "note": "open since the reopen on 10-04"},
+          {"kind": "stale_pending_approval", "severity": "medium", "subject": "acme/api#5", "note": "awaiting product_manager since the dismissal on 10-03, not since the PR opened"},
+          {"kind": "unauthorized_attempts", "severity": "high", "actor": "gh:wu-sales:5004", "note": "an ignored approve label and an ignored label removal"},
+          {"kind": "unauthorized_attempts", "severity": "high", "actor": "gh:mallory:6666", "note": "two ignored approving reviews; the comment is not counted"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "gh:lin-eng:5002", "note": "one ignored merge"},
+          {"kind": "unauthorized_attempts", "severity": "medium", "actor": "gh:buyer-acme:5001", "note": "one ignored reopen revoke"}
+        ]
+      }
+    }
+  ]
+}

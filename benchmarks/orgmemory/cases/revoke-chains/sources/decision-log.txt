@@ -1,0 +1,19 @@
+Data governance decision log
+Lin: we need a data retention rule.
+Zhou: data retention rule approved.
+Zhou: withdrawing my approval of the retention rule.
+Ana: retention rule approved with a 90-day window.
+Zhou: withdrawing the October 2 approval again.
+Zhou: withdrawing my withdrawal of October 3.
+Ana: withdrawing my approval pending legal.
+Zhou: Ana's withdrawal is withdrawn.
+Lin: I withdraw Zhou's last change.
+Lin: we need retention exceptions.
+Zhou: retention exceptions approved.
+Zhou: retention exceptions rejected after all.
+Ana: retention exceptions approved for legal holds.
+Lin: we need key rotation.
+Zhou: key rotation approved.
+Zhou: withdrawing the exceptions approval of October 2.
+Ana: key rotation rejected until the HSM arrives.
+Zhou (backdated to September 30): withdrawing the key rotation approval.

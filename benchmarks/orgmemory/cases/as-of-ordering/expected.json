@@ -1,0 +1,137 @@
+{
+  "description": "As-of cutoffs and effective-time ordering versus file order: entries appended out of order and in other UTC offsets replay by effective time, the cutoff is inclusive, ties keep file order (a revoke filed before its same-instant target is invalid), and the staleness boundary is strict.",
+  "snapshots": [
+    {
+      "as_of": "2026-09-01T00:00:00Z",
+      "states": {},
+      "audit": {"stale_days": 14, "findings": []}
+    },
+    {
+      "as_of": "2026-10-03T11:59:59+09:00",
+      "states": {
+        "Invoice redesign": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "The approve is dated 12:00+09:00 (03:00Z), one second after this cutoff (02:59:59Z); the reject is filed first but dated 10-05."
+        },
+        "Tie order": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b03",
+          "note": "The revoke and the approve share an instant; the revoke is earlier in the file, so it replays first and names a decision not yet made."
+        }
+      },
+      "trail": {
+        "a02": {"outcome": "not_replayed", "note": "03:00Z is after 02:59:59Z"},
+        "a03": {"outcome": "not_replayed", "note": "first line of the file, but effective on 10-05"},
+        "b02": {"outcome": "invalid_supersession", "note": "same instant as b03 but earlier in the file"}
+      }
+    },
+    {
+      "as_of": "2026-10-03T03:00:00Z",
+      "states": {
+        "Invoice redesign": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "a02",
+          "note": "A cutoff equal to an event's effective time includes the event."
+        },
+        "Tie order": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b03",
+          "note": "Unchanged."
+        }
+      },
+      "trail": {
+        "a02": {"outcome": "applied", "note": "dated exactly at the cutoff"}
+      }
+    },
+    {
+      "as_of": "2026-10-04T00:00:00Z",
+      "states": {
+        "Invoice redesign": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["a05"], "dependencies": [], "last_authorized_decision": "a02",
+          "note": "The risk was appended last but is dated exactly at this cutoff."
+        },
+        "Tie order": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b03",
+          "note": "Unchanged."
+        }
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "risk_after_approval", "severity": "high", "subject": "Invoice redesign", "note": "the risk takes effect after the approval, although it was filed after the later reject"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Tie order", "note": "the revoke filed before its same-instant target"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-10-05T12:00:00Z",
+      "states": {
+        "Invoice redesign": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": ["a05"], "dependencies": [], "last_authorized_decision": "a03",
+          "note": "By effective time the reject (10-05) follows the approve (10-03), even though the reject is the first line of the file."
+        },
+        "Tie order": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b03",
+          "note": "Unchanged."
+        }
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "decision_reversed", "severity": "low", "subject": "Invoice redesign", "note": "Zhou approved, then Zhou rejected, in effective-time order"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Tie order", "note": "the revoke filed before its same-instant target"}
+        ]
+      }
+    },
+    {
+      "as_of": null,
+      "states": {
+        "Invoice redesign": {
+          "status": "rejected", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": ["a05"], "dependencies": [], "last_authorized_decision": "a03",
+          "note": "The customer's second request after the reject is a reconsideration awaiting product_manager."
+        },
+        "Tie order": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b03",
+          "note": "Unchanged."
+        },
+        "Late entry": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "Without a cutoff the whole log replays, including November."
+        }
+      },
+      "trail": {
+        "l01": {"outcome": "applied", "note": "engineer may request"}
+      },
+      "order": ["a01", "a02", "a05", "a03", "a04"]
+    },
+    {
+      "as_of": "2026-10-20T00:00:00Z",
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "decision_reversed", "severity": "low", "subject": "Invoice redesign", "note": "as before"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Tie order", "note": "as before"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-10-20T00:00:01Z",
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "stale_reconsideration", "severity": "medium", "subject": "Invoice redesign", "note": "open since 10-06T00:00Z: exactly 14 days at 10-20T00:00Z is not stale, one second later it is"},
+          {"kind": "decision_reversed", "severity": "low", "subject": "Invoice redesign", "note": "as before"},
+          {"kind": "invalid_supersession", "severity": "medium", "subject": "Tie order", "note": "as before"}
+        ]
+      }
+    }
+  ]
+}

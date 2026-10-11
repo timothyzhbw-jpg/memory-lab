@@ -1,0 +1,7 @@
+GitHub pull request acme/api#2 opened by gh:lin-eng:5002 (User) at 2026-10-01T12:00:00Z
+{"author_association":"MEMBER","created_at":"2026-10-01T12:00:00Z","draft":false,"kind":"issue","number":2,"pull_request":true,"repo":"acme/api","repo_id":2002,"state":"closed","updated_at":"2026-10-03T10:00:00Z","user":{"id":5002,"login":"lin-eng","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Add per-tenant rate limits
+Implements #1.
+
+LGTM from product already, see Slack.

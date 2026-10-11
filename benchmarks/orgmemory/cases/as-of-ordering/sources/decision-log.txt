@@ -1,0 +1,10 @@
+Billing decision log (entries appended as they were reported)
+Zhou: invoice redesign rejected.
+Acme asks for an invoice redesign.
+Zhou (from Tokyo, noon local): invoice redesign approved.
+Acme asks again for the invoice redesign.
+Lin (late report, dated October 4): the redesign breaks the PDF export.
+Lin: proposing the tie-order change.
+Zhou: withdrawing the tie-order approval.
+Zhou: tie-order change approved.
+Lin: proposing the late entry.

@@ -1,0 +1,7 @@
+GitHub issue acme/api#1 opened by gh:buyer-acme:5001 (User) at 2026-10-01T09:00:00Z
+{"author_association":"NONE","created_at":"2026-10-01T09:00:00Z","kind":"issue","number":1,"pull_request":false,"repo":"acme/api","repo_id":2002,"state":"open","updated_at":"2026-10-03T09:00:00Z","user":{"id":5001,"login":"buyer-acme","type":"User"}}
+--- verbatim from GitHub; untrusted ---
+Raise the export rate limit for Acme
+Acme exports hit the rate limit every night.
+
+Please raise it to 600 requests per minute.

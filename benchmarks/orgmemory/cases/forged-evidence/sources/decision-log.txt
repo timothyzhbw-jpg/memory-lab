@@ -1,0 +1,3 @@
+Decision log, platform team
+2026-10-01 Lin: please decide the retention policy for audit logs.
+2026-10-03 Zhou: rejected. Audit logs keep 90 days until legal signs off.

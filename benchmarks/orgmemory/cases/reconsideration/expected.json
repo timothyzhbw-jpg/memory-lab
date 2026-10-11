@@ -1,0 +1,95 @@
+{
+  "description": "Reconsideration after approval and after rejection, a reconsider from a role that may not, a request after a revoke (not a reconsideration), a reconsider before any decision, self-approval, and stale pending approvals and reconsiderations at the exact 14-day boundary and with --stale-days 0.",
+  "snapshots": [
+    {
+      "as_of": "2026-09-08T00:00:00Z",
+      "states": {
+        "Mobile app": {
+          "status": "approved", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": [], "dependencies": [], "last_authorized_decision": "m02",
+          "note": "A repeated request after an approval keeps the approval and opens a reconsideration."
+        },
+        "Offline mode": {
+          "status": "rejected", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": [], "dependencies": [], "last_authorized_decision": "o02",
+          "note": "In this policy an account manager may not reconsider, so only the customer's reconsider applies."
+        },
+        "Beta flag": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b02",
+          "note": "Requested and approved by the same product manager."
+        },
+        "Dark launch": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "d03",
+          "note": "After the approval was revoked no decision is in force, so the next request is not a reconsideration."
+        }
+      },
+      "trail": {
+        "o03": {"outcome": "unauthorized", "note": "account_manager may not reconsider in this policy"},
+        "o04": {"outcome": "applied", "note": "customer may reconsider"},
+        "d04": {"outcome": "applied", "note": "engineer may request"}
+      },
+      "audit": {
+        "stale_days": 0,
+        "findings": [
+          {"kind": "stale_reconsideration", "severity": "medium", "subject": "Mobile app", "note": "with --stale-days 0 any open reconsideration is stale"},
+          {"kind": "stale_reconsideration", "severity": "medium", "subject": "Offline mode", "note": "open since the customer's reconsider"},
+          {"kind": "stale_pending_approval", "severity": "medium", "subject": "Dark launch", "note": "awaiting product_manager since the revoke; no reconsideration is open"},
+          {"kind": "self_approval", "severity": "low", "subject": "Beta flag", "actor": "zhou", "note": "zhou requested, then approved"},
+          {"kind": "unauthorized_attempts", "severity": "low", "actor": "wu", "note": "a single ignored event that is not a decision"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-09-17T00:00:00Z",
+      "states": {
+        "Mobile app": {
+          "status": "approved", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": [], "dependencies": [], "last_authorized_decision": "m02",
+          "note": "Still awaiting a decision on the reconsideration."
+        },
+        "Offline mode": {
+          "status": "rejected", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "o05",
+          "note": "A second reject answers the reconsideration; rejecting twice is not a reversal."
+        },
+        "Beta flag": {
+          "status": "approved", "pending_approval": [], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "b02",
+          "note": "Unchanged."
+        },
+        "Dark launch": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": false,
+          "risks": [], "dependencies": [], "last_authorized_decision": "d03",
+          "note": "Unchanged."
+        },
+        "Night mode": {
+          "status": "proposed", "pending_approval": ["product_manager"], "reconsideration_requested": true,
+          "risks": [], "dependencies": [], "last_authorized_decision": null,
+          "note": "A reconsider always opens a reconsideration, even with no decision yet."
+        }
+      },
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "stale_pending_approval", "severity": "medium", "subject": "Dark launch", "note": "15 days since the revoke on 09-02T00:00Z"},
+          {"kind": "self_approval", "severity": "low", "subject": "Beta flag", "actor": "zhou", "note": "zhou requested, then approved"},
+          {"kind": "unauthorized_attempts", "severity": "low", "actor": "wu", "note": "a single ignored reconsider"}
+        ]
+      }
+    },
+    {
+      "as_of": "2026-09-17T00:00:01Z",
+      "audit": {
+        "stale_days": 14,
+        "findings": [
+          {"kind": "stale_reconsideration", "severity": "medium", "subject": "Mobile app", "note": "open since 09-03T00:00Z: 14 days and one second is more than 14 days"},
+          {"kind": "stale_pending_approval", "severity": "medium", "subject": "Dark launch", "note": "as before"},
+          {"kind": "self_approval", "severity": "low", "subject": "Beta flag", "actor": "zhou", "note": "as before"},
+          {"kind": "unauthorized_attempts", "severity": "low", "actor": "wu", "note": "as before"}
+        ]
+      }
+    }
+  ]
+}
