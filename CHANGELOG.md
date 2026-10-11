@@ -16,7 +16,49 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Nothing yet.
+HTML reports. memfalsify's and orgmemory's `--format html` import `memcore.htmlpage`, so their next
+release needs a memlab-core release that has it; raise their memlab-core pins then.
+
+### memlab-core
+
+#### Added
+
+- `memcore.htmlpage`: building blocks for self-contained HTML report pages. A page has inline CSS, no
+  JavaScript and loads nothing, behind a `Content-Security-Policy` meta tag (`default-src 'none';
+  style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`) and `referrer` `no-referrer`. `text()`
+  HTML-escapes every value and shows control, format (bidi, zero-width, tag), separator and surrogate
+  characters as visible `U+XXXX` markers. Only `http` and `https` URIs become links (`link()`,
+  `safe_url()`), with `rel="noopener noreferrer"`. The page is 7-bit ASCII, follows
+  `prefers-color-scheme`, and its tables scroll sideways at phone width.
+
+### memfalsify
+
+#### Added
+
+- `--format html` on `audit` and `diff`: one self-contained page with the same content as the Markdown
+  report (summary table, findings grouped by status, every evidence quote with location, character range
+  and full SHA-256, issues and proposed actions; for `diff`, the changed, added and removed claims).
+  Works with `--output`. `history` stays `markdown` or `json`. The examples have `report.html` next to
+  `report.md`.
+
+#### Changed
+
+- An HTML report (a `<!DOCTYPE html>` page whose head names `memfalsify` as its generator) is skipped as
+  evidence, like the Markdown and JSON reports.
+
+### orgmemory
+
+#### Added
+
+- `--format html` on `replay` and `audit`. `replay`: a summary row per subject, then each subject's
+  state, authorizing decision with its quoted evidence, ignored attempts, conflicts and decision trail.
+  `audit`: the kind-by-severity table, then findings grouped by severity with every cited event and
+  quote. The examples have `replay-report.html` and `audit-report.html` next to the Markdown reports.
+
+### memlab-mcp
+
+- No change. The tools' `format` stays `markdown` or `json`: an MCP client reads text, and HTML is for
+  people, through the CLIs.
 
 ## memlab-core
 

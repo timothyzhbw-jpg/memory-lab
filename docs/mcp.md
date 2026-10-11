@@ -26,6 +26,8 @@ The MCP server requires POSIX `O_NOFOLLOW` and descriptor-relative opens (suppor
 
 For root-relative paths, a tool returns the text the matching command prints when run from that root. Some commands add one trailing newline. Audit report paths are canonicalized relative to the server root; a CLI invoked with absolute paths or symlink aliases can therefore print different path labels. `memfalsify claims` is the exception in shape: it prints JSONL, and `memfalsify_claims` returns those same objects as one JSON array.
 
+`format` is `markdown` or `json` on every tool. The CLIs' `--format html` pages are for people, not agents, and the server writes no files, so to share an HTML report, run the CLI.
+
 `reviews_file` requires `evidence_dir`. Omit optional paths or pass `null`; empty paths are errors. Memory links stay within the memory file's directory. Review references stay within the evidence directory, and dataset evidence references stay within the manifest's directory. Evidence scans skip outward file symlinks, directory symlinks and non-regular files. A dataset directory must contain `events.jsonl`, `policy.json`, and `evidence.jsonl`, with regular files as evidence sources.
 
 Invalid tool calls return MCP tool errors and leave the connection usable. Schema-validation errors report field names without rejected values; errors conceal outside-root path arguments, backend diagnostics and tracebacks. Model-verifier failures report a generic error suggesting SDK, credentials and backend checks.
