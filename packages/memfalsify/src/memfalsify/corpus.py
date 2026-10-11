@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -28,19 +30,30 @@ class Skipped(BaseModel):
     reason: str
 
 
-def scan(root: Path, exclude: list[Path] = ()) -> tuple[list[Passage], list[Skipped]]:
+def _matches(relative: str, patterns: list[str], directory: bool = False) -> bool:
+    """fnmatch against the root-relative POSIX path; a directory also matches as ``dir/`` so ``dir/*`` prunes it."""
+    names = (relative, relative + "/") if directory else (relative,)
+    return any(fnmatchcase(name, pattern) for name in names for pattern in patterns)
+
+
+def scan(root: Path, exclude: Iterable[str] = (),
+         memory_files: Iterable[Path] = ()) -> tuple[list[Passage], list[Skipped]]:
+    """Index ``root``. Files matching an ``exclude`` glob and the memory files themselves are silently left out."""
     root = Path(root).resolve()
-    excluded = {Path(p).resolve() for p in exclude}
+    patterns = [p.strip().removeprefix("./") for p in exclude if p.strip()]
+    excluded = {Path(p).resolve() for p in memory_files}
     passages, skipped = [], []
     for directory, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS)
+        base = Path(directory).relative_to(root)
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS
+                             and not _matches((base / d).as_posix(), patterns, directory=True))
         for name in sorted(filenames):
             if name.startswith("."):
                 continue
             path = Path(directory) / name
             relative = path.relative_to(root).as_posix()
             resolved = path.resolve()
-            if resolved in excluded:
+            if resolved in excluded or _matches(relative, patterns):
                 continue
             if not resolved.is_relative_to(root):
                 skipped.append(Skipped(path=relative, reason="symlink escapes evidence root"))

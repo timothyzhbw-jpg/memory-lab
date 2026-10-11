@@ -46,6 +46,16 @@ def build_verifier(choice: VerifierChoice, llm_model: str, jev_model: str, accep
     return DualVerifier(llm.LLMVerifier(llm_model), jev.JevVerifier(jev_model))
 
 
+MAX_JUDGED = 8
+
+
+def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_judged: int = MAX_JUDGED) -> dict:
+    """audit() passage limits: lexical judges every passage covering half the terms, models a bounded few."""
+    lexical = choice is VerifierChoice.lexical
+    return {"min_coverage": min_coverage if min_coverage is not None else 0.5 if lexical else 0.2,
+            "max_judged": None if lexical else max_judged}
+
+
 def _fail(message: str) -> None:
     typer.echo(f"error: {message}", err=True)
     raise typer.Exit(2)
@@ -55,6 +65,10 @@ def _fail(message: str) -> None:
 def audit_command(
     memory: Path = typer.Argument(..., exists=True, dir_okay=False, help="MEMORY.md to audit"),
     evidence: Optional[Path] = typer.Option(None, "--evidence", "-e", help="Directory of evidence files"),
+    exclude: Optional[list[str]] = typer.Option(
+        None, "--exclude", "-x", metavar="GLOB",
+        help="Leave matching evidence files out (fnmatch on paths relative to --evidence, e.g. 'examples/**'); "
+             "repeatable"),
     reviews: Optional[Path] = typer.Option(None, "--reviews", "-r", exists=True, dir_okay=False,
                                            help="JSONL of human-confirmed assertions"),
     fmt: Format = typer.Option(Format.markdown, "--format", "-f"),
@@ -71,19 +85,17 @@ def audit_command(
     jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual/cascade"),
     accept_at: float = typer.Option(0.8, min=0.0, max=1.0,
                                     help="--verifier cascade: accept Jev at this confidence, else ask the LLM"),
-    max_judged: int = typer.Option(8, min=1, help="Model verifiers: passages judged per memory (bounds API calls)"),
+    max_judged: int = typer.Option(MAX_JUDGED, min=1, help="Model verifiers: passages judged per memory (bounds API calls)"),
     min_coverage: Optional[float] = typer.Option(
         None, min=0.0, max=1.0,
         help="Share of a memory's terms a passage must contain to be judged (default 0.5 lexical, 0.2 models)"),
 ) -> None:
     """Audit MEMORY.md and print an evidence-cited report with proposed (unapplied) actions."""
-    lexical = verifier is VerifierChoice.lexical
     try:
         reference = date.fromisoformat(as_of) if as_of else None
         report = audit(memory, evidence, reviews, verifier=build_verifier(verifier, llm_model, jev_model, accept_at),
-                       as_of=reference, stale_days=stale_days, follow_links=follow_links,
-                       min_coverage=min_coverage if min_coverage is not None else 0.5 if lexical else 0.2,
-                       max_judged=None if lexical else max_judged)
+                       as_of=reference, stale_days=stale_days, follow_links=follow_links, exclude=exclude or (),
+                       **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
     text = to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n"
