@@ -234,7 +234,7 @@ class _Auditor:
         own = [e.event_id for e in trail if e.outcome == "applied" and e.action in ("request", "reconsider")
                and e.actor == approval.actor and self.position[e.event_id] < self.position[approval.event_id]]
         if own:
-            self.add("self_approval", "low", f"{approval.actor} approved a subject they had also requested",
+            self.add("self_approval", "low", f"approved by {approval.actor}, who had also requested the subject",
                      [*own, approval.event_id],
                      subject=state.subject, actor=approval.actor)
 

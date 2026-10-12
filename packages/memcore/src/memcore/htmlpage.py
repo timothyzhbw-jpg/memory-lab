@@ -145,8 +145,11 @@ def when(value: date | datetime) -> str:
 
 
 def quote(value: object) -> str:
-    """A verbatim quote: line breaks kept, nothing interpreted."""
-    return f"<blockquote>{text(value, lines=True)}</blockquote>"
+    """A verbatim quote: line breaks kept, nothing interpreted.
+
+    Each line break is written as ``&#10;``, which the browser decodes to the same newline (the block is
+    ``white-space: pre-wrap``), so no line of the file starts with the quote's own text."""
+    return f"<blockquote>{text(value, lines=True).replace(chr(10), '&#10;')}</blockquote>"
 
 
 def badge(label: str, tone: str) -> str:
