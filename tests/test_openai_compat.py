@@ -513,11 +513,31 @@ def test_a_rationale_sharing_letters_with_the_key_is_kept(monkeypatch):
     assert judge.judge(CLAIM, CLAIM).rationale == rationale
 
 
-def test_a_rationale_still_holding_the_key_after_redaction_is_withheld(team_key, monkeypatch):
-    monkeypatch.setattr(openai_compat, "redact", lambda text, *secrets: text)  # a redaction that missed it
-    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", f"key {KEY}")),
-                     api_key_env="TEAM_KEY")
+SHORT_KEY = "abcd-efgh-ij"  # short enough that an encoded copy is not a long run
+
+
+@pytest.mark.parametrize("encoded", ["abcd%2defgh-ij", "abcd%2Defgh%2dij", "%61bcd-efgh-ij", "abcd\\u002defgh-ij",
+                                     "abcd&#45;efgh-ij", "abcd\\x2defgh-ij"])
+def test_a_rationale_showing_the_key_once_decoded_is_withheld(monkeypatch, encoded):
+    monkeypatch.setenv("SHORT_KEY", SHORT_KEY)
+    assert len(encoded) < 24
+    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", f"the token is {encoded}")),
+                     api_key_env="SHORT_KEY")
     assert judge.judge(CLAIM, CLAIM).rationale == openai_compat.WITHHELD_RATIONALE
+
+
+@pytest.mark.parametrize("rationale, shown", [
+    ("The passage says CSV export is not available to customers.",
+     "The passage says CSV export is not available to customers."),
+    ("docs/billing.md says the limit is 60 requests per minute, not 100.",
+     "docs/billing.md says the limit is 60 requests per minute, not 100."),
+    ("See /usr/local/share/memfalsify/evidence/billing-notes.md for the decision.",
+     "See [\u2026] for the decision."),
+    ("https://wiki.example.test/decisions/2026/billing says otherwise.", "[\u2026] says otherwise."),
+])
+def test_long_unbroken_strings_in_a_rationale_are_elided(team_key, rationale, shown):
+    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", rationale)), api_key_env="TEAM_KEY")
+    assert judge.judge(CLAIM, CLAIM).rationale == shown
 
 
 # --- provider errors: status, plain-token fields and a fixed hint -----------------------------------
@@ -961,3 +981,90 @@ def test_cli_diff_takes_the_openai_options(git_repo, monkeypatch):
     assert report["audit"]["verifier"] == "openai:gemini-model@generativelanguage.googleapis.com"
     [call] = client.chat.completions.calls  # only the added claim was judged
     assert "response_format" not in call
+
+
+# --- round 5: error tokens and once-encoded keys ------------------------------------------------------
+
+@pytest.mark.parametrize("value", [SECRET, SECRET.upper(), SECRET.lower(), "sk-test-0123456789", "x0123456789abcdefx",
+                                   "SECRETxyz-abcdef", "a" * 41])
+def test_an_error_field_sharing_the_key_or_too_long_is_dropped(monkeypatch, value):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    judge = verifier(fake_client(error=status_error(429, type=value, code=value, param="messages")))
+    with pytest.raises(VerifierError) as caught:
+        judge.judge(CLAIM, COUNTER)
+    assert str(caught.value) == ("openai:test-model@api.openai.com: HTTP 429 (param messages): rate limited or out of "
+                                 "quota")
+
+
+def test_short_error_fields_without_a_shared_run_are_kept(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    judge = verifier(fake_client(error=status_error(401, type="invalid_request_error", code="invalid_api_key",
+                                                    param="sk-test")))  # 7 shared characters: kept
+    with pytest.raises(VerifierError) as caught:
+        judge.judge(CLAIM, COUNTER)
+    assert str(caught.value) == ("openai:test-model@api.openai.com: HTTP 401 (type invalid_request_error, code "
+                                 "invalid_api_key, param sk-test): the key in OPENAI_API_KEY was refused")
+
+
+# Codex's probes: the key once-encoded in ways the literal redaction does not list.
+PROBES = {
+    "mixed-case percent": "sk%2btest%2F0123456789%3dabcdefSECRET",
+    "fully percent-encoded": "".join(f"%{ord(ch):02X}" for ch in KEY),
+    "unicode-escaped": "".join(f"\\u{ord(ch):04x}" for ch in KEY),
+    "HTML references": "".join(f"&#{ord(ch)};" for ch in KEY),
+}
+
+
+def assert_hidden(text, key=KEY):
+    """Neither the key nor any once-decoded reading of ``text`` shows it."""
+    assert not openai_compat.shows_secret(text, key)
+    for probe in PROBES.values():
+        assert probe not in text
+
+
+@pytest.mark.parametrize("probe", list(PROBES.values()), ids=list(PROBES))
+@pytest.mark.parametrize("fmt", ["json", "markdown", "html"])
+def test_once_encoded_keys_in_a_rationale_never_reach_a_report(two_claims, mock_sdk, team_key, probe, fmt):
+    content = verdict("contradicts", f"the passage cites the token {probe} here")
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=completion(content))
+    result = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"),
+                                 "--verifier", "openai", "--openai-model", "gpt-model", "--api-key-env", "TEAM_KEY",
+                                 "--format", fmt])
+    assert result.exit_code == 0, result.output
+    assert_hidden(result.stdout)
+    if fmt == "json":
+        rationales = {e["rationale"] for f in json.loads(result.stdout)["findings"] for e in f["evidence"]}
+        assert rationales == {"the passage cites the token [\u2026] here"}
+
+
+@pytest.mark.parametrize("probe", list(PROBES.values()), ids=list(PROBES))
+def test_once_encoded_keys_in_an_sdk_debug_log_line_are_withheld(mock_sdk, team_key, monkeypatch, caplog, probe):
+    from openai._utils._logs import setup_logging
+    monkeypatch.setenv("OPENAI_LOG", "debug")
+    sdk_logger = logging.getLogger("openai")
+    monkeypatch.setattr(sdk_logger, "level", sdk_logger.level)
+    setup_logging()
+    caplog.set_level(logging.DEBUG)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(
+        200, json=completion(), headers={"x-request-id": f"req-{probe}"})
+    assert OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER).relation == "contradicts"
+    sdk_lines = [r.getMessage() for r in caplog.records if r.name == "openai._base_client"]
+    assert openai_compat.LOG_WITHHELD in sdk_lines  # the request_id line (older SDKs log the headers too)
+    assert not any(line.startswith("request_id") for line in sdk_lines)
+    assert_hidden(caplog.text)
+
+
+def test_once_encoded_keys_in_log_exceptions_and_stacks_are_withheld(mock_sdk, team_key, caplog):
+    caplog.set_level(logging.DEBUG)
+    OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    logger = logging.getLogger("openai.round5")
+    try:
+        raise RuntimeError(f"failed for {PROBES['mixed-case percent']}")
+    except RuntimeError:
+        logger.exception("plain message")
+    logger.handle(logger.makeRecord(logger.name, logging.WARNING, __file__, 1, "with a stack", None, None,
+                                    sinfo=f"Stack:\n  token={PROBES['HTML references']}"))
+    records = [r for r in caplog.records if r.name == "openai.round5"]
+    assert [r.getMessage() for r in records] == ["plain message", "with a stack"]
+    assert records[0].exc_text == openai_compat.LOG_WITHHELD and records[1].stack_info == openai_compat.LOG_WITHHELD
+    assert_hidden(caplog.text)

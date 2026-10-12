@@ -9,9 +9,11 @@ Install with ``pip install 'memfalsify[openai]'``. Memory claims and evidence pa
 configured endpoint.
 
 Threat model: the key must stay out of everything the provider or the model controls (error bodies, the answer,
-response headers in the SDK's debug log), and out of reports and diagnostics. Other code running in the same
-Python process is trusted: it can read the environment, and a library that puts the key into log records or
-replaces the logging record factory is out of scope.
+response headers in the SDK's debug log), and out of reports and diagnostics. The promise: the literal key and its
+once-encoded forms (``decoded_once``: percent, ``\\uXXXX``/``\\xXX``/``\\/`` escapes, HTML references) never
+appear. A provider that hides the key it received under deeper encodings is out of scope: it already holds the
+key. Other code running in the same Python process is trusted: it can read the environment, and a library that
+puts the key into log records or replaces the logging record factory is out of scope.
 
 Transport and secrets:
 
@@ -23,11 +25,12 @@ Transport and secrets:
   ``SSL_CERT_DIR``, which are the user's own configuration.
 - The key is read from the environment variable the caller names, never taken as an argument, and must consist
   of the characters keys use (``KEY_CHARS``). The provider's free text is never shown: an error is reported as
-  its HTTP status, the error's type, code and param when each is a plain token (``TOKEN``), and a fixed hint
-  for the status. The model's rationale is the only free text kept; the key in it (as is, percent-encoded or
-  JSON-escaped) is redacted. No ``VerifierError`` keeps the SDK's exception as its cause or context, and the
-  log records of the SDK and the HTTP stack (``OPENAI_LOG=debug``) are redacted as they are made
-  (``guard_logs``).
+  its HTTP status, the error's type, code and param when each is a plain token (``TOKEN``) that shares no run
+  of ``SHARED_RUN`` characters with the key, and a fixed hint for the status. The model's rationale is the
+  only free text kept: the key in it is redacted (``secret_forms``), long unbroken runs are elided
+  (``LONG_RUN``), and it is withheld if it still shows the key once decoded (``shows_secret``). No
+  ``VerifierError`` keeps the SDK's exception as its cause or context, and the log records of the SDK and the
+  HTTP stack (``OPENAI_LOG=debug``) are cleaned the same way as they are made (``guard_logs``).
 - Only the arguments configure the client. The SDK would otherwise read ``OPENAI_BASE_URL``,
   ``OPENAI_ORG_ID``, ``OPENAI_PROJECT_ID`` and ``OPENAI_CUSTOM_HEADERS`` from the environment and send what they
   hold to whatever endpoint is configured; ``isolated_headers`` removes those headers from every request.
@@ -42,6 +45,7 @@ reason as the rationale), never as support.
 """
 from __future__ import annotations
 
+import html
 import logging
 import os
 import re
@@ -51,7 +55,7 @@ from dataclasses import dataclass
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from pydantic import ConfigDict
 
@@ -108,8 +112,10 @@ REDACTED = "[redacted]"
 # The characters real API keys use (OpenAI, xAI, DeepSeek, Gemini, base64 and JWT tokens). A key with others
 # (a backslash or a quote, which a JSON or Python repr would escape) is refused.
 KEY_CHARS = re.compile(r"[A-Za-z0-9._~+/=-]+")
-# An error's type, code or param is shown only when it is a plain token like this; the message never is.
-TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+# An error's type, code or param is shown only when it is a plain token like this, and shares no run of
+# ``SHARED_RUN`` characters with the key (case-insensitively); the message never is.
+TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,40}")
+SHARED_RUN = 8
 # Retries the SDK makes after a connection error, 408, 409, 429 or 5xx (its default).
 MAX_RETRIES = 2
 # The only finish_reason whose answer is used: the normal end of an answer for OpenAI, DeepSeek ("the model hit
@@ -119,6 +125,12 @@ MAX_RETRIES = 2
 # Gemini is assumed to follow OpenAI. Any other value, and none at all, is no verdict, even when the text parses.
 FINISHED = "stop"
 WITHHELD_RATIONALE = "the rationale was withheld because it contained the API key"
+LOG_WITHHELD = "[withheld: contained the API key]"
+# In a rationale, every run of this many non-whitespace characters or more is elided: a key is one long
+# unbroken string in any encoding; natural language loses at most a long path or URL.
+LONG_RUN = re.compile(r"\S{24,}")
+ELIDED = "[\u2026]"
+_ESCAPED = re.compile(r"\\(?:u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|(/))")
 
 
 @dataclass(frozen=True)
@@ -234,17 +246,56 @@ def redact(text: str, *secrets: str | None) -> str:
     return text
 
 
+def _unescape_once(text: str) -> str:
+    """JSON-style escapes undone once: ``\\uXXXX``, ``\\xXX`` and ``\\/``."""
+    def one(match: re.Match[str]) -> str:
+        code = match.group(1) or match.group(2)
+        return chr(int(code, 16)) if code else "/"
+
+    return _ESCAPED.sub(one, text)
+
+
+def decoded_once(text: str) -> list[str]:
+    """``text`` and how it reads with one layer of encoding undone: percent-decoded (``unquote``, escapes in
+    any case), JSON-style unescaped, HTML-unescaped, and the three applied once in sequence."""
+    percent, escaped, entities = unquote(text, errors="replace"), _unescape_once(text), html.unescape(text)
+    return [text, percent, escaped, entities, html.unescape(_unescape_once(percent))]
+
+
+def shows_secret(text: str, *secrets: str | None) -> bool:
+    """Whether ``text``, as is or decoded once (``decoded_once``), contains a secret (case-sensitively)."""
+    views = decoded_once(text)
+    return any(secret in view for secret in secrets if secret for view in views)
+
+
+def shares_run(value: str, secret: str | None, run: int = SHARED_RUN) -> bool:
+    """Whether ``value``, as is or percent-decoded once, shares ``run`` or more consecutive characters with
+    ``secret``, compared case-insensitively."""
+    if not secret:
+        return False
+    pieces = {secret.lower()[i:i + run] for i in range(len(secret) - run + 1)} if len(secret) >= run \
+        else {secret.lower()}
+    return any(piece in view.lower() for view in (value, unquote(value, errors="replace")) for piece in pieces)
+
+
+def _clean_log_text(text: str, secrets: list[str]) -> str:
+    """Log text with the key redacted, or withheld whole if it still shows the key once decoded."""
+    cleaned = redact(text, *secrets)
+    return LOG_WITHHELD if shows_secret(cleaned, *secrets) else cleaned
+
+
 def redact_record(record: logging.LogRecord, secrets: list[str]) -> None:
-    """Redact every secret from ``record``: the message (with its arguments), the exception and the stack. An
-    exception is rendered to ``exc_text`` and ``exc_info`` dropped, so no handler formats the live exception,
-    whose attributes (an SDK error's body) the rendered text does not show."""
+    """Keep every secret out of ``record``: the message (with its arguments interpolated), the exception and the
+    stack each have the key redacted (``secret_forms``), and are withheld whole if they still show it once
+    decoded (``shows_secret``). An exception is rendered to ``exc_text`` and ``exc_info`` dropped, so no
+    handler formats the live exception, whose attributes (an SDK error's body) the rendered text does not show."""
     if not secrets:
         return
     try:
         message = record.getMessage()
-    except Exception:  # a malformed record: redact what it would print at best
+    except Exception:  # a malformed record: clean what it would print at best
         message = f"{record.msg} {record.args}"
-    cleaned = redact(message, *secrets)
+    cleaned = _clean_log_text(message, secrets)
     if cleaned != message:
         record.msg, record.args = cleaned, None
     if record.exc_info:
@@ -254,9 +305,9 @@ def redact_record(record: logging.LogRecord, secrets: list[str]) -> None:
             record.exc_text = "[exception could not be rendered]"
         record.exc_info = None
     if record.exc_text:
-        record.exc_text = redact(record.exc_text, *secrets)
+        record.exc_text = _clean_log_text(record.exc_text, secrets)
     if record.stack_info:
-        record.stack_info = redact(record.stack_info, *secrets)
+        record.stack_info = _clean_log_text(record.stack_info, secrets)
 
 
 class _KeyFilter(logging.Filter):
@@ -417,11 +468,14 @@ def _usage(usage: Any) -> Any:
                            output_tokens=_count(_get(usage, "completion_tokens")))
 
 
-def _token(value: Any) -> str | None:
-    """An error field as a plain token (``TOKEN``), or None: anything else is dropped, never shown."""
+def _token(value: Any, secret: str | None) -> str | None:
+    """An error field as a plain token (``TOKEN``) that shares no run with the key (``shares_run``), or None:
+    anything else is dropped whole, never shown in part."""
     if isinstance(value, int) and not isinstance(value, bool):
         value = str(value)
-    return value if isinstance(value, str) and TOKEN.fullmatch(value) else None
+    if not isinstance(value, str) or not TOKEN.fullmatch(value) or shares_run(value, secret):
+        return None
+    return value
 
 
 class OpenAICompatVerifier:
@@ -503,8 +557,8 @@ class OpenAICompatVerifier:
         if 300 <= status < 400:
             return f"HTTP {status}: the endpoint answered with a redirect, which is not followed; check the base URL"
         body = getattr(exc, "body", None)
-        fields = {name: _token(body.get(name)) for name in ("type", "code", "param")} if isinstance(body, Mapping) \
-            else {}
+        fields = ({name: _token(body.get(name), self._secret) for name in ("type", "code", "param")}
+                  if isinstance(body, Mapping) else {})
         shown = ", ".join(f"{name} {value}" for name, value in fields.items() if value is not None)
         return f"HTTP {status}" + (f" ({shown})" if shown else "") + f": {self._hint(status)}"
 
@@ -577,10 +631,11 @@ class OpenAICompatVerifier:
         return Judgment(relation=verdict.relation, rationale=self._rationale(verdict.rationale), verifier=self.name)
 
     def _rationale(self, text: str) -> str:
-        """The model's rationale, the only free text kept: the key redacted (``secret_forms``), and withheld
-        whole if it is still there; then one inert line."""
-        cleaned = redact(text, self._secret)
-        if self._secret and self._secret in cleaned:
+        """The model's rationale, the only free text kept: the key redacted (``secret_forms``), every run of 24
+        or more non-whitespace characters elided (a key is one, in any encoding), and the whole rationale
+        withheld if it still shows the key once decoded (``shows_secret``); then one inert line."""
+        cleaned = LONG_RUN.sub(ELIDED, redact(text, self._secret))
+        if shows_secret(cleaned, self._secret):
             cleaned = WITHHELD_RATIONALE
         return printable(cleaned)
 
