@@ -7,10 +7,11 @@ different sha256 and different offsets there than on macOS and Linux. This scrip
   (UTF-8 bytes, from tests/conftest.py), and the module imports it;
 * a text-mode ``open(..., "w")`` / ``path.open("a", ...)`` / ``os.fdopen(fd, "w")`` gets ``newline=""``.
 
-Calls that already pass ``newline=``, and binary or read-only opens, are left alone, so running it again
-changes nothing. A ``write_text`` call with any other keyword (``errors=``, a non-UTF-8 encoding) is
-reported, not rewritten. Usage: ``python scripts/exact_writes.py [--check] [path ...]`` (default: tests/);
-``--check`` rewrites nothing and exits 1 if something would change.
+Calls that already pass ``newline=``, binary or read-only opens, and calls on a line marked
+``# windows-guard: allow`` are left alone, so running it again changes nothing. A ``write_text`` call with any
+other keyword (``errors=``, a non-UTF-8 encoding) is reported, not rewritten.
+Usage: ``python scripts/exact_writes.py [--check] [path ...]`` (default: tests/); ``--check`` rewrites nothing
+and exits 1 if something would change.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 HELPER, HELPER_MODULE = "write_text_exact", "conftest"
 FILE_MODE = re.compile(r"[rwaxbt+]+")
 UTF8 = {"utf-8", "utf8", "utf_8"}
+ALLOW = "# windows-guard: allow"  # a deliberate text-mode write, left as it is (as the guard does)
 # The repository's own modules: a new conftest import goes first among them.
 LOCAL_MODULES = {"conftest", "memcore", "memfalsify", "orgmemory", "memlab_mcp", "memlab_ui", "github_fakes",
                  "jira_fakes", "orgmemory_reference"}
@@ -84,7 +86,7 @@ def rewrite(text: str, path: str = "<source>") -> tuple[str, list[str]]:
     edits: list[tuple[int, int, str]] = []
     notes: list[tuple[int, str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or has_newline(node):
+        if not isinstance(node, ast.Call) or has_newline(node) or ALLOW in src.lines[node.lineno - 1]:
             continue
         func = node.func
         if isinstance(func, ast.Attribute) and func.attr == "write_text":

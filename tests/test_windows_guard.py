@@ -301,6 +301,7 @@ def test_the_rules_catch_what_broke_ci():
     assert inexact_writes(ast.parse(fixed)) == [] and "write_text_exact(root /" in fixed
     allowed = fixture.rstrip("\n") + "  " + ALLOW + "\n"
     assert inexact_writes(ast.parse(allowed), allowed.split("\n")) == []
+    assert script.rewrite(allowed)[0] == allowed  # the script leaves a deliberate text-mode write alone too
 
     servers = """
 from conftest import requires_confinement
