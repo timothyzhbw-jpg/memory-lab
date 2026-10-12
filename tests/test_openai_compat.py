@@ -18,7 +18,7 @@ from urllib.parse import quote
 import pytest
 from typer.testing import CliRunner
 
-from conftest import write_text_exact
+from conftest import requires_confinement, write_text_exact
 from memfalsify import openai_compat
 from memfalsify.audit import audit
 from memfalsify.cli import app
@@ -1220,6 +1220,7 @@ def test_the_key_in_every_error_field_reaches_no_diagnostic_or_log(two_claims, p
 
 
 @pytest.mark.skipif(importlib.util.find_spec("mcp") is None, reason="the MCP SDK is not installed")
+@requires_confinement
 def test_the_key_in_every_response_field_reaches_no_mcp_result(two_claims, poison):
     import anyio
     from mcp import Client

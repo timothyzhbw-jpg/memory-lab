@@ -17,9 +17,10 @@ a full CI round. Every failure names file:line and the fix; AGENTS.md ("Windows"
    ``dir_fd`` that confined reads need. A test that builds one, through ``create_server``, ``App``, ``serve``
    or ``StdioServerParameters``, directly or through a helper or fixture of its module, needs
    ``@requires_confinement`` (or a ``pytestmark`` with it), or must set ``confinement_supported`` itself with
-   ``monkeypatch.setattr`` so that macOS takes the path Windows takes, or skip itself
-   (``if not confinement_supported(): pytest.skip(...)``) before it builds one. That includes a call inside
+   ``monkeypatch.setattr`` so that macOS takes the path Windows takes. That includes a call inside
    ``pytest.raises``: a test expecting another refusal failed on Windows because the platform check came first.
+   An in-body ``pytest.skip`` is ignored: whether it runs before the server is built is beyond a reliable
+   reading of the source, and the marker says the same plainly.
 3. f-strings for Python 3.10. A backslash, a comment or the enclosing quote inside an f-string's replacement
    field parses only on 3.12+ (PEP 701). On 3.12+ the tokenizer finds them; on 3.10/3.11 the file does not
    parse, which this test reports too.
@@ -169,17 +170,6 @@ def _patches_confinement(function: ast.AST) -> bool:
                and "confinement_supported" in ast.unparse(node) for node in ast.walk(function))
 
 
-def _skips_itself(function: ast.AST) -> int | None:
-    """The line of an ``if not confinement_supported(): pytest.skip(...)`` (or a platform test) in the body."""
-    for node in ast.walk(function):
-        if isinstance(node, ast.If) and any(word in ast.unparse(node.test) for word in
-                                            ("confinement_supported", "os.name", "sys.platform")):
-            if any(isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "skip"
-                   for statement in node.body for call in ast.walk(statement)):
-                return node.lineno
-    return None
-
-
 def unskipped_server_tests(tree: ast.Module) -> list[tuple[int, str]]:
     names, modules = _server_names(tree)
     if not names and not modules:
@@ -220,9 +210,6 @@ def unskipped_server_tests(tree: ast.Module) -> list[tuple[int, str]]:
             continue
         uses = sorted({a.arg for a in function.args.args} & fixtures)
         line = _starts_server(function, names | helpers, modules)
-        skip = _skips_itself(function)
-        if line is not None and not uses and skip is not None and skip < line:
-            continue  # it skips itself before it builds the server
         if (line is not None or uses) and not _patches_confinement(function):
             how = f"line {line} builds a server" if line is not None else f"fixture {', '.join(uses)} builds a server"
             found.append((function.lineno, f"{function.name}: {how}"))
@@ -339,20 +326,34 @@ def test_create_server_refuses_a_bad_openai_configuration(root, settings, proble
     with pytest.raises(ValueError, match=problem):
         create_server(root, allow_model_verifiers=True, **settings)
 
-def test_skips_itself_first(root):
+def test_skips_itself_in_the_body(root):
     if not confinement_supported():
         pytest.skip("POSIX only")
     call(create_server(root), "memfalsify_claims")
 
-def test_skips_itself_too_late(root):
-    server = create_server(root)
-    if not confinement_supported():
+def test_skips_when_confinement_is_supported(root):  # the reversed condition
+    if confinement_supported():
         pytest.skip("POSIX only")
+    call(create_server(root), "memfalsify_claims")
+
+def test_skips_under_if_false(root):
+    if False and not confinement_supported():
+        pytest.skip("POSIX only")
+    call(create_server(root), "memfalsify_claims")
+
+def test_skips_in_an_uncalled_function(root):
+    def never():
+        if not confinement_supported():
+            pytest.skip("POSIX only")
+    call(create_server(root), "memfalsify_claims")
 """
     assert [why for _, why in unskipped_server_tests(ast.parse(servers))] == [
         "test_forgot_the_marker: line 14 builds a server", "test_forgot_it_with_a_fixture: fixture app builds a server",
         "test_create_server_refuses_a_bad_openai_configuration: line 30 builds a server",
-        "test_skips_itself_too_late: line 38 builds a server"]
+        "test_skips_itself_in_the_body: line 35 builds a server",
+        "test_skips_when_confinement_is_supported: line 40 builds a server",
+        "test_skips_under_if_false: line 45 builds a server",
+        "test_skips_in_an_uncalled_function: line 51 builds a server"]
     assert unskipped_server_tests(ast.parse("pytestmark = requires_confinement\n" + servers)) == []
 
     if sys.version_info >= (3, 12):
