@@ -25,6 +25,7 @@ Safety follows the MCP server (docs/mcp.md):
 from __future__ import annotations
 
 import io
+import secrets
 import sys
 import threading
 import time
@@ -57,6 +58,11 @@ HEADER_DEADLINE = 10.0     # seconds for the request line and all headers togeth
 FILE_BYTES = 8_000_000     # per file read for a page (evidence files keep MemFalsify's own 2 MB limit)
 TOTAL_BYTES = 64_000_000   # all files read for one page
 DIRECTORIES = 20_000       # directories one page may walk: discovery, the lists and the evidence scan together
+DEPTH = 64                 # levels below a walk's start
+ENTRIES = 100_000          # directory entries one page may list
+ITEMS = {"claims": 5_000, "passages": 5_000, "comparisons": 2_000_000}  # statements parsed, evidence passages
+# built, claim-passage and old-new statement comparisons: each is counted while it is built
+TRIMMED = ("as_of", "since", "verifier", "lang", "from", "to", "token")  # fields whose spaces mean nothing
 HEADERS = (
     ("Content-Type", "text/html; charset=utf-8"),
     ("Content-Security-Policy", CSP + "; frame-ancestors 'none'"),
@@ -114,6 +120,7 @@ class App:
         self.port = port
         self.static = static_files()
         self.pages = threading.BoundedSemaphore(MAX_PAGES)
+        self.token = secrets.token_urlsafe(16)  # model checks need it: only this run's own form carries it
 
     # --- checks before any page runs ----------------------------------------------------------------
 
@@ -168,7 +175,8 @@ class App:
                 response.headers.append(("Retry-After", "5"))
                 return response
             try:
-                with confined_reads(self.ws.root), read_limits(FILE_BYTES, TOTAL_BYTES, DIRECTORIES) as limits:
+                with confined_reads(self.ws.root), read_limits(FILE_BYTES, TOTAL_BYTES, DIRECTORIES, depth=DEPTH,
+                                                               entries=ENTRIES, items=ITEMS) as limits:
                     status, html = self.page(path, params, switch, limits)
             except Exception:  # never a traceback or a library message on the page
                 return self.message(500, "Something went wrong",
@@ -195,7 +203,7 @@ class App:
                 raise BadRequest("Each field may appear only once in the address.")
             if len(value) > MAX_VALUE:
                 raise BadRequest("A field in the address is too long.")
-            params[key] = value.strip()
+            params[key] = value.strip() if key in TRIMMED else value  # paths and subjects stay exact
         return parts.path, params
 
     # --- pages ----------------------------------------------------------------------------------------
@@ -208,7 +216,8 @@ class App:
             body = home.render(self.ws.inventory(), models=self.models)
         elif path == "/check":
             title, active = "Check an agent file", "check"
-            status, body = check.render(self.ws, self.ws.inventory(count=False), params, models=self.models)
+            status, body = check.render(self.ws, self.ws.inventory(count=False), params, models=self.models,
+                                        token=self.token)
         else:
             title, active = "Team decisions", "decisions"
             status, body, topics = decisions.render(self.ws, self.ws.inventory(count=False), params)
@@ -375,7 +384,8 @@ app = typer.Typer(add_completion=False, help="Serve Memory Lab's read-only web p
 @app.command()
 def serve(
     root: Path = typer.Option(Path("."), "--root", exists=True, file_okay=False, resolve_path=True,
-                              help="The project folder the page may read; nothing outside it is read"),
+                              help="The project folder the page may read. Paths outside it are refused; "
+                                   "a file hard-linked into it from elsewhere is read like any other (docs/ui.md)"),
     port: int = typer.Option(DEFAULT_PORT, "--port", min=0, max=65535,
                              help="Port on 127.0.0.1 (0 picks a free one)"),
     host: str = typer.Option(HOST, "--host", help="Only 127.0.0.1 is accepted: the page has no login"),
@@ -395,7 +405,8 @@ def serve(
                    err=True)
         raise typer.Exit(2) from None
     typer.echo(f"Memory Lab is open at http://{HOST}:{server.server_address[1]}/")
-    typer.echo("It reads only the folder given with --root and never changes a file. Press Ctrl+C to stop.")
+    typer.echo("It reads only the folder given with --root (and files hard-linked into it) and never changes a "
+               "file. Press Ctrl+C to stop.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
