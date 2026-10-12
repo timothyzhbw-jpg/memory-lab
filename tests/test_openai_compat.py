@@ -2,12 +2,15 @@
 ``httpx2.MockTransport`` where the request itself (URL, headers, body) or the SDK's errors matter."""
 import importlib.util
 import json
+import logging
 import shutil
 import threading
 import time
+import traceback
 from datetime import date
 from types import SimpleNamespace
 from typing import get_args
+from urllib.parse import quote
 
 import pytest
 from typer.testing import CliRunner
@@ -38,15 +41,17 @@ def verdict(relation, rationale="-"):
     return json.dumps({"relation": relation, "rationale": rationale})
 
 
-def status_error(status, message="refused"):
-    """The SDK's own exception for an HTTP status (BadRequestError for 400, and so on)."""
+def status_error(status, message="refused", **fields):
+    """The SDK's own exception for an HTTP status (BadRequestError for 400, and so on), as the SDK builds it:
+    ``body`` is the error object, and the exception's text holds the body's repr."""
     openai = pytest.importorskip("openai")
     httpx2 = pytest.importorskip("httpx2")
     request = httpx2.Request("POST", "https://api.example.test/v1/chat/completions")
     response = httpx2.Response(status, request=request)
     kinds = {400: openai.BadRequestError, 401: openai.AuthenticationError, 422: openai.UnprocessableEntityError,
              429: openai.RateLimitError}
-    return kinds.get(status, openai.APIStatusError)(message, response=response, body=None)
+    body = {"message": message, "type": "invalid_request_error", **fields}
+    return kinds.get(status, openai.APIStatusError)(f"Error code: {status} - {body!r}", response=response, body=body)
 
 
 def decide(claim, passage):
@@ -87,7 +92,8 @@ class FakeCompletions:
                 raise self.error
             mode = kwargs.get("response_format", {}).get("type", "text")
             if mode in self.refuse:
-                raise status_error(self.refuse_status, f"response_format {mode} is not supported")
+                raise status_error(self.refuse_status, f"response_format {mode} is not supported",
+                                   param="response_format")
             if self.raw is not None:
                 return self.raw
             return answer(self.decide(claim, passage), usage=self.usage)
@@ -211,7 +217,7 @@ def test_missing_key_is_a_verifier_error_naming_only_the_preset_variable(monkeyp
         OpenAICompatVerifier("grok-model", "grok", api_key_env="MY_TEAM_KEY")
     assert "the environment variable you named is not set" in str(caught.value)
     monkeypatch.setenv("MY_TEAM_KEY", "two words")
-    with pytest.raises(VerifierError, match="whitespace") as caught:
+    with pytest.raises(VerifierError, match="characters API keys do not use") as caught:
         OpenAICompatVerifier("grok-model", "grok", api_key_env="MY_TEAM_KEY")
     assert "two words" not in str(caught.value)
 
@@ -262,9 +268,11 @@ def test_refused_formats_fall_back_to_json_object_then_plain_text(status):
     assert "response_format" not in client.chat.completions.calls[-1]
     assert judge.response_format == "text"
     assert lines == [
-        f"openai:test-model@api.openai.com: HTTP {status} for a request with response_format json_schema; asking "
+        f"openai:test-model@api.openai.com: the endpoint refused response_format json_schema (HTTP {status} (type "
+        "invalid_request_error, param response_format): response_format json_schema is not supported); asking "
         "with response_format json_object from now on",
-        f"openai:test-model@api.openai.com: HTTP {status} for a request with response_format json_object; asking "
+        f"openai:test-model@api.openai.com: the endpoint refused response_format json_object (HTTP {status} (type "
+        "invalid_request_error, param response_format): response_format json_object is not supported); asking "
         "with no response_format (plain-text JSON) from now on"]
     # The accepted format is kept: the next pair costs one request.
     assert judge.judge(CLAIM, CLAIM).relation == "supports" and len(client.chat.completions.calls) == 4
@@ -288,12 +296,14 @@ def test_fallback_happens_once_across_threads():
     pairs = [(CLAIM, f"{COUNTER} {n}") for n in range(6)]
     assert [j.relation for j in judge_all(judge, pairs, max_concurrency=3)] == ["contradicts"] * 6
     assert len(lines) == 1 and judge.response_format == "json_object"
+    assert len(client.chat.completions.calls) == 7  # the six pairs, plus one refused request
 
 
 @pytest.mark.parametrize("status", [401, 404, 429, 500])
 def test_other_api_errors_do_not_fall_back(status):
     client = fake_client(error=status_error(status, "denied"))
-    with pytest.raises(VerifierError, match="openai:test-model@api.openai.com: denied"):
+    with pytest.raises(VerifierError, match=f"^openai:test-model@api.openai.com: HTTP {status} "
+                                            r"\(type invalid_request_error\): denied$"):
         verifier(client).judge(CLAIM, COUNTER)
     assert len(client.chat.completions.calls) == 1
 
@@ -337,8 +347,9 @@ def test_unusable_answers_are_no_verdict_never_support(content):
     (answer(None), "finish_reason: stop; the answer is empty"),
     (answer("   "), "finish_reason: stop; the answer is empty"),
     (answer('{"relation": "supports", "rationale": "cut', finish_reason="length"),
-     "finish_reason: length; the answer is not a JSON verdict"),
-    (answer(None, finish_reason="content_filter"), "finish_reason: content_filter; the answer is empty"),
+     "finish_reason: length; the answer did not end normally (only finish_reason stop is used)"),
+    (answer(None, finish_reason="content_filter"),
+     "finish_reason: content_filter; the answer did not end normally (only finish_reason stop is used)"),
     (answer(choices=False), "finish_reason: None; the response has no answer"),
     (SimpleNamespace(), "finish_reason: None; the response has no answer"),
 ])
@@ -367,10 +378,12 @@ def test_model_and_provider_text_stays_one_inert_line(two_claims):
     assert "\x1b" not in markdown and "\u202e" not in markdown
     assert not any(line.startswith(("## pwned", "::set-output")) for line in markdown.splitlines())
     finished = verifier(fake_client(raw=answer("nope", finish_reason=HOSTILE))).judge(CLAIM, COUNTER)
-    assert finished.rationale == printable(f"no verdict (finish_reason: {HOSTILE}; the answer is not a JSON verdict)")
+    assert finished.rationale == printable(f"no verdict (finish_reason: {HOSTILE}; the answer did not end normally "
+                                           "(only finish_reason stop is used))")
     with pytest.raises(VerifierError) as caught:
-        verifier(fake_client(error=status_error(500, HOSTILE))).judge(CLAIM, COUNTER)
-    assert str(caught.value) == printable(f"openai:test-model@api.openai.com: {HOSTILE}")
+        verifier(fake_client(error=status_error(500, HOSTILE, code=HOSTILE))).judge(CLAIM, COUNTER)
+    assert str(caught.value) == printable(f"openai:test-model@api.openai.com: HTTP 500 (type invalid_request_error, "
+                                          f"code {HOSTILE}): {HOSTILE}")
 
 
 # --- the key stays secret -----------------------------------------------------------------------
@@ -429,20 +442,27 @@ def completion(content=verdict("contradicts", "not available")):
 
 @pytest.fixture
 def mock_sdk(monkeypatch):
-    """Route the real ``openai.OpenAI`` client through ``httpx2.MockTransport``; ``handle(request)`` answers."""
+    """The verifier's own client construction (``openai.DefaultHttpxClient`` with the verifier's options, then
+    ``openai.OpenAI``), with only the transport replaced by ``httpx2.MockTransport``; ``handle(request)`` answers.
+    The SDK's retries are off, so an error answer costs one request."""
     openai = pytest.importorskip("openai")
     httpx2 = pytest.importorskip("httpx2")
-    seen = []
+    seen, options = [], []
     state = {"handle": lambda request: httpx2.Response(200, json=completion())}
 
     def handler(request):
         seen.append(request)
         return state["handle"](request)
 
-    real = openai.OpenAI
-    monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: real(
-        **kwargs, max_retries=0, http_client=httpx2.Client(transport=httpx2.MockTransport(handler))))
-    return SimpleNamespace(seen=seen, state=state, httpx2=httpx2)
+    real = openai.DefaultHttpxClient
+
+    def client(**kwargs):
+        options.append(kwargs)
+        return real(**kwargs, transport=httpx2.MockTransport(handler))
+
+    monkeypatch.setattr(openai, "DefaultHttpxClient", client)
+    monkeypatch.setattr(openai_compat, "MAX_RETRIES", 0)
+    return SimpleNamespace(seen=seen, state=state, options=options, httpx2=httpx2)
 
 
 def test_sdk_request_goes_only_where_configured(mock_sdk, monkeypatch):
@@ -515,7 +535,7 @@ def test_sdk_connection_error_is_a_verifier_error(mock_sdk, monkeypatch):
         raise mock_sdk.httpx2.ConnectError("connection refused")
 
     mock_sdk.state["handle"] = refuse
-    with pytest.raises(VerifierError, match="openai:gpt-model@api.openai.com: Connection error"):
+    with pytest.raises(VerifierError, match="^openai:gpt-model@api.openai.com: could not connect to the endpoint$"):
         OpenAICompatVerifier("gpt-model").judge(CLAIM, COUNTER)
 
 
@@ -556,7 +576,7 @@ def test_cli_openai_falls_back_and_says_so_on_stderr(two_claims, monkeypatch):
                                  "--verifier", "openai", "--openai-model", "m", "--provider", "ollama",
                                  "--max-concurrency", "1"])
     assert result.exit_code == 0 and "POSSIBLE COUNTEREVIDENCE" in result.stdout
-    assert result.stderr.count("HTTP 400 for a request with response_format json_schema") == 1
+    assert result.stderr.count("the endpoint refused response_format json_schema") == 1
 
 
 @pytest.mark.parametrize("extra, message", [
@@ -590,7 +610,8 @@ def test_cli_api_error_exits_2_and_never_shows_the_key(two_claims, mock_sdk, mon
                                  "--verifier", "openai", "--openai-model", "gpt-model", "--api-key-env", "TEAM_KEY",
                                  "--format", fmt, "-o", str(out)])
     assert result.exit_code == 2 and not out.exists()
-    assert result.output.startswith("error: openai:gpt-model@api.openai.com: Error code: 401")
+    assert result.output.startswith("error: openai:gpt-model@api.openai.com: HTTP 401 (type invalid_request_error): "
+                                    "Incorrect API key provided: [redacted]")
     assert "[redacted]" in result.output and "Traceback" not in result.output
     assert all(SECRET[i:i + 8] not in result.output for i in range(len(SECRET) - 7))
 
@@ -621,3 +642,236 @@ def test_cli_diff_takes_the_openai_options(git_repo, monkeypatch):
     assert built == [("gemini-model", "gemini", None, None)]
     assert report["audit"]["verifier"] == "openai:gemini-model@generativelanguage.googleapis.com"
     assert len(client.chat.completions.calls) == 1  # only the added claim was judged
+
+
+# --- security review regressions --------------------------------------------------------------------
+
+def no_key(text, key=SECRET):
+    """Neither the key, nor its URL-encoded or escaped forms, nor any 8-character run of them is in ``text``."""
+    for form in openai_compat.secret_forms(key):
+        assert all(form[i:i + 8] not in text for i in range(len(form) - 7)), form
+
+
+def quote_key(key):
+    return quote(key, safe="")
+
+
+@pytest.mark.parametrize("key", ["sk-ab\\cd-efgh123456", 'sk-ab"cd-efgh123456', "sk-ab'cd-efgh123456",
+                                 "sk-ab cd-efgh123456", "sk-abcd-efgh12345é", "sk-ab%cd-efgh123456",
+                                 "sk-ab\x1bcd-efgh123456"])
+def test_keys_with_characters_keys_do_not_use_are_refused(monkeypatch, key):
+    pytest.importorskip("openai")
+    monkeypatch.setenv("TEAM_KEY", key)
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    message = str(caught.value)
+    assert "characters API keys do not use" in message and "TEAM_KEY" not in message and key.strip() not in message
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+
+
+@pytest.mark.parametrize("key", ["sk-abc123def456ghi789jkl", "sk+abc/def=ghi~jkl.mno_pqr", "AIzaSyA-b_c0123456789xyz",
+                                 "eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl"])
+def test_real_key_shapes_are_accepted(monkeypatch, key):
+    pytest.importorskip("openai")
+    monkeypatch.setenv("TEAM_KEY", key)
+    assert OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")._secret == key
+
+
+KEY = "sk+test/0123456789=abcdefSECRET"
+
+
+def test_redact_finds_url_encoded_and_json_escaped_forms():
+    text = (f"raw {KEY}; url {quote_key(KEY)}; json-escaped {KEY.replace('/', chr(92) + '/')}; "
+            f"head {KEY[:12]}; short abc")
+    shown = redact(text, KEY)
+    no_key(shown, KEY)
+    assert shown == "raw [redacted]; url [redacted]; json-escaped [redacted]; head [redacted]; short abc"
+
+
+def test_provider_errors_are_built_from_fields_not_from_the_body_repr(mock_sdk, monkeypatch):
+    """The message names status, type, code, param and the message text, each redacted; nested data and the
+    body's repr never reach it, so an escaped or encoded copy of the key cannot slip past redaction."""
+    monkeypatch.setenv("TEAM_KEY", KEY)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(401, json={"error": {
+        "message": f"Incorrect API key provided: {quote_key(KEY)} ({KEY.replace('/', chr(92) + '/')})",
+        "type": "invalid_request_error", "code": "invalid_api_key", "param": None,
+        "metadata": {"raw": KEY, "header": f"Bearer {KEY}"}}})
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
+    message = str(caught.value)
+    assert message == ("openai:gpt-model@api.openai.com: HTTP 401 (type invalid_request_error, code "
+                       "invalid_api_key): Incorrect API key provided: [redacted] ([redacted])")
+    no_key(message, KEY)
+
+
+@pytest.mark.parametrize("body", ['{"error": "plain text error with sk+test/0123456789=abcdefSECRET"}',
+                                  "<html>Bad gateway sk+test%2F0123456789%3DabcdefSECRET</html>", ""])
+def test_provider_errors_without_an_error_object(mock_sdk, monkeypatch, body):
+    monkeypatch.setenv("TEAM_KEY", KEY)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(502, text=body)
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
+    assert str(caught.value).startswith("openai:gpt-model@api.openai.com: HTTP 502")
+    no_key(str(caught.value), KEY)
+
+
+def test_long_provider_messages_are_cut():
+    judge = verifier(fake_client(error=status_error(500, "x" * 5000)))
+    with pytest.raises(VerifierError) as caught:
+        judge.judge(CLAIM, COUNTER)
+    assert len(str(caught.value)) < 700 and str(caught.value).endswith("x...")
+
+
+def test_tracebacks_of_verifier_errors_hold_no_sdk_exception(mock_sdk, monkeypatch):
+    monkeypatch.setenv("TEAM_KEY", KEY)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(
+        401, json={"error": {"message": f"Incorrect API key provided: {KEY}"}})
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
+    error = caught.value
+    assert error.__cause__ is None and error.__context__ is None
+    shown = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    no_key(shown, KEY)
+    assert "AuthenticationError" not in shown
+
+
+def test_construction_errors_hold_no_exception_chain(monkeypatch):
+    openai = pytest.importorskip("openai")
+    monkeypatch.setenv("TEAM_KEY", KEY)
+
+    def broken(**kwargs):
+        raise openai.OpenAIError(f"cannot configure the client for {KEY}")
+
+    monkeypatch.setattr(openai, "OpenAI", broken)
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+    no_key(str(caught.value), KEY)
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", base_url="http://gateway.example.test/v1")
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+
+
+def test_sdk_debug_logs_never_carry_the_key(mock_sdk, monkeypatch, caplog):
+    """OPENAI_LOG=debug makes the SDK log the response's x-request-id header unfiltered; an endpoint that echoes
+    the key there must not get it into the log, nor may a logger created after the verifier."""
+    from openai._utils._logs import setup_logging
+    monkeypatch.setenv("OPENAI_LOG", "debug")
+    monkeypatch.setenv("TEAM_KEY", KEY)
+    sdk_logger = logging.getLogger("openai")
+    monkeypatch.setattr(sdk_logger, "level", sdk_logger.level)  # setup_logging changes it; put it back afterwards
+    setup_logging()
+    caplog.set_level(logging.DEBUG)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(
+        200, json=completion(), headers={"x-request-id": f"req-{KEY}"})
+    judge = OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    late = logging.getLogger("openai.created_later")
+    assert judge.judge(CLAIM, COUNTER).relation == "contradicts"
+    late.debug("late logger sees %s and %s", KEY, quote_key(KEY))
+    logged = caplog.text + "".join(record.getMessage() for record in caplog.records)
+    assert "request_id: req-[redacted]" in logged and "late logger sees [redacted] and [redacted]" in logged
+    no_key(logged, KEY)
+
+
+def test_production_client_follows_no_redirect_and_ignores_proxies(mock_sdk, monkeypatch):
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, "http://proxy.example.test:3128")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    for provider in ("openai", "ollama"):
+        assert OpenAICompatVerifier("m", provider).judge(CLAIM, COUNTER).relation == "contradicts"
+    # With trust_env, the proxy settings would route both requests away from the transport under test.
+    assert [str(r.url) for r in mock_sdk.seen] == ["https://api.openai.com/v1/chat/completions",
+                                                   "http://localhost:11434/v1/chat/completions"]
+    assert mock_sdk.options == [{"follow_redirects": False, "trust_env": False}] * 2
+
+
+@pytest.mark.parametrize("status, location", [
+    (307, "https://elsewhere.example.test/v1/chat/completions"),
+    (308, "http://elsewhere.example.test/v1/chat/completions"),
+    (301, "http://localhost:11434/v1/chat/completions"),
+    (302, "https://api.openai.com/v2/chat/completions"),
+])
+def test_redirects_are_errors_and_never_followed(mock_sdk, monkeypatch, status, location):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+
+    def handle(request):
+        if request.url.host == "api.openai.com" and request.url.path == "/v1/chat/completions":
+            return mock_sdk.httpx2.Response(status, headers={"location": location})
+        return mock_sdk.httpx2.Response(200, json=completion())
+
+    mock_sdk.state["handle"] = handle
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model").judge(CLAIM, COUNTER)
+    assert str(caught.value) == (f"openai:gpt-model@api.openai.com: HTTP {status}: the endpoint answered with a "
+                                 "redirect, which is not followed; check the base URL")
+    assert [str(r.url) for r in mock_sdk.seen] == ["https://api.openai.com/v1/chat/completions"]
+
+
+@pytest.mark.parametrize("finish", ["length", "content_filter", "tool_calls", "insufficient_system_resource",
+                                    "end_turn", "STOP", None])
+def test_only_a_finished_answer_is_a_verdict(finish):
+    judgment = verifier(fake_client(raw=answer(verdict("supports", "same words"), finish_reason=finish))).judge(
+        CLAIM, CLAIM)
+    assert judgment.relation == "unrelated"
+    assert judgment.rationale == (f"no verdict (finish_reason: {finish}; the answer did not end normally (only "
+                                  "finish_reason stop is used))")
+
+
+@pytest.mark.parametrize("error", [
+    {"status": 400, "message": "The model `gpt-nope` does not exist", "param": "model", "code": "model_not_found"},
+    {"status": 400, "message": "This model's maximum context length is 8192 tokens", "param": "messages"},
+    {"status": 422, "message": "Input should be a valid string", "param": "messages"},
+])
+def test_other_bad_requests_fail_at_once_without_a_fallback(error):
+    lines = []
+    error = dict(error)
+    status = error.pop("status")
+    client = fake_client(error=status_error(status, **error))
+    judge = verifier(client, progress=lines.append)
+    with pytest.raises(VerifierError) as caught:
+        judge.judge(CLAIM, COUNTER)
+    assert f"HTTP {status}" in str(caught.value) and error["message"] in str(caught.value)
+    assert len(client.chat.completions.calls) == 1 and lines == [] and judge.response_format == "json_schema"
+
+
+@pytest.mark.parametrize("fields", [
+    {"message": "This response_format type is unavailable now"},  # DeepSeek's wording
+    {"message": "Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.",
+     "param": "response_format"},
+    {"message": "'response_format.type' must be 'json_schema' or 'text'"},
+    {"message": "invalid request", "param": "response_format.json_schema"},
+    {"message": "JSON_SCHEMA output is not available for this model"},
+])
+def test_a_format_refusal_is_recognized_by_param_or_message(fields):
+    class Refusing(FakeCompletions):
+        def create(self, **kwargs):
+            if kwargs.get("response_format", {}).get("type") == "json_schema":
+                self.calls.append(kwargs)
+                raise status_error(400, **fields)
+            return super().create(**kwargs)
+
+    judge = verifier(SimpleNamespace(chat=SimpleNamespace(completions=Refusing())))
+    assert judge.judge(CLAIM, COUNTER).relation == "contradicts" and judge.response_format == "json_object"
+
+
+def test_format_negotiation_is_serialized_under_concurrency():
+    lines = []
+    client = fake_client(refuse=("json_schema", "json_object"), delay=lambda claim, passage: 0.02)
+    judge = verifier(client, progress=lines.append)
+    pairs = [(CLAIM, f"{COUNTER} {n}") for n in range(8)]
+    assert [j.relation for j in judge_all(judge, pairs, max_concurrency=4)] == ["contradicts"] * 8
+    kinds = [c.get("response_format", {}).get("type") for c in client.chat.completions.calls]
+    assert kinds == ["json_schema", "json_object"] + [None] * 8
+    assert len(lines) == 2 and judge.response_format == "text"
+
+
+def test_cli_max_concurrency_4_costs_one_request_per_refused_format(two_claims, monkeypatch):
+    client = fake_client(refuse=("json_schema", "json_object"), delay=lambda claim, passage: 0.02)
+    cli_with_fake(monkeypatch, client)
+    result = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"),
+                                 "--verifier", "openai", "--openai-model", "m", "--max-concurrency", "4"])
+    assert result.exit_code == 0, result.output
+    assert len(client.chat.completions.calls) == 4 + 2  # four pairs, plus one request per refused format
+    assert result.stderr.count("the endpoint refused") == 2

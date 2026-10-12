@@ -12,21 +12,29 @@ Transport and secrets:
 
 - The base URL must use https; plain http is accepted only for localhost, 127.0.0.1 and ::1. A base URL with a
   user name, password, query or fragment is refused, and error messages never repeat it.
-- The key is read from the environment variable the caller names, never taken as an argument. It is never
-  shown: errors from the SDK pass through ``redact`` before they become a ``VerifierError``.
+- Requests go only there: the HTTP client follows no redirect (a 3xx is an error) and ignores proxy and
+  certificate settings from the environment (``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, ...).
+- The key is read from the environment variable the caller names, never taken as an argument, and must consist
+  of the characters keys use (``KEY_CHARS``). It is never shown: error messages are built from the fields of the
+  provider's error (status, type, code, param, message), each passed through ``redact``; no ``VerifierError``
+  keeps the SDK's exception as its cause or context; and a log filter redacts it from the SDK's and the HTTP
+  stack's log records (``OPENAI_LOG=debug``).
 - Only the arguments configure the client. The SDK would otherwise read ``OPENAI_BASE_URL``,
   ``OPENAI_ORG_ID``, ``OPENAI_PROJECT_ID`` and ``OPENAI_CUSTOM_HEADERS`` from the environment and send what they
   hold to whatever endpoint is configured; ``isolated_headers`` removes those headers from every request.
 
 Structured output: a request asks for a JSON verdict with ``response_format`` ``json_schema`` (strict). An
-endpoint that rejects the request with HTTP 400 or 422 is asked again with ``json_object``, then with no
-``response_format`` at all; the instructions ask for the same JSON object every time. The first format the
-endpoint accepts is kept for the rest of the run. An answer that is not a JSON verdict (invalid JSON, a
-repeated or unknown key, a relation outside the schema), an empty answer and a refusal are all recorded as no
-verdict (``unrelated``, with the reason in the rationale), never as support.
+endpoint that answers HTTP 400 or 422 with an error naming the format (``response_format``, ``json_schema`` or
+``json_object``) is asked again with ``json_object``, then with no ``response_format`` at all; the instructions
+ask for the same JSON object every time. Any other error ends the audit at once. The first request settles the
+format while concurrent ones wait, so each refused format costs one extra request per run. Only an answer that
+ended normally (``finish_reason`` ``stop``) is read. An answer that did not, one that is not a JSON verdict
+(invalid JSON, a repeated or unknown key, a relation outside the schema), an empty answer and a refusal are all
+recorded as no verdict (``unrelated``, with the reason in the rationale), never as support.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import threading
@@ -35,7 +43,7 @@ from dataclasses import dataclass
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from pydantic import ConfigDict
 
@@ -78,6 +86,20 @@ SDK_ENV_HEADERS = ("OpenAI-Organization", "OpenAI-Project")
 # Error text is searched for runs of this many characters of the key.
 REDACT_RUN = 8
 REDACTED = "[redacted]"
+# The characters real API keys use (OpenAI, xAI, DeepSeek, Gemini, base64 and JWT tokens). A key with others
+# (a backslash or a quote, which a JSON or Python repr would escape) is refused, so redaction can find it.
+KEY_CHARS = re.compile(r"[A-Za-z0-9._~+/=-]+")
+# Retries the SDK makes after a connection error, 408, 409, 429 or 5xx (its default).
+MAX_RETRIES = 2
+# The only finish_reason whose answer is used: the normal end of an answer for OpenAI, DeepSeek ("the model hit
+# a natural stop point", https://api-docs.deepseek.com/api/create-chat-completion), xAI (the examples in
+# https://docs.x.ai/developers/rest-api-reference/inference/chat-completions) and Ollama (openai/openai.go
+# passes its done_reason, "stop" at a natural end). Google's OpenAI-compatibility page shows no response, so
+# Gemini is assumed to follow OpenAI. length, content_filter, tool_calls, insufficient_system_resource, any
+# other value and none at all are no verdict, even when the text parses.
+FINISHED = "stop"
+# An HTTP 400 or 422 whose error mentions one of these refuses the format, not the request.
+_FORMAT_ERROR = re.compile(r"response_format|json_schema|json_object", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -161,16 +183,26 @@ def resolve_endpoint(provider: str = Provider.openai.value, base_url: str | None
     return Endpoint(chosen, url, check_key_env(api_key_env), preset_key=False)
 
 
-def redact(text: str, secret: str | None) -> str:
-    """``text`` with ``secret``, and every run of ``REDACT_RUN`` or more of its consecutive characters, replaced.
+def secret_forms(secret: str) -> list[str]:
+    """How a key can appear in provider text: as is, URL-encoded (``+``, ``/`` and ``=`` as ``%2B``, ``%2F`` and
+    ``%3D``), and JSON-escaped with ``\\/``. Keys hold only ``KEY_CHARS``, so a JSON or Python string repr
+    cannot escape them any other way."""
+    forms = [secret, quote(secret, safe=""), secret.replace("/", "\\/")]
+    return list(dict.fromkeys(form for form in forms if form))
 
-    The run rule covers an error body that quotes part of a key, or the key cut at a line end."""
-    if not secret:
+
+def redact(text: str, *secrets: str | None) -> str:
+    """``text`` with each secret (in each of its ``secret_forms``), and every run of ``REDACT_RUN`` or more
+    consecutive characters of one of those forms, replaced by ``[redacted]``.
+
+    The run rule covers an error body that quotes part of a key, or the key cut at a line end. Whole forms of
+    every secret go first, longest first, so a key that shares a run with another is still replaced whole."""
+    forms = sorted({form for secret in secrets if secret for form in secret_forms(secret)}, key=len, reverse=True)
+    for form in forms:
+        text = text.replace(form, REDACTED)
+    pieces = {form[i:i + REDACT_RUN] for form in forms for i in range(len(form) - REDACT_RUN + 1)}
+    if not pieces:
         return text
-    text = text.replace(secret, REDACTED)
-    if len(secret) < REDACT_RUN:
-        return text
-    pieces = {secret[i:i + REDACT_RUN] for i in range(len(secret) - REDACT_RUN + 1)}
     hidden = [False] * len(text)
     for i in range(len(text) - REDACT_RUN + 1):
         if text[i:i + REDACT_RUN] in pieces:
@@ -185,6 +217,58 @@ def redact(text: str, secret: str | None) -> str:
             out.append(text[i])
             i += 1
     return "".join(out)
+
+
+class _KeyFilter(logging.Filter):
+    """Redacts every registered key from log records of the SDK and its HTTP stack.
+
+    With ``OPENAI_LOG=debug`` the SDK logs, among other things, a response's ``x-request-id`` header as the
+    endpoint sent it; an endpoint that echoes the key there would put it in the log."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._secrets: list[str] = []
+
+    def add(self, secret: str) -> None:
+        with self._lock:
+            if secret not in self._secrets:
+                self._secrets.append(secret)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        with self._lock:
+            secrets = list(self._secrets)
+        if not secrets:
+            return True
+        try:
+            message = record.getMessage()
+        except Exception:  # a malformed record is the logging module's business, not a reason to drop it
+            return True
+        cleaned = redact(message, *secrets)
+        if cleaned != message:
+            record.msg, record.args = cleaned, None
+        return True
+
+
+_LOG_FILTER = _KeyFilter()
+# Loggers of the SDK and the HTTP libraries under it (httpx2 and httpcore2 in openai 3.x).
+LOGGER_ROOTS = ("openai", "httpx", "httpx2", "httpcore", "httpcore2")
+
+
+def guard_logs(secret: str | None) -> None:
+    """Redact ``secret`` from the SDK's and the HTTP stack's log records, for the rest of the process.
+
+    A filter on a logger sees only the records logged on that logger, not those of its children, so it goes on
+    each existing logger under ``LOGGER_ROOTS``; every request calls this again, for loggers created
+    since."""
+    if secret:
+        _LOG_FILTER.add(secret)
+    names = list(logging.Logger.manager.loggerDict)
+    for name in [*LOGGER_ROOTS, *names]:
+        if name.split(".", 1)[0] in LOGGER_ROOTS:
+            logger = logging.getLogger(name)
+            if _LOG_FILTER not in logger.filters:
+                logger.addFilter(_LOG_FILTER)
 
 
 def isolated_headers(api_key: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
@@ -268,6 +352,23 @@ def _usage(usage: Any) -> Any:
                            output_tokens=getattr(usage, "completion_tokens", None))
 
 
+def _scalar(value: Any) -> str | None:
+    """A string, number or boolean from an error body as text; None for anything else (no repr of a body)."""
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, (bool, int, float)):
+        return str(value)
+    return None
+
+
+@dataclass(frozen=True)
+class Failure:
+    """A request that did not produce a response, described without the exception that reported it."""
+    message: str
+    detail: str = ""
+    format_refused: bool = False
+
+
 class OpenAICompatVerifier:
     """Ask a model behind an OpenAI-compatible Chat Completions API for a verdict on one claim/passage pair."""
 
@@ -277,33 +378,50 @@ class OpenAICompatVerifier:
         """``provider`` picks the preset base URL and key variable (``PRESETS``); ``base_url`` and
         ``api_key_env`` (the variable's name, never the key) override it. ``progress`` receives a line
         whenever the endpoint refuses a response format and the verifier falls back to the next one."""
+        problem = None
         try:
             self.model = check_model(model)
             self.endpoint = resolve_endpoint(provider, base_url, api_key_env)
         except ValueError as exc:
-            raise VerifierError(str(exc)) from exc
+            problem = str(exc)
+        if problem is not None:
+            raise VerifierError(problem)
         self.name = f"openai:{model}@{self.endpoint.host}"
         try:
             import openai
-            self._api_error: type[Exception] | tuple = openai.OpenAIError
-        except ImportError as exc:
-            if client is None:
-                raise VerifierError("the OpenAI-compatible verifier needs the openai package: "
-                                    "pip install 'memfalsify[openai]'") from exc
-            self._api_error = ()
+        except ImportError:
+            openai = None
+        if openai is None and client is None:
+            raise VerifierError("the OpenAI-compatible verifier needs the openai package: "
+                                "pip install 'memfalsify[openai]'")
+        self._sdk = openai
+        self._api_error: type[Exception] | tuple = openai.OpenAIError if openai is not None else ()
         self._secret = self._key(required=client is None)
+        if openai is not None:
+            guard_logs(self._secret)
         if client is None:
-            try:
-                key = self._secret or NO_KEY
-                client = openai.OpenAI(api_key=key, base_url=self.endpoint.base_url,
-                                       default_headers=isolated_headers(key))
-            except openai.OpenAIError as exc:
-                raise VerifierError(self._shown(f"{self.name}: {exc}")) from exc
+            client = self._client()
         self.client = client
         self.meter = UsageMeter(self.name)
         self._format = 0  # index into FORMATS: the first one the endpoint has not refused
-        self._lock = threading.Lock()
+        self._settled = False  # a request has succeeded with FORMATS[self._format]
+        self._negotiating = threading.Lock()
         self._progress = progress or (lambda message: None)
+
+    def _client(self) -> Any:
+        """The SDK client: our own HTTP client, which follows no redirect (a 307 or 308 would resend the claim,
+        the evidence and the key to wherever the endpoint points) and ignores proxy and certificate settings
+        from the environment (``trust_env=False``), so requests go only to the configured base URL."""
+        openai = self._sdk
+        key = self._secret or NO_KEY
+        failure = None
+        try:
+            http = openai.DefaultHttpxClient(follow_redirects=False, trust_env=False)
+            return openai.OpenAI(api_key=key, base_url=self.endpoint.base_url,
+                                 default_headers=isolated_headers(key), http_client=http, max_retries=MAX_RETRIES)
+        except openai.OpenAIError as exc:  # the SDK's own configuration errors: fixed texts, no response body
+            failure = self._shown(f"{self.name}: {exc}")
+        raise VerifierError(failure)
 
     def usage(self) -> list[VerifierStats]:
         return [self.meter.snapshot()]
@@ -315,28 +433,92 @@ class OpenAICompatVerifier:
 
     def judge(self, claim: str, passage: str) -> Judgment:
         messages = prompt(claim, passage)
-        while True:
-            index = self._format
-            try:
-                response = self.client.chat.completions.create(model=self.model, messages=messages,
-                                                               **request_format(FORMATS[index]))
-            except self._api_error as exc:
-                if index + 1 < len(FORMATS) and getattr(exc, "status_code", None) in (400, 422):
-                    self._fall_back(index, exc.status_code)
-                    continue
-                raise VerifierError(self._shown(f"{self.name}: {exc}")) from exc
-            self.meter.record(_usage(getattr(response, "usage", None)))
-            return self._judgment(response)
+        if not self._settled:
+            # The first request settles the format; concurrent judgments wait for it, so each refused format
+            # costs one extra request per run, however many requests are in flight.
+            with self._negotiating:
+                if not self._settled:
+                    return self._negotiate(messages)
+        response, failure = self._send(messages, FORMATS[self._format])
+        if failure is not None:
+            raise VerifierError(failure.message)
+        return self._judgment(response)
 
-    def _fall_back(self, index: int, status: int) -> None:
-        """A request with ``FORMATS[index]`` got HTTP 400 or 422: use the next format from now on. Several threads
-        can see the same refusal; only the first moves on (and reports it)."""
-        with self._lock:
-            if self._format == index:
-                self._format = index + 1
-                self._progress(self._shown(
-                    f"{self.name}: HTTP {status} for a request with {_FORMAT_NAMES[FORMATS[index]]}; "
-                    f"asking with {_FORMAT_NAMES[FORMATS[index + 1]]} from now on"))
+    def _negotiate(self, messages: list[dict[str, str]]) -> Judgment:
+        """Ask in the current format, falling back to the next one while the endpoint refuses the format."""
+        while True:
+            mode = FORMATS[self._format]
+            response, failure = self._send(messages, mode)
+            if failure is None:
+                self._settled = True
+                return self._judgment(response)
+            if not failure.format_refused or self._format + 1 == len(FORMATS):
+                raise VerifierError(failure.message)
+            self._format += 1
+            self._progress(self._shown(
+                f"{self.name}: the endpoint refused {_FORMAT_NAMES[mode]} ({failure.detail}); asking with "
+                f"{_FORMAT_NAMES[FORMATS[self._format]]} from now on"))
+
+    def _send(self, messages: list[dict[str, str]], mode: str) -> tuple[Any, Failure | None]:
+        """One request. A failure is described inside the ``except`` block and raised by the caller after it,
+        so no ``VerifierError`` carries the SDK's exception (and the body it may quote) as cause or context."""
+        guard_logs(None)  # loggers created since the last request
+        failure = None
+        try:
+            response = self.client.chat.completions.create(model=self.model, messages=messages,
+                                                           **request_format(mode))
+        except self._api_error as exc:
+            failure = self._failure(exc, mode)
+        if failure is not None:
+            return None, failure
+        self.meter.record(_usage(getattr(response, "usage", None)))
+        return response, None
+
+    def _failure(self, exc: Exception, mode: str) -> Failure:
+        """What went wrong, built from the error's fields (status, type, code, param, message), each redacted;
+        never from ``str()`` or ``repr()`` of a response body."""
+        status = getattr(exc, "status_code", None)
+        if not isinstance(status, int):
+            return Failure(f"{self.name}: {self._without_response(exc)}")
+        if 300 <= status < 400:
+            return Failure(f"{self.name}: HTTP {status}: the endpoint answered with a redirect, which is not "
+                           "followed; check the base URL")
+        body = getattr(exc, "body", None)
+        fields: dict[str, str] = {}
+        message = None
+        if isinstance(body, Mapping):
+            for name in ("type", "code", "param"):
+                value = _scalar(body.get(name))
+                if value is not None:
+                    fields[name] = value
+            message = _scalar(body.get("message")) or _scalar(body.get("detail"))
+        else:
+            message = _scalar(body)
+        text = f"HTTP {status}"
+        if fields:
+            text += " (" + ", ".join(f"{name} {self._field(value, 100)}" for name, value in fields.items()) + ")"
+        if message:
+            text += ": " + self._field(message, 500)
+        # Only an error that names the format means "ask in another format"; any other 400 (an unknown model,
+        # a context that is too long) is reported at once.
+        mentions = " ".join(value for value in (message, *fields.values()) if value)
+        refused = mode != "text" and status in (400, 422) and bool(_FORMAT_ERROR.search(mentions))
+        return Failure(f"{self.name}: {text}", detail=text, format_refused=refused)
+
+    def _without_response(self, exc: Exception) -> str:
+        """A failure without an HTTP status: the SDK's fixed description of its kind, never its message."""
+        sdk = self._sdk
+        if sdk is not None and isinstance(exc, sdk.APITimeoutError):
+            return "the request timed out"
+        if sdk is not None and isinstance(exc, sdk.APIConnectionError):
+            return "could not connect to the endpoint"
+        if sdk is not None and isinstance(exc, sdk.APIResponseValidationError):
+            return "the response does not have the shape of a chat completion"
+        return f"the request failed ({type(exc).__name__})"
+
+    def _field(self, value: str, limit: int) -> str:
+        cleaned = redact(value, self._secret)
+        return self._shown(cleaned[:limit] + ("..." if len(cleaned) > limit else ""))
 
     def _judgment(self, response: Any) -> Judgment:
         choices = getattr(response, "choices", None) or []
@@ -347,6 +529,8 @@ class OpenAICompatVerifier:
         message = getattr(choice, "message", None)
         if getattr(message, "refusal", None):
             return self._no_verdict(finish, "the model refused")
+        if finish != FINISHED:
+            return self._no_verdict(finish, "the answer did not end normally (only finish_reason stop is used)")
         content = getattr(message, "content", None)
         if not isinstance(content, str) or not content.strip():
             return self._no_verdict(finish, "the answer is empty")
@@ -372,8 +556,9 @@ class OpenAICompatVerifier:
                      if self.endpoint.preset_key else "the environment variable you named is not set or is empty")
             raise VerifierError(f"{self.name}: no API key: {where}; set it, or name another variable with "
                                 "--api-key-env")
-        if not key.isascii() or any(ch.isspace() or not ch.isprintable() for ch in key):
-            raise VerifierError(f"{self.name}: the API key contains whitespace, control or non-ASCII characters")
+        if not KEY_CHARS.fullmatch(key):
+            raise VerifierError(f"{self.name}: the API key holds characters API keys do not use; only letters, "
+                                "digits and . _ ~ + / = - are accepted")
         return key
 
     def _shown(self, text: object) -> str:

@@ -620,20 +620,23 @@ def test_action_runs_the_openai_verifier(tmp_path, monkeypatch, runner_env, caps
 def test_action_openai_api_failure_exits_2_without_the_key(tmp_path, monkeypatch, runner_env, capsys):
     openai = pytest.importorskip("openai")
     httpx2 = pytest.importorskip("httpx2")
+    from memfalsify import openai_compat
+
     secret = "sk-test-0123456789abcdefSECRETxyz"
     monkeypatch.setenv("TEAM_OPENAI_KEY", secret)
     leak = {"error": {"message": f"Incorrect API key provided: {secret}"}}
     transport = httpx2.MockTransport(lambda request: httpx2.Response(401, json=leak))
-    real = openai.OpenAI
-    monkeypatch.setattr(openai, "OpenAI", lambda **kw: real(**kw, max_retries=0,
-                                                            http_client=httpx2.Client(transport=transport)))
+    real = openai.DefaultHttpxClient  # the verifier's own client, with only the transport replaced
+    monkeypatch.setattr(openai, "DefaultHttpxClient", lambda **kw: real(**kw, transport=transport))
+    monkeypatch.setattr(openai_compat, "MAX_RETRIES", 0)
     monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "demo"))
     env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md", "MEMFALSIFY_EVIDENCE": "evidence",
            "MEMFALSIFY_VERIFIER": "openai", "MEMFALSIFY_OPENAI_MODEL": "gpt-model",
            "MEMFALSIFY_API_KEY_ENV": "TEAM_OPENAI_KEY"}
     assert action.main(env) == 2
     log = capsys.readouterr().out
-    assert "MemFalsify CLI: error: openai:gpt-model@api.openai.com: Error code: 401" in log
+    assert ("MemFalsify CLI: error: openai:gpt-model@api.openai.com: HTTP 401: Incorrect API key provided: "
+            "[redacted]") in log
     assert "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2)" in log
     summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
     for text in (log, summary):
