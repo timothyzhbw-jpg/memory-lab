@@ -40,8 +40,8 @@ wheel 中包含 `py.typed`。支持 Python 3.10+。
 `min_coverage=0.5`、`max_judged=None`，无排除项。`exclude=("private/**",)` 排除证据。
 `audit_claims` 要求 `memory_file`、`files_read`、`memory_paths` 关键字，可用 `only` 限定输出。
 只有人工 `Review` 能确定支持／反对，模型仍是候选。自定义 `Verifier` 提供 `name: str` 和
-`judge(claim: str, passage: str) -> Judgment`。包导入不导入 `anthropic` 或 `typesafe_sdk`；
-构造模型验证器需要 `[llm]`／`[jev]` 扩展与凭据或注入客户端。`DualVerifier` 保留分歧；
+`judge(claim: str, passage: str) -> Judgment`。包导入不导入 `anthropic`、`typesafe_sdk` 或 `openai`；
+构造模型验证器需要 `[llm]`／`[jev]`／`[openai]` 扩展与凭据或注入客户端。`DualVerifier` 保留分歧；
 `CascadeVerifier` 在首个判断置信度不足时升级。模型审计显式传入 `min_coverage=0.2, max_judged=8`
 与 CLI 预筛选一致。模型失败为 `VerifierError`；证据错误为 `memcore.EvidenceError`；
 无效输入为 `ValueError`（包括 Pydantic 验证错误），文件 I/O 可能抛出 `OSError`。
@@ -256,6 +256,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.LLMVerifier` | 构造参数为 model、可选 client、effort="low"、fallbacks=None，以及仅限关键字的 batch=False（Message Batches API）、progress 和 sleep；仅构造时导入 anthropic。缓存提示前缀；judge_many 和 usage() 供审计使用。 |
 | `memfalsify.LexicalVerifier` | 离线验证器；覆盖阈值 related=0.6、support=0.75。 |
 | `memfalsify.MemoryFormat` | 不可变的智能体指令文件格式：名称（例如 cursor-rule）、读取它的智能体，以及作为记忆元数据保留的 frontmatter 字段。 |
+| `memfalsify.OpenAICompatVerifier` | 构造参数为 model（必填）、provider="openai"（预设的 base URL 和密钥变量：openai、grok、deepseek、gemini、ollama）、覆盖用的 base_url 和 api_key_env（变量名，绝不是密钥本身）、可选 client，以及仅限关键字的 response_format（json_schema、json_object 或 text；provider 为 deepseek 且使用预设 URL 时默认 json_object，否则为 json_schema（deepseek 加上显式 base_url 时也是））；仅构造时导入 openai，并从指定的环境变量读取密钥。无法使用的回答记为无判断（unrelated）；服务商的错误文本从不显示。usage() 报告请求数和 token 数。 |
 | `memfalsify.Proposal` | 建议操作及原因；replacement 始终为 None。 |
 | `memfalsify.Relation` | Literal 类型：supports、contradicts、unrelated、disputed。 |
 | `memfalsify.RemovedClaim` | 已删除记忆版本及删除该记忆的提交。 |
@@ -389,8 +390,8 @@ validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Ite
 | API | 用途 |
 |---|---|
 | `memlab_mcp.__version__` | 已安装发行包的版本字符串。 |
-| `memlab_mcp.create_server` | 构建只读 MCPServer，root="."、allow_model_verifiers=False；不启动服务。要求支持 POSIX 限制读取。 |
+| `memlab_mcp.create_server` | 构建只读 MCPServer，root="."、allow_model_verifiers=False；不启动服务。要求支持 POSIX 限制读取。openai_model、openai_provider、openai_base_url、openai_api_key_env 和 openai_response_format 配置 openai 验证器（即服务器的 --openai-* 参数），工具参数无法更改；值不合法时抛出 ValueError。 |
 
 ```python
-create_server(root: Path | str='.', allow_model_verifiers: bool=False) -> MCPServer
+create_server(root: Path | str='.', allow_model_verifiers: bool=False, openai_model: Optional[str]=None, openai_provider: Optional[str]=None, openai_base_url: Optional[str]=None, openai_api_key_env: Optional[str]=None, openai_response_format: Optional[str]=None) -> MCPServer
 ```

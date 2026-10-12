@@ -1,6 +1,7 @@
 """MemFalsify benchmark: audit labeled cases and score each memory's status against its label.
 
-    python benchmarks/memfalsify/run.py [--verifier lexical|llm|jev|dual|cascade] [--case ID]... [--json OUT]
+    python benchmarks/memfalsify/run.py [--verifier lexical|llm|jev|dual|cascade|openai] [--case ID]... [--json OUT]
+    python benchmarks/memfalsify/run.py --verifier openai --provider ollama --openai-model MODEL
 
 The case format and every metric are defined in README.md next to this file.
 """
@@ -25,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError  # noqa: E402
 
 from memcore import EvidenceError, locate_quote, resolve_inside  # noqa: E402
 from memcore.jsonutil import loads  # noqa: E402
-from memfalsify import __version__, jev, llm  # noqa: E402
+from memfalsify import __version__, jev, llm, openai_compat  # noqa: E402
 from memfalsify import AuditReport, Issue, audit  # noqa: E402
 from memfalsify.cli import MAX_JUDGED, VerifierChoice, build_verifier, preselection  # noqa: E402
 from memfalsify import parse_memory  # noqa: E402
@@ -375,10 +376,27 @@ app = typer.Typer(add_completion=False, help="Score memfalsify verifiers on the 
 @app.command()
 def main(
     verifier: VerifierChoice = typer.Option(VerifierChoice.lexical, "--verifier",
-                                            help="lexical (offline), llm, jev, dual (llm + jev) "
-                                                 "or cascade (jev, escalating to llm)"),
+                                            help="lexical (offline), llm, jev, dual (llm + jev), "
+                                                 "cascade (jev, escalating to llm) or openai (an "
+                                                 "OpenAI-compatible Chat Completions API)"),
     llm_model: str = typer.Option(llm.DEFAULT_MODEL, help="Claude model for --verifier llm/dual/cascade"),
     jev_model: str = typer.Option(jev.DEFAULT_MODEL, help="TypeSafe model for --verifier jev/dual/cascade"),
+    openai_model: Optional[str] = typer.Option(None, "--openai-model",
+                                               help="--verifier openai: the model, as the provider names it "
+                                                    "(required; no default)"),
+    provider: openai_compat.Provider = typer.Option(
+        openai_compat.Provider.openai, "--provider",
+        help="--verifier openai: preset base URL and key variable (openai, grok, deepseek, gemini, ollama)"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", metavar="URL",
+                                           help="--verifier openai: base URL overriding the provider's (https, "
+                                                "or http only for localhost, 127.0.0.1 or ::1)"),
+    api_key_env: Optional[str] = typer.Option(None, "--api-key-env", metavar="NAME",
+                                              help="--verifier openai: name of the environment variable holding "
+                                                   "the API key (never the key itself)"),
+    openai_response_format: Optional[openai_compat.ResponseFormat] = typer.Option(
+        None, "--openai-response-format",
+        help="--verifier openai: json_schema, json_object or text (default: json_object for deepseek, json_schema "
+             "otherwise; an explicit --base-url resets it to json_schema)"),
     accept_at: float = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence"),
     case: Optional[list[str]] = typer.Option(None, "--case", help="Run only this case ID (repeatable)"),
     json_out: Optional[Path] = typer.Option(None, "--json", dir_okay=False,
@@ -396,14 +414,22 @@ def main(
         if check:
             typer.echo(f"{len(cases)} case(s), {sum(len(c.claims) for c in cases)} labeled claims: labels OK")
             return
-        result = evaluate(cases, build_verifier(verifier, llm_model, jev_model, accept_at),
-                          **preselection(verifier, min_coverage, max_judged))
+        if verifier is VerifierChoice.openai:
+            judge = build_verifier(verifier, llm_model, jev_model, accept_at, openai=openai_compat.OpenAISettings(
+                openai_model, provider.value, base_url, api_key_env,
+                openai_response_format.value if openai_response_format else None))
+        else:
+            judge = build_verifier(verifier, llm_model, jev_model, accept_at)
+        result = evaluate(cases, judge, **preselection(verifier, min_coverage, max_judged))
     except (ValueError, OSError, VerifierError) as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(2)
     result["settings"]["verifier"] = verifier.value  # model names are part of result["verifier"]
     if verifier is VerifierChoice.cascade:
         result["settings"]["accept_at"] = accept_at
+    if verifier is VerifierChoice.openai:  # the model and host are part of result["verifier"]
+        result["settings"]["provider"] = provider.value
+        result["settings"]["response_format"] = judge.response_format
     typer.echo(to_markdown(result), nl=False)
     if json_out:
         json_out.write_bytes((json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))

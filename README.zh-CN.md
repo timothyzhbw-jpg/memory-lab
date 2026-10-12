@@ -175,7 +175,7 @@ repos:
 memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict
 ```
 
-一次提交如果只暂存了被链接的 `.md` 文件，钩子不会运行。请同时暂存链接它的 `CLAUDE.md`、`AGENTS.md` 或 `MEMORY.md`。默认验证器是词法的，并且离线。要用 `llm`、`jev`、`dual` 或 `cascade`，把对应的 SDK 写进 `additional_dependencies`（例如 `anthropic>=1.13` 或 `typesafe-sdk`），并在 `args` 里传入 `--verifier`。钩子的安装已经带上本仓库里的 MemFalsify。
+一次提交如果只暂存了被链接的 `.md` 文件，钩子不会运行。请同时暂存链接它的 `CLAUDE.md`、`AGENTS.md` 或 `MEMORY.md`。默认验证器是词法的，并且离线。要用 `llm`、`jev`、`dual`、`cascade` 或 `openai`，把对应的 SDK 写进 `additional_dependencies`（例如 `anthropic>=1.13`、`typesafe-sdk` 或 `openai>=3.0`），并在 `args` 里传入 `--verifier`（用 `openai` 时还要传 `--openai-model` 和服务商）。钩子的安装已经带上本仓库里的 MemFalsify。
 
 ### 组织记忆：回放决策
 
@@ -538,11 +538,11 @@ codex mcp add memlab -- /absolute/path/to/memory-lab/.venv/bin/memlab-mcp --root
 
 ## MCP 服务器
 
-`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供十个工具：`memfalsify_claims`、`memfalsify_audit`、`memfalsify_diff`、`memfalsify_history`、`memfalsify_rollback`、`orgmemory_validate`、`orgmemory_replay`、`orgmemory_explain`、`orgmemory_audit` 和 `orgmemory_changes`。`memfalsify_diff` 比较 git 里一份记忆文件的基准修订版本和另一端（默认是工作区），只审计新增或修改过的记忆。`memfalsify_history` 给出每条记忆由哪个提交引入、最后由哪个提交修改，并列出被删除的记忆。`memfalsify_rollback` 返回一条记忆的补丁，从不应用它。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内。这三个 git 工具还会拒绝工作区、git 目录、公共目录或对象库落在该根目录之外的仓库。不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭；加上之后，`memfalsify_audit` 和 `memfalsify_diff` 才能使用它们。五个只读资源按 URI 返回同样的文本：`memlab://memory/<path>/claims`（JSON）和 `/audit`（Markdown，一律使用 lexical 验证器），以及 `memlab://dataset/<path>/state`、`/audit` 和 `/explain/<subject>`（Markdown）。三个提示词 `audit_memory`、`review_memory_changes` 和 `explain_status` 引导 Agent 走完技能里“先出报告”的流程。它们把参数当作数据引用，从不让 Agent 写文件。工具、资源、提示词的参数，客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
+`memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供十个工具：`memfalsify_claims`、`memfalsify_audit`、`memfalsify_diff`、`memfalsify_history`、`memfalsify_rollback`、`orgmemory_validate`、`orgmemory_replay`、`orgmemory_explain`、`orgmemory_audit` 和 `orgmemory_changes`。`memfalsify_diff` 比较 git 里一份记忆文件的基准修订版本和另一端（默认是工作区），只审计新增或修改过的记忆。`memfalsify_history` 给出每条记忆由哪个提交引入、最后由哪个提交修改，并列出被删除的记忆。`memfalsify_rollback` 返回一条记忆的补丁，从不应用它。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内。这三个 git 工具还会拒绝工作区、git 目录、公共目录或对象库落在该根目录之外的仓库。不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭；加上之后，`memfalsify_audit` 和 `memfalsify_diff` 才能使用它们。`openai` 验证器的端点和模型只能由服务器的 `--openai-*` 启动参数设定，工具参数无法更改。五个只读资源按 URI 返回同样的文本：`memlab://memory/<path>/claims`（JSON）和 `/audit`（Markdown，一律使用 lexical 验证器），以及 `memlab://dataset/<path>/state`、`/audit` 和 `/explain/<subject>`（Markdown）。三个提示词 `audit_memory`、`review_memory_changes` 和 `explain_status` 引导 Agent 走完技能里“先出报告”的流程。它们把参数当作数据引用，从不让 Agent 写文件。工具、资源、提示词的参数，客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
 
-## 验证后端：词法、LLM、Jev
+## 验证后端：词法、LLM、Jev、兼容 OpenAI 的模型
 
-验证器判断一条记忆和一段证据的关系：`supports`（支持）、`contradicts`（反驳）或 `unrelated`（无关），并给出理由。内置三个后端，`dual` 和 `cascade` 是两个模型后端的组合方式：
+验证器判断一条记忆和一段证据的关系：`supports`（支持）、`contradicts`（反驳）或 `unrelated`（无关），并给出理由。内置四个后端，`dual` 和 `cascade` 是 Claude 与 Jev 的组合方式：
 
 | `--verifier` | 谁来判断 | 需要什么 | 取舍 |
 |---|---|---|---|
@@ -551,6 +551,7 @@ codex mcp add memlab -- /absolute/path/to/memory-lab/.venv/bin/memlab-mcp --root
 | `jev` | [Jev](https://docs.typesafe.ai)：TypeSafe AI 的判断模型，只做决策不生成文字，在三种关系中选一个并给出各自的概率（`--jev-model`，默认 `jev-latest`） | `pip install 'memfalsify[jev]'` 和 `TYPESAFE_API_KEY` | 成本只有 LLM 评委的零头，带校准过的置信度；没有文字解释，**会把记忆和证据原文发给 TypeSafe API** |
 | `dual` | `llm` 和 `jev` 各自独立判断 | 两者都要 | 意见一致就照常输出；不一致就标为 `disputed`，报告里列出双方意见 |
 | `cascade` | 先问 `jev`；只有 Jev 的置信度低于 `--accept-at`（默认 0.8）时才问 Claude | 两者都要 | Jev 大多有把握时，成本接近只用 Jev；报告里会同时显示 Jev 没把握的意见和 Claude 的判断。Jev 有把握的答案不会再被交叉核对 |
+| `openai` | 任何兼容 OpenAI Chat Completions API 的模型阅读证据并写出判断理由：OpenAI、xAI Grok、DeepSeek、Google Gemini 或本地 Ollama（`--provider`），也可以是其他端点（`--base-url`）。`--openai-model` 必填 | `pip install 'memfalsify[openai]'`，以及服务商对应变量里的 key（`--api-key-env` 可指定别的变量）；Ollama 不需要 | 与 `llm` 相同的提示和判断格式，模型由你选；**会把记忆和证据原文发到配置的端点**，用 Ollama 时数据留在本机 |
 
 ```bash
 memfalsify audit MEMORY.md --evidence evidence --verifier dual
@@ -570,7 +571,26 @@ Claude 每个 token 的价格（包括缓存写入、缓存读取和批处理）
 
 LLM 验证器使用结构化输出，每个判断都符合固定格式；它的系统提示要求把记忆和证据当作引用的数据，忽略其中出现的任何指令。在支持的模型上，它会开启服务端的拒答回退（server-side refusal fallback）；被拒答的请求记为“无判断”（`unrelated`，理由中写明停止原因）。`dual` 更严格：每个判断都核对两次。`cascade` 遵循“有把握就采纳，没把握再升级”的思路，便宜得多，但 Jev 有把握的答案会被直接采用，不经 Claude 复核，所以正式依赖它之前，先用你已经人工确认过的记忆调一调 `--accept-at`。
 
-两个模型后端遇到 API 调用失败、缺少 SDK 或缺少凭据时，审计都会以退出码 2 结束并给出错误信息，而不是输出一份不完整的报告。
+所有模型后端遇到 API 调用失败、缺少 SDK 或缺少凭据时，审计都会以退出码 2 结束并给出错误信息，而不是输出一份不完整的报告。
+
+**兼容 OpenAI 的服务商。** `--verifier openai` 使用 Chat Completions API，一个后端就能覆盖所有提供这种 API 的服务商：
+
+```bash
+memfalsify audit MEMORY.md --evidence evidence --verifier openai --openai-model <model>                     # OPENAI_API_KEY
+memfalsify audit MEMORY.md --evidence evidence --verifier openai --provider ollama --openai-model <model>    # 本地，不需要 key
+```
+
+| `--provider` | Base URL | Key 变量 | 响应格式 |
+|---|---|---|---|
+| `openai`（默认） | `https://api.openai.com/v1` | `OPENAI_API_KEY` | `json_schema` |
+| `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` | `json_schema` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | `json_object` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/`（[Google 的 OpenAI 兼容端点](https://ai.google.dev/gemini-api/docs/openai)） | `GEMINI_API_KEY` | `json_schema` |
+| `ollama` | `http://localhost:11434/v1` | 无 | `json_schema` |
+
+`--base-url` 和 `--api-key-env` 会覆盖预设。base URL 必须是 `https://`（只有 `localhost`、`127.0.0.1`、`::1` 允许 `http://`），不能带用户名、密码、查询参数或片段。`--api-key-env` 接收的是变量名：没有任何选项接收 key 本身。服务商的错误只显示 HTTP 状态码、错误的 type、code 和 param（各自必须是简单的标记）以及一条固定提示；服务商自己的消息从不输出，模型理由里的 key 会被遮掉。OpenAI SDK 自己的 `OPENAI_*` 环境变量不会生效，给一个服务商的设置不会被发给另一个。模型没有默认值，因为各服务商的模型名不同，而且会变。
+
+请求只发往 base URL：不跟随重定向，也不使用环境里的代理设置；证书按 OpenAI SDK 自带的方式校验（平台的信任库）。`--openai-response-format` 可选 `json_schema`（严格结构化输出）、`json_object` 或 `text`，默认值见上表（用 `--base-url` 时为 `json_schema`）。端点不支持该格式时会返回 HTTP 400 或 422，审计结束，错误信息会建议更简单的格式；不会自动换格式重试。只读取正常结束（`finish_reason` 为 `stop`）的回答。被截断或被过滤的回答、不是合法判断的回答、空回答和拒答都记为无判断（`unrelated`），绝不会算作支持。这个后端不支持 `--batch`，`dual` 和 `cascade` 仍然是 Claude 配 Jev。key 和服务商的更多说明见 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
 
 在 Python 里使用：
 
@@ -583,7 +603,7 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
                min_coverage=0.2, max_judged=8, max_concurrency=4)
 ```
 
-`LLMVerifier(batch=True)` 使用 Message Batches API。任何有 `name` 属性和 `judge(claim, passage) -> Judgment` 方法的对象都可以当验证器，其他模型可以用同样的方式接入。还可以选择实现 `judge_many(pairs, max_concurrency)`：它一次拿到整次审计的全部（记忆，片段）对，并按相同顺序返回判断；`usage()` 则为报告返回 `VerifierStats`。模型的判断始终只是候选：它们永远不能代替人工确认。
+`LLMVerifier(batch=True)` 使用 Message Batches API。`OpenAICompatVerifier("<model>", provider="ollama")` 是兼容 OpenAI 的后端（`base_url` 和 `api_key_env` 覆盖预设）。任何有 `name` 属性和 `judge(claim, passage) -> Judgment` 方法的对象都可以当验证器，其他模型可以用同样的方式接入。还可以选择实现 `judge_many(pairs, max_concurrency)`：它一次拿到整次审计的全部（记忆，片段）对，并按相同顺序返回判断；`usage()` 则为报告返回 `VerifierStats`。模型的判断始终只是候选：它们永远不能代替人工确认。
 
 ## 评测集与 GitHub Action
 
@@ -625,7 +645,7 @@ Action 只使用固定到提交 SHA 的 Action，并从带哈希校验的锁文�
 
 - 哈希只能证明某段引用确实存在于特定的字节里，不能证明来源是真实的，也不能证明这段话的意思就是某人所说的那样。
 - 词法和模型找到的候选只是线索，不是结论。只有 `reviews.jsonl` 能给记忆下结论。
-- `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发。只对允许外发的材料使用它们。使用 `--batch` 时，Anthropic 会把批次的请求和结果保留最多 29 天，该工作区（workspace）里有权限的人都能看到；如果觉得太久，可以通过 API 删除该批次。
+- `--verifier llm` 会把记忆和证据发给 Anthropic API，`jev` 会发给 TypeSafe API，`dual` 和 `cascade` 两边都会发，`openai` 会发到你配置的端点（本地 Ollama 服务则留在本机）。只对允许外发的材料使用它们。使用 `--batch` 时，Anthropic 会把批次的请求和结果保留最多 29 天，该工作区（workspace）里有权限的人都能看到；如果觉得太久，可以通过 API 删除该批次。
 - `orgmemory audit` 的发现项和 `orgmemory changes` 只是复述日志和权限策略里的内容，是供人判断的线索，不是结论。日志无法记录“风险已解决”，所以已批准的议题在批准之前提出的每个风险都会一直对应一个 `risk_after_approval` 发现项。自己批准自己的请求、被忽略的越权尝试也可能是正常的：谁能做什么由权限策略决定。
 - 导出的 ADR 只是复述回放后的日志。它的 Context 列出的是记录在案的申请和风险，不是任何人的理由；记录也不会自动更新：日志变化后需要重新导出。
 - 参与者（`actor`）ID、`policy.json` 和 `policy-log.jsonl` 被视为可信输入。目前还没有身份认证或签名溯源。记录在 `policy-log.jsonl` 里的角色变更带有生效时间，但修改 `policy.json`（包括不分时间的 `permissions`）或改写角色变更日志，仍然会改变每一次回放的结果。

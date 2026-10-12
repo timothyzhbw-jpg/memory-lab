@@ -1,4 +1,5 @@
-# The [all] extra of memfalsify (both model SDKs, for the dual and cascade verifiers), on top of the lexical set.
+# The SDKs of the dual and cascade verifiers (the [llm] and [jev] extras of memfalsify), on top of the lexical
+# set. The [all] extra also holds [openai]; the openai verifier has its own lock (openai.in).
 -r lexical.in
 anthropic>=1.13
 typesafe-sdk>=0.7

@@ -403,7 +403,9 @@ LOCK_DIR = ROOT / "action" / "requirements"
 LOCK_SETS = {"lexical": {"pydantic", "typer", "setuptools"},
              "llm": {"pydantic", "typer", "setuptools", "anthropic"},
              "jev": {"pydantic", "typer", "setuptools", "typesafe-sdk"},
+             "openai": {"pydantic", "typer", "setuptools", "openai"},
              "all": {"pydantic", "typer", "setuptools", "anthropic", "typesafe-sdk"}}
+MODEL_SDKS = {"anthropic", "typesafe-sdk", "openai"}
 PINNED_USES = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
 PINNED_LINE = re.compile(r"^\s*(?:- )?uses:\s+\S+@[0-9a-f]{40}  # v\d+\.\d+\.\d+$")
 ENTRY = re.compile(r"^(?P<name>[A-Za-z0-9][\w.-]*)==(?P<version>[^\s;]+)(?: ; (?P<marker>.*?))? "
@@ -475,7 +477,7 @@ def test_action_installs_the_lock_file_with_require_hashes():
     assert "--only-binary :all:" in locked[0]
     assert '-r "$GITHUB_ACTION_PATH/action/requirements/$lock.txt"' in locked[0]
     text = (ROOT / "action.yml").read_text(encoding="utf-8")
-    assert 'lexical|llm|jev) lock="$MEMFALSIFY_VERIFIER" ;;' in text and 'dual|cascade) lock="all" ;;' in text
+    assert 'lexical|llm|jev|openai) lock="$MEMFALSIFY_VERIFIER" ;;' in text and 'dual|cascade) lock="all" ;;' in text
     for name in LOCK_SETS:
         assert (LOCK_DIR / f"{name}.txt").is_file()
 
@@ -494,7 +496,7 @@ def test_action_installs_its_own_packages_without_dependencies():
 def test_lock_file_pins_every_requirement_with_hashes(name):
     found = pins(name)  # fails on any line that is not an exact pin followed by sha256 hashes
     assert set(found) >= LOCK_SETS[name]
-    only_models = {"anthropic", "typesafe-sdk"} - LOCK_SETS[name]
+    only_models = MODEL_SDKS - LOCK_SETS[name]
     assert not only_models & set(found)  # a verifier installs only the SDKs it uses
 
 
@@ -524,7 +526,127 @@ def test_lock_inputs_match_the_package_dependencies():
     assert set(requirements_of("lexical")) == runtime | build
     assert set(requirements_of("llm")) == set(requirements_of("lexical")) | set(toml_list(falsify, "llm"))
     assert set(requirements_of("jev")) == set(requirements_of("lexical")) | set(toml_list(falsify, "jev"))
+    assert set(requirements_of("openai")) == set(requirements_of("lexical")) | set(toml_list(falsify, "openai"))
+    # dual and cascade use Claude and Jev only, so their lock leaves the openai SDK out.
     assert set(requirements_of("all")) == set(requirements_of("llm")) | set(requirements_of("jev"))
+    assert toml_list(falsify, "all") == ["memfalsify[llm,jev,openai]"]
+
+
+def test_lock_script_covers_every_lock_set():
+    script = (ROOT / "scripts" / "update-action-lock.sh").read_text(encoding="utf-8")
+    assert re.search(r"^for set in (.+); do$", script, re.MULTILINE).group(1).split() == \
+        ["lexical", "llm", "jev", "openai", "all"]
+    assert sorted(p.stem for p in LOCK_DIR.glob("*.in")) == sorted(LOCK_SETS)
+    assert sorted(p.stem for p in LOCK_DIR.glob("*.txt")) == sorted(LOCK_SETS)
+
+
+# --- verifier openai -----------------------------------------------------------------------------------------
+
+OPENAI_ENV = ("MEMFALSIFY_OPENAI_MODEL", "MEMFALSIFY_PROVIDER", "MEMFALSIFY_BASE_URL", "MEMFALSIFY_API_KEY_ENV",
+              "MEMFALSIFY_OPENAI_RESPONSE_FORMAT")
+
+
+def test_action_passes_openai_inputs_through_env():
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    for name, variable in zip(("openai-model", "provider", "base-url", "api-key-env", "openai-response-format"),
+                              OPENAI_ENV):
+        assert f"\n  {name}:\n" in text and f"{variable}: ${{{{ inputs.{name} }}}}" in text
+
+
+def test_action_openai_options_reach_the_cli_as_single_arguments():
+    env = {"MEMFALSIFY_VERIFIER": "openai", "MEMFALSIFY_OPENAI_MODEL": " grok-model ", "MEMFALSIFY_PROVIDER": "grok",
+           "MEMFALSIFY_BASE_URL": "https://gateway.example.test/v1", "MEMFALSIFY_API_KEY_ENV": "GATEWAY_KEY"}
+    assert action.options(env)[-4:] == ["--openai-model=grok-model", "--provider=grok",
+                                        "--base-url=https://gateway.example.test/v1", "--api-key-env=GATEWAY_KEY"]
+    assert action.options({**env, "MEMFALSIFY_OPENAI_RESPONSE_FORMAT": "text"})[-1] == "--openai-response-format=text"
+    assert action.options({**env, "MEMFALSIFY_BASE_URL": "", "MEMFALSIFY_PROVIDER": ""})[-2:] == \
+        ["--openai-model=grok-model", "--api-key-env=GATEWAY_KEY"]
+    assert not any(o.startswith(("--openai", "--provider", "--base-url", "--api-key"))
+                   for o in action.options({**env, "MEMFALSIFY_VERIFIER": "llm"}))
+
+
+@pytest.mark.parametrize("override, message", [
+    ({"MEMFALSIFY_OPENAI_MODEL": ""}, "verifier openai needs the openai-model input"),
+    ({"MEMFALSIFY_PROVIDER": "azure"}, "the provider input must be one of openai, grok, deepseek, gemini, ollama"),
+    ({"MEMFALSIFY_BASE_URL": "http://gateway.example.test/v1"}, "must use https"),
+    ({"MEMFALSIFY_BASE_URL": "https://gateway.example.test/v1?key=sk-SECRET"}, "user name, password, query"),
+    ({"MEMFALSIFY_API_KEY_ENV": "sk-SECRET-pasted-key"}, "never the key itself"),
+    ({"MEMFALSIFY_OPENAI_RESPONSE_FORMAT": "json"},
+     "the openai-response-format input must be one of json_schema, json_object, text"),
+])
+def test_action_openai_inputs_are_validated(tmp_path, monkeypatch, runner_env, capsys, override, message):
+    monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "demo"))
+    monkeypatch.setattr(action, "app", lambda *a, **k: pytest.fail("the CLI must not run"))
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md", "MEMFALSIFY_EVIDENCE": "evidence",
+           "MEMFALSIFY_VERIFIER": "openai", "MEMFALSIFY_OPENAI_MODEL": "m", **override}
+    assert action.main(env) == 2
+    out = capsys.readouterr().out
+    assert "::error title=MemFalsify::" in out and message in out
+    assert "SECRET" not in out and "gateway.example" not in out
+
+
+def test_action_warns_about_openai_inputs_without_the_openai_verifier(tmp_path, monkeypatch, runner_env, capsys):
+    monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "demo"))
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md", "MEMFALSIFY_EVIDENCE": "evidence",
+           "MEMFALSIFY_STRICT": "false", "MEMFALSIFY_OPENAI_MODEL": "m"}
+    assert action.main(env) == 0
+    assert ("::warning title=MemFalsify::the openai-model, provider, base-url, api-key-env and "
+            "openai-response-format inputs apply only to verifier openai; ignoring them") in capsys.readouterr().out
+
+
+def test_action_runs_the_openai_verifier(tmp_path, monkeypatch, runner_env, capsys):
+    from types import SimpleNamespace
+
+    from memfalsify import openai_compat
+
+    def create(**kwargs):
+        content = ('{"relation": "contradicts", "rationale": "60, not 100"}' if "60" in kwargs["messages"][1]["content"]
+                   else '{"relation": "unrelated", "rationale": "-"}')
+        message = SimpleNamespace(content=content, refusal=None)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=message)], usage=None)
+
+    built, real = [], openai_compat.OpenAICompatVerifier
+
+    def make(model, provider, base_url, api_key_env, **kwargs):
+        built.append((model, provider, base_url, api_key_env))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return real(model, provider, base_url, api_key_env, client=client, **kwargs)
+
+    monkeypatch.setattr(openai_compat, "OpenAICompatVerifier", make)
+    monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "demo"))
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md", "MEMFALSIFY_EVIDENCE": "evidence",
+           "MEMFALSIFY_AS_OF": "2026-10-10", "MEMFALSIFY_VERIFIER": "openai", "MEMFALSIFY_OPENAI_MODEL": "llama-local",
+           "MEMFALSIFY_PROVIDER": "ollama"}
+    assert action.main(env) == 1
+    assert built == [("llama-local", "ollama", None, None)]
+    report = Path(outputs(env)["report"]).read_text(encoding="utf-8")
+    assert "Verifier: `openai:llama-local@localhost:11434`" in report and "POSSIBLE COUNTEREVIDENCE" in report
+
+
+def test_action_openai_api_failure_exits_2_without_the_key(tmp_path, monkeypatch, runner_env, capsys):
+    openai = pytest.importorskip("openai")
+    httpx2 = pytest.importorskip("httpx2")
+    from memfalsify import openai_compat
+
+    secret = "sk-test-0123456789abcdefSECRETxyz"
+    monkeypatch.setenv("TEAM_OPENAI_KEY", secret)
+    leak = {"error": {"message": f"Incorrect API key provided: {secret}"}}
+    transport = httpx2.MockTransport(lambda request: httpx2.Response(401, json=leak))
+    real = openai.DefaultHttpxClient  # the verifier's own client, with only the transport replaced
+    monkeypatch.setattr(openai, "DefaultHttpxClient", lambda **kw: real(**kw, transport=transport))
+    monkeypatch.setattr(openai_compat, "MAX_RETRIES", 0)
+    monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "demo"))
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md", "MEMFALSIFY_EVIDENCE": "evidence",
+           "MEMFALSIFY_VERIFIER": "openai", "MEMFALSIFY_OPENAI_MODEL": "gpt-model",
+           "MEMFALSIFY_API_KEY_ENV": "TEAM_OPENAI_KEY"}
+    assert action.main(env) == 2
+    log = capsys.readouterr().out
+    assert ("MemFalsify CLI: error: openai:gpt-model@api.openai.com: HTTP 401: the key in the environment variable "
+            "you named was refused") in log
+    assert "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2)" in log
+    summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
+    for text in (log, summary):
+        assert all(secret[i:i + 8] not in text for i in range(len(secret) - 7))
 
 
 def test_dogfood_job_holds_nothing_for_a_pull_request_to_take():

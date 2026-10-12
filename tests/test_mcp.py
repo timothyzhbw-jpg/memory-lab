@@ -7,6 +7,7 @@ import subprocess
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,6 +22,7 @@ from conftest import EXAMPLES, requires_confinement, snapshot, write_text_exact 
 from memfalsify.audit import audit  # noqa: E402
 from memfalsify import corpus as memfalsify_corpus  # noqa: E402
 from memfalsify.memory import parse_memory  # noqa: E402
+from memfalsify import openai_compat  # noqa: E402
 from memfalsify.verify import LexicalVerifier  # noqa: E402
 from memlab_mcp import server as memlab_server  # noqa: E402
 from memlab_mcp.server import create_server  # noqa: E402
@@ -577,7 +579,7 @@ def test_dataset_evidence_does_not_open_special_files(root, monkeypatch):
 
 # --- verifiers -------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("verifier", ["llm", "jev", "dual", "cascade"])
+@pytest.mark.parametrize("verifier", ["llm", "jev", "dual", "cascade", "openai"])
 @requires_confinement
 def test_model_verifiers_refused_without_the_flag(root, monkeypatch, verifier):
     def no_models(*args, **kwargs):
@@ -611,6 +613,159 @@ def test_model_verifiers_allowed_with_the_flag(root, monkeypatch, verifier):
         async with Client(server, mode="legacy") as client:
             return {t.name: t.annotations.open_world_hint for t in (await client.list_tools()).tools}
     assert anyio.run(annotations)["memfalsify_audit"] is True
+
+
+GATEWAY = {"openai_model": "served-model", "openai_provider": "grok",
+           "openai_base_url": "https://gateway.example.test/v1", "openai_api_key_env": "GATEWAY_KEY"}
+SETTINGS = openai_compat.OpenAISettings("served-model", "grok", "https://gateway.example.test/v1", "GATEWAY_KEY")
+ENDPOINT_ARGUMENTS = {"base_url": "https://attacker.example.test/v1", "model": "attacker-model",
+                      "provider": "ollama", "api_key_env": "OTHER_KEY",
+                      "openai_base_url": "https://attacker.example.test", "openai_model": "attacker-model",
+                      "openai_provider": "ollama", "openai_api_key_env": "OTHER_KEY", "response_format": "text",
+                      "openai_response_format": "text"}
+
+
+def tool_listing(server):
+    async def main():
+        async with Client(server, mode="legacy") as client:
+            return {t.name: t for t in (await client.list_tools()).tools}
+    return anyio.run(main)
+
+
+@pytest.mark.parametrize("tool", ["memfalsify_audit", "memfalsify_diff"])
+@requires_confinement
+def test_openai_endpoint_is_never_a_tool_argument(root, tool):
+    """Provider, base URL, model and key variable are fixed when the server starts; a client cannot name them."""
+    listed = tool_listing(create_server(root, allow_model_verifiers=True, **GATEWAY))[tool]
+    properties = set(listed.input_schema["properties"])
+    assert "verifier" in properties and not properties & set(ENDPOINT_ARGUMENTS)
+    assert "openai" in listed.input_schema["properties"]["verifier"]["enum"]
+    assert "served-model at gateway.example.test" in json.dumps(listed.input_schema)
+    assert "GATEWAY_KEY" not in json.dumps(listed.input_schema) + listed.description
+
+
+@requires_confinement
+def test_openai_verifier_uses_only_the_server_side_endpoint(root, monkeypatch):
+    built = []
+
+    class Offline(LexicalVerifier):
+        name = "stand-in"
+
+    def fake_build(choice, llm_model, jev_model, accept_at=0.8, openai=None):
+        built.append((choice.value, openai))
+        return Offline()
+
+    monkeypatch.setattr(memlab_server, "build_verifier", fake_build)
+    server = create_server(root, allow_model_verifiers=True, **GATEWAY)
+    report = json.loads(ok(call(server, "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE,
+                                verifier="openai", format="json")))
+    assert built == [("openai", SETTINGS)] and report["verifier"] == "stand-in"
+    # Endpoint-shaped extra arguments are either refused or ignored; they never reach the verifier.
+    result = call(server, "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai",
+                  format="json", **ENDPOINT_ARGUMENTS)
+    assert all(settings == SETTINGS for _, settings in built)
+    assert "attacker" not in text(result)
+
+
+@requires_confinement
+def test_openai_verifier_runs_against_the_configured_endpoint(root, monkeypatch):
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        content = ('{"relation": "contradicts", "rationale": "60 is not 100"}'
+                   if "60" in kwargs["messages"][1]["content"] else '{"relation": "unrelated", "rationale": "-"}')
+        message = SimpleNamespace(content=content, refusal=None)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=message)], usage=None)
+
+    real = openai_compat.OpenAICompatVerifier
+    seen = []
+
+    def make(model, provider, base_url, api_key_env, **kwargs):
+        seen.append((model, provider, base_url, api_key_env))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return real(model, provider, base_url, api_key_env, client=client, **kwargs)
+
+    monkeypatch.setattr(openai_compat, "OpenAICompatVerifier", make)
+    report = json.loads(ok(call(create_server(root, allow_model_verifiers=True, **GATEWAY), "memfalsify_audit",
+                                memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai", format="json")))
+    assert seen == [("served-model", "grok", "https://gateway.example.test/v1", "GATEWAY_KEY")]
+    assert report["verifier"] == "openai:served-model@gateway.example.test" and calls
+    assert all(c["model"] == "served-model" for c in calls)
+
+
+@requires_confinement
+def test_openai_verifier_needs_the_flag_and_a_server_side_configuration(root, monkeypatch):
+    def no_models(*args, **kwargs):
+        raise AssertionError("no verifier may be built")
+
+    monkeypatch.setattr(memlab_server, "build_verifier", no_models)
+    message = error(call(create_server(root, **GATEWAY), "memfalsify_audit", memory_file=MEMORY,
+                         verifier="openai"))
+    assert "verifier 'openai' is disabled" in message and "--allow-model-verifiers" in message
+    message = error(call(create_server(root, allow_model_verifiers=True), "memfalsify_audit", memory_file=MEMORY,
+                         verifier="openai"))
+    assert "not configured on this server" in message and "never by a tool call" in message
+    listed = tool_listing(create_server(root, allow_model_verifiers=True))["memfalsify_audit"]
+    assert "openai (not configured on this server)" in json.dumps(listed.input_schema)
+
+
+@requires_confinement
+def test_openai_missing_key_is_a_generic_tool_error(root, monkeypatch):
+    pytest.importorskip("openai")
+    monkeypatch.delenv("GATEWAY_KEY", raising=False)
+    message = error(call(create_server(root, allow_model_verifiers=True, **GATEWAY), "memfalsify_audit",
+                         memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai"))
+    assert "model verifier failed" in message and "GATEWAY_KEY" not in message
+
+
+@requires_confinement
+def test_the_response_format_is_a_server_setting(root, monkeypatch):
+    built = []
+
+    class Offline(LexicalVerifier):
+        name = "stand-in"
+
+    monkeypatch.setattr(memlab_server, "build_verifier",
+                        lambda choice, llm_model, jev_model, accept_at=0.8, openai=None: built.append(openai) or
+                        Offline())
+    server = create_server(root, allow_model_verifiers=True, **GATEWAY, openai_response_format="json_object")
+    listed = tool_listing(server)["memfalsify_audit"]
+    assert not {"response_format", "openai_response_format"} & set(listed.input_schema["properties"])
+    ok(call(server, "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai",
+            response_format="text", openai_response_format="text"))
+    assert [settings.response_format for settings in built] == ["json_object"]
+
+
+@pytest.mark.parametrize("settings, problem", [
+    ({"openai_provider": "grok"}, "need --openai-model"),
+    ({"openai_response_format": "text"}, "need --openai-model"),
+    ({"openai_model": "m", "openai_response_format": "json"}, "the response format must be one of"),
+    ({"openai_model": "m", "openai_provider": "azure"}, "unknown provider"),
+    ({"openai_model": "m", "openai_base_url": "http://gateway.example.test/v1"}, "must use https"),
+    ({"openai_model": "m", "openai_api_key_env": "sk-not-a-name"}, "never the key itself"),
+])
+@pytest.mark.parametrize("confinement", [True, False])
+def test_create_server_refuses_a_bad_openai_configuration(root, monkeypatch, settings, problem, confinement):
+    """The openai settings are checked before the platform, so the error names them on Windows too."""
+    monkeypatch.setattr(memlab_server, "confinement_supported", lambda: confinement)
+    with pytest.raises(ValueError, match=problem):
+        create_server(root, allow_model_verifiers=True, **settings)
+
+
+@pytest.mark.parametrize("args, problem", [
+    (["--openai-provider", "grok"], "need --openai-model"),
+    (["--openai-model", "m", "--openai-base-url", "http://gateway.example.test/v1?key=sk-SECRET"],
+     "user name, password, query or fragment"),
+    (["--openai-model", "m", "--openai-base-url", "http://gateway.example.test/v1"], "must use https"),
+    (["--openai-model", "m", "--openai-api-key-env", "sk-SECRET-value"], "never the key itself"),
+])
+def test_serve_refuses_a_bad_openai_configuration(root, args, problem):
+    from typer.testing import CliRunner
+
+    result = CliRunner().invoke(memlab_server.app, ["--root", str(root), "--allow-model-verifiers", *args])
+    assert result.exit_code == 2 and "error: openai verifier: " in result.output and problem in result.output
+    assert "SECRET" not in result.output and "gateway.example" not in result.output
 
 
 @requires_confinement
@@ -1413,8 +1568,8 @@ def test_media_swapped_for_an_outward_symlink_before_hashing_cannot_be_read(medi
 def test_stdio_round_trip(root, tmp_path, allow_models):
     sources = [REPO / "packages" / name / "src" for name in ("memcore", "memfalsify", "orgmemory", "memlab-mcp")]
     args = ["-m", "memlab_mcp", "--root", str(root)]
-    if allow_models:
-        args.append("--allow-model-verifiers")
+    if allow_models:  # with the openai verifier configured on the command line, as a user would
+        args += ["--allow-model-verifiers", "--openai-model", "served-model", "--openai-provider", "ollama"]
     params = StdioServerParameters(command=sys.executable, args=args,
                                    env={"PYTHONPATH": os.pathsep.join(map(str, sources))}, cwd=str(tmp_path))
     log = tmp_path / "server.log"
@@ -1434,6 +1589,8 @@ def test_stdio_round_trip(root, tmp_path, allow_models):
     assert info.name == "memlab" and {t.name for t in tools} == TOOLS, log.read_text()
     open_world = {t.name: t.annotations.open_world_hint for t in tools}
     assert open_world["memfalsify_audit"] is open_world["memfalsify_diff"] is allow_models
+    audit_schema = json.dumps(next(t for t in tools if t.name == "memfalsify_audit").input_schema)
+    assert ("served-model at localhost:11434" in audit_schema) is allow_models
     assert not any(open_world[name] for name in TOOLS - {"memfalsify_audit", "memfalsify_diff"})
     assert "ev-wed-reject" in ok(result)
     assert {t.name: (t.uri_template, t.mime_type) for t in templates} == TEMPLATES
@@ -1498,7 +1655,7 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
             cases.append(("memfalsify_audit", {"memory_file": MEMORY, "evidence_dir": EVIDENCE,
                                                field: value}, "outside the server root"))
         cases.append(("memfalsify_audit", {"memory_file": MEMORY, field: ""}, f"{field} is empty"))
-    for verifier in ["llm", "jev", "dual", "cascade"]:
+    for verifier in ["llm", "jev", "dual", "cascade", "openai"]:
         cases.append(("memfalsify_audit", {"memory_file": MEMORY, "evidence_dir": EVIDENCE,
                                            "verifier": verifier}, "--allow-model-verifiers"))
     cases.extend([
