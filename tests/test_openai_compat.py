@@ -18,6 +18,7 @@ from urllib.parse import quote
 import pytest
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 from memfalsify import openai_compat
 from memfalsify.audit import audit
 from memfalsify.cli import app
@@ -110,22 +111,23 @@ def verifier(client=None, model="test-model", **options):
 
 @pytest.fixture
 def invoices(tmp_path):
-    (tmp_path / "MEMORY.md").write_text(f"- {CLAIM}\n", encoding="utf-8")
+    write_text_exact(tmp_path / "MEMORY.md", f"- {CLAIM}\n")
     (tmp_path / "evidence").mkdir()
-    (tmp_path / "evidence" / "billing.md").write_text(f"# Billing\n\n{COUNTER}\n", encoding="utf-8")
+    write_text_exact(tmp_path / "evidence" / "billing.md", f"# Billing\n\n{COUNTER}\n")
     return tmp_path
 
 
 @pytest.fixture
 def two_claims(tmp_path):
     """The CSV claim shares terms with three evidence sentences, the Redis claim with one."""
-    (tmp_path / "MEMORY.md").write_text("- Invoice export to CSV is available to customers.\n"
-                                        "- The cache uses Redis.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "MEMORY.md", "- Invoice export to CSV is available to customers.\n"
+                                             "- The cache uses Redis.\n")
     (tmp_path / "evidence").mkdir()
-    (tmp_path / "evidence" / "billing.md").write_text(
+    write_text_exact(
+        tmp_path / "evidence" / "billing.md",
         "Invoice export to CSV is not available to customers.\n\nCustomers ask about invoice export to CSV.\n\n"
-        "Invoice export to CSV is available to admins.\n", encoding="utf-8")
-    (tmp_path / "evidence" / "infra.md").write_text("The cache uses Redis.\n", encoding="utf-8")
+        "Invoice export to CSV is available to admins.\n")
+    write_text_exact(tmp_path / "evidence" / "infra.md", "The cache uses Redis.\n")
     return tmp_path
 
 
@@ -1255,7 +1257,7 @@ def test_the_key_in_every_response_field_reaches_no_action_output(two_claims, po
            "MEMFALSIFY_EVIDENCE": "evidence", "MEMFALSIFY_STRICT": "false", "MEMFALSIFY_VERIFIER": "openai",
            "MEMFALSIFY_OPENAI_MODEL": "gpt-model", "MEMFALSIFY_API_KEY_ENV": "TEAM_KEY"}
     for name in ("GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT"):
-        Path(env[name]).write_text("", encoding="utf-8")
+        write_text_exact(Path(env[name]), "")
     monkeypatch.chdir(two_claims)
     assert action.main(env) == 0
     outputs = Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
