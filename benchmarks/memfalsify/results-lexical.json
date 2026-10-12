@@ -1,5 +1,5 @@
 {
-  "memfalsify_version": "0.3.0",
+  "memfalsify_version": "0.4.0",
   "verifier": "lexical",
   "settings": {
     "min_coverage": 0.5,
@@ -7,19 +7,19 @@
     "verifier": "lexical"
   },
   "cost": {
-    "judge_calls": 236,
+    "judge_calls": 255,
     "escalations": null,
-    "seconds": 0.267
+    "seconds": 0.076
   },
   "metrics": {
     "claims": 202,
     "contradiction": {
-      "tp": 29,
-      "fp": 9,
-      "fn": 52,
-      "precision": 0.7631578947368421,
-      "recall": 0.35802469135802467,
-      "f1": 0.48739495798319327,
+      "tp": 33,
+      "fp": 8,
+      "fn": 48,
+      "precision": 0.8048780487804879,
+      "recall": 0.4074074074074074,
+      "f1": 0.5409836065573771,
       "disputed": {
         "contradicted": 0,
         "supported": 0,
@@ -27,35 +27,35 @@
       }
     },
     "support": {
-      "tp": 12,
-      "fp": 12,
-      "fn": 60,
-      "precision": 0.5,
-      "recall": 0.16666666666666666,
-      "f1": 0.25
+      "tp": 15,
+      "fp": 14,
+      "fn": 57,
+      "precision": 0.5172413793103449,
+      "recall": 0.20833333333333334,
+      "f1": 0.297029702970297
     },
     "accuracy": {
-      "correct": 86,
+      "correct": 91,
       "total": 202,
-      "rate": 0.42574257425742573
+      "rate": 0.4504950495049505
     },
     "confusion": {
       "contradicted": {
-        "contradicted": 29,
+        "contradicted": 33,
         "supported": 10,
-        "unsupported": 42,
+        "unsupported": 38,
         "disputed": 0
       },
       "supported": {
-        "contradicted": 7,
-        "supported": 12,
-        "unsupported": 53,
+        "contradicted": 6,
+        "supported": 15,
+        "unsupported": 51,
         "disputed": 0
       },
       "unsupported": {
         "contradicted": 2,
-        "supported": 2,
-        "unsupported": 45,
+        "supported": 4,
+        "unsupported": 43,
         "disputed": 0
       }
     },
@@ -93,12 +93,12 @@
         "f1": 0.9565217391304348
       },
       "internal_conflict": {
-        "tp": 22,
-        "fp": 14,
-        "fn": 25,
-        "precision": 0.6111111111111112,
-        "recall": 0.46808510638297873,
-        "f1": 0.5301204819277109
+        "tp": 27,
+        "fp": 13,
+        "fn": 20,
+        "precision": 0.675,
+        "recall": 0.574468085106383,
+        "f1": 0.6206896551724138
       },
       "duplicate": {
         "tp": 5,
@@ -113,32 +113,32 @@
       "paraphrase": {
         "claims": 78,
         "contradiction_recall": {
-          "hits": 1,
+          "hits": 2,
           "n": 12,
-          "rate": 0.08333333333333333
+          "rate": 0.16666666666666666
         },
         "support_recall": {
-          "hits": 10,
+          "hits": 13,
           "n": 66,
-          "rate": 0.15151515151515152
+          "rate": 0.19696969696969696
         },
         "false_flags": {
-          "hits": 5,
+          "hits": 4,
           "n": 66,
-          "rate": 0.07575757575757576
+          "rate": 0.06060606060606061
         }
       },
       "numeric": {
         "claims": 90,
         "contradiction_recall": {
-          "hits": 18,
+          "hits": 19,
           "n": 47,
-          "rate": 0.3829787234042553
+          "rate": 0.40425531914893614
         },
         "support_recall": {
-          "hits": 5,
+          "hits": 7,
           "n": 35,
-          "rate": 0.14285714285714285
+          "rate": 0.2
         },
         "false_flags": {
           "hits": 2,
@@ -149,9 +149,9 @@
       "antonym": {
         "claims": 8,
         "contradiction_recall": {
-          "hits": 3,
+          "hits": 4,
           "n": 8,
-          "rate": 0.375
+          "rate": 0.5
         },
         "support_recall": {
           "hits": 0,
@@ -167,9 +167,9 @@
       "negation": {
         "claims": 17,
         "contradiction_recall": {
-          "hits": 7,
+          "hits": 9,
           "n": 17,
-          "rate": 0.4117647058823529
+          "rate": 0.5294117647058824
         },
         "support_recall": {
           "hits": 0,
@@ -190,32 +190,32 @@
           "rate": null
         },
         "support_recall": {
-          "hits": 3,
+          "hits": 4,
           "n": 24,
-          "rate": 0.125
+          "rate": 0.16666666666666666
         },
         "false_flags": {
-          "hits": 6,
+          "hits": 4,
           "n": 40,
-          "rate": 0.15
+          "rate": 0.1
         }
       },
       "distractor": {
         "claims": 75,
         "contradiction_recall": {
-          "hits": 15,
+          "hits": 16,
           "n": 33,
-          "rate": 0.45454545454545453
+          "rate": 0.48484848484848486
         },
         "support_recall": {
-          "hits": 0,
+          "hits": 1,
           "n": 1,
-          "rate": 0.0
+          "rate": 1.0
         },
         "false_flags": {
-          "hits": 3,
+          "hits": 2,
           "n": 42,
-          "rate": 0.07142857142857142
+          "rate": 0.047619047619047616
         }
       },
       "temporal": {
@@ -239,19 +239,19 @@
       "chinese": {
         "claims": 71,
         "contradiction_recall": {
-          "hits": 7,
+          "hits": 11,
           "n": 29,
-          "rate": 0.2413793103448276
+          "rate": 0.3793103448275862
         },
         "support_recall": {
-          "hits": 2,
+          "hits": 5,
           "n": 24,
-          "rate": 0.08333333333333333
+          "rate": 0.20833333333333334
         },
         "false_flags": {
-          "hits": 6,
+          "hits": 5,
           "n": 42,
-          "rate": 0.14285714285714285
+          "rate": 0.11904761904761904
         }
       },
       "repo": {
@@ -262,9 +262,9 @@
           "rate": 0.21428571428571427
         },
         "support_recall": {
-          "hits": 1,
+          "hits": 2,
           "n": 17,
-          "rate": 0.058823529411764705
+          "rate": 0.11764705882352941
         },
         "false_flags": {
           "hits": 2,
@@ -293,13 +293,13 @@
     },
     "citations": {
       "contradicted": {
-        "hits": 26,
-        "n": 29,
-        "rate": 0.896551724137931
+        "hits": 29,
+        "n": 33,
+        "rate": 0.8787878787878788
       },
       "supported": {
-        "hits": 12,
-        "n": 12,
+        "hits": 15,
+        "n": 15,
         "rate": 1.0
       }
     }
@@ -2121,17 +2121,17 @@
       "id": "zh-decisions-platform",
       "description": "Chinese platform-team memory: database migration, deployment, a payment-timeout incident, logging and messaging. Evidence is two ADRs, the deployment YAML and payment-service code from the repository, the 2026-09-12 incident postmortem and the 2026-09-28 architecture meeting that postponed the database cutover. Hard parts: settings changed after the incident (the old timeout survives in a comment, and the memory keeps both values), a staging value next to the production one, a value that belongs to another service, a rule stated only for night releases, and negation characters that negate nothing (无异常, 未来, 无论) next to ones that do (非幂等, 暂不强制).",
       "as_of": "2026-10-10",
-      "judge_calls": 9,
+      "judge_calls": 10,
       "escalations": null,
       "metrics": {
         "claims": 16,
         "contradiction": {
-          "tp": 0,
+          "tp": 1,
           "fp": 1,
-          "fn": 6,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
+          "fn": 5,
+          "precision": 0.5,
+          "recall": 0.16666666666666666,
+          "f1": 0.25,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -2139,29 +2139,29 @@
           }
         },
         "support": {
-          "tp": 0,
+          "tp": 1,
           "fp": 0,
-          "fn": 4,
-          "precision": null,
-          "recall": 0.0,
-          "f1": 0.0
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.25,
+          "f1": 0.4
         },
         "accuracy": {
-          "correct": 5,
+          "correct": 7,
           "total": 16,
-          "rate": 0.3125
+          "rate": 0.4375
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 0,
+            "contradicted": 1,
             "supported": 0,
-            "unsupported": 6,
+            "unsupported": 5,
             "disputed": 0
           },
           "supported": {
             "contradicted": 0,
-            "supported": 0,
-            "unsupported": 4,
+            "supported": 1,
+            "unsupported": 3,
             "disputed": 0
           },
           "unsupported": {
@@ -2230,9 +2230,9 @@
               "rate": 0.0
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 4,
-              "rate": 0.0
+              "rate": 0.25
             },
             "false_flags": {
               "hits": 0,
@@ -2248,9 +2248,9 @@
               "rate": 0.0
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 2,
-              "rate": 0.0
+              "rate": 0.5
             },
             "false_flags": {
               "hits": 0,
@@ -2279,9 +2279,9 @@
           "negation": {
             "claims": 2,
             "contradiction_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 2,
-              "rate": 0.0
+              "rate": 0.5
             },
             "support_recall": {
               "hits": 0,
@@ -2351,14 +2351,14 @@
           "chinese": {
             "claims": 16,
             "contradiction_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 6,
-              "rate": 0.0
+              "rate": 0.16666666666666666
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 4,
-              "rate": 0.0
+              "rate": 0.25
             },
             "false_flags": {
               "hits": 1,
@@ -2374,9 +2374,9 @@
               "rate": 0.0
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 2,
-              "rate": 0.0
+              "rate": 0.5
             },
             "false_flags": {
               "hits": 1,
@@ -2405,14 +2405,14 @@
         },
         "citations": {
           "contradicted": {
-            "hits": 0,
-            "n": 0,
-            "rate": null
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
           },
           "supported": {
-            "hits": 0,
-            "n": 0,
-            "rate": null
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
           }
         }
       }
@@ -2421,17 +2421,17 @@
       "id": "zh-decisions-process",
       "description": "Chinese engineering-management memory: purchasing approvals, code review, the National Day release freeze, hiring, remote work and the 2026 R&D budget. Evidence is the purchasing, code-review and remote-work policies, the 2025-12-18 annual budget meeting, the 2026-09-15 quarterly planning meeting that topped up the budget, and the freeze notice email. Hard parts: rules that apply only above a threshold or to some modules, two freeze claims that conflict with each other, a dated budget claim that stays true while the undated one does not, a cloud cap the memory derives by adding two numbers, and negation-character traps (无论, 非得, 非常, 未来, 不仅…而且).",
       "as_of": "2026-10-08",
-      "judge_calls": 8,
+      "judge_calls": 11,
       "escalations": null,
       "metrics": {
         "claims": 17,
         "contradiction": {
-          "tp": 1,
+          "tp": 3,
           "fp": 2,
-          "fn": 6,
-          "precision": 0.3333333333333333,
-          "recall": 0.14285714285714285,
-          "f1": 0.2,
+          "fn": 4,
+          "precision": 0.6,
+          "recall": 0.42857142857142855,
+          "f1": 0.5,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -2447,15 +2447,15 @@
           "f1": 0.0
         },
         "accuracy": {
-          "correct": 7,
+          "correct": 9,
           "total": 17,
-          "rate": 0.4117647058823529
+          "rate": 0.5294117647058824
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 1,
+            "contradicted": 3,
             "supported": 0,
-            "unsupported": 6,
+            "unsupported": 4,
             "disputed": 0
           },
           "supported": {
@@ -2505,12 +2505,12 @@
             "f1": 1.0
           },
           "internal_conflict": {
-            "tp": 0,
+            "tp": 2,
             "fp": 0,
-            "fn": 2,
-            "precision": null,
-            "recall": 0.0,
-            "f1": 0.0
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
           },
           "duplicate": {
             "tp": 1,
@@ -2525,9 +2525,9 @@
           "paraphrase": {
             "claims": 8,
             "contradiction_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 5,
-              "rate": 0.0
+              "rate": 0.2
             },
             "support_recall": {
               "hits": 0,
@@ -2561,9 +2561,9 @@
           "antonym": {
             "claims": 1,
             "contradiction_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 1,
-              "rate": 0.0
+              "rate": 1.0
             },
             "support_recall": {
               "hits": 0,
@@ -2579,9 +2579,9 @@
           "negation": {
             "claims": 3,
             "contradiction_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 3,
-              "rate": 0.0
+              "rate": 0.3333333333333333
             },
             "support_recall": {
               "hits": 0,
@@ -2651,9 +2651,9 @@
           "chinese": {
             "claims": 17,
             "contradiction_recall": {
-              "hits": 1,
+              "hits": 3,
               "n": 7,
-              "rate": 0.14285714285714285
+              "rate": 0.42857142857142855
             },
             "support_recall": {
               "hits": 0,
@@ -2687,8 +2687,8 @@
         },
         "citations": {
           "contradicted": {
-            "hits": 1,
-            "n": 1,
+            "hits": 3,
+            "n": 3,
             "rate": 1.0
           },
           "supported": {
@@ -2703,17 +2703,17 @@
       "id": "zh-decisions-roadmap",
       "description": "Chinese product memory for a reporting app: release plans, pricing, templates and roadmap focus. Evidence is two roadmap meetings (2026-09-03 and a 2026-09-24 re-review that postponed bulk export), a 2026-03-02 decision log, the pricing ADR, a weekly product report and release notes. Hard parts: proposals versus decisions, a web-only rollout figure, the pricing grace period for existing customers, Chinese numerals (一成, 三秒), a dated decision that is now over 180 days old, and negation-character traps (未来, 非常, 无论, 非得, 不仅…而且).",
       "as_of": "2026-10-09",
-      "judge_calls": 15,
+      "judge_calls": 18,
       "escalations": null,
       "metrics": {
         "claims": 18,
         "contradiction": {
           "tp": 1,
-          "fp": 3,
+          "fp": 1,
           "fn": 5,
-          "precision": 0.25,
+          "precision": 0.5,
           "recall": 0.16666666666666666,
-          "f1": 0.2,
+          "f1": 0.25,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -2721,17 +2721,17 @@
           }
         },
         "support": {
-          "tp": 0,
-          "fp": 0,
-          "fn": 7,
-          "precision": null,
-          "recall": 0.0,
-          "f1": 0.0
+          "tp": 2,
+          "fp": 1,
+          "fn": 5,
+          "precision": 0.6666666666666666,
+          "recall": 0.2857142857142857,
+          "f1": 0.4
         },
         "accuracy": {
-          "correct": 5,
+          "correct": 6,
           "total": 18,
-          "rate": 0.2777777777777778
+          "rate": 0.3333333333333333
         },
         "confusion": {
           "contradicted": {
@@ -2741,15 +2741,15 @@
             "disputed": 0
           },
           "supported": {
-            "contradicted": 2,
-            "supported": 0,
+            "contradicted": 0,
+            "supported": 2,
             "unsupported": 5,
             "disputed": 0
           },
           "unsupported": {
             "contradicted": 1,
-            "supported": 0,
-            "unsupported": 4,
+            "supported": 1,
+            "unsupported": 3,
             "disputed": 0
           }
         },
@@ -2812,14 +2812,14 @@
               "rate": 0.5
             },
             "support_recall": {
-              "hits": 0,
-              "n": 7,
-              "rate": 0.0
-            },
-            "false_flags": {
               "hits": 2,
               "n": 7,
               "rate": 0.2857142857142857
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
             }
           },
           "numeric": {
@@ -2830,14 +2830,14 @@
               "rate": 0.25
             },
             "support_recall": {
-              "hits": 0,
-              "n": 2,
-              "rate": 0.0
-            },
-            "false_flags": {
               "hits": 1,
               "n": 2,
               "rate": 0.5
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
             }
           },
           "antonym": {
@@ -2884,14 +2884,14 @@
               "rate": null
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 5,
-              "rate": 0.0
+              "rate": 0.2
             },
             "false_flags": {
-              "hits": 3,
+              "hits": 1,
               "n": 8,
-              "rate": 0.375
+              "rate": 0.125
             }
           },
           "distractor": {
@@ -2902,14 +2902,14 @@
               "rate": 0.0
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 1,
-              "rate": 0.0
+              "rate": 1.0
             },
             "false_flags": {
-              "hits": 2,
+              "hits": 1,
               "n": 6,
-              "rate": 0.3333333333333333
+              "rate": 0.16666666666666666
             }
           },
           "temporal": {
@@ -2938,14 +2938,14 @@
               "rate": 0.16666666666666666
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 2,
               "n": 7,
-              "rate": 0.0
+              "rate": 0.2857142857142857
             },
             "false_flags": {
-              "hits": 3,
+              "hits": 1,
               "n": 12,
-              "rate": 0.25
+              "rate": 0.08333333333333333
             }
           },
           "multi_sentence": {
@@ -2974,9 +2974,9 @@
             "rate": 1.0
           },
           "supported": {
-            "hits": 0,
-            "n": 0,
-            "rate": null
+            "hits": 2,
+            "n": 2,
+            "rate": 1.0
           }
         }
       }
@@ -2985,17 +2985,17 @@
       "id": "zh-units-negation",
       "description": "航标容量与重试记忆：时延预算、错误预算、存储单位、保留期、网关超时和重试条件。证据是服务指标、ADR-011、被取代的 ADR-004、2026-09-18 容量会，以及 2026-03-02 的保留计划。难点是毫秒对分钟、GB 对 GiB、百分数的中文换算、检索与账单的适用范围，以及“不得”“只有…才”和带日期的规则通过记录。",
       "as_of": "2026-10-08",
-      "judge_calls": 24,
+      "judge_calls": 36,
       "escalations": null,
       "metrics": {
         "claims": 20,
         "contradiction": {
-          "tp": 5,
-          "fp": 0,
-          "fn": 5,
-          "precision": 1.0,
-          "recall": 0.5,
-          "f1": 0.6666666666666666,
+          "tp": 6,
+          "fp": 1,
+          "fn": 4,
+          "precision": 0.8571428571428571,
+          "recall": 0.6,
+          "f1": 0.7058823529411765,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -3004,11 +3004,11 @@
         },
         "support": {
           "tp": 2,
-          "fp": 2,
+          "fp": 3,
           "fn": 7,
-          "precision": 0.5,
+          "precision": 0.4,
           "recall": 0.2222222222222222,
-          "f1": 0.3076923076923077
+          "f1": 0.2857142857142857
         },
         "accuracy": {
           "correct": 8,
@@ -3017,21 +3017,21 @@
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 5,
+            "contradicted": 6,
             "supported": 2,
-            "unsupported": 3,
+            "unsupported": 2,
             "disputed": 0
           },
           "supported": {
-            "contradicted": 0,
+            "contradicted": 1,
             "supported": 2,
-            "unsupported": 7,
+            "unsupported": 6,
             "disputed": 0
           },
           "unsupported": {
             "contradicted": 0,
-            "supported": 0,
-            "unsupported": 1,
+            "supported": 1,
+            "unsupported": 0,
             "disputed": 0
           }
         },
@@ -3069,12 +3069,12 @@
             "f1": null
           },
           "internal_conflict": {
-            "tp": 4,
-            "fp": 2,
-            "fn": 5,
-            "precision": 0.6666666666666666,
-            "recall": 0.4444444444444444,
-            "f1": 0.5333333333333333
+            "tp": 7,
+            "fp": 1,
+            "fn": 2,
+            "precision": 0.875,
+            "recall": 0.7777777777777778,
+            "f1": 0.8235294117647058
           },
           "duplicate": {
             "tp": 0,
@@ -3099,17 +3099,17 @@
               "rate": 0.2222222222222222
             },
             "false_flags": {
-              "hits": 0,
+              "hits": 1,
               "n": 9,
-              "rate": 0.0
+              "rate": 0.1111111111111111
             }
           },
           "numeric": {
             "claims": 14,
             "contradiction_recall": {
-              "hits": 4,
+              "hits": 5,
               "n": 9,
-              "rate": 0.4444444444444444
+              "rate": 0.5555555555555556
             },
             "support_recall": {
               "hits": 0,
@@ -3117,9 +3117,9 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 0,
+              "hits": 1,
               "n": 5,
-              "rate": 0.0
+              "rate": 0.2
             }
           },
           "negation": {
@@ -3161,9 +3161,9 @@
           "distractor": {
             "claims": 7,
             "contradiction_recall": {
-              "hits": 4,
+              "hits": 5,
               "n": 6,
-              "rate": 0.6666666666666666
+              "rate": 0.8333333333333334
             },
             "support_recall": {
               "hits": 0,
@@ -3197,9 +3197,9 @@
           "chinese": {
             "claims": 20,
             "contradiction_recall": {
-              "hits": 5,
+              "hits": 6,
               "n": 10,
-              "rate": 0.5
+              "rate": 0.6
             },
             "support_recall": {
               "hits": 2,
@@ -3207,9 +3207,9 @@
               "rate": 0.2222222222222222
             },
             "false_flags": {
-              "hits": 0,
+              "hits": 1,
               "n": 10,
-              "rate": 0.0
+              "rate": 0.1
             }
           },
           "multi_sentence": {
@@ -3234,8 +3234,8 @@
         "citations": {
           "contradicted": {
             "hits": 5,
-            "n": 5,
-            "rate": 1.0
+            "n": 6,
+            "rate": 0.8333333333333334
           },
           "supported": {
             "hits": 2,
@@ -6226,8 +6226,8 @@
       "memory_id": "m-a7883e45",
       "text": "新服务一律要接入统一 API 网关。",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "negation",
         "chinese"
@@ -6236,8 +6236,16 @@
         "overgeneralization"
       ],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "会议纪要/2026-09-28-架构周会.md:14",
+          "quote": "从10月起，新上线的对外服务必须接入统一 API 网关，内部服务暂不强制。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-decisions-platform",
@@ -6261,8 +6269,8 @@
       "memory_id": "m-61fd0981",
       "text": "事故后支付接口超时放宽到了 8 秒，为的是降低误判超时的可能性。",
       "truth": "supported",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "supported",
+      "status": "candidate_support",
       "tags": [
         "paraphrase",
         "numeric",
@@ -6276,8 +6284,16 @@
         "inference_marker",
         "internal_conflict"
       ],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "src/payment/settings.py:3",
+          "quote": "2026-09-12 事故后由 3 秒放宽到 8 秒，降低大促时误判超时的可能性",
+          "rationale": "source restates the claim (term coverage 0.82)",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-decisions-platform",
@@ -6511,8 +6527,8 @@
       "memory_id": "m-54843a0c",
       "text": "封版期间禁止任何上线。",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "antonym",
         "chinese"
@@ -6522,18 +6538,27 @@
         "internal_conflict"
       ],
       "predicted_issues": [
-        "overgeneralization"
+        "overgeneralization",
+        "internal_conflict"
       ],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "邮件/2026-09-26-国庆封版通知.txt:8",
+          "quote": "期间仅允许 P0 级修复上线，由当周值班经理审批即可，无需 CTO 签字。",
+          "rationale": "opposing terms: claim '禁止…' vs source '允许…'",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-decisions-process",
       "memory_id": "m-a61ef737",
       "text": "封版期间上线不仅要是 P0 修复，而且要 CTO 审批。",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "negation",
         "paraphrase",
@@ -6542,9 +6567,19 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "邮件/2026-09-26-国庆封版通知.txt:8",
+          "quote": "期间仅允许 P0 级修复上线，由当周值班经理审批即可，无需 CTO 签字。",
+          "rationale": "same subject, but only one side is negated",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-decisions-process",
@@ -6582,13 +6617,6 @@
           "relation": "contradicts",
           "location": "会议纪要/2026-09-15-季度规划会.md:8",
           "quote": "第四季度前端岗位冻结招聘，后端新增2个名额。",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "会议纪要/2026-09-15-季度规划会.md:1",
-          "quote": "第四季度规划会纪要",
           "rationale": "same subject, but only one side is negated",
           "opinions": []
         }
@@ -6649,9 +6677,16 @@
       "evidence": [
         {
           "relation": "contradicts",
+          "location": "会议纪要/2026-09-15-季度规划会.md:13",
+          "quote": "由于云资源费用超支，下半年研发预算追加150万元。",
+          "rationale": "different values: claim ['12000000', '2025-12-18', '2026'] vs source ['1500000']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
           "location": "会议纪要/2025-12-18-年度预算会.md:5",
           "quote": "2025年12月18日的年度预算会确定：2026年研发预算总额为1200万元，其中云资源费用不超过400万元。",
-          "rationale": "same subject, but only one side is negated",
+          "rationale": "source restates the claim (term coverage 0.86)",
           "opinions": []
         }
       ]
@@ -6675,16 +6710,16 @@
       "evidence": [
         {
           "relation": "contradicts",
-          "location": "会议纪要/2025-12-18-年度预算会.md:5",
-          "quote": "2025年12月18日的年度预算会确定：2026年研发预算总额为1200万元，其中云资源费用不超过400万元。",
-          "rationale": "same subject, but only one side is negated",
+          "location": "会议纪要/2026-09-15-季度规划会.md:13",
+          "quote": "由于云资源费用超支，下半年研发预算追加150万元。",
+          "rationale": "different values: claim ['12000000', '2026'] vs source ['1500000']",
           "opinions": []
         },
         {
-          "relation": "contradicts",
-          "location": "会议纪要/2026-09-15-季度规划会.md:13",
-          "quote": "由于云资源费用超支，下半年研发预算追加150万元。",
-          "rationale": "different values: claim ['1200', '2026'] vs source ['150']",
+          "relation": "supports",
+          "location": "会议纪要/2025-12-18-年度预算会.md:5",
+          "quote": "2025年12月18日的年度预算会确定：2026年研发预算总额为1200万元，其中云资源费用不超过400万元。",
+          "rationale": "source restates the claim (term coverage 0.75)",
           "opinions": []
         }
       ]
@@ -6848,8 +6883,8 @@
       "memory_id": "m-3f1bebfb",
       "text": "新版首页已经向一成的网页端用户开放。",
       "truth": "supported",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "supported",
+      "status": "candidate_support",
       "tags": [
         "paraphrase",
         "numeric",
@@ -6857,8 +6892,16 @@
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "周报/2026-W40-产品周报.md:5",
+          "quote": "新版首页已对10%的网页端用户开放灰度，跳出率下降了3个百分点。",
+          "rationale": "source restates the claim (term coverage 0.86)",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-decisions-roadmap",
@@ -6918,29 +6961,11 @@
       "memory_id": "m-adb1072d",
       "text": "企业版月费将上调到 399 元。",
       "truth": "unsupported",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
-      "tags": [
-        "distractor",
-        "negation_trap",
-        "chinese"
-      ],
-      "issues": [],
-      "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
-    },
-    {
-      "case": "zh-decisions-roadmap",
-      "memory_id": "m-7ef50f0f",
-      "text": "免费用户也可以使用基础模板。",
-      "truth": "supported",
       "predicted": "contradicted",
       "status": "candidate_counterevidence",
       "tags": [
-        "paraphrase",
-        "negation_trap",
         "distractor",
+        "negation_trap",
         "chinese"
       ],
       "issues": [],
@@ -6949,9 +6974,35 @@
       "evidence": [
         {
           "relation": "contradicts",
+          "location": "决策记录/ADR-012-专业版定价.md:13",
+          "quote": "专业版月费由99元上调至129元，自2026年11月1日起对新客户生效。",
+          "rationale": "different values: claim ['399'] vs source ['129', '2026-11-01', '99']",
+          "opinions": []
+        }
+      ]
+    },
+    {
+      "case": "zh-decisions-roadmap",
+      "memory_id": "m-7ef50f0f",
+      "text": "免费用户也可以使用基础模板。",
+      "truth": "supported",
+      "predicted": "supported",
+      "status": "candidate_support",
+      "tags": [
+        "paraphrase",
+        "negation_trap",
+        "distractor",
+        "chinese"
+      ],
+      "issues": [],
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "supports",
           "location": "会议纪要/2026-09-24-路线图复审.md:20",
           "quote": "无论是否付费，所有用户都可以使用基础模板；",
-          "rationale": "same subject, but only one side is negated",
+          "rationale": "source restates the claim (term coverage 0.83)",
           "opinions": []
         }
       ]
@@ -6961,8 +7012,8 @@
       "memory_id": "m-07ef87dd",
       "text": "免费版的存储额度会提高到 5GB。",
       "truth": "unsupported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "supported",
+      "status": "candidate_support",
       "tags": [
         "distractor",
         "negation_trap",
@@ -6973,10 +7024,10 @@
       "cites_labeled_passage": null,
       "evidence": [
         {
-          "relation": "contradicts",
+          "relation": "supports",
           "location": "会议纪要/2026-09-24-路线图复审.md:21",
           "quote": "王磊建议提高免费版的存储额度，比如提到5GB，会上没有形成结论。",
-          "rationale": "same subject, but only one side is negated",
+          "rationale": "source restates the claim (term coverage 0.85)",
           "opinions": []
         }
       ]
@@ -7040,7 +7091,7 @@
           "relation": "contradicts",
           "location": "会议纪要/2026-09-24-路线图复审.md:15",
           "quote": "未来两个季度，团队的重点是提升报表加载速度，目标是把首屏加载时间降到2秒以内。",
-          "rationale": "same subject, but only one side is negated",
+          "rationale": "different values: claim ['3'] vs source ['2']",
           "opinions": []
         }
       ]
@@ -7086,8 +7137,8 @@
       "memory_id": "m-144d9912",
       "text": "客户对新版筛选器的评价很好，NPS 涨到了 42。",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "paraphrase",
         "numeric",
@@ -7097,15 +7148,7 @@
       "issues": [],
       "predicted_issues": [],
       "cites_labeled_passage": null,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "周报/2026-W40-产品周报.md:10",
-          "quote": "客户对新版筛选器的反馈非常积极，NPS从31提升到42。",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        }
-      ]
+      "evidence": []
     },
     {
       "case": "zh-units-negation",
@@ -7129,8 +7172,8 @@
       "memory_id": "m-9eb905f1",
       "text": "账单服务的 p99 时延预算是四分之一秒。",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric",
         "distractor",
@@ -7138,8 +7181,23 @@
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:7",
+          "quote": "账单服务的 p99 时延预算是 800 毫秒。",
+          "rationale": "different values: claim ['1'] vs source ['800']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:5",
+          "quote": "检索服务的 p99 时延预算是 250 毫秒。",
+          "rationale": "different values: claim ['1'] vs source ['250']",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-units-negation",
@@ -7200,8 +7258,8 @@
       "memory_id": "m-f97d6193",
       "text": "检索索引的热数据有半个太比字节。",
       "truth": "supported",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "paraphrase",
         "numeric",
@@ -7211,9 +7269,19 @@
         "internal_conflict",
         "duplicate"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
-      "evidence": []
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:17",
+          "quote": "检索索引的热数据占用 512 GiB。",
+          "rationale": "different values: claim ['0.5'] vs source ['512']",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-units-negation",
@@ -7231,7 +7299,9 @@
         "internal_conflict",
         "duplicate"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -7249,14 +7319,16 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": null,
       "evidence": [
         {
           "relation": "supports",
           "location": "制度/时延与容量.md:17",
           "quote": "检索索引的热数据占用 512 GiB。",
-          "rationale": "source restates the claim (term coverage 0.86)",
+          "rationale": "source restates the claim (term coverage 0.80)",
           "opinions": []
         }
       ]
@@ -7316,7 +7388,14 @@
           "relation": "contradicts",
           "location": "记录/2026-03-02-保留计划.md:3",
           "quote": "2026年3月2日，容量组的计划是把检索热数据保留 30 天。",
-          "rationale": "different values: claim ['90'] vs source ['2', '2026', '3', '30']",
+          "rationale": "different values: claim ['90'] vs source ['2026-03-02', '30']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:17",
+          "quote": "检索索引的热数据占用 512 GiB。",
+          "rationale": "different values: claim ['90'] vs source ['512']",
           "opinions": []
         }
       ]
@@ -7349,6 +7428,13 @@
           "location": "制度/时延与容量.md:21",
           "quote": "检索热数据保留 14 天。",
           "rationale": "different values: claim ['30'] vs source ['14']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "记录/2026-03-02-保留计划.md:3",
+          "quote": "2026年3月2日，容量组的计划是把检索热数据保留 30 天。",
+          "rationale": "source restates the claim (term coverage 0.80)",
           "opinions": []
         }
       ]
@@ -7389,9 +7475,7 @@
         "chinese"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -7399,6 +7483,13 @@
           "location": "决策/ADR-011-超时与重试.md:7",
           "quote": "账单渲染的网关超时是 8 秒。",
           "rationale": "different values: claim ['1500'] vs source ['8']",
+          "opinions": []
+        },
+        {
+          "relation": "contradicts",
+          "location": "决策/ADR-004-超时.md:5",
+          "quote": "检索查询的网关超时曾是 800 毫秒。",
+          "rationale": "different values: claim ['1500'] vs source ['800']",
           "opinions": []
         }
       ]
@@ -7420,7 +7511,7 @@
       "predicted_issues": [
         "overgeneralization"
       ],
-      "cites_labeled_passage": true,
+      "cites_labeled_passage": false,
       "evidence": [
         {
           "relation": "contradicts",
@@ -7430,17 +7521,10 @@
           "opinions": []
         },
         {
-          "relation": "contradicts",
-          "location": "决策/ADR-011-超时与重试.md:7",
-          "quote": "账单渲染的网关超时是 8 秒。",
-          "rationale": "different values: claim ['1500'] vs source ['8']",
-          "opinions": []
-        },
-        {
           "relation": "supports",
           "location": "决策/ADR-011-超时与重试.md:5",
           "quote": "检索查询的网关超时是 1500 毫秒。",
-          "rationale": "source restates the claim (term coverage 0.80)",
+          "rationale": "source restates the claim (term coverage 0.86)",
           "opinions": []
         }
       ]
@@ -7507,13 +7591,6 @@
           "quote": "账单渲染最多重试一次，且仅当第一次返回 HTTP 503 时才允许重试。",
           "rationale": "same subject, but only one side is negated",
           "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "决策/ADR-011-超时与重试.md:7",
-          "quote": "账单渲染的网关超时是 8 秒。",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
         }
       ]
     },
@@ -7540,7 +7617,7 @@
           "relation": "supports",
           "location": "决策/ADR-011-超时与重试.md:11",
           "quote": "账单渲染最多重试一次，且仅当第一次返回 HTTP 503 时才允许重试。",
-          "rationale": "source restates the claim (term coverage 0.77)",
+          "rationale": "source restates the claim (term coverage 0.88)",
           "opinions": []
         }
       ]
@@ -7565,7 +7642,7 @@
           "relation": "supports",
           "location": "会议纪要/2026-09-18-容量会.md:3",
           "quote": "检索告警不得由账单值班确认。",
-          "rationale": "source restates the claim (term coverage 0.78)",
+          "rationale": "source restates the claim (term coverage 0.91)",
           "opinions": []
         }
       ]
@@ -7575,8 +7652,8 @@
       "memory_id": "m-0ad5d868",
       "text": "检索值班不得确认账单告警。",
       "truth": "unsupported",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "supported",
+      "status": "candidate_support",
       "tags": [
         "negation_trap",
         "distractor",
@@ -7585,7 +7662,15 @@
       "issues": [],
       "predicted_issues": [],
       "cites_labeled_passage": null,
-      "evidence": []
+      "evidence": [
+        {
+          "relation": "supports",
+          "location": "会议纪要/2026-09-18-容量会.md:3",
+          "quote": "检索告警不得由账单值班确认。",
+          "rationale": "source restates the claim (term coverage 0.91)",
+          "opinions": []
+        }
+      ]
     }
   ]
 }

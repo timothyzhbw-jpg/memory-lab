@@ -3,7 +3,7 @@
 Measured locally on 2026-10-11 with orgmemory 0.4.0 and memlab-core 0.3.0, offline. Reproduce from the repository root:
 
 ```bash
-python benchmarks/orgmemory/run.py --json results.json   # exits 1 because of the mismatches below
+.venv/bin/python benchmarks/orgmemory/run.py --json -   # exits 1 because of the mismatches below
 ```
 
 [Case format, check definitions and how to add a case](README.md)

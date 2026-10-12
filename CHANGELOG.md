@@ -16,16 +16,12 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Multimodal evidence through transcript and OCR sidecars (roadmap v0.4). See
-[docs/multimodal.md](docs/multimodal.md). memfalsify and orgmemory use new memlab-core API, so at release
-memlab-core needs a minor version and their pins must move to it.
+Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0 and memlab-mcp
+0.4.0. The release date is not yet set; all changes since release 0.3 are collected here.
 
-HTML reports. memfalsify's and orgmemory's `--format html` import `memcore.htmlpage`, so their next
-release needs a memlab-core release that has it; raise their memlab-core pins then.
-
-Repository-level changes; no package version changes.
-
-No package changes yet.
+Multimodal evidence through transcript and OCR sidecars (roadmap v0.4; see
+[docs/multimodal.md](docs/multimodal.md)) and HTML reports use the new memlab-core API,
+including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0.3.
 
 ### Security
 
@@ -67,6 +63,10 @@ No package changes yet.
   file hard-linked into the evidence directory on the same filesystem is read and can be quoted. Git does not
   store hard links, so only someone with write access to the audited directory can plant one. See
   `docs/github-action.md` and the trust boundaries in both READMEs.
+- MCP resource and prompt errors carry the tools' messages or a fixed one. They do not echo the requested URI
+  or arguments, and they are not logged, so neither a client nor stderr sees a path outside the root or a
+  traceback. The SDK's default resource security (no `..` escape, absolute path or NUL) runs on every
+  resource path before the server's own path checks.
 
 ### Added
 
@@ -124,6 +124,23 @@ No package changes yet.
 
 ### memfalsify
 
+#### Added
+
+- The evidence scan indexes each cue or OCR line of a sidecar as a passage. Markdown reports cite the media
+  file and position (`clip.mp4#t=12.5,17 (00:00:12.500-00:00:17.000)`), then the sidecar line and its
+  hash, then the media file's hash or that it was not present. A multi-line cue is quoted line by line
+  (in `diff` reports too, before control characters are neutralized). JSON spans carry `media`. When a
+  report uses sidecar evidence, its limitations say that a transcript or OCR is someone's reading of the
+  media.
+- Reviews may cite a sidecar. The quote must lie inside one cue or line; an optional `locator` picks which.
+- Example: `examples/memfalsify-media`.
+
+- `--format html` on `audit` and `diff`: one self-contained page with the same content as the Markdown
+  report (summary table, findings grouped by status, every evidence quote with location, character range
+  and full SHA-256, issues and proposed actions; for `diff`, the changed, added and removed claims).
+  Works with `--output`. `history` stays `markdown` or `json`. The examples have `report.html` next to
+  `report.md`.
+
 #### Changed
 
 - Lexical judging of Chinese text, with no new dependency. Text without CJK characters is read exactly as
@@ -143,20 +160,9 @@ No package changes yet.
     (`必须`, `非…不可`) against need not (`无需`, `不必`).
   - A bare quantity such as `三个月。` is no longer a claim, as with `3 months.`; `memfalsify diff` pairs
     edited Chinese claims by bigram and trigram similarity.
-  - On the benchmark, Chinese contradiction recall rises from 2/19 to 5/19 and precision from 0.25 to
-    0.56, and Chinese false flags fall from 6/32 to 4/32. See `benchmarks/memfalsify/RESULTS.md`.
-#### Added
-
-- The evidence scan indexes each cue or OCR line of a sidecar as a passage. Markdown reports cite the media
-  file and position (`clip.mp4#t=12.5,17 (00:00:12.500-00:00:17.000)`), then the sidecar line and its
-  hash, then the media file's hash or that it was not present. A multi-line cue is quoted line by line
-  (in `diff` reports too, before control characters are neutralized). JSON spans carry `media`. When a
-  report uses sidecar evidence, its limitations say that a transcript or OCR is someone's reading of the
-  media.
-- Reviews may cite a sidecar. The quote must lie inside one cue or line; an optional `locator` picks which.
-- Example: `examples/memfalsify-media`.
-
-#### Changed
+  - On the original eight-case benchmark run, Chinese contradiction recall rises from 2/19 to 5/19,
+    precision from 0.25 to 0.56, and Chinese false flags fall from 6/32 to 4/32. See
+    `benchmarks/memfalsify/RESULTS.md`.
 
 - A media file is listed as skipped only when no sidecar was indexed for it, with the reason "no usable
   transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it". Malformed, stale, unbound and ambiguous
@@ -191,8 +197,6 @@ No package changes yet.
 - `@file.md` imports (Claude Code, Gemini CLI) are followed like local Markdown links: one level deep,
   inside the memory file's directory, and not inside code spans. `--no-follow-links` turns both off.
 
-#### Changed
-
 - A line holding an `@file.md` import is an index entry, like a line with a local Markdown link: it was
   read as a claim before.
 - `history` counts a change to a file's frontmatter metadata as the latest change of each of its claims.
@@ -221,8 +225,6 @@ No package changes yet.
   define `judge_many(pairs, max_concurrency)` to schedule a whole audit's pairs, and `usage()` to report
   its API usage.
 
-#### Changed
-
 - The audit shortlists passages for every claim first, then sends all (claim, passage) pairs to the
   verifier in one `judge_all` call. `dual` asks each backend in one pass. `cascade` asks Jev about every
   pair and then Claude about the pairs Jev was unsure of. Verdicts are unchanged.
@@ -231,24 +233,13 @@ No package changes yet.
   unchanged.
 - `audit.candidates()` now ranks judged passages; selecting them moved to `audit.shortlist()`.
 
+- An HTML report (a `<!DOCTYPE html>` page whose head names `memfalsify` as its generator) is skipped as
+  evidence, like the Markdown and JSON reports.
+
 #### Fixed
 
 - Model rationales, batch status lines and batch errors are one line with terminal and bidi controls
   removed. The Markdown API-usage line keeps the verifier name inside a single code span.
-
-
-#### Added
-
-- `--format html` on `audit` and `diff`: one self-contained page with the same content as the Markdown
-  report (summary table, findings grouped by status, every evidence quote with location, character range
-  and full SHA-256, issues and proposed actions; for `diff`, the changed, added and removed claims).
-  Works with `--output`. `history` stays `markdown` or `json`. The examples have `report.html` next to
-  `report.md`.
-
-#### Changed
-
-- An HTML report (a `<!DOCTYPE html>` page whose head names `memfalsify` as its generator) is skipped as
-  evidence, like the Markdown and JSON reports.
 
 ### memlab-core
 
@@ -346,8 +337,6 @@ No package changes yet.
   issues. A dataset imports one site, and the importer never reads `policy.json`. See
   [docs/design/jira-import.md](docs/design/jira-import.md) and `examples/orgmemory/jira-example`.
 
-#### Changed
-
 - The GitHub and Jira importers share their capture machinery (`orgmemory.ingest`). Neither starts while
   the other's lock (`.github-sync.lock`, `.jira-sync.lock`) exists. GitHub output is unchanged.
 
@@ -387,17 +376,10 @@ No package changes yet.
 
 ### memlab-mcp
 
-No code change. Through the libraries, `memfalsify_audit`, `memfalsify_diff` and the orgmemory tools read
+Through the libraries, `memfalsify_audit`, `memfalsify_diff` and the orgmemory tools read
 sidecars and hash media files with the same confined reads as other evidence, so a media file swapped for
 a symlink out of the root is never read.
-#### Changed
 
-- `memfalsify_claims` returns the same objects as `memfalsify claims`, including `metadata`, and the
-  other memfalsify tools accept the new instruction formats.
-- No change. The tools' `format` stays `markdown` or `json`: an MCP client reads text, and HTML is for
-  people, through the CLIs.
-- The orgmemory tools read an optional `policy-log.jsonl`, refusing one that is a symlink leaving the server
-  root. `orgmemory_validate` prints the same lines as `orgmemory validate`.
 #### Added
 
 - `orgmemory_changes` (`dataset`, `from_time`, `to_time`, `format`): the read-only tool over
@@ -415,12 +397,14 @@ a symlink out of the root is never read.
   string that does not start with `-` or contain a control character. The tool resolves that revision to a
   commit. Prompts embed no file contents and never tell the agent to write a file.
 
-#### Security
+#### Changed
 
-- Resource and prompt errors carry the tools' messages or a fixed one. They do not echo the requested URI
-  or arguments, and they are not logged, so neither a client nor stderr sees a path outside the root or a
-  traceback. The SDK's default resource security (no `..` escape, absolute path or NUL) runs on every
-  resource path before the server's own path checks.
+- `memfalsify_claims` returns the same objects as `memfalsify claims`, including `metadata`, and the
+  other memfalsify tools accept the new instruction formats.
+- No change. The tools' `format` stays `markdown` or `json`: an MCP client reads text, and HTML is for
+  people, through the CLIs.
+- The orgmemory tools read an optional `policy-log.jsonl`, refusing one that is a symlink leaving the server
+  root. `orgmemory_validate` prints the same lines as `orgmemory validate`.
 
 ### Repository
 
@@ -437,16 +421,18 @@ a symlink out of the root is never read.
   replays them offline through `Dataset.load`, `replay` and `audit` and reports every check (`--check`,
   `--case`, `--json`); it exits 1 on any mismatch. `tests/test_orgbench.py` runs it in CI against the
   known mismatches.
-- [Measured results](benchmarks/orgmemory/RESULTS.md): 588 of 598 checks pass. Two findings remain open.
-  Duplicate JSON keys in `events.jsonl`, `evidence.jsonl` or `policy.json` are accepted, and the last
-  one wins. Role changes in `policy.json` apply to every past event, because the policy has no
-  effective dates.
+- [Measured results](benchmarks/orgmemory/RESULTS.md): the first run passed 588 of 598 checks, with
+  two findings: duplicate JSON keys in `events.jsonl`, `evidence.jsonl` or `policy.json` were accepted
+  with the last value winning, and current roles in `policy.json` applied to every past event. Duplicate
+  keys now fail closed, so 590 of 598 checks pass; all 8 remaining mismatches are in `role-change`.
+  Effective-dated roles fix historical authority when recorded in `policy-log.jsonl`; this case has
+  no dated policy log and keeps its independent labels.
 
 ## memlab-core
 
-### 0.3.0 - Unreleased
+### 0.3.0 - Pending release 0.4
 
-Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
+Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
 
 ### 0.2.0 - 2026-10-11
 
@@ -476,9 +462,9 @@ Part of release 0.4. The changes are listed under [Unreleased](#unreleased) unti
 
 ## memfalsify
 
-### 0.4.0 - Unreleased
+### 0.4.0 - Pending release 0.4
 
-Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
+Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
 
 ### 0.3.0 - 2026-10-11
 
@@ -567,9 +553,9 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
-### 0.4.0 - Unreleased
+### 0.4.0 - Pending release 0.4
 
-Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
+Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
 
 ### 0.3.0 - 2026-10-11
 
@@ -611,9 +597,9 @@ Part of release 0.4. The changes are listed under [Unreleased](#unreleased) unti
 
 ## memlab-mcp
 
-### 0.4.0 - Unreleased
+### 0.4.0 - Pending release 0.4
 
-Part of release 0.4. The changes are listed under [Unreleased](#unreleased) until the release date is set.
+Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
 
 ### 0.3.0 - 2026-10-11
 
