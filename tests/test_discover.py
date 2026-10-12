@@ -114,7 +114,7 @@ def test_discovery_markdown_keeps_names_and_patterns_inert(tmp_path):
     # A backtick in the name needs a longer fence, or the span closes and the rest of the name is Markdown.
     assert "| ``.cursor/rules/a`b.mdc`` | Cursor | `cursor-rule` |" in markdown
     assert "| ``sub`tick/AGENTS.md`` | Codex and other AGENTS.md readers | `agents-md` |" in markdown
-    assert "- Excluded: `* - [phish](http://evil)`, `ok`" in markdown
+    assert "- Excluded: `*\\u000a- [phish](http://evil)`, `ok`" in markdown
     assert "\n- [phish](http://evil)" not in markdown and "\x1b" not in markdown
     # A name the OS may reject still has to render as one cell: pipes stay escaped inside the fence.
     synthetic = Discovery(
@@ -126,8 +126,8 @@ def test_discovery_markdown_keeps_names_and_patterns_inert(tmp_path):
     )
     text = discovery_to_markdown(synthetic)
     assert "| ``a`\\|b.mdc`` | Cursor | `cursor-rule` (same file as ``sub`\\|x.md``) |" in text
-    assert "- Directory: `we ird`" in text and "\nird" not in text
-    assert "- Excluded: `* - [phish](http://evil)`" in text
+    assert "- Directory: `we\\u000aird`" in text and "\nird" not in text
+    assert "- Excluded: `*\\u000a- [phish](http://evil)`" in text
     assert "- ``bad`name``: symlinked directory not followed" in text
     assert "\n- [phish](http://evil)" not in text
 

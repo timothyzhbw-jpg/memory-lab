@@ -190,7 +190,7 @@ def test_frontmatter_text_is_shown_safely(tmp_path):
     rule.parent.mkdir(parents=True)
     rule.write_bytes("---\ndescription: a `tick` and \x1b[31mred\n---\n- The cache uses Redis.\n".encode("utf-8"))
     markdown = to_markdown(audit(rule, as_of=AS_OF))
-    assert "Frontmatter: ``description: a `tick` and �[31mred``" in markdown and "\x1b" not in markdown
+    assert "Frontmatter: ``description: a `tick` and \\u001b[31mred``" in markdown and "\x1b" not in markdown
 
 
 def test_claims_cli_adds_metadata_only_when_present():

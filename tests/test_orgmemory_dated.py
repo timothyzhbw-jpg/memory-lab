@@ -353,7 +353,7 @@ def test_explain_shows_roles_at_the_time_and_role_changes(tmp_path):
     assert "**Role changes of these actors**" in text
     assert ("- `g` at 2026-10-04T09:00:00+00:00: admin (roles: org_admin) granted product_manager to sales; "
             "roles of sales: account_manager → account_manager, product_manager") in text
-    assert '; roles of pm: product_manager → none; note: "left\\nthe team"' in text
+    assert '; roles of pm: product_manager → none; note: "left\\\\nthe team"' in text
     assert "| `x` | sales (account_manager) | approve | unauthorized |" in text
     # Only the changes of actors in this subject's history, up to the cutoff.
     assert "`o`" in text

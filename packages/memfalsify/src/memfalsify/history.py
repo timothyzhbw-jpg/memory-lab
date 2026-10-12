@@ -291,7 +291,7 @@ def diff_to_markdown(report: DiffReport) -> str:
            else "- Evidence root: none supplied",
            *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in audit.excluded)]
              if audit.excluded else []),
-           f"- Verifier: `{audit.verifier}` · as of {audit.as_of} · mode: **{report.mode}** (no memory was modified)",
+           f"- Verifier: {code_span(audit.verifier)} · as of {audit.as_of} · mode: **{report.mode}** (no memory was modified)",
            *usage_lines(audit),
            "", "| Change | Claims |", "|---|---|"]
     out += [f"| {kind.capitalize()} | {n} |" for kind, n in report.summary.items()]
@@ -340,7 +340,7 @@ def diff_to_markdown(report: DiffReport) -> str:
         out += ["## Skipped evidence", ""]
         out += [skipped_line(s.path, s.reason, show_text) for s in audit.skipped_evidence]
         out.append("")
-    out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations + audit.limitations]
+    out += ["## Limitations", ""] + [f"- {show_text(line)}" for line in report.limitations + audit.limitations]
     return "\n".join(out) + "\n"
 
 
@@ -510,8 +510,8 @@ def _commit(info: CommitInfo | None) -> str:
     if info is None:
         return "before the scanned commits"
     if info.commit is None:
-        return info.subject
-    return f"`{info.commit[:12]}` {(info.date or '')[:10]} · {info.author} · {info.subject}"
+        return show_text(info.subject)
+    return f"`{info.commit[:12]}` {(info.date or '')[:10]} · {show_text(info.author or '')} · {show_text(info.subject)}"
 
 
 def history_to_markdown(report: HistoryReport) -> str:
@@ -544,5 +544,5 @@ def history_to_markdown(report: HistoryReport) -> str:
                     f"Was at {code_span(gone.location)}"
                     + (f" · {code_span(gone.section)}" if gone.section else ""), "",
                     f"- Removed: {_commit(gone.removed)}", f"- Introduced: {_commit(gone.introduced)}", ""]
-    out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
+    out += ["## Limitations", ""] + [f"- {show_text(line)}" for line in report.limitations]
     return "\n".join(out) + "\n"

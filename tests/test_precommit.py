@@ -331,7 +331,7 @@ def test_hook_markdown_keeps_untrusted_text_inert_and_json_escapes_controls(repo
         result = runner.invoke(app, [mode, *common])
         assert result.exit_code in (0, 1), result.output
         assert esc not in result.stdout and rlo not in result.stdout and cr not in result.stdout
-        assert "\ufffd" in result.stdout and "sessions" in result.stdout
+        assert "u001b" in result.stdout and "u202e" in result.stdout and "sessions" in result.stdout
     payload = runner.invoke(app, ["audit", *common, "--format", "json"])
     assert payload.exit_code in (0, 1), payload.output
     assert rlo in payload.stdout and esc not in payload.stdout and cr not in payload.stdout

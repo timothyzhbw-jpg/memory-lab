@@ -25,6 +25,13 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
 
 ### Security
 
+- MemFalsify audit, diff and history Markdown, orgmemory replay/explain (including YAML state),
+  audit, changes and ADR exports, CLI diagnostics and Action summaries use shared memcore display
+  helpers: untrusted fields occupy one line with control, format and separator characters visibly
+  escaped, then literal Markdown or safely quoted YAML. Paths and review metadata receive the same
+  treatment. Action logs and annotations retain workflow-command escaping and also escape terminal
+  controls, preventing forged report headings, YAML fence breaks and runner commands.
+
 - GitHub fetch rejects percent-encoded credential reflection in JSON strings and response headers,
   including header names. Pagination stays on the original listing endpoint and preserves its query
   filters, allowing only pagination changes: at most one positive `page` and one `after` cursor

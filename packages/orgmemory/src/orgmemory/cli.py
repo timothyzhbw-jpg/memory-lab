@@ -14,7 +14,9 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 from memcore.jsonutil import loads_at
-from memcore.sidecar import one_line
+
+from memcore.cli import SafeTyperGroup
+from memcore.display import report_text
 
 from .audit import DEFAULT_STALE_DAYS, audit
 from .authority import POLICY_LOG
@@ -25,7 +27,7 @@ from .models import Event, PolicyChange
 from .replay import Dataset, replay, validation_summary
 from .report import audit_markdown, changes_markdown, explain, to_markdown
 
-app = typer.Typer(no_args_is_help=True, add_completion=False,
+app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
                   help="Replay organizational decisions under explicit authority rules.")
 evidence_app = typer.Typer(no_args_is_help=True, help="Manage the evidence manifest.")
 app.add_typer(evidence_app, name="evidence")
@@ -62,8 +64,7 @@ def _json_shield(text: str) -> str:
 
 
 def _fail(message: str) -> None:
-    flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
-    typer.echo(f"error: {flat}", err=True)
+    typer.echo(f"error: {report_text(message)}", err=True)
     raise typer.Exit(2)
 
 
@@ -210,7 +211,7 @@ def export_command(
     except (ValueError, OSError) as exc:
         _fail(str(exc))
     for path in written:
-        typer.echo(f"wrote {path}")
+        typer.echo(f"wrote {report_text(str(path))}")
     typer.echo(f"exported {len(records)} decision(s) of {subjects} subject(s), as of {when}; subjects without an "
                "authorized decision are left out")
 
@@ -235,7 +236,7 @@ def append_command(dataset: Path = DATASET,
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
     append_jsonl(dataset / "events.jsonl", new.model_dump(mode="json", exclude_none=True))
-    typer.echo(f"appended {new.id}")
+    typer.echo(f"appended {report_text(new.id)}")
 
 
 def _record_role_change(dataset: Path, action: str, id: str, timestamp: str, actor: str, subject_actor: str,
@@ -250,7 +251,7 @@ def _record_role_change(dataset: Path, action: str, id: str, timestamp: str, act
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
     append_jsonl(dataset / POLICY_LOG, change.model_dump(mode="json", exclude_none=True))
-    typer.echo(f"appended {change.id} to {POLICY_LOG}")
+    typer.echo(f"appended {report_text(change.id)} to {POLICY_LOG}")
 
 
 ROLE_CHANGE_OPTIONS = dict(
@@ -315,7 +316,7 @@ def evidence_add(
         _fail(str(exc))
     append_jsonl(manifest, entry.model_dump(mode="json"))
     where = span.location if span.media is None else f"{span.citation} ({span.media.label} {span.location})"
-    typer.echo(one_line(f"registered {id} at {where}"))
+    typer.echo(report_text(f"registered {id} at {where}"))
 
 
 github_app = typer.Typer(no_args_is_help=True, help="Ingest GitHub issues and pull requests.")

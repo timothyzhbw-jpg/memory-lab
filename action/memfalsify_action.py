@@ -18,6 +18,7 @@ import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from memcore.display import one_line, report_text
 from memcore.paths import InputPathError, input_path
 from memfalsify import ATTENTION, AuditReport
 from memfalsify.cli import app
@@ -38,11 +39,11 @@ def _escape(text: str) -> str:
 
 def _log_text(text: str) -> str:
     """Keep arbitrary diagnostics inert even if a runner searches mid-line."""
-    return _escape(text).replace("::", "%3A%3A")
+    return one_line(_escape(text)).replace("::", "%3A%3A")
 
 
 def annotate(kind: str, message: str) -> None:
-    print(f"::{kind} title=MemFalsify::{_escape(message)}", flush=True)
+    print(f"::{kind} title=MemFalsify::{one_line(_escape(message))}", flush=True)
 
 
 def _append(env: dict[str, str], variable: str, text: str) -> None:
@@ -67,7 +68,9 @@ def run_cli(args: list[str]) -> int:
     finally:
         # CLI errors can contain repository paths or provider text. Never let a
         # physical output line become a runner workflow command.
-        for line in output.getvalue().splitlines():
+        captured = output.getvalue()
+        lines = captured.removesuffix("\n").split("\n") if captured else []
+        for line in lines:
             print(f"MemFalsify CLI: {_log_text(line)}", flush=True)
 
 
@@ -162,7 +165,7 @@ def main(env: dict[str, str] | None = None) -> int:
                    else "No memory file found (looked for " + (", ".join(memories) or "nothing")
                    + "); nothing to audit.")
         annotate("notice", message)
-        publish(env, report_path, f"{REPORT_HEADER}\n\n{message}\n", 0)
+        publish(env, report_path, f"{REPORT_HEADER}\n\n{report_text(message)}\n", 0)
         return 0
     sections, codes, attention = [], [], 0
     command = ["diff", f"--base={base}"] if base else ["audit"]

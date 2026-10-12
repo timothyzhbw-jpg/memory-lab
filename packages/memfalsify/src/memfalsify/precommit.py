@@ -21,6 +21,9 @@ from typing import Optional
 import typer
 from pydantic import ValidationError
 
+from memcore.cli import SafeTyperGroup
+from memcore.display import report_text
+
 from . import __version__, jev, llm
 from .audit import ATTENTION
 from .cli import Format, VerifierChoice, build_verifier, preselection
@@ -33,7 +36,7 @@ from .verify import VerifierError
 # Basenames the hooks accept. The manifest ``files`` regex must name the same three.
 MEMORY_NAMES = frozenset({"CLAUDE.md", "AGENTS.md", "MEMORY.md"})
 
-app = typer.Typer(no_args_is_help=True, add_completion=False,
+app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
                   help="Check staged CLAUDE.md, AGENTS.md and MEMORY.md. Never modifies them.")
 
 
@@ -50,7 +53,7 @@ def _configure_stdio() -> None:
 
 
 def _fail(message: str) -> None:
-    typer.echo(f"error: {message}", err=True)
+    typer.echo(f"error: {report_text(message)}", err=True)
     raise typer.Exit(2)
 
 

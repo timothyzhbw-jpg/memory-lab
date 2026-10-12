@@ -380,7 +380,7 @@ def test_reports_cite_the_media_file_and_position(media_dir):
     assert ("· `clip.mp4#t=12.5,17` (00:00:12.500-00:00:17.000) · transcript `clip.mp4.vtt:12` · sha256 "
             f"`{sha((media_dir / 'clip.mp4.vtt').read_bytes())[:12]}` · media sha256 "
             f"`{sha((media_dir / 'clip.mp4').read_bytes())[:12]}` · different values") in markdown
-    assert "  > <v Priya>The public API rate limit is 60 requests\n  > per minute per key.\n" in markdown
+    assert "  > &lt;v Priya&gt;The public API rate limit is 60 requests\\\\u000aper minute per key.\n" in markdown
     assert "· `board.png#page=1&xywh=40,120,570,38` · OCR `board.png.ocr.json:" in markdown
     assert MEDIA_NOTE in report.limitations and f"- {MEDIA_NOTE}" in markdown
     spans = [e["span"] for f in json.loads(report.model_dump_json())["findings"] for e in f["evidence"]]
@@ -405,14 +405,14 @@ def test_a_transcript_without_media_says_its_binding_was_not_checked(media_dir):
 
 
 def test_diff_reports_split_crlf_cues_before_scrubbing_controls(git_repo):
-    """Diff Markdown replaces control characters (CR included); a CRLF cue must still print as two lines."""
+    """Diff Markdown escapes CR and LF inside a cue onto one literal quote line."""
     base = git_repo.commit("memory", {"MEMORY.md": "- The queue runs on Kafka.\n"})
     git_repo.write({"MEMORY.md": "- The queue runs on Kafka.\n"
                                  "- Deployments go through staging, except for hotfixes.\n"})
     evidence = Path(shutil.copytree(FIXTURES, git_repo.root.parent / "media-evidence"))
     markdown = diff_to_markdown(memory_diff(git_repo.root / "MEMORY.md", base, evidence_root=evidence))
     assert "· `retro.wav#t=5.25,9` (00:00:05.250-00:00:09.000) · transcript `retro.srt:9` ·" in markdown
-    assert "  > <i>Deployments go through staging,</i>\n  > except for hotfixes.\n" in markdown
+    assert "  > &lt;i&gt;Deployments go through staging,&lt;/i&gt;\\\\u000d\\\\u000aexcept for hotfixes.\n" in markdown
     assert "�" not in markdown
 
 
@@ -576,7 +576,7 @@ def test_explain_and_audit_cite_the_media_position(org_media):
     cited = ("  - evidence `cue` · `media/clip.mp4#t=12.5,17` (00:00:12.500-00:00:17.000) · transcript "
              f"`media/clip.mp4.vtt:12` · synthetic://standup · sha256 `{digest}`\n")
     text = explain(replay(Dataset.load(org_media)), "Rate limit")
-    assert cited + "    > <v Priya>The public API rate limit is 60 requests\n    > per minute\n" in text
+    assert cited + "    > &lt;v Priya&gt;The public API rate limit is 60 requests\\\\u000aper minute\n" in text
     assert runner.invoke(org_app, ["explain", str(org_media), "Rate limit"]).output == text + "\n"
     # The decision audit escapes quoted text onto one line, and still shows the media position.
     result = runner.invoke(org_app, ["audit", str(org_media), "--as-of", "2026-10-10T00:00:00Z"])
@@ -688,7 +688,7 @@ def test_sidecar_diagnostics_keep_file_names_inert(tmp_path, git_repo):
     assert diff_bullets and all(line.startswith("- `") for line in diff_bullets)
 
 
-def test_explain_quotes_keep_cue_lines_and_drop_terminal_controls(org_media):
+def test_explain_quotes_escape_cue_lines_and_terminal_controls(org_media):
     clip = org_media / "media" / "clip.mp4.vtt"
     clip.write_bytes(clip.read_bytes() + (
         "\n00:03:00.000 --> 00:03:01.000\nHello\x1b[2J\u202e there\nline two\n".encode()))
@@ -696,7 +696,7 @@ def test_explain_quotes_keep_cue_lines_and_drop_terminal_controls(org_media):
     hostile = add(org_media, "--quote", quote, "--locator", "t=180,181", id="bad\n\x1bid")
     assert hostile.exit_code == 0, hostile.output
     assert hostile.output.count("\n") == 1 and "\x1b" not in hostile.output
-    assert "registered bad\ufffd\ufffdid at media/clip.mp4#t=180,181" in hostile.output
+    assert "registered bad\\\\u000a\\\\u001bid at media/clip.mp4\\#t=180,181" in hostile.output
     missing = add(org_media, "--quote", "no such words", "--locator", "t=1,2\n\x1b", id="nope")
     assert missing.exit_code == 2 and missing.output.count("\n") == 1 and "\x1b" not in missing.output
     assert "not found verbatim" in missing.output
@@ -709,7 +709,7 @@ def test_explain_quotes_keep_cue_lines_and_drop_terminal_controls(org_media):
             "id": event_id, "timestamp": "2026-10-09T09:00:00Z", "actor": actor, "action": action,
             "subject": "Rate limit", "evidence_ids": ["scrub"]}) + "\n").encode())
     text = explain(replay(Dataset.load(org_media)), "Rate limit")
-    assert "Hello\ufffd[2J\ufffd there" in text and "    > line two" in text
+    assert "Hello\\\\u001b\\[2J\\\\u202e there\\\\u000aline two" in text
     assert "\x1b" not in text and "\u202e" not in text
     result = runner.invoke(org_app, ["audit", str(org_media), "--as-of", "2026-10-10T00:00:00Z"])
     assert result.exit_code == 0, result.output

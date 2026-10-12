@@ -135,9 +135,10 @@ def test_usage_line_verifier_name_stays_inside_one_code_span():
     hostile = "m`\n- pwned\x1b[0m\u202e"
     report = SimpleNamespace(verifier_stats=[VerifierStats(verifier=hostile, requests=1, output_tokens=2)])
     [line] = usage_lines(report)
-    shown = printable(hostile).replace("`", "'")
-    assert line.startswith(f"- API usage of `{shown}`: 1 request(s)")
-    assert line.count("`") == 2 and "\n" not in line and "\x1b" not in line and "\u202e" not in line
+    from memfalsify.gitstore import code_span
+    assert line.startswith(f"- API usage of {code_span(hostile)}: 1 request(s)")
+    assert line.count("`") == 5 and "\n" not in line and "\x1b" not in line and "\u202e" not in line
+    assert "u000a" in line and "u001b" in line and "u202e" in line
 
 
 def test_llm_api_error_becomes_verifier_error():
@@ -287,7 +288,7 @@ def test_cli_cascade(invoices, monkeypatch):
                                  "--verifier", "cascade", "--accept-at", "0.6"])
     assert result.exit_code == 0 and "POSSIBLE COUNTEREVIDENCE" in result.output
     assert "Verifier: `jev:jev-latest>llm:claude-opus-5-5`" in result.output
-    assert "(confidence 0.55 < 0.6), escalated" in result.output
+    assert "(confidence 0.55 &lt; 0.6), escalated" in result.output
 
 
 # --- API usage, prompt caching and concurrency ---------------------------------------

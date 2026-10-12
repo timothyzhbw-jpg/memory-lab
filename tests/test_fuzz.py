@@ -436,7 +436,7 @@ def test_git_log_date_is_strict_and_text_is_printable():
         parse_git_log(record("2026-10-01T00:01:00.1+00:00"))
     cleaned = parse_git_log(record(date, "Au\x1bthor", "sub\u202eject"))[0]
     assert "\x1b" not in cleaned.author and "\u202e" not in cleaned.subject
-    assert "\ufffd" in cleaned.author and "\ufffd" in cleaned.subject
+    assert "\\u001b" in cleaned.author and "\\u202e" in cleaned.subject
 
 
 def test_null_in_a_link_is_skipped_and_locate_quote_refuses_it(tmp_path):
@@ -504,11 +504,12 @@ def test_cli_error_is_one_line_without_controls(tmp_path):
     _assert_cli(RUNNER.invoke(orgmemory_app, ["validate", str(root)]), "not UTF-8")
 
 
-def test_audit_stdout_strips_controls_and_output_keeps_quotes(tmp_path):
+def test_audit_stdout_and_written_output_escape_controls(tmp_path):
     memory = tmp_path / "MEMORY.md"
     memory.write_text("- The cache uses \x1b[31mRedis\u202e for sessions.\n", encoding="utf-8")
     library = audit_markdown(audit(memory))
-    assert "\x1b" in library and "\u202e" in library
+    assert "\x1b" not in library and "\u202e" not in library
+    assert "u001b" in library and "u202e" in library
     shown = RUNNER.invoke(memfalsify_app, ["audit", str(memory)])
     assert shown.exit_code == 0, shown.output
     assert "\x1b" not in shown.output and "\u202e" not in shown.output
