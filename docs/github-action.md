@@ -280,7 +280,8 @@ the repository.
           verifier: jev
 ```
 
-With `verifier: openai`, name the model and, for a provider other than OpenAI, the preset. The key reaches the
+`verifier: openai` and its inputs came after release 0.4: the `v0.4.0` commit does not have them, so pin a
+later commit to use them. Name the model and, for a provider other than OpenAI, the preset. The key reaches the
 step as an environment variable; `api-key-env` names a different variable when yours is not the provider's
 default:
 
