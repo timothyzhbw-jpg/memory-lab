@@ -73,7 +73,7 @@ memfalsify audit MEMORY.md --evidence docs --verifier openai --base-url https://
 - 记忆和证据片段会发送到配置的端点（本地服务除外）。只对允许发往该服务商的材料使用它。
 - `--openai-response-format` 决定让模型以什么格式回答：`json_schema`（用判断的 schema 做严格结构化输出）、`json_object`（任意 JSON 对象）或 `text`（不发 `response_format`，提示里仍然要求同样的 JSON 对象）。默认值见上表。不会自动换格式重试：端点不支持该格式时会返回 HTTP 400 或 422，审计以退出码 2 结束，错误信息会建议更简单的格式（先 `json_object`，再 `text`）。
 - 只读取正常结束（`finish_reason` 为 `stop`）的回答：被截断（`length`）、被过滤或其他未正常结束的回答、格式不对的响应，以及不是合法 JSON 判断的回答，一律记为无判断（`unrelated`），绝不会算作支持。
-- key 要避开的是服务商或模型能控制的一切内容。服务商的错误只显示 HTTP 状态码、错误的 type、code 和 param（各自必须是简单的标记），以及一条固定提示（例如“OPENAI_API_KEY 里的 key 被拒绝”的英文提示）；服务商自己的消息从不输出。模型的理由是报告里唯一的自由文本：其中的 key（原样、百分号编码或 JSON 转义的形式）会被替换为 `[redacted]`。设置 `OPENAI_LOG=debug` 时，SDK 和 HTTP 库的日志消息、异常和调用栈也按同样方式遮掉。同一个 Python 进程里运行的其他代码被视为可信：它本来就能读取环境变量；自己把 key 写进日志、或替换日志记录工厂的库，不在 MemFalsify 防御的范围内。
+- key 要避开的是服务商或模型能控制的一切内容，涵盖所有报告格式、诊断信息和 SDK 日志。承诺很具体：key 原文及其编码一次的形式（任意大小写的百分号编码、`\uXXXX`/`\xXX`/`\/` 转义、HTML 字符引用）都不会出现。服务商的错误只显示 HTTP 状态码，以及错误的 type、code 和 param（各自必须是最多 40 个字符的简单标记，且与 key 没有 8 个字符以上的共同片段），再加一条固定提示（例如“OPENAI_API_KEY 里的 key 被拒绝”的英文提示）；服务商自己的消息从不输出。模型的理由是报告里唯一的自由文本：其中的 key 替换为 `[redacted]`，每段 24 个字符以上不含空白的连续文本（很长的路径或 URL，或任何编码形式的 key）替换为 `[…]`，解码一次后仍能看出 key 的理由会被整段隐去。设置 `OPENAI_LOG=debug` 时，SDK 和 HTTP 库的日志消息、异常和调用栈按同样方式遮掉，解码一次后仍能看出 key 的部分替换为 `[withheld: contained the API key]`。服务商若故意把收到的 key 用更深的编码藏起来，这超出了能检测的范围（它本来就持有这个 key），所以请为这个用途单独使用一个权限受限的 key。同一个 Python 进程里运行的其他代码被视为可信：它本来就能读取环境变量；自己把 key 写进日志、或替换日志记录工厂的库，不在 MemFalsify 防御的范围内。
 - 这个验证器不支持 `--batch`（退出码 2）。`dual` 和 `cascade` 仍然是 Claude 配 Jev。
 
 ## 3. 模型审计的成本

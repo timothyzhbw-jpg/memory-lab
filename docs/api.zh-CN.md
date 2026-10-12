@@ -256,7 +256,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.LLMVerifier` | 构造参数为 model、可选 client、effort="low"、fallbacks=None，以及仅限关键字的 batch=False（Message Batches API）、progress 和 sleep；仅构造时导入 anthropic。缓存提示前缀；judge_many 和 usage() 供审计使用。 |
 | `memfalsify.LexicalVerifier` | 离线验证器；覆盖阈值 related=0.6、support=0.75。 |
 | `memfalsify.MemoryFormat` | 不可变的智能体指令文件格式：名称（例如 cursor-rule）、读取它的智能体，以及作为记忆元数据保留的 frontmatter 字段。 |
-| `memfalsify.OpenAICompatVerifier` | 构造参数为 model（必填）、provider="openai"（预设的 base URL 和密钥变量：openai、grok、deepseek、gemini、ollama）、覆盖用的 base_url 和 api_key_env（变量名，绝不是密钥本身）、可选 client，以及仅限关键字的 response_format（json_schema、json_object 或 text；provider 为 deepseek 时默认 json_object，否则为 json_schema）；仅构造时导入 openai，并从指定的环境变量读取密钥。无法使用的回答记为无判断（unrelated）；服务商的错误文本从不显示。usage() 报告请求数和 token 数。 |
+| `memfalsify.OpenAICompatVerifier` | 构造参数为 model（必填）、provider="openai"（预设的 base URL 和密钥变量：openai、grok、deepseek、gemini、ollama）、覆盖用的 base_url 和 api_key_env（变量名，绝不是密钥本身）、可选 client，以及仅限关键字的 response_format（json_schema、json_object 或 text；provider 为 deepseek 且使用预设 URL 时默认 json_object，否则为 json_schema（deepseek 加上显式 base_url 时也是））；仅构造时导入 openai，并从指定的环境变量读取密钥。无法使用的回答记为无判断（unrelated）；服务商的错误文本从不显示。usage() 报告请求数和 token 数。 |
 | `memfalsify.Proposal` | 建议操作及原因；replacement 始终为 None。 |
 | `memfalsify.Relation` | Literal 类型：supports、contradicts、unrelated、disputed。 |
 | `memfalsify.RemovedClaim` | 已删除记忆版本及删除该记忆的提交。 |

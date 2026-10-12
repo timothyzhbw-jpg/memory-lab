@@ -396,7 +396,7 @@ def main(
     openai_response_format: Optional[openai_compat.ResponseFormat] = typer.Option(
         None, "--openai-response-format",
         help="--verifier openai: json_schema, json_object or text (default: json_object for deepseek, json_schema "
-             "otherwise)"),
+             "otherwise; an explicit --base-url resets it to json_schema)"),
     accept_at: float = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence"),
     case: Optional[list[str]] = typer.Option(None, "--case", help="Run only this case ID (repeatable)"),
     json_out: Optional[Path] = typer.Option(None, "--json", dir_okay=False,

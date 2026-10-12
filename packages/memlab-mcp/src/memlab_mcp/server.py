@@ -885,7 +885,7 @@ def serve(
     openai_response_format: Optional[openai_compat.ResponseFormat] = typer.Option(
         None, "--openai-response-format",
         help="openai verifier: json_schema, json_object or text (default: json_object for --openai-provider "
-             "deepseek, json_schema otherwise)"),
+             "deepseek, json_schema otherwise; an explicit --openai-base-url resets it to json_schema)"),
 ) -> None:
     """Run the MCP server on stdin/stdout."""
     endpoint = dict(openai_model=openai_model, openai_provider=openai_provider.value if openai_provider else None,

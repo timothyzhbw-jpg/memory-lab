@@ -35,20 +35,25 @@ Changes after release 0.4 (`v0.4.0`), not yet released. The package versions are
     are not used. Certificates are verified as the OpenAI SDK and httpx2 ship it (the platform's trust store;
     on Linux, OpenSSL honours `SSL_CERT_FILE` and `SSL_CERT_DIR`).
   - The key is read from the named variable, never taken as an argument, and must hold only the characters
-    keys use. The threat model is everything the provider or the model controls: a provider error is shown as
-    its HTTP status, its type, code and param when each is a plain token, and a fixed hint for the status,
-    never the provider's message; the model's rationale, the only free text kept, has the key redacted (as is,
-    percent-encoded or JSON-escaped); finish_reason and other envelope fields are never echoed; no error keeps
-    the SDK exception as its cause or context; and the SDK's and the HTTP stack's log records
-    (`OPENAI_LOG=debug`) are redacted as they are made. Other code in the same Python process is trusted. The
-    OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are
-    ignored, so settings meant for one provider never reach another.
+    keys use. The threat model is everything the provider or the model controls, and the promise is that the
+    literal key and its once-encoded forms (percent, `\u`/`\x`/`\/` escapes, HTML references) never appear in
+    output. A provider error is shown as its HTTP status, its type, code and param when each is a plain token
+    of at most 40 characters sharing no 8 characters with the key (case-insensitively), and a fixed hint for
+    the status, never the provider's message. The model's rationale, the only free text kept, has the key
+    redacted, every run of 24 or more non-space characters elided (`[…]`), and is withheld if it still shows
+    the key once decoded. finish_reason and other envelope fields are never echoed; no error keeps the SDK
+    exception as its cause or context; and the SDK's and the HTTP stack's log records (`OPENAI_LOG=debug`) are
+    redacted as they are made, a message, exception or stack that still shows the key once decoded being
+    withheld. A provider that encodes the key it received more deeply is out of scope (it holds the key
+    already). Other code in the same Python process is trusted. The OpenAI SDK's `OPENAI_BASE_URL`,
+    `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are ignored, so settings meant for one
+    provider never reach another.
   - `--openai-response-format` is `json_schema` (strict structured output), `json_object` or `text`: by default
     `json_object` for `deepseek` (DeepSeek documents no `json_schema`) and `json_schema` for the other providers
-    and any `--base-url`. Nothing is retried in another format; an HTTP 400 or 422 says which simpler format to
-    try. Only an answer with `finish_reason` `stop` is read; an unfinished one, one that is not a valid verdict
-    (invalid JSON, a repeated or unknown key, a relation outside the schema), an empty answer, a malformed
-    response and a refusal are no verdict (`unrelated`), never support.
+    and for any explicit `--base-url`, DeepSeek's included. Nothing is retried in another format; an HTTP 400
+    or 422 says which simpler format to try. Only an answer with `finish_reason` `stop` is read; an unfinished
+    one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation outside the
+    schema), an empty answer, a malformed response and a refusal are no verdict (`unrelated`), never support.
   - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
     requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
     `cascade` still pair Claude with Jev.
