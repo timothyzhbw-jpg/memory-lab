@@ -5,11 +5,14 @@ a full CI round. Every failure names file:line and the fix; AGENTS.md ("Windows"
 
 1. Exact writes. Windows text mode turns each "\\n" written into "\\r\\n". Evidence carries the sha256 of
    its file and character offsets of its quotes, and reports are compared byte for byte, so a fixture written
-   with ``Path.write_text`` broke the hash check on Windows only. ``write_text(...)`` and a text-mode
-   ``open(..., "w"/"a"/"x"/"+")`` must pass ``newline=""``; tests use ``write_text_exact(path, text)`` from
-   conftest.py and ``python scripts/exact_writes.py`` rewrites them. The rule covers every Python file of the
-   repository: the packages write bytes today and should keep to that. A call on a line that ends with
-   ``# windows-guard: allow`` is a deliberate text-mode write.
+   with ``Path.write_text`` broke the hash check on Windows only. ``write_text(...)``, and ``open``,
+   ``io.open``, ``Path.open`` or ``os.fdopen`` in a literal text mode that writes ("w", "a", "x", "+"), must
+   name the newline as a string literal, ``newline=""`` (keyword or positional); ``newline=None`` is the
+   translating default. ``tarfile.open`` and other module functions named ``open`` are not file writes here.
+   Tests use ``write_text_exact(path, text)`` from conftest.py; ``python scripts/exact_writes.py`` rewrites
+   them and holds the rule's definition. The rule covers every Python file of the repository: the packages
+   write bytes today and should keep to that. A call on a line that ends with ``# windows-guard: allow`` is a
+   deliberate text-mode write.
 2. Servers skip on Windows. memlab-mcp (and memlab-ui) refuse to start without the POSIX ``O_NOFOLLOW`` and
    ``dir_fd`` that confined reads need. A test that builds one, through ``create_server``, ``App``, ``serve``
    or ``StdioServerParameters``, directly or through a helper or fixture of its module, needs
@@ -42,7 +45,6 @@ SERVER_PACKAGES = ("memlab_mcp", "memlab_ui")
 STARTERS = {"create_server", "App", "serve"}  # each refuses to run without confined reads
 STDIO_STARTERS = {"StdioServerParameters"}  # from mcp: memlab-mcp in a subprocess
 MARKER = "requires_confinement"
-ALLOW = "# windows-guard: allow"  # a deliberate text-mode write (the newline simulation's own test)
 
 
 @cache
@@ -64,39 +66,24 @@ def trees() -> dict[str, ast.Module | SyntaxError]:
 
 # --- 1. exact writes ---------------------------------------------------------------------------------------
 
-def _text_write_mode(call: ast.Call) -> bool:
-    """A literal text mode that writes: ``open(f, "w")``, ``io.open(f, "a")``, ``path.open("w")``,
-    ``os.fdopen(fd, "w+")``. ``codecs.open`` writes in binary mode."""
-    func = call.func
-    if isinstance(func, ast.Name) and func.id == "open":
-        index = 1
-    elif isinstance(func, ast.Attribute) and func.attr in ("open", "fdopen"):
-        module = func.value.id if isinstance(func.value, ast.Name) else None
-        if module == "codecs":
-            return False
-        index = 1 if func.attr == "fdopen" or module in ("io", "os", "_io") else 0
-    else:
-        return False
-    mode = next((k.value for k in call.keywords if k.arg == "mode"),
-                call.args[index] if len(call.args) > index else None)
-    if not (isinstance(mode, ast.Constant) and isinstance(mode.value, str)
-            and set(mode.value) <= set("rwaxbt+") and mode.value):
-        return False
-    return "b" not in mode.value and any(c in mode.value for c in "wax+")
+def _load_exact_writes():
+    """scripts/exact_writes.py, which fixes what this rule finds and holds its one definition."""
+    spec = importlib.util.spec_from_file_location("exact_writes", ROOT / "scripts" / "exact_writes.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+exact_writes = _load_exact_writes()
+ALLOW = exact_writes.ALLOW
 
 
 def inexact_writes(tree: ast.Module, lines: list[str] = ()) -> list[tuple[int, str]]:
-    found = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or any(k.arg == "newline" for k in node.keywords):
-            continue
-        if lines and ALLOW in lines[node.lineno - 1]:
-            continue
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
-            found.append((node.lineno, "write_text adds CR before each LF on Windows"))
-        elif _text_write_mode(node):
-            found.append((node.lineno, "a text-mode write adds CR before each LF on Windows"))
-    return found
+    """``write_text``, ``open``/``io.open``/``Path.open``/``os.fdopen`` in a literal text mode that writes,
+    without a literal newline string (see ``exact_writes.exact_newline``)."""
+    return [(call.lineno, "write_text adds CR before each LF on Windows" if kind == "write_text"
+             else "a text-mode write adds CR before each LF on Windows")
+            for call, kind in exact_writes.inexact_writes(tree, lines)]
 
 
 def test_text_writes_are_exact_bytes():
@@ -289,19 +276,22 @@ def test_the_rules_catch_what_broke_ci():
     """Each rule flags the code that failed in CI (or a minimal copy of it) and passes its fix."""
     fixture = '(root / "sources" / "main.txt").write_text(text, encoding="utf-8")\n'  # c92d759, evidence hash
     assert inexact_writes(ast.parse(fixture)) == [(1, "write_text adds CR before each LF on Windows")]
-    for call in ('open(p, "a", encoding="utf-8")', 'p.open("w")', 'io.open(p, mode="x")', 'os.fdopen(fd, "w+")'):
+    default = "None"  # spelled out apart from the calls below (see the dogfood job in ci.yml)
+    for call in ('open(p, "a", encoding="utf-8")', 'p.open("w")', 'io.open(p, mode="x")', 'os.fdopen(fd, "w+")',
+                 f'open(p, "w", newline={default})', f'p.write_text(t, newline={default})',
+                 f'Path(p).open("a", -1, {default}, {default}, {default})', 'Path(p).open(mode="w")'):
         assert len(inexact_writes(ast.parse(call))) == 1, call
     for call in ('p.write_text(t, newline="")', 'p.open("ab")', 'open(p)', 'open(p, "rb")', 'codecs.open(p, "w")',
-                 'p.open(mode)', 'p.write_bytes(t.encode())', 'tarfile.open("a.tar", "w")', 'open(p, "w", newline="")'):
+                 'p.open(mode)', 'p.write_bytes(t.encode())', 'tarfile.open("a.tar", "w")', 'open(p, "w", newline="")',
+                 'tarfile.open("a.tar", mode="w")', 'import shelve as s\ns.open("db", "w")', 'webbrowser.open("w")',
+                 'open(p, "w", -1, "utf-8", None, "")', 'p.open("w", -1, "utf-8", None, "\\n")',
+                 'p.write_text(t, "utf-8", None, "")', 'os.fdopen(fd, "w", -1, "utf-8", None, "")'):
         assert inexact_writes(ast.parse(call)) == [], call
-    spec = importlib.util.spec_from_file_location("exact_writes", ROOT / "scripts" / "exact_writes.py")
-    script = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(script)
-    fixed, _ = script.rewrite("from conftest import EXAMPLES\n" + fixture + 'open(p, "a").write(t)\n')
+    fixed, _ = exact_writes.rewrite("from conftest import EXAMPLES\n" + fixture + 'open(p, "a").write(t)\n')
     assert inexact_writes(ast.parse(fixed)) == [] and "write_text_exact(root /" in fixed
     allowed = fixture.rstrip("\n") + "  " + ALLOW + "\n"
     assert inexact_writes(ast.parse(allowed), allowed.split("\n")) == []
-    assert script.rewrite(allowed)[0] == allowed  # the script leaves a deliberate text-mode write alone too
+    assert exact_writes.rewrite(allowed)[0] == allowed  # the script leaves a deliberate text-mode write alone too
 
     servers = """
 from conftest import requires_confinement
@@ -347,3 +337,94 @@ def test_create_server_refuses_a_bad_openai_configuration(root, settings, proble
     else:
         with pytest.raises(SyntaxError):
             ast.parse("f\"{'\\\\n'.join(lines)}\"\n")
+
+
+# --- the migration keeps every value -------------------------------------------------------------------------
+
+# Writes in the layouts the migration meets: triple-quoted text whose continuation lines sit at or past the
+# text's column (moving them would change the text), implicit concatenation, f-strings, hanging indents, data=
+# given by keyword, positional encoding/errors/newline, a backslash continuation, and the opens.
+MIGRATION_FIXTURES = r'''
+import os
+from pathlib import Path
+
+from conftest import EXAMPLES
+
+
+def cases(p, q, tmp_path, name, value):
+    p.write_text("""first
+                     second
+                     """, encoding="utf-8")
+    (tmp_path / "a.md").write_text("one\n"
+                                   "two\n", encoding="utf-8")
+    q.write_text(f"""{name}
+                    indented {value}
+                 """)
+    q.write_text(f"head {name}\n"
+                 f"""tail {value}
+                 still the tail
+""", encoding="utf-8")
+    p.write_text(
+        f"head {name}\n"
+        f"tail {value}\n",
+        encoding="utf-8")
+    p.write_text(
+        data="x\n"
+             "y\n")
+    p.write_text(encoding="utf-8", data="""keyword
+                                         after""")
+    (tmp_path / "b.md").write_text("line one\n" + \
+        "line two\n")
+    p.write_text(f"{name!r:>{len(value)}}\n" "plain\\tab\n", "utf-8", None, None)
+    p.write_text("a\
+                 continued", newline=None)
+    with open(tmp_path / "c.md", "w", encoding="utf-8") as handle:
+        handle.write("x\n")
+    with Path(p).open("a", -1, "utf-8", None, None) as handle:
+        handle.write("y\n")
+    with os.fdopen(3, "w", newline=None) as handle:
+        handle.write("z\n")
+'''
+
+
+def _written(tree: ast.AST) -> list[tuple[str, str]]:
+    """(target, text) of each write, as AST dumps: positions differ after the rewrite, values may not."""
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
+            data = exact_writes.argument(node, "data", 0)
+            found.append((node.lineno, ast.dump(node.func.value), ast.dump(data)))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "write_text_exact":
+            found.append((node.lineno, ast.dump(node.args[0]), ast.dump(node.args[1])))
+    return [(target, text) for _, target, text in sorted(found)]
+
+
+def _opened(tree: ast.AST) -> list[str]:
+    """Each open with its newline argument dropped."""
+    found = []
+    for node, kind in sorted(((n, exact_writes.writer(n, exact_writes.module_names(tree))) for n in ast.walk(tree)
+                              if isinstance(n, ast.Call)), key=lambda item: (item[0].lineno, item[0].col_offset)):
+        if kind in ("open", "fdopen", "path.open"):
+            index = exact_writes.POSITIONS[kind][1]
+            found.append(ast.dump(ast.Call(node.func, node.args[:index],
+                                           [k for k in node.keywords if k.arg != "newline"])))
+    return found
+
+
+def test_the_migration_keeps_every_value():
+    """The rewrite changes how text is written, never the text: every target and every text, f-strings
+    included, has the same AST before and after, and each open differs only in its newline."""
+    before = ast.parse(MIGRATION_FIXTURES)
+    fixed, notes = exact_writes.rewrite(MIGRATION_FIXTURES, "fixtures.py")
+    after = ast.parse(fixed)
+    compile(fixed, "fixtures.py", "exec")
+    assert len(_written(before)) == 10 and _written(after) == _written(before)
+    assert len(_opened(before)) == 3 and _opened(after) == _opened(before)
+    texts = [node.args[1] for node in ast.walk(after) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Name) and node.func.id == "write_text_exact"]
+    assert ast.literal_eval(min(texts, key=lambda n: n.lineno)) == "first\n                     second\n" + " " * 21
+    assert "from conftest import EXAMPLES, write_text_exact" in fixed
+    assert inexact_writes(after) == [] and exact_writes.rewrite(fixed)[0] == fixed
+    assert all("leaves to a human" not in note for note in notes) and len(notes) == 13
+    left, notes = exact_writes.rewrite('p.write_text(t, encoding="latin-1")\np.write_text(t, errors="strict")\n')
+    assert left.count("write_text(") == 2 and len(notes) == 2 and all("leaves to a human" in n for n in notes)
