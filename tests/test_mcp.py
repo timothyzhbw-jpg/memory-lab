@@ -615,10 +615,13 @@ def test_model_verifiers_allowed_with_the_flag(root, monkeypatch, verifier):
     assert anyio.run(annotations)["memfalsify_audit"] is True
 
 
-GATEWAY = openai_compat.OpenAISettings("served-model", "grok", "https://gateway.example.test/v1", "GATEWAY_KEY")
+GATEWAY = {"openai_model": "served-model", "openai_provider": "grok",
+           "openai_base_url": "https://gateway.example.test/v1", "openai_api_key_env": "GATEWAY_KEY"}
+SETTINGS = openai_compat.OpenAISettings("served-model", "grok", "https://gateway.example.test/v1", "GATEWAY_KEY")
 ENDPOINT_ARGUMENTS = {"base_url": "https://attacker.example.test/v1", "model": "attacker-model",
-                      "provider": "ollama", "api_key_env": "OTHER_KEY", "openai_base_url": "https://attacker.example.test",
-                      "openai_model": "attacker-model", "openai_provider": "ollama", "openai_api_key_env": "OTHER_KEY"}
+                      "provider": "ollama", "api_key_env": "OTHER_KEY",
+                      "openai_base_url": "https://attacker.example.test", "openai_model": "attacker-model",
+                      "openai_provider": "ollama", "openai_api_key_env": "OTHER_KEY"}
 
 
 def tool_listing(server):
@@ -632,7 +635,7 @@ def tool_listing(server):
 @requires_confinement
 def test_openai_endpoint_is_never_a_tool_argument(root, tool):
     """Provider, base URL, model and key variable are fixed when the server starts; a client cannot name them."""
-    listed = tool_listing(create_server(root, allow_model_verifiers=True, openai=GATEWAY))[tool]
+    listed = tool_listing(create_server(root, allow_model_verifiers=True, **GATEWAY))[tool]
     properties = set(listed.input_schema["properties"])
     assert "verifier" in properties and not properties & set(ENDPOINT_ARGUMENTS)
     assert "openai" in listed.input_schema["properties"]["verifier"]["enum"]
@@ -652,14 +655,14 @@ def test_openai_verifier_uses_only_the_server_side_endpoint(root, monkeypatch):
         return Offline()
 
     monkeypatch.setattr(memlab_server, "build_verifier", fake_build)
-    server = create_server(root, allow_model_verifiers=True, openai=GATEWAY)
+    server = create_server(root, allow_model_verifiers=True, **GATEWAY)
     report = json.loads(ok(call(server, "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE,
                                 verifier="openai", format="json")))
-    assert built == [("openai", GATEWAY)] and report["verifier"] == "stand-in"
+    assert built == [("openai", SETTINGS)] and report["verifier"] == "stand-in"
     # Endpoint-shaped extra arguments are either refused or ignored; they never reach the verifier.
     result = call(server, "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai",
                   format="json", **ENDPOINT_ARGUMENTS)
-    assert all(settings == GATEWAY for _, settings in built)
+    assert all(settings == SETTINGS for _, settings in built)
     assert "attacker" not in text(result)
 
 
@@ -683,7 +686,7 @@ def test_openai_verifier_runs_against_the_configured_endpoint(root, monkeypatch)
         return real(model, provider, base_url, api_key_env, client=client, **kwargs)
 
     monkeypatch.setattr(openai_compat, "OpenAICompatVerifier", make)
-    report = json.loads(ok(call(create_server(root, allow_model_verifiers=True, openai=GATEWAY), "memfalsify_audit",
+    report = json.loads(ok(call(create_server(root, allow_model_verifiers=True, **GATEWAY), "memfalsify_audit",
                                 memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai", format="json")))
     assert seen == [("served-model", "grok", "https://gateway.example.test/v1", "GATEWAY_KEY")]
     assert report["verifier"] == "openai:served-model@gateway.example.test" and calls
@@ -696,7 +699,7 @@ def test_openai_verifier_needs_the_flag_and_a_server_side_configuration(root, mo
         raise AssertionError("no verifier may be built")
 
     monkeypatch.setattr(memlab_server, "build_verifier", no_models)
-    message = error(call(create_server(root, openai=GATEWAY), "memfalsify_audit", memory_file=MEMORY,
+    message = error(call(create_server(root, **GATEWAY), "memfalsify_audit", memory_file=MEMORY,
                          verifier="openai"))
     assert "verifier 'openai' is disabled" in message and "--allow-model-verifiers" in message
     message = error(call(create_server(root, allow_model_verifiers=True), "memfalsify_audit", memory_file=MEMORY,
@@ -710,19 +713,20 @@ def test_openai_verifier_needs_the_flag_and_a_server_side_configuration(root, mo
 def test_openai_missing_key_is_a_generic_tool_error(root, monkeypatch):
     pytest.importorskip("openai")
     monkeypatch.delenv("GATEWAY_KEY", raising=False)
-    message = error(call(create_server(root, allow_model_verifiers=True, openai=GATEWAY), "memfalsify_audit",
+    message = error(call(create_server(root, allow_model_verifiers=True, **GATEWAY), "memfalsify_audit",
                          memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai"))
     assert "model verifier failed" in message and "GATEWAY_KEY" not in message
 
 
 @pytest.mark.parametrize("settings, problem", [
-    (openai_compat.OpenAISettings(None, "grok"), "needs --openai-model"),
-    (openai_compat.OpenAISettings("m", "openai", "http://gateway.example.test/v1"), "must use https"),
-    (openai_compat.OpenAISettings("m", "openai", None, "sk-not-a-name"), "never the key itself"),
+    ({"openai_provider": "grok"}, "need --openai-model"),
+    ({"openai_model": "m", "openai_provider": "azure"}, "unknown provider"),
+    ({"openai_model": "m", "openai_base_url": "http://gateway.example.test/v1"}, "must use https"),
+    ({"openai_model": "m", "openai_api_key_env": "sk-not-a-name"}, "never the key itself"),
 ])
 def test_create_server_refuses_a_bad_openai_configuration(root, settings, problem):
     with pytest.raises(ValueError, match=problem):
-        create_server(root, allow_model_verifiers=True, openai=settings)
+        create_server(root, allow_model_verifiers=True, **settings)
 
 
 @pytest.mark.parametrize("args, problem", [

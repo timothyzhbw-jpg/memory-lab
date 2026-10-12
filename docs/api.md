@@ -413,8 +413,8 @@ validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Ite
 | API | Purpose |
 |---|---|
 | `memlab_mcp.__version__` | Installed distribution version string. |
-| `memlab_mcp.create_server` | Construct the read-only MCPServer with root="." and allow_model_verifiers=False; does not start serving. Requires supported POSIX confinement. |
+| `memlab_mcp.create_server` | Construct the read-only MCPServer with root="." and allow_model_verifiers=False; does not start serving. Requires supported POSIX confinement. openai_model, openai_provider, openai_base_url and openai_api_key_env configure the openai verifier (the server flags --openai-*); no tool argument can change them. A refused value raises ValueError. |
 
 ```python
-create_server(root: Path | str='.', allow_model_verifiers: bool=False) -> MCPServer
+create_server(root: Path | str='.', allow_model_verifiers: bool=False, openai_model: Optional[str]=None, openai_provider: Optional[str]=None, openai_base_url: Optional[str]=None, openai_api_key_env: Optional[str]=None) -> MCPServer
 ```

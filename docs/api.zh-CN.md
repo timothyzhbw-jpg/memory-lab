@@ -390,8 +390,8 @@ validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Ite
 | API | 用途 |
 |---|---|
 | `memlab_mcp.__version__` | 已安装发行包的版本字符串。 |
-| `memlab_mcp.create_server` | 构建只读 MCPServer，root="."、allow_model_verifiers=False；不启动服务。要求支持 POSIX 限制读取。 |
+| `memlab_mcp.create_server` | 构建只读 MCPServer，root="."、allow_model_verifiers=False；不启动服务。要求支持 POSIX 限制读取。openai_model、openai_provider、openai_base_url 和 openai_api_key_env 配置 openai 验证器（即服务器的 --openai-* 参数），工具参数无法更改；值不合法时抛出 ValueError。 |
 
 ```python
-create_server(root: Path | str='.', allow_model_verifiers: bool=False) -> MCPServer
+create_server(root: Path | str='.', allow_model_verifiers: bool=False, openai_model: Optional[str]=None, openai_provider: Optional[str]=None, openai_base_url: Optional[str]=None, openai_api_key_env: Optional[str]=None) -> MCPServer
 ```

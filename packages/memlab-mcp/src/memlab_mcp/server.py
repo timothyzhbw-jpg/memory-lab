@@ -346,25 +346,34 @@ def _annotations(title: str, open_world: bool = False) -> ToolAnnotations:
                            open_world_hint=open_world)
 
 
-def openai_endpoint(settings: Optional[openai_compat.OpenAISettings]) -> Optional[str]:
-    """``model at host`` for the configured OpenAI-compatible endpoint, or None. Raises ``ValueError`` for a
-    missing model, an unknown provider, or a base URL or key variable name that is refused."""
-    if settings is None:
+def openai_settings(model: Optional[str] = None, provider: Optional[str] = None, base_url: Optional[str] = None,
+                    api_key_env: Optional[str] = None) -> Optional[openai_compat.OpenAISettings]:
+    """The ``openai`` verifier's configuration, or None when none of it is given. Raises ``ValueError`` for a
+    missing model, an unknown provider, or a refused base URL or key variable name; the messages never repeat
+    a URL or name, which could hold a secret."""
+    if model is None and provider is None and base_url is None and api_key_env is None:
         return None
-    model = openai_compat.check_model(settings.model)
-    return f"{model} at {settings.endpoint().host}"
+    if not model:
+        raise ValueError("--openai-provider, --openai-base-url and --openai-api-key-env need --openai-model")
+    settings = openai_compat.OpenAISettings(openai_compat.check_model(model), provider or "openai", base_url,
+                                            api_key_env)
+    settings.endpoint()
+    return settings
 
 
-def create_server(root: Path | str = ".", allow_model_verifiers: bool = False,
-                  openai: Optional[openai_compat.OpenAISettings] = None) -> MCPServer:
+def create_server(root: Path | str = ".", allow_model_verifiers: bool = False, openai_model: Optional[str] = None,
+                  openai_provider: Optional[str] = None, openai_base_url: Optional[str] = None,
+                  openai_api_key_env: Optional[str] = None) -> MCPServer:
     """Build the server. ``allow_model_verifiers`` enables verifiers that call external, paid APIs.
 
-    ``openai`` configures the ``openai`` verifier: provider, base URL, model and key variable are fixed here,
-    by whoever starts the server, and are never tool arguments, so a client cannot send text elsewhere."""
+    The ``openai_*`` arguments configure the ``openai`` verifier (model, provider preset, base URL and the name of
+    the key's environment variable). They are fixed here, by whoever starts the server, and are never tool
+    arguments, so a client cannot send memory and evidence text elsewhere."""
     ws = Workspace(Path(root))
     if not confinement_supported():
         raise ValueError("the MCP server requires POSIX O_NOFOLLOW and dir_fd support for confined reads")
-    configured = openai_endpoint(openai)
+    openai = openai_settings(openai_model, openai_provider, openai_base_url, openai_api_key_env)
+    configured = f"{openai.model} at {openai.endpoint().host}" if openai else None
     if allow_model_verifiers:
         verifier_help = ("lexical (default: offline, free), or llm (Claude), jev (TypeSafe Jev), dual (llm + jev), "
                          "cascade (jev, escalating unsure answers to llm) or openai ("
@@ -870,19 +879,15 @@ def serve(
              "(never the key itself)"),
 ) -> None:
     """Run the MCP server on stdin/stdout."""
-    settings = None
-    if openai_model is not None or openai_provider or openai_base_url is not None or openai_api_key_env is not None:
-        settings = openai_compat.OpenAISettings(openai_model, (openai_provider or openai_compat.Provider.openai).value,
-                                                openai_base_url, openai_api_key_env)
-        try:
-            if not openai_model:
-                raise ValueError("--openai-provider, --openai-base-url and --openai-api-key-env need --openai-model")
-            openai_endpoint(settings)
-        except ValueError as exc:  # the messages never repeat a URL or key name, which could hold a secret
-            typer.echo(f"error: openai verifier: {exc}", err=True)
-            raise typer.Exit(2) from None
+    endpoint = dict(openai_model=openai_model, openai_provider=openai_provider.value if openai_provider else None,
+                    openai_base_url=openai_base_url, openai_api_key_env=openai_api_key_env)
     try:
-        server = create_server(root, allow_model_verifiers=allow_model_verifiers, openai=settings)
+        openai_settings(openai_model, endpoint["openai_provider"], openai_base_url, openai_api_key_env)
+    except ValueError as exc:  # the messages never repeat a URL or key name, which could hold a secret
+        typer.echo(f"error: openai verifier: {exc}", err=True)
+        raise typer.Exit(2) from None
+    try:
+        server = create_server(root, allow_model_verifiers=allow_model_verifiers, **endpoint)
     except (OSError, ValueError):
         typer.echo("error: cannot start MCP server; check the root directory and POSIX filesystem support", err=True)
         raise typer.Exit(2) from None
