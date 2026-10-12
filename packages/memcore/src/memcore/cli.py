@@ -12,7 +12,7 @@ except ImportError:
     from click import ClickException
 from typer.core import TyperGroup
 
-from .display import report_text
+from .display import one_line as terminal_text
 
 
 class SafeTyperGroup(TyperGroup):
@@ -22,12 +22,12 @@ class SafeTyperGroup(TyperGroup):
         try:
             return super().parse_args(ctx, args)
         except ClickException as exc:
-            exc.message = report_text(exc.message)
+            exc.message = terminal_text(exc.message)
             raise
 
     def invoke(self, ctx):
         try:
             return super().invoke(ctx)
         except ClickException as exc:
-            exc.message = report_text(exc.message)
+            exc.message = terminal_text(exc.message)
             raise

@@ -12,7 +12,7 @@ import typer
 from pydantic import ValidationError
 
 from memcore.cli import SafeTyperGroup
-from memcore.display import report_text
+from memcore.display import one_line as terminal_text
 from memcore.display import json_shield as _json_shield
 
 from . import jev, llm
@@ -93,11 +93,11 @@ def concurrency(choice: VerifierChoice, max_concurrency: int) -> int:
 
 
 def _progress(message: str) -> None:
-    typer.echo(report_text(message), err=True)
+    typer.echo(terminal_text(message), err=True)
 
 
 def _fail(message: str) -> None:
-    typer.echo(f"error: {report_text(message)}", err=True)
+    typer.echo(f"error: {terminal_text(message)}", err=True)
     raise typer.Exit(2)
 
 
@@ -110,7 +110,7 @@ def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "re
     if output.resolve() in {Path(p).resolve() for p in protected}:
         _fail(f"refusing to overwrite a memory file with the {what}")
     output.write_bytes(data)
-    typer.echo(f"wrote {report_text(str(output))}", err=True)
+    typer.echo(f"wrote {terminal_text(str(output))}", err=True)
 
 
 def _echo_exact(text: str) -> None:
