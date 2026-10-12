@@ -7,9 +7,26 @@ from pathlib import Path
 
 import pytest
 
+import windows_newlines
 from memcore.reading import confinement_supported
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+def pytest_addoption(parser):
+    parser.addoption(windows_newlines.OPTION, action="store_true",
+                     help="write text-mode files and CliRunner output with CRLF, as Windows does "
+                          "(tests/windows_newlines.py)")
+
+
+def pytest_configure(config):
+    if config.getoption(windows_newlines.OPTION):
+        config.add_cleanup(windows_newlines.simulate())
+
+
+def pytest_report_header(config):
+    if config.getoption(windows_newlines.OPTION):
+        return "simulating Windows newlines: text-mode writes and CliRunner output get CRLF"
 
 requires_confinement = pytest.mark.skipif(
     not confinement_supported(),

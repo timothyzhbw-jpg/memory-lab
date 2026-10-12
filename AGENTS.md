@@ -29,3 +29,4 @@ Development happens on macOS; CI also tests Windows, where text mode writes each
 - Tests that start memlab-mcp or memlab-ui (they need POSIX confined reads) get `@requires_confinement` from `tests/conftest.py`.
 - Paths in reports and Markdown use forward slashes (`as_posix()`).
 - Keep backslashes, comments and the enclosing quote out of an f-string's `{...}`: Python 3.10 and 3.11 reject them.
+- `python3 -m pytest --simulate-windows-newlines` runs the suite with Windows newlines (CRLF) in text-mode writes and `CliRunner` output, on macOS or Linux.

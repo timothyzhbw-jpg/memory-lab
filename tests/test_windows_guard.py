@@ -8,7 +8,8 @@ a full CI round. Every failure names file:line and the fix; AGENTS.md ("Windows"
    with ``Path.write_text`` broke the hash check on Windows only. ``write_text(...)`` and a text-mode
    ``open(..., "w"/"a"/"x"/"+")`` must pass ``newline=""``; tests use ``write_text_exact(path, text)`` from
    conftest.py and ``python scripts/exact_writes.py`` rewrites them. The rule covers every Python file of the
-   repository: the packages write bytes today and should keep to that.
+   repository: the packages write bytes today and should keep to that. A call on a line that ends with
+   ``# windows-guard: allow`` is a deliberate text-mode write.
 2. Servers skip on Windows. memlab-mcp (and memlab-ui) refuse to start without the POSIX ``O_NOFOLLOW`` and
    ``dir_fd`` that confined reads need. A test that builds one, through ``create_server``, ``App``, ``serve``
    or ``StdioServerParameters``, directly or through a helper or fixture of its module, needs
@@ -40,6 +41,7 @@ SERVER_PACKAGES = ("memlab_mcp", "memlab_ui")
 STARTERS = {"create_server", "App", "serve"}  # each refuses to run without confined reads
 STDIO_STARTERS = {"StdioServerParameters"}  # from mcp: memlab-mcp in a subprocess
 MARKER = "requires_confinement"
+ALLOW = "# windows-guard: allow"  # a deliberate text-mode write (the newline simulation's own test)
 
 
 @cache
@@ -82,10 +84,12 @@ def _text_write_mode(call: ast.Call) -> bool:
     return "b" not in mode.value and any(c in mode.value for c in "wax+")
 
 
-def inexact_writes(tree: ast.Module) -> list[tuple[int, str]]:
+def inexact_writes(tree: ast.Module, lines: list[str] = ()) -> list[tuple[int, str]]:
     found = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or any(k.arg == "newline" for k in node.keywords):
+            continue
+        if lines and ALLOW in lines[node.lineno - 1]:
             continue
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             found.append((node.lineno, "write_text adds CR before each LF on Windows"))
@@ -96,7 +100,7 @@ def inexact_writes(tree: ast.Module) -> list[tuple[int, str]]:
 
 def test_text_writes_are_exact_bytes():
     offenders = [f"{name}:{line}: {why}" for name, tree in trees().items() if isinstance(tree, ast.Module)
-                 for line, why in inexact_writes(tree)]
+                 for line, why in inexact_writes(tree, sources()[name].split("\n"))]
     assert not offenders, (
         "write exact bytes: in tests write_text_exact(path, text) from conftest.py (python scripts/exact_writes.py "
         "rewrites these), elsewhere path.write_bytes(text.encode('utf-8')) or newline=''\n" + "\n".join(offenders))
@@ -299,6 +303,8 @@ def test_the_rules_catch_what_broke_ci():
     spec.loader.exec_module(script)
     fixed, _ = script.rewrite("from conftest import EXAMPLES\n" + fixture + 'open(p, "a").write(t)\n')
     assert inexact_writes(ast.parse(fixed)) == [] and "write_text_exact(root /" in fixed
+    allowed = fixture.rstrip("\n") + "  " + ALLOW + "\n"
+    assert inexact_writes(ast.parse(allowed), allowed.split("\n")) == []
 
     servers = """
 from conftest import requires_confinement
