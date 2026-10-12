@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import EXAMPLES
+from conftest import EXAMPLES, write_text_exact
 from memfalsify.memory import parse_memory
 from memfalsify.text import (CJK, explicit_dates, features, fold_width, has_negation, modality_conflict, negation,
                              normalize, terms, zh_numeral)
@@ -215,6 +215,6 @@ def test_same_or_unrelated_modality_does_not_contradict(claim, passage):
 def test_a_bare_quantity_is_not_a_claim(tmp_path):
     # As with "3 months." in English, a quantity is a number, not one of the two content terms a claim needs.
     memory = tmp_path / "MEMORY.md"
-    memory.write_text("- 三个月。\n- 3 months.\n- 应用日志只保存三个月。\n- 第四季度不招前端了。\n", encoding="utf-8")
+    write_text_exact(memory, "- 三个月。\n- 3 months.\n- 应用日志只保存三个月。\n- 第四季度不招前端了。\n")
     claims, _ = parse_memory(memory)
     assert [c.text for c in claims] == ["应用日志只保存三个月。", "第四季度不招前端了。"]

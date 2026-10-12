@@ -8,7 +8,7 @@ from itertools import product
 import pytest
 from typer.testing import CliRunner
 
-from conftest import EXAMPLES, snapshot
+from conftest import EXAMPLES, snapshot, write_text_exact
 from memcore import EvidenceSpan, ManifestEntry, locate_quote
 from orgmemory.audit import KINDS, audit, open_periods, report_kinds
 from orgmemory.cli import app
@@ -376,7 +376,7 @@ def test_untrusted_audit_fields_render_as_text(tmp_path, field):
         if field == "actor":
             policy = json.loads((root / "policy.json").read_text())
             policy["actors"][payload] = ["engineer"]
-            (root / "policy.json").write_text(json.dumps(policy))
+            write_text_exact(root / "policy.json", json.dumps(policy))
     elif field == "event_id":
         events[-1]["id"] = payload
     elif field == "evidence_id":
@@ -389,11 +389,11 @@ def test_untrusted_audit_fields_render_as_text(tmp_path, field):
     elif field == "source_uri":
         entry["source_uri"] = payload
     elif field == "quote":
-        (root / "note.txt").write_text(payload)
+        write_text_exact(root / "note.txt", payload)
         span = locate_quote(root, "note.txt", payload)
         entry.update(sha256=span.sha256, quote=span.quote, start=span.start, end=span.end)
-    (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
-    (root / "evidence.jsonl").write_text(json.dumps(entry) + "\n")
+    write_text_exact(root / "events.jsonl", "".join(json.dumps(e) + "\n" for e in events))
+    write_text_exact(root / "evidence.jsonl", json.dumps(entry) + "\n")
     report = audit(Dataset.load(root), at(3))
     findings = audit_markdown(report).split("## Findings\n", 1)[1].split("## Notes", 1)[0]
     tokens = MarkdownIt().parse(findings)

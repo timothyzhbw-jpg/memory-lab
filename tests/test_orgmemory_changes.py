@@ -8,7 +8,7 @@ from itertools import product
 import pytest
 from typer.testing import CliRunner
 
-from conftest import EXAMPLES, snapshot
+from conftest import EXAMPLES, snapshot, write_text_exact
 from memcore import EvidenceSpan, ManifestEntry, locate_quote
 from orgmemory.changes import KINDS, changes
 from orgmemory.cli import app
@@ -310,7 +310,7 @@ def test_untrusted_fields_render_as_text(tmp_path, field):
         if field == "actor":
             policy = json.loads((root / "policy.json").read_text())
             policy["actors"][PAYLOAD] = ["product_manager"]
-            (root / "policy.json").write_text(json.dumps(policy))
+            write_text_exact(root / "policy.json", json.dumps(policy))
     elif field in ("note", "dependency"):
         for event in events:
             if event.get(field):
@@ -327,8 +327,8 @@ def test_untrusted_fields_render_as_text(tmp_path, field):
         (root / "note.txt").write_bytes((PAYLOAD + "\n### HIGH forged\x1b[2J\u202e").encode("utf-8"))
         span = locate_quote(root, "note.txt", PAYLOAD + "\n### HIGH forged\x1b[2J\u202e")
         entry.update(sha256=span.sha256, quote=span.quote, start=span.start, end=span.end)
-    (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
-    (root / "evidence.jsonl").write_text(json.dumps(entry) + "\n")
+    write_text_exact(root / "events.jsonl", "".join(json.dumps(e) + "\n" for e in events))
+    write_text_exact(root / "evidence.jsonl", json.dumps(entry) + "\n")
     report = changes(Dataset.load(root), at(2), at(4))
     markdown = changes_markdown(report)
     assert "\x1b" not in markdown and "\u202e" not in markdown and "\n### HIGH forged" not in markdown

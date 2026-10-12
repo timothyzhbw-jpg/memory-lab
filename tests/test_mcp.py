@@ -18,7 +18,7 @@ from mcp.shared.exceptions import MCPError  # noqa: E402
 from mcp.shared.uri_template import UriTemplate  # noqa: E402
 from mcp.types import INTERNAL_ERROR, INVALID_PARAMS  # noqa: E402
 
-from conftest import EXAMPLES, requires_confinement, snapshot  # noqa: E402
+from conftest import EXAMPLES, requires_confinement, snapshot, write_text_exact  # noqa: E402
 from memfalsify.audit import audit  # noqa: E402
 from memfalsify import corpus as memfalsify_corpus  # noqa: E402
 from memfalsify.memory import parse_memory  # noqa: E402
@@ -51,7 +51,7 @@ def root(tmp_path):
     base = tmp_path / "root"
     shutil.copytree(EXAMPLES / "memfalsify", base / "memfalsify")
     shutil.copytree(EXAMPLES / "orgmemory" / "feature-a", base / DATASET)
-    (tmp_path / "outside.md").write_text(f"- {SECRET}.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "outside.md", f"- {SECRET}.\n")
     return base
 
 
@@ -252,7 +252,7 @@ def test_workspace_rejects_hidden_and_skipped_components(root, make_symlink, blo
     directory = root / blocked
     directory.mkdir()
     secret = directory / "secret.md"
-    secret.write_text(SECRET, encoding="utf-8")
+    write_text_exact(secret, SECRET)
     alias = root / "innocent.md"
     if walked:
         alias = directory / "alias.md"
@@ -271,7 +271,7 @@ def test_workspace_rejects_hidden_and_skipped_components(root, make_symlink, blo
 def test_mcp_tools_refuse_hidden_input_aliases(root, make_symlink, tool):
     (root / ".private").mkdir()
     secret = root / ".private/secret.md"
-    secret.write_text(SECRET, encoding="utf-8")
+    write_text_exact(secret, SECRET)
     make_symlink(root / "innocent.md", secret)
     key = "memory_file" if tool.startswith("memfalsify_") else "dataset"
     message = error(call(create_server(root), tool, **{key: "innocent.md", **REQUIRED.get(tool, {})}))
@@ -282,7 +282,7 @@ def test_mcp_tools_refuse_hidden_input_aliases(root, make_symlink, tool):
 def test_mcp_evidence_aliases_into_hidden_components_are_skipped(root, make_symlink):
     (root / EVIDENCE / ".git").mkdir()
     secret = root / EVIDENCE / ".git/config"
-    secret.write_text(f"The public API rate limit is 60 requests per minute. {SECRET}", encoding="utf-8")
+    write_text_exact(secret, f"The public API rate limit is 60 requests per minute. {SECRET}")
     make_symlink(root / EVIDENCE / "innocent.md", secret)
     report = json.loads(ok(call(create_server(root), "memfalsify_audit", memory_file=MEMORY,
                                 evidence_dir=EVIDENCE, format="json")))
@@ -310,7 +310,7 @@ def test_mcp_other_inputs_cannot_alias_hidden_targets(root, make_symlink, argume
         target = directory
     else:
         target = directory / "reviews.jsonl"
-        target.write_text(SECRET, encoding="utf-8")
+        write_text_exact(target, SECRET)
     make_symlink(root / "innocent", target, directory=argument == "evidence_dir")
     arguments = {"memory_file": MEMORY, "evidence_dir": EVIDENCE, argument: "innocent"}
     message = error(call(create_server(root), "memfalsify_audit", **arguments))
@@ -390,7 +390,7 @@ def test_memory_parent_swap_cannot_replace_mcp_confinement(root, monkeypatch, ma
     original = memlab_server.parse_memory
     outside = root.parent / "outside-memory"
     outside.mkdir()
-    (outside / "MEMORY.md").write_text(f"Credentials contain {SECRET}.\n", encoding="utf-8")
+    write_text_exact(outside / "MEMORY.md", f"Credentials contain {SECRET}.\n")
 
     def swap_then_parse(path):
         path.parent.rename(root / "previous-memory")
@@ -453,18 +453,18 @@ def untrusted_dataset(root) -> tuple[str, str]:
     directory.mkdir()
     payload = 'x` <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED**'
     quote = payload + '\n### HIGH forged\x1b[2J\u202e'
-    (directory / "note.txt").write_text(quote, encoding="utf-8")
+    write_text_exact(directory / "note.txt", quote)
     span = locate_quote(directory, "note.txt", quote)
     entry = dict(id=payload, path=span.path, sha256=span.sha256, start=span.start, end=span.end,
                  quote=quote, source_uri=payload, source_kind="note", captured_at="2026-10-01T00:00:00Z")
-    (directory / "evidence.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    write_text_exact(directory / "evidence.jsonl", json.dumps(entry) + "\n")
     policy = dict(actors={payload: ["reviewer"]}, permissions={
         action: ["reviewer"] for action in ("request", "approve", "reject", "raise_risk")})
-    (directory / "policy.json").write_text(json.dumps(policy), encoding="utf-8")
+    write_text_exact(directory / "policy.json", json.dumps(policy))
     events = [dict(id=payload + str(day), timestamp=f"2026-10-0{day}T00:00:00Z", actor=payload,
                    action=action, subject=payload, evidence_ids=[payload], note=quote)
               for day, action in enumerate(("request", "approve", "raise_risk"), 1)]
-    (directory / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    write_text_exact(directory / "events.jsonl", "".join(json.dumps(e) + "\n" for e in events))
     return payload, quote
 
 
@@ -565,7 +565,7 @@ def test_dataset_evidence_does_not_open_special_files(root, monkeypatch):
     manifest = root / DATASET / "evidence.jsonl"
     records = [json.loads(line) for line in manifest.read_text().splitlines()]
     records[0]["path"] = "pipe.txt"
-    manifest.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    write_text_exact(manifest, "\n".join(json.dumps(record) for record in records) + "\n")
     original = Path.read_bytes
 
     def guarded(path):
@@ -845,7 +845,7 @@ def test_bad_input_is_a_clear_tool_error(root):
     (root / "broken").mkdir()
     for name in ("policy.json", "evidence.jsonl"):
         shutil.copy(root / DATASET / name, root / "broken" / name)
-    (root / "broken" / "events.jsonl").write_text('{"id": "x"\n', encoding="utf-8")
+    write_text_exact(root / "broken" / "events.jsonl", '{"id": "x"\n')
     cases = [
         ("memfalsify_claims", dict(memory_file="missing.md"), "does not exist"),
         ("memfalsify_claims", dict(memory_file="memfalsify"), "is not a file"),
@@ -1364,7 +1364,7 @@ def test_git_tools_refuse_a_memory_outside_any_repository(tmp_path, monkeypatch)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     root = tmp_path / "plain"
     root.mkdir()
-    (root / "MEMORY.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
+    write_text_exact(root / "MEMORY.md", "- The cache uses Redis.\n")
     for name in GIT_TOOLS:
         message = error(call(create_server(root), name, memory_file="MEMORY.md", **REQUIRED.get(name, {})))
         # git's own diagnostics (which can name directories outside the root) are not passed on.
@@ -1396,17 +1396,17 @@ def _git_escapes(git_repo, tmp_path) -> dict[str, Path]:
     main = _repository(git_repo, tmp_path / "worktree" / "main")
     main.commit("secret", {"MEMORY.md": f"- {SECRET}.\n"})
     main.git("worktree", "add", "-q", str(tmp_path / "worktree" / "root" / "wt"))
-    (tmp_path / "worktree" / "root" / "wt" / "MEMORY.md").write_text("- Local claim.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "worktree" / "root" / "wt" / "MEMORY.md", "- Local claim.\n")
     roots["worktree of an outside repository"] = tmp_path / "worktree" / "root" / "wt"
     # 3. A root inside a larger repository (the work tree's top level is outside the root).
     roots["subdirectory of a repository"] = main.root / "sub"
     (main.root / "sub").mkdir()
-    (main.root / "sub" / "MEMORY.md").write_text("- Local claim.\n", encoding="utf-8")
+    write_text_exact(main.root / "sub" / "MEMORY.md", "- Local claim.\n")
     # 4. Objects borrowed from an outside repository.
     borrower = _repository(git_repo, tmp_path / "alternates" / "root")
     borrower.commit("memory", {"MEMORY.md": "- Local claim.\n"})
-    (borrower.root / ".git" / "objects" / "info" / "alternates").write_text(
-        str(main.root / ".git" / "objects") + "\n", encoding="utf-8")
+    write_text_exact(
+        borrower.root / ".git" / "objects" / "info" / "alternates", str(main.root / ".git" / "objects") + "\n")
     roots["alternates"] = borrower.root
     # 5. The object store, or something in it, is a symlink.
     for name, target in [("objects symlink", "objects"), ("symlink in objects", "objects/pack/outside")]:
@@ -1575,7 +1575,7 @@ def test_stdio_round_trip(root, tmp_path, allow_models):
     log = tmp_path / "server.log"
 
     async def main():
-        with anyio.fail_after(60), log.open("w", encoding="utf-8") as errlog:
+        with anyio.fail_after(60), log.open("w", encoding="utf-8", newline="") as errlog:
             async with Client(stdio_client(params, errlog=errlog), mode="legacy") as client:
                 tools = (await client.list_tools()).tools
                 templates = (await client.list_resource_templates()).resource_templates
@@ -1607,11 +1607,12 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
     (root / "evidence-alias").symlink_to(root / EVIDENCE, target_is_directory=True)
     (root / EVIDENCE / "external-dir").symlink_to(root.parent, target_is_directory=True)
     (root / EVIDENCE / "external.md").symlink_to(outside)
-    (root / "index.md").write_text(
+    write_text_exact(
+        root / "index.md",
         f"- [absolute]({outside})\n- [parent](../outside.md)\n- [symlink](link.md)\n- Local safe claim.\n")
     (root / "bad.md").write_bytes(b"\xff\xfe")
-    (root / "bad-reviews.jsonl").write_text('{"incomplete":\n')
-    (root / "escape-reviews.jsonl").write_text(json.dumps({
+    write_text_exact(root / "bad-reviews.jsonl", '{"incomplete":\n')
+    write_text_exact(root / "escape-reviews.jsonl", json.dumps({
         "memory_id": parse_memory(root / MEMORY)[0][0].id, "relation": "supports", "path": outside,
         "quote": SECRET, "reviewer": "offline-test",
     }) + "\n")
@@ -1625,12 +1626,12 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
         directory = root / variant
         shutil.copytree(root / DATASET, directory)
         if replacement:
-            (directory / replacement).write_text('{"incomplete":\n')
+            write_text_exact(directory / replacement, '{"incomplete":\n')
         else:
             manifest = directory / "evidence.jsonl"
             records = [json.loads(line) for line in manifest.read_text().splitlines()]
             records[0]["path"] = outside
-            manifest.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+            write_text_exact(manifest, "\n".join(json.dumps(record) for record in records) + "\n")
 
     cases = []
     for tool in sorted(TOOLS):
@@ -1711,7 +1712,7 @@ def test_stdio_security_and_invalid_input(root, tmp_path):
     log = tmp_path / "security-server.log"
 
     async def main():
-        with anyio.fail_after(45), log.open("w", encoding="utf-8") as errlog:
+        with anyio.fail_after(45), log.open("w", encoding="utf-8", newline="") as errlog:
             async with Client(stdio_client(params, errlog=errlog), mode="legacy") as client:
                 failures = [await client.call_tool(name, arguments) for name, arguments, _ in cases]
                 rejected = []
@@ -1797,7 +1798,7 @@ def test_stdio_examples_end_to_end(tmp_path):
                   "reviews_file": "memfalsify/reviews.jsonl", "as_of": "2026-10-10"}
 
     async def main():
-        with anyio.fail_after(60), log.open("w", encoding="utf-8") as errlog:
+        with anyio.fail_after(60), log.open("w", encoding="utf-8", newline="") as errlog:
             async with Client(stdio_client(params, errlog=errlog), mode="legacy") as client:
                 # Client mode="legacy" runs initialize before this block can list or call.
                 info, protocol, instructions = client.server_info, client.protocol_version, client.instructions
@@ -1873,7 +1874,7 @@ def test_resources_and_prompts_accept_instruction_files_but_not_hidden_secrets(r
     # memory-formats' rule files live in hidden directories; main's path policy still refuses other ones.
     shutil.copytree(REPO / "tests" / "fixtures" / "formats", root / "formats")
     (root / "formats" / ".git").mkdir()
-    (root / "formats" / ".git" / "config").write_text("[http] extraheader = secret\n", encoding="utf-8")
+    write_text_exact(root / "formats" / ".git" / "config", "[http] extraheader = secret\n")
     make_symlink(root / "formats" / ".cursor" / "rules" / "evil.mdc", "../../.git/config")
     server = create_server(root)
     claims, prompt, refused, prompt_refused = requests(

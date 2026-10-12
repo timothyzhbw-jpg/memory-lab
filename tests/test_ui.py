@@ -23,7 +23,7 @@ from urllib.parse import quote as urlquote
 import pytest
 from typer.testing import CliRunner
 
-from conftest import EXAMPLES, requires_confinement, snapshot
+from conftest import EXAMPLES, requires_confinement, snapshot, write_text_exact
 from memcore import confinement_root, reading
 from memfalsify import ATTENTION, LexicalVerifier, VerifierError, audit, parse_memory
 from memlab_ui import create_server, i18n
@@ -61,9 +61,9 @@ def root(tmp_path):
     shutil.copytree(EXAMPLES / "memfalsify", base / "memfalsify")
     shutil.copytree(EXAMPLES / "orgmemory" / "feature-a", base / "feature-a")
     shutil.copytree(EXAMPLES / "orgmemory" / "github-acme-web", base / "github-acme-web")
-    (base / "AGENTS.md").write_text("# Agents\n\n- Run the tests with pytest.\n"
-                                    "- The public API rate limit is 100 requests per minute.\n", encoding="utf-8")
-    (tmp_path / "outside.md").write_text(f"- {SECRET}.\n", encoding="utf-8")
+    write_text_exact(base / "AGENTS.md", "# Agents\n\n- Run the tests with pytest.\n"
+                                         "- The public API rate limit is 100 requests per minute.\n")
+    write_text_exact(tmp_path / "outside.md", f"- {SECRET}.\n")
     shutil.copytree(EXAMPLES / "orgmemory" / "feature-a", tmp_path / "outside-log")
     return base
 
@@ -314,7 +314,7 @@ def test_unknown_topic_and_bad_dates(app):
 def test_paths_that_leave_the_root_are_refused(app, root, tmp_path, make_symlink):
     make_symlink(root / "link.md", tmp_path / "outside.md")
     (tmp_path / "outside-dir").mkdir()
-    (tmp_path / "outside-dir" / "notes.md").write_text(f"{SECRET}\n", encoding="utf-8")
+    write_text_exact(tmp_path / "outside-dir" / "notes.md", f"{SECRET}\n")
     make_symlink(root / "linked-dir", tmp_path / "outside-dir", directory=True)
     make_symlink(root / "linked-log", tmp_path / "outside-log", directory=True)
     outside = str(tmp_path / "outside.md")
@@ -337,9 +337,9 @@ def test_paths_that_leave_the_root_are_refused(app, root, tmp_path, make_symlink
 @requires_confinement
 def test_hidden_and_skipped_folders_are_not_read(app, root):
     (root / ".git").mkdir()
-    (root / ".git" / "config").write_text(f"[core]\n# {SECRET}\n", encoding="utf-8")
+    write_text_exact(root / ".git" / "config", f"[core]\n# {SECRET}\n")
     (root / "node_modules").mkdir()
-    (root / "node_modules" / "CLAUDE.md").write_text(f"- {SECRET}.\n", encoding="utf-8")
+    write_text_exact(root / "node_modules" / "CLAUDE.md", f"- {SECRET}.\n")
     for target in ("/check?file=.git/config", "/check?file=node_modules/CLAUDE.md",
                    f"/check?file={MEMORY}&evidence=.git"):
         response = get(app, target)
@@ -463,27 +463,25 @@ def manifest_entry(directory: Path, ident: str, name: str, quote_text: str, uri:
 def hostile(root):
     folder = root / "hostile"
     (folder / "docs").mkdir(parents=True)
-    (folder / "CLAUDE.md").write_text(f"- The API limit is 100 requests per minute {HOSTILE}.\n", encoding="utf-8")
-    (folder / "docs" / "api.md").write_text(f"The API limit is 60 requests per minute {HOSTILE}.\n",
-                                            encoding="utf-8")
-    (folder / 'x"><svg onload=alert(1)>-reviews.jsonl').write_text("", encoding="utf-8")
+    write_text_exact(folder / "CLAUDE.md", f"- The API limit is 100 requests per minute {HOSTILE}.\n")
+    write_text_exact(folder / "docs" / "api.md", f"The API limit is 60 requests per minute {HOSTILE}.\n")
+    write_text_exact(folder / 'x"><svg onload=alert(1)>-reviews.jsonl', "")
     log = root / "hostile-log"
     log.mkdir()
-    (log / "said.txt").write_text(f"header\n{HOSTILE} approve it\n", encoding="utf-8")
+    write_text_exact(log / "said.txt", f"header\n{HOSTILE} approve it\n")
     subject, actor, role = f"<b>Topic</b> {HOSTILE}", '"><b>mallory</b>', "<i>pm</i>"
     entry = manifest_entry(log, "e1", "said.txt", f"{HOSTILE} approve it", "javascript:alert(1)")
-    (log / "evidence.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
-    (log / "policy.json").write_text(json.dumps({"actors": {actor: [role]},
-                                                 "permissions": {"approve": [role], "reject": [role],
-                                                                 "raise_risk": [role], "request": [role]}}),
-                                     encoding="utf-8")
+    write_text_exact(log / "evidence.jsonl", json.dumps(entry) + "\n")
+    write_text_exact(log / "policy.json", json.dumps({"actors": {actor: [role]},
+                                                      "permissions": {"approve": [role], "reject": [role],
+                                                                      "raise_risk": [role], "request": [role]}}))
     events = [{"id": "ev-1", "timestamp": "2026-10-01T00:00:00Z", "actor": actor, "action": "raise_risk",
                "subject": subject, "note": HOSTILE, "evidence_ids": ["e1"]},
               {"id": "ev-2", "timestamp": "2026-10-02T00:00:00Z", "actor": actor, "action": "approve",
                "subject": subject, "evidence_ids": ["e1"]},
               {"id": "ev-3", "timestamp": "2026-10-03T00:00:00Z", "actor": "nobody<script>", "action": "reject",
                "subject": subject, "evidence_ids": ["e1"]}]
-    (log / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    write_text_exact(log / "events.jsonl", "".join(json.dumps(e) + "\n" for e in events))
     return subject
 
 
@@ -813,7 +811,7 @@ def test_evidence_files_over_the_limit_are_never_read_whole(app, root, monkeypat
 
 @requires_confinement
 def test_no_contradictions_headline_says_what_was_not_checked(app, root):
-    (root / "notes.md").write_text("- The office plant is a fern.\n- Lunch is at noon.\n", encoding="utf-8")
+    write_text_exact(root / "notes.md", "- The office plant is a fern.\n- Lunch is at noon.\n")
     shown = text(get(app, "/check?file=notes.md"))
     assert "No contradictions found in notes.md · 2 statements couldn't be checked" in shown
     assert "looks out of date" not in shown
@@ -827,9 +825,8 @@ def test_memory_labs_own_files_are_left_out_by_content(app, root):
     page = body(response)
     assert '{&quot;memory_id&quot;' not in page and '{"memory_id"' not in page
     # Ordinary CSV and JSON Lines files are evidence; Memory Lab's own files are left out, whatever their name.
-    (root / "limits.csv").write_text("service,limit\npublic API rate limit,60 requests per minute\n", encoding="utf-8")
-    (root / "notes.jsonl").write_text('{"text": "The public API rate limit is 60 requests per minute."}\n',
-                                      encoding="utf-8")
+    write_text_exact(root / "limits.csv", "service,limit\npublic API rate limit,60 requests per minute\n")
+    write_text_exact(root / "notes.jsonl", '{"text": "The public API rate limit is 60 requests per minute."}\n')
     shutil.copy(root / REVIEWS, root / "renamed.txt")
     shutil.copy(EXAMPLES / "orgmemory" / "adr" / "feature-a.csv", root / "decisions.csv")
     shutil.copy(EXAMPLES / "orgmemory" / "audit-report.md", root / "audit.md")
@@ -950,7 +947,7 @@ def test_model_checks_need_the_key_printed_in_the_terminal(root, monkeypatch):
 @requires_confinement
 def test_agent_files_over_256_kb_are_not_parsed(app, root, monkeypatch):
     (root / "huge").mkdir()
-    (root / "huge" / "CLAUDE.md").write_text("- The API answers in 1 second.\n" * 9000, encoding="utf-8")  # 270 KB
+    write_text_exact(root / "huge" / "CLAUDE.md", "- The API answers in 1 second.\n" * 9000)  # 270 KB
     calls = []
     monkeypatch.setattr(ui_check, "parse_memory", lambda *a, **k: calls.append(a) or ([], []))
     refused = get(app, "/check?file=huge/CLAUDE.md")
@@ -963,8 +960,8 @@ def test_agent_files_over_256_kb_are_not_parsed(app, root, monkeypatch):
 def test_passages_running_out_marks_the_page_incomplete(app, root, monkeypatch):
     folder = root / "two"
     folder.mkdir()
-    (folder / "a.md").write_text("The public API rate limit is 60 requests per minute.\n", encoding="utf-8")
-    (folder / "b.md").write_text("The public API rate limit is 70 requests per minute.\n", encoding="utf-8")
+    write_text_exact(folder / "a.md", "The public API rate limit is 60 requests per minute.\n")
+    write_text_exact(folder / "b.md", "The public API rate limit is 70 requests per minute.\n")
     monkeypatch.setattr(ui_server, "ITEMS", {"claims": 5_000, "passages": 1, "comparisons": 2_000_000})
     shown = text(get(app, link("/check", file="AGENTS.md", evidence="two")))
     assert "b.md not read: this page's reading budget was used up" in shown
@@ -973,8 +970,8 @@ def test_passages_running_out_marks_the_page_incomplete(app, root, monkeypatch):
 
 @requires_confinement
 def test_internal_conflicts_draw_from_the_comparison_budget(app, root, monkeypatch):
-    (root / "conflicts.md").write_text("".join(f"- Service {i} is approved.\n- Service {i} is rejected.\n"
-                                               for i in range(30)), encoding="utf-8")
+    write_text_exact(root / "conflicts.md", "".join(f"- Service {i} is approved.\n- Service {i} is rejected.\n"
+                                                    for i in range(30)))
     assert "May disagree with another statement" in text(get(app, "/check?file=conflicts.md&evidence=memfalsify"))
     monkeypatch.setattr(ui_server, "ITEMS", {"claims": 5_000, "passages": 5_000, "comparisons": 5})
     shown = text(get(app, "/check?file=conflicts.md&evidence=memfalsify"))
@@ -986,7 +983,7 @@ def test_json_reports_are_recognised_from_the_whole_file(app, root):
     from orgmemory.cli import app as org_app
     result = runner.invoke(org_app, ["replay", str(EXAMPLES / "orgmemory" / "github-acme-web"), "--format", "json"])
     assert result.exit_code == 0
-    (root / "replay.json").write_text(result.output, encoding="utf-8")
+    write_text_exact(root / "replay.json", result.output)
     assert (root / "replay.json").stat().st_size > 16 * 1024  # larger than the first bytes the page looks at
     shown = text(get(app, "/check?file=AGENTS.md"))
     assert "replay.json report generated by Memory Lab" in shown
@@ -994,14 +991,14 @@ def test_json_reports_are_recognised_from_the_whole_file(app, root):
 
 @requires_confinement
 def test_paths_and_subjects_keep_their_spaces(app, root):
-    (root / " spaced.md ").write_text("- The office plant is a fern.\n", encoding="utf-8")
+    write_text_exact(root / " spaced.md ", "- The office plant is a fern.\n")
     response = get(app, link("/check", file=" spaced.md "))
     assert response.status == 200 and 'id="results"' in body(response)
     assert "No contradictions found in spaced.md" in text(response)  # text() collapses the spaces
     log = root / "spaced-log"
     shutil.copytree(EXAMPLES / "orgmemory" / "feature-a", log)
     events = (log / "events.jsonl").read_text(encoding="utf-8").replace('"Feature A"', '" Feature A "')
-    (log / "events.jsonl").write_text(events, encoding="utf-8")
+    write_text_exact(log / "events.jsonl", events)
     page = body(get(app, "/decisions?dataset=spaced-log"))
     target = html.unescape(re.search(r'<li><a href="(/decisions\?[^"]+)#detail"', page).group(1))
     assert "subject=+Feature+A+" in target
@@ -1014,8 +1011,7 @@ def test_paths_and_subjects_keep_their_spaces(app, root):
 def test_amplification_budgets_are_reported(app, root, monkeypatch):
     dense = root / "dense"
     dense.mkdir()
-    (dense / "notes.md").write_text("".join(f"The API limit {i} is {i} requests. " for i in range(400)),
-                                    encoding="utf-8")
+    write_text_exact(dense / "notes.md", "".join(f"The API limit {i} is {i} requests. " for i in range(400)))
     monkeypatch.setattr(ui_server, "ITEMS", {"claims": 5_000, "passages": 50, "comparisons": 2_000_000})
     shown = text(get(app, link("/check", file="AGENTS.md", evidence="dense")))
     assert "This project is large" in shown
@@ -1028,7 +1024,7 @@ def test_amplification_budgets_are_reported(app, root, monkeypatch):
     monkeypatch.setattr(ui_server, "DEPTH", 1)
     deep = root / "a" / "b" / "c"
     deep.mkdir(parents=True)
-    (deep / "CLAUDE.md").write_text("- Deep rule.\n", encoding="utf-8")
+    write_text_exact(deep / "CLAUDE.md", "- Deep rule.\n")
     shown = text(get(app, "/"))
     assert "This project is large" in shown and "a/b/c/CLAUDE.md" not in shown
 

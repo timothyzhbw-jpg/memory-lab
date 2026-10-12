@@ -37,6 +37,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 from memfalsify.cli import app as memfalsify_app
 from memfalsify.precommit import app as precommit_app
 from orgmemory.cli import app as orgmemory_app
@@ -591,7 +592,7 @@ def action_environment(tmp_path: Path, workspace: Path, **inputs) -> dict:
            "GITHUB_OUTPUT": str(runner_dir / "output"), "GITHUB_WORKSPACE": str(workspace),
            "GITHUB_REPOSITORY": "acme/web", "GITHUB_EVENT_NAME": "pull_request", "GITHUB_ACTIONS": "true"}
     for name in ("GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT"):
-        Path(env[name]).write_text("", encoding="utf-8")
+        write_text_exact(Path(env[name]), "")
     env.update({f"MEMFALSIFY_{name.upper()}": value for name, value in inputs.items()})
     return env
 
@@ -1008,7 +1009,7 @@ def test_imported_text_stays_inert_in_every_report(tmp_path, source, field, payl
     for name in importer.files:
         shutil.copyfile(FIXTURES / source / name, dataset / name)
     capture = tmp_path / "capture.json"
-    capture.write_text(json.dumps(importer.capture(field, IMPORT_PAYLOADS[payload])), encoding="utf-8")
+    write_text_exact(capture, json.dumps(importer.capture(field, IMPORT_PAYLOADS[payload])))
     converted = invoke(orgmemory_app, [*importer.command, dataset, capture])
     assert_exit(converted, (0, 2, 3))
     outputs = {"convert": converted.output}

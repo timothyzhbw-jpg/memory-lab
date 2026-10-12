@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from conftest import snapshot
+from conftest import snapshot, write_text_exact
 from jira_fakes import SITE, T1, T2, capture, comment, history, issue, page, single, status, user
 from memcore import read_jsonl
 from orgmemory import jira_apply
@@ -122,7 +122,7 @@ def test_states_do_not_depend_on_import_history(tmp_path):
 def test_drift_reported_never_rewritten(jira_dataset):
     converted(jira_dataset, "capture-1")
     before = relative_snapshot(jira_dataset, log=False)
-    (jira_dataset / "jira.json").write_text('{"statuses": {"10003": "reject", "10004": "reject"}}')
+    write_text_exact(jira_dataset / "jira.json", '{"statuses": {"10003": "reject", "10004": "reject"}}')
     summary = converted(jira_dataset, "capture-1")
     # Human approvals would now be rejections; the automated one stays a comment; reconsider is unmapped now.
     assert summary.plan.drift == ["jira:ACME-1/transition/20103", "jira:ACME-1/transition/20104",
@@ -137,8 +137,8 @@ def test_drift_reported_never_rewritten(jira_dataset):
 def test_policy_json_never_read(tmp_path, monkeypatch):
     roots = [dataset(tmp_path, str(n)) for n in range(3)]
     (roots[0] / "policy.json").unlink()
-    (roots[1] / "policy.json").write_text("invalid JSON")
-    (roots[2] / "policy.json").write_text(json.dumps({"actors": {}, "permissions": {}}))
+    write_text_exact(roots[1] / "policy.json", "invalid JSON")
+    write_text_exact(roots[2] / "policy.json", json.dumps({"actors": {}, "permissions": {}}))
     policies = [(r / "policy.json").read_bytes() if (r / "policy.json").exists() else None for r in roots]
     real_open, real_read = Path.open, Path.read_bytes
 
@@ -192,12 +192,12 @@ def test_fails_closed(jira_dataset, tmp_path, kind):
         path.parent.mkdir(parents=True)
         path.write_bytes(b"conflict")
     elif kind == "malformed_events":
-        (jira_dataset / "events.jsonl").write_text("{not json}\n")
+        write_text_exact(jira_dataset / "events.jsonl", "{not json}\n")
     elif kind == "duplicate":
         path = jira_dataset / "events.jsonl"
         path.write_bytes(path.read_bytes() + path.read_bytes().splitlines(keepends=True)[0])
     elif kind == "bad_log":
-        (jira_dataset / "jira-sync.jsonl").write_text('{"site": "https://acme.atlassian.net"}\n')
+        write_text_exact(jira_dataset / "jira-sync.jsonl", '{"site": "https://acme.atlassian.net"}\n')
     elif kind == "two_sites":
         path = jira_dataset / "jira-sync.jsonl"
         line = log(jira_dataset)[0]
@@ -211,7 +211,7 @@ def test_fails_closed(jira_dataset, tmp_path, kind):
         except OSError:
             pytest.skip("symlinks unavailable")
     elif kind == "bad_config":
-        (jira_dataset / "jira.json").write_text('{"statuses": {"Approved": "approve"}}')
+        write_text_exact(jira_dataset / "jira.json", '{"statuses": {"Approved": "approve"}}')
     elif kind == "not_json":
         capture_path = bad_json(jira_dataset, tmp_path)
     elif kind == "malformed_capture":
@@ -292,7 +292,7 @@ def test_lock_and_dry_run(jira_dataset):
     planned = [json.loads(line) for line in result.output.splitlines() if line.startswith("{")]
     assert len(planned) == 24 and planned[0]["id"] == "jira:ACME-1/created"
     for held in (".jira-sync.lock", ".github-sync.lock"):
-        (jira_dataset / held).write_text("held")
+        write_text_exact(jira_dataset / held, "held")
         before = snapshot(jira_dataset)
         result = cli(jira_dataset, FIXTURES / "capture-1.json")
         assert result.exit_code == 2 and "another sync is running" in result.output
@@ -302,7 +302,7 @@ def test_lock_and_dry_run(jira_dataset):
 
 def test_github_import_waits_for_a_jira_import(tmp_path):
     root = dataset(tmp_path, "both")
-    (root / ".jira-sync.lock").write_text("held")
+    write_text_exact(root / ".jira-sync.lock", "held")
     result = RUNNER.invoke(app, ["github", "convert", str(root),
                                  str(Path(__file__).parent / "fixtures" / "github" / "capture-1.json")])
     assert result.exit_code == 2 and "another sync is running" in result.output
@@ -339,12 +339,10 @@ def test_repeated_keys_are_refused_in_captures_config_and_policy_aliases(jira_da
     # main rejects a repeated JSON key in every input; the Jira importer follows the same rule.
     text = (FIXTURES / "capture-1.json").read_text(encoding="utf-8")
     forged = tmp_path / "forged.json"
-    forged.write_text(text.replace('"jira_capture": 1,', '"jira_capture": 1, "jira_capture": 1,', 1),
-                      encoding="utf-8")
+    write_text_exact(forged, text.replace('"jira_capture": 1,', '"jira_capture": 1, "jira_capture": 1,', 1))
     with pytest.raises(JiraCaptureError, match="duplicate key"):
         run_convert(jira_dataset, forged, dry_run=True)
-    (jira_dataset / "jira.json").write_text('{"statuses": {"10003": "approve", "10003": "reject"}}',
-                                            encoding="utf-8")
+    write_text_exact(jira_dataset / "jira.json", '{"statuses": {"10003": "approve", "10003": "reject"}}')
     with pytest.raises(JiraCaptureError, match="invalid jira.json"):
         run_convert(jira_dataset, FIXTURES / "capture-1.json", dry_run=True)
     shutil.copyfile(FIXTURES / "jira.json", jira_dataset / "jira.json")

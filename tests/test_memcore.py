@@ -4,19 +4,19 @@ import os
 import pytest
 from pydantic import ValidationError
 
-from conftest import requires_confinement
+from conftest import requires_confinement, write_text_exact
 from memcore import EvidenceError, append_jsonl, load_manifest, locate_quote, read_jsonl
 from memcore.jsonutil import loads, loads_at
 from memcore.reading import confined_reads, read_file_bytes
 
 
 def write_manifest(root, **overrides):
-    (root / "src.txt").write_text("Alpha line.\nThe PM rejects Feature A.\n", encoding="utf-8")
+    write_text_exact(root / "src.txt", "Alpha line.\nThe PM rejects Feature A.\n")
     span = locate_quote(root, "src.txt", "The PM rejects Feature A.")
     entry = {"id": "e1", "path": "src.txt", "sha256": span.sha256, "quote": span.quote, "start": span.start,
              "end": span.end, "source_uri": "synthetic://t", "source_kind": "test",
              "captured_at": "2026-10-07T00:00:00Z", **overrides}
-    (root / "evidence.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    write_text_exact(root / "evidence.jsonl", json.dumps(entry) + "\n")
     return root / "evidence.jsonl"
 
 
@@ -27,7 +27,7 @@ def test_manifest_verifies_hash_and_span(tmp_path):
 
 def test_tampered_file_fails_closed(tmp_path):
     manifest = write_manifest(tmp_path)
-    (tmp_path / "src.txt").write_text("Alpha line.\nThe PM approves Feature A.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "src.txt", "Alpha line.\nThe PM approves Feature A.\n")
     with pytest.raises(EvidenceError, match="hash mismatch"):
         load_manifest(manifest)
 
@@ -45,14 +45,14 @@ def test_quote_must_exist_verbatim(tmp_path):
 
 @pytest.mark.parametrize("path", ["../outside.txt", "/etc/hosts"])
 def test_paths_cannot_escape_root(tmp_path, path):
-    (tmp_path.parent / "outside.txt").write_text("x", encoding="utf-8")
+    write_text_exact(tmp_path.parent / "outside.txt", "x")
     with pytest.raises(EvidenceError, match="escapes|relative"):
         locate_quote(tmp_path, path, "x")
 
 
 def test_symlink_cannot_escape_root(tmp_path):
     outside = tmp_path.parent / "secret.txt"
-    outside.write_text("secret", encoding="utf-8")
+    write_text_exact(outside, "secret")
     (tmp_path / "link.txt").symlink_to(outside)
     with pytest.raises(EvidenceError, match="escapes"):
         locate_quote(tmp_path, "link.txt", "secret")
@@ -151,7 +151,7 @@ def test_manifest_cache_does_not_accept_an_escape(tmp_path):
 
 def test_duplicate_evidence_id_rejected(tmp_path):
     manifest = write_manifest(tmp_path)
-    manifest.write_text(manifest.read_text() * 2, encoding="utf-8")
+    write_text_exact(manifest, manifest.read_text() * 2)
     with pytest.raises(EvidenceError, match="duplicate"):
         load_manifest(manifest)
 
@@ -284,20 +284,20 @@ def test_read_jsonl_rejects_duplicate_keys(tmp_path, body):
 
 def test_read_jsonl_allows_the_same_key_in_different_objects(tmp_path):
     path = tmp_path / "log.jsonl"
-    path.write_text('{"actor": "a", "meta": {"actor": "b"}}\n', encoding="utf-8")
+    write_text_exact(path, '{"actor": "a", "meta": {"actor": "b"}}\n')
     assert list(read_jsonl(path)) == [(1, {"actor": "a", "meta": {"actor": "b"}})]
 
 
 def test_manifest_rejects_duplicate_keys(tmp_path):
     manifest = write_manifest(tmp_path)
     original = manifest.read_text(encoding="utf-8")
-    manifest.write_text(original.replace('{"id":', '{"id": "shadow", "id":', 1), encoding="utf-8")
+    write_text_exact(manifest, original.replace('{"id":', '{"id": "shadow", "id":', 1))
     with pytest.raises(ValueError) as caught:
         load_manifest(manifest)
     assert str(caught.value) == f"{manifest}:1: invalid JSON: duplicate key"
 
     body = original.rstrip("\n")
-    manifest.write_text(body[:-1] + ', "meta": {"k": 1, "k": 2}}\n', encoding="utf-8")
+    write_text_exact(manifest, body[:-1] + ', "meta": {"k": 1, "k": 2}}\n')
     with pytest.raises(ValueError) as nested:
         load_manifest(manifest)
     assert str(nested.value) == f"{manifest}:1: invalid JSON: duplicate key"

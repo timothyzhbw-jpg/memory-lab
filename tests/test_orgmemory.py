@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
-from conftest import snapshot
+from conftest import snapshot, write_text_exact
 from memcore import EvidenceError
 from orgmemory.cli import app
 from orgmemory.models import Event
@@ -120,7 +120,7 @@ def test_malformed_events_rejected(bad):
 
 
 def test_malformed_event_after_cutoff_still_fails(org_demo):
-    with (org_demo / "events.jsonl").open("a") as handle:
+    with (org_demo / "events.jsonl").open("a", newline="") as handle:
         handle.write(json.dumps(event("late", "2030-01-01T00:00:00Z", "lin", "dependency")) + "\n")
     result = runner.invoke(app, ["replay", str(org_demo), "--as-of", "2026-10-07T23:59:59Z"])
     assert result.exit_code == 2 and "requires 'dependency'" in result.output
@@ -139,7 +139,7 @@ def test_duplicate_event_id_rejected(org_demo):
 
 
 def test_tampered_evidence_fails_replay(org_demo):
-    (org_demo / "sources" / "2026-10-07-decision-log.txt").write_text("Feature A is approved.\n")
+    write_text_exact(org_demo / "sources" / "2026-10-07-decision-log.txt", "Feature A is approved.\n")
     result = runner.invoke(app, ["replay", str(org_demo)])
     assert result.exit_code == 2 and "hash mismatch" in result.output
 

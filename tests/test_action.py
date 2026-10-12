@@ -8,7 +8,7 @@ from pathlib import Path, PureWindowsPath
 
 import pytest
 
-from conftest import EXAMPLES
+from conftest import EXAMPLES, write_text_exact
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("memfalsify_action", ROOT / "action" / "memfalsify_action.py")
@@ -22,7 +22,7 @@ def runner_env(tmp_path):
     env = {"RUNNER_TEMP": str(tmp_path / "runner"), "GITHUB_STEP_SUMMARY": str(tmp_path / "runner" / "summary.md"),
            "GITHUB_OUTPUT": str(tmp_path / "runner" / "output")}
     for name in ("GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT"):
-        Path(env[name]).write_text("", encoding="utf-8")
+        write_text_exact(Path(env[name]), "")
     return env
 
 
@@ -72,7 +72,7 @@ def test_action_publishes_report_and_applies_strict(tmp_path, monkeypatch, capsy
 def test_action_failure_keeps_a_hostile_memory_name_inert(tmp_path, monkeypatch, runner_env):
     monkeypatch.chdir(tmp_path)
     name = "a`[x](evil).md"
-    (tmp_path / name).write_text("- The cache uses Redis.\n", encoding="utf-8")
+    write_text_exact(tmp_path / name, "- The cache uses Redis.\n")
     env = {**runner_env, "MEMFALSIFY_MEMORY": name, "MEMFALSIFY_EVIDENCE": "missing-dir"}
     assert action.main(env) == 2
     summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
@@ -97,7 +97,7 @@ def test_action_keeps_cli_error_text_out_of_the_job_summary(tmp_path, monkeypatc
 
     monkeypatch.setattr(action, "app", failing_cli)
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "MEMORY.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "MEMORY.md", "- The cache uses Redis.\n")
     env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md"}
     assert action.main(env) == 2
 
@@ -126,7 +126,7 @@ def test_action_usage_error_log_carries_no_rich_styling_on_a_github_runner(tmp_p
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("FORCE_COLOR", "1")
-    (tmp_path / "CLAUDE.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "CLAUDE.md", "- The cache uses Redis.\n")
     # A real runner also sets GITHUB_WORKSPACE to its own checkout; point it at this test's workspace.
     env = {**os.environ, **runner_env, "GITHUB_WORKSPACE": str(tmp_path), "MEMFALSIFY_MEMORY": "CLAUDE.md",
            "MEMFALSIFY_VERIFIER": "no-such-verifier", "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
@@ -148,11 +148,11 @@ def test_action_without_memory_files_notices_and_succeeds(tmp_path, monkeypatch,
 def test_action_handles_spaces_and_excludes(tmp_path, monkeypatch, runner_env):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "my evidence" / "old stuff").mkdir(parents=True)
-    (tmp_path / "CLAUDE.md").write_text("- The API rate limit is 100 requests per minute.\n", encoding="utf-8")
-    (tmp_path / "agent notes.md").write_text("- The database runs PostgreSQL 15.\n", encoding="utf-8")
-    (tmp_path / "my evidence" / "old stuff" / "api.md").write_text("The API rate limit is 60 requests per minute.\n",
-                                                                     encoding="utf-8")
-    (tmp_path / "my evidence" / "db.md").write_text("The database runs PostgreSQL 16.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "CLAUDE.md", "- The API rate limit is 100 requests per minute.\n")
+    write_text_exact(tmp_path / "agent notes.md", "- The database runs PostgreSQL 15.\n")
+    write_text_exact(tmp_path / "my evidence" / "old stuff" / "api.md",
+                     "The API rate limit is 60 requests per minute.\n")
+    write_text_exact(tmp_path / "my evidence" / "db.md", "The database runs PostgreSQL 16.\n")
     env = {**runner_env, "MEMFALSIFY_MEMORY": 'CLAUDE.md "agent notes.md"', "MEMFALSIFY_EVIDENCE": "my evidence",
            "MEMFALSIFY_EXCLUDE": "old stuff/**\n\n"}
     assert action.main(env) == 1
@@ -195,12 +195,12 @@ def test_action_refuses_all_excluded_evidence(tmp_path, monkeypatch, runner_env,
 def test_action_link_cannot_remove_counterevidence(tmp_path, monkeypatch, runner_env):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "api.md").write_text("The public API rate limit is 60 requests per minute.\n")
+    write_text_exact(tmp_path / "docs" / "api.md", "The public API rate limit is 60 requests per minute.\n")
     memory = tmp_path / "AGENTS.md"
-    memory.write_text("- The public API rate limit is 100 requests per minute.\n")
+    write_text_exact(memory, "- The public API rate limit is 100 requests per minute.\n")
     env = {**runner_env, "MEMFALSIFY_MEMORY": "AGENTS.md"}
     for suffix in ("", "- [API](docs/api.md)\n"):
-        memory.write_text("- The public API rate limit is 100 requests per minute.\n" + suffix)
+        write_text_exact(memory, "- The public API rate limit is 100 requests per minute.\n" + suffix)
         assert action.main(env) == 1
         assert outputs(runner_env)["attention"] == "1"
         report = Path(outputs(runner_env)["report"]).read_text()
@@ -209,8 +209,8 @@ def test_action_link_cannot_remove_counterevidence(tmp_path, monkeypatch, runner
 
 def test_action_named_instruction_files_remain_evidence_for_each_other(tmp_path, monkeypatch, runner_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "CLAUDE.md").write_text("- The database runs PostgreSQL 15.\n- [Agents](AGENTS.md)\n")
-    (tmp_path / "AGENTS.md").write_text("- The database runs PostgreSQL 16.\n- [Claude](CLAUDE.md)\n")
+    write_text_exact(tmp_path / "CLAUDE.md", "- The database runs PostgreSQL 15.\n- [Agents](AGENTS.md)\n")
+    write_text_exact(tmp_path / "AGENTS.md", "- The database runs PostgreSQL 16.\n- [Claude](CLAUDE.md)\n")
     assert action.main(runner_env) == 1
     assert outputs(runner_env)["attention"] == "2"
     report = Path(outputs(runner_env)["report"]).read_text()
@@ -227,8 +227,8 @@ def test_memory_progress_cannot_inject_workflow_commands(tmp_path, monkeypatch, 
     monkeypatch.chdir(tmp_path)
     name = "notes\n::error::forged%\rcommand.md"
     if exists:
-        (tmp_path / name).write_text("- The cache uses Redis.\n")
-        (tmp_path / "evidence.txt").write_text("The cache uses Redis.\n")
+        write_text_exact(tmp_path / name, "- The cache uses Redis.\n")
+        write_text_exact(tmp_path / "evidence.txt", "The cache uses Redis.\n")
     assert action.main({**runner_env, "MEMFALSIFY_MEMORY": '"' + name + '"'}) == 0
     output = capsys.readouterr().out
     assert "notes%0A%3A%3Aerror%3A%3Aforged%25%0Dcommand.md" in output
@@ -258,8 +258,8 @@ def test_action_external_cwd_and_option_shaped_filename(tmp_path, monkeypatch, r
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     monkeypatch.chdir(consumer)
-    (consumer / "--strict").write_text("- The database runs PostgreSQL 15.\n")
-    (consumer / "db.txt").write_text("The database runs PostgreSQL 16.\n")
+    write_text_exact(consumer / "--strict", "- The database runs PostgreSQL 15.\n")
+    write_text_exact(consumer / "db.txt", "The database runs PostgreSQL 16.\n")
     assert action.main({**runner_env, "MEMFALSIFY_MEMORY": "--strict"}) == 1
     assert outputs(runner_env)["attention"] == "1"
     report = Path(outputs(runner_env)["report"]).read_text()

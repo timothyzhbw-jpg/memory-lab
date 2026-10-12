@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import write_text_exact
+
 ROOT = Path(__file__).resolve().parent.parent
 TUTORIAL = ROOT / "docs" / "tutorial.md"
 TUTORIAL_ZH = ROOT / "docs" / "tutorial.zh-CN.md"
@@ -123,7 +125,7 @@ def test_tutorial_bash_blocks_run_in_order(tmp_path):
         parts.append(block.rstrip("\n"))
         parts.append(f'printf "%s\\n" "{MARKER}{index}=$?"')
     script = tmp_path / "run-tutorial.sh"
-    script.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    write_text_exact(script, "\n".join(parts) + "\n")
     proc = subprocess.run(
         ["bash", str(script)],
         cwd=checkout,

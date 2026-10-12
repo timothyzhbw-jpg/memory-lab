@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 from memfalsify import jev, llm
 from memfalsify.audit import MODEL_NOTE, audit
 from memfalsify.cli import app
@@ -70,9 +71,9 @@ def mock_jev(decide=jev_answer, requests=None, status=200, threshold=0.5):
 
 @pytest.fixture
 def invoices(tmp_path):
-    (tmp_path / "MEMORY.md").write_text(f"- {CLAIM}\n", encoding="utf-8")
+    write_text_exact(tmp_path / "MEMORY.md", f"- {CLAIM}\n")
     (tmp_path / "evidence").mkdir()
-    (tmp_path / "evidence" / "billing.md").write_text(f"# Billing\n\n{COUNTER}\n", encoding="utf-8")
+    write_text_exact(tmp_path / "evidence" / "billing.md", f"# Billing\n\n{COUNTER}\n")
     return tmp_path
 
 
@@ -207,8 +208,9 @@ def test_model_verifier_judges_paraphrases_lexical_skips(invoices):
 
 
 def test_max_judged_bounds_model_calls(invoices):
-    (invoices / "evidence" / "more.md").write_text(
-        "\n".join(f"Customers asked about invoice batch {n}." for n in range(5)) + "\n", encoding="utf-8")
+    write_text_exact(
+        invoices / "evidence" / "more.md",
+        "\n".join(f"Customers asked about invoice batch {n}." for n in range(5)) + "\n")
     requests = []
     audit(invoices / "MEMORY.md", invoices / "evidence", verifier=mock_jev(requests=requests),
           min_coverage=0.2, max_judged=2)
@@ -349,12 +351,13 @@ def scripted_client(**kwargs):
 @pytest.fixture
 def two_claims(tmp_path):
     """The CSV claim shares terms with three evidence sentences, the Redis claim with one."""
-    (tmp_path / "MEMORY.md").write_text(f"- {CSV_CLAIM}\n- {REDIS_CLAIM}\n", encoding="utf-8")
+    write_text_exact(tmp_path / "MEMORY.md", f"- {CSV_CLAIM}\n- {REDIS_CLAIM}\n")
     (tmp_path / "evidence").mkdir()
-    (tmp_path / "evidence" / "billing.md").write_text(
+    write_text_exact(
+        tmp_path / "evidence" / "billing.md",
         "Invoice export to CSV is not available to customers.\n\nCustomers ask about invoice export to CSV.\n\n"
-        "Invoice export to CSV is available to admins.\n", encoding="utf-8")
-    (tmp_path / "evidence" / "infra.md").write_text(f"{REDIS_CLAIM}\n", encoding="utf-8")
+        "Invoice export to CSV is available to admins.\n")
+    write_text_exact(tmp_path / "evidence" / "infra.md", f"{REDIS_CLAIM}\n")
     return tmp_path
 
 
