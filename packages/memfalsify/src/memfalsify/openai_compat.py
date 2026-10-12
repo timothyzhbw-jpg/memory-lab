@@ -52,14 +52,17 @@ logprobs, index; choices[1:]
 usage.prompt_tokens, usage.completion_tokens                   numeric-capped: whole numbers up to
                                                                ``MAX_TOKENS_PER_REQUEST``, else missing
 usage.total_tokens and the *_tokens_details                    dropped: never read
-id, object, created, model, system_fingerprint, service_tier   dropped: never read (the verifier name uses the
+id, object, created, model, system_fingerprint, service_tier,  dropped: never read (the verifier name uses the
+metadata, moderation; choices[0].message.role
                                                                configured model)
 HTTP status                                                    numeric: the transport's status code
 error.type, error.code, error.param                            token-filtered (``TOKEN``, ``shares_run``)
 error.message, error.detail, any other error field, a non-     dropped: fixed hint per status
 JSON error body
 Location of a 3xx answer                                       dropped: fixed redirect text
-connection, timeout and SDK exceptions                         dropped: fixed text per exception class
+connection, timeout and SDK exceptions                         dropped: fixed text per exception class; a
+                                                               response-validation error that carries a status
+                                                               is reported like an HTTP error above
 response headers (x-request-id, ...) in SDK debug logs         log-filtered: redacted, withheld if they still
 and anything else an SDK or HTTP log record holds              show the key once decoded (``redact_record``)
 =============================================================  =================================================

@@ -128,7 +128,7 @@ def test_the_import_check_catches_a_pin_that_is_too_low():
                        projects["memlab-core"][1])
     assert ("memcore.reading", "ReadLimitError") in missing and ("memcore.reading", "take") in missing
     missing = _missing("memlab-mcp", "memlab_mcp", Requirement("memfalsify>=0.4,<0.5"), projects["memfalsify"][1])
-    assert ("memfalsify", "openai_compat") in missing  # the openai verifier is new in memfalsify 0.4.1
+    assert ("memfalsify", "openai_compat") in missing  # the openai verifier is new in memfalsify 0.5.0
 
 
 # The dependency metadata of released versions, from their tag (see the file's _source).

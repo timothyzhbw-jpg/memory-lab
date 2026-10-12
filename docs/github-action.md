@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           persist-credentials: false
-      - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # v0.4.0
+      - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # v0.5.0
         with:
           exclude: |
             vendor/**
@@ -56,9 +56,9 @@ jobs:
 ```
 
 Pin the action to the full commit SHA of a release, with the release tag in a comment, for example
-`uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # v0.4.0`. The release tags are lightweight, so
-`git ls-remote https://github.com/timothyzhbw-jpg/memory-lab refs/tags/v0.4.0` prints that commit SHA.
-`@v0.4.0` and `@v0` (the latest 0.x release) also work, but the action runs inside your job and a tag or
+`uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # v0.5.0`. The release tags are lightweight, so
+`git ls-remote https://github.com/timothyzhbw-jpg/memory-lab refs/tags/v0.5.0` prints that commit SHA.
+`@v0.5.0` and `@v0` (the latest 0.x release) also work, but the action runs inside your job and a tag or
 branch can move under you; with a SHA you update when you choose to. Pin the other actions in your workflow
 the same way, as the examples here do: a tag such as `@v4` is a pointer its owner can move to other code. The
 action pins the actions it uses and installs its Python dependencies from a hash-checked lock file, so pinning
@@ -281,8 +281,7 @@ the repository.
           verifier: jev
 ```
 
-`verifier: openai` and its inputs came after release 0.4: the `v0.4.0` commit does not have them, so pin a
-later commit to use them. Name the model and, for a provider other than OpenAI, the preset. The key reaches the
+`verifier: openai` and its inputs are new in release 0.5: pin `v0.5.0` or later to use them. Name the model and, for a provider other than OpenAI, the preset. The key reaches the
 step as an environment variable; `api-key-env` names a different variable when yours is not the provider's
 default:
 

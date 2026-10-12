@@ -5,21 +5,22 @@ All notable changes to the packages in this repository, newest first. The format
 they are 0.x, a minor version may change behavior. Pins between the packages admit one minor version of
 each dependency, for example `memlab-core>=0.2,<0.3`.
 
-Release 0.4 contains:
+Release 0.5 contains:
 
 | Directory | Distribution | Version | Previous release |
 |---|---|---|---|
-| `packages/memcore` | `memlab-core` | 0.3.0 | 0.2.0 |
-| `packages/memfalsify` | `memfalsify` | 0.4.0 | 0.3.0 |
-| `packages/orgmemory` | `orgmemory` | 0.4.0 | 0.3.0 |
-| `packages/memlab-mcp` | `memlab-mcp` | 0.4.0 | 0.3.0 |
+| `packages/memcore` | `memlab-core` | 0.4.0 | 0.3.0 |
+| `packages/memfalsify` | `memfalsify` | 0.5.0 | 0.4.0 |
+| `packages/orgmemory` | `orgmemory` | 0.4.1 | 0.4.0 |
+| `packages/memlab-mcp` | `memlab-mcp` | 0.5.0 | 0.4.0 |
+| `packages/memlab-ui` | `memlab-ui` | 0.1.0 | none (new) |
 
-## Unreleased
+## Release 0.5
 
-Changes after release 0.4. The packages in the Release 0.4 section (memlab-core 0.3.0, memfalsify 0.4.0,
-orgmemory 0.4.0, memlab-mcp 0.4.0) are already released. Not yet released: memlab-core 0.4.0, memfalsify 0.4.1,
-orgmemory 0.4.1, memlab-mcp 0.4.1 and the new memlab-ui 0.1.0. The OpenAI-compatible verifier below is part
-of memfalsify 0.4.1 and memlab-mcp 0.4.1 too.
+Release 0.5 contains memlab-core 0.4.0, memfalsify 0.5.0, orgmemory 0.4.1, memlab-mcp 0.5.0 and the new
+memlab-ui 0.1.0. It was tagged `v0.5.0` on 2026-10-12; all changes since release 0.4 are collected here.
+Highlights: the OpenAI-compatible verifier (`--verifier openai`, for OpenAI, xAI Grok, DeepSeek, Google Gemini,
+a local Ollama server or any compatible endpoint) and `memlab-ui`, a local read-only web page.
 
 memlab-ui's resource limits are best-effort robustness against a project's own content, not a security
 boundary: they keep a very large or unusual project from tying up the page, and the page says when they cut
@@ -36,7 +37,7 @@ it short.
   reports and exports) are recognised by content and listed as left out, never quoted as evidence. It uses
   only the standard library's `http.server` and has no JavaScript. Every page reads in English or Simplified
   Chinese (`?lang=zh`, with a switch in the sidebar). Public API: `memlab_ui.create_server` (binds 127.0.0.1
-  without serving) and `__version__`. Requires memlab-core 0.4, memfalsify 0.4.1 and orgmemory 0.4.1. See
+  without serving) and `__version__`. Requires memlab-core 0.4, memfalsify 0.5.0 and orgmemory 0.4.1. See
   [docs/ui.md](docs/ui.md).
 
 ### Security
@@ -69,10 +70,10 @@ it short.
 
 - memlab-core 0.4.0 adds the internal read-limit API above (`read_limits`, `take`, `available`, `charge`,
   `read_head`, `ReadLimitError`, `read_input_bytes(max_bytes=...)`); its public `__all__` is unchanged.
-  memfalsify 0.4.1 and memlab-ui use it. memfalsify 0.4.1, orgmemory 0.4.1 and memlab-mcp 0.4.1 require
+  memfalsify 0.5.0 and memlab-ui use it. memfalsify 0.5.0, orgmemory 0.4.1 and memlab-mcp 0.5.0 require
   `memlab-core>=0.4,<0.5`: their dependency metadata changed, so their released 0.4.0 versions could not be
-  reused. memlab-ui requires `memfalsify>=0.4.1,<0.5` and `orgmemory>=0.4.1,<0.5`; memlab-mcp requires
-  `memfalsify>=0.4.1,<0.5`, the first memfalsify with the `openai` verifier it imports.
+  reused. memlab-ui requires `memfalsify>=0.5,<0.6` and `orgmemory>=0.4.1,<0.5`; memlab-mcp requires
+  `memfalsify>=0.5,<0.6`, the first memfalsify with the `openai` verifier it imports.
   `tests/test_packaging.py` checks that every package imports only names that the lowest version its pins
   admit of each package here defines (released versions' names are in `tests/released_exports.json`) and
   that a package whose dependencies differ from a released version's (`tests/released_metadata.json`, from
@@ -141,6 +142,11 @@ it short.
 - MemFalsify benchmark: `run.py --verifier openai` with the same options (the response format is recorded in
   the JSON settings), and a documented local Ollama run. No model results are recorded.
 - `scripts/setup-local.sh`, both CI install lines and `docs/local-setup*.md` include `-e packages/memlab-ui`.
+- Windows checks that run on any OS: `tests/test_windows_guard.py` flags text-mode writes without
+  `newline=""`, tests that build the MCP or UI server without the confinement marker, and f-strings only
+  Python 3.12 parses; `pytest --simulate-windows-newlines` writes CRLF like Windows text mode, and a Linux CI
+  job runs the suite with it. Test fixtures are written as exact bytes (`write_text_exact`,
+  `scripts/exact_writes.py`). AGENTS.md has the Windows rules.
 
 ## Release 0.4
 
@@ -573,9 +579,9 @@ a symlink out of the root is never read.
 
 ## memlab-core
 
-### 0.4.0 - Unreleased
+### 0.4.0 - 2026-10-12
 
-Changes are collected in the [Unreleased section](#unreleased): the internal read-limit API.
+Changes are collected in the [release 0.5 section](#release-05): the internal read-limit API.
 
 ### 0.3.0 - 2026-10-11
 
@@ -609,9 +615,9 @@ Changes are collected in the [release 0.4 section](#release-04).
 
 ## memfalsify
 
-### 0.4.1 - Unreleased
+### 0.5.0 - 2026-10-12
 
-Changes are collected in the [Unreleased section](#unreleased): the 2 MB evidence limit holds while reading, and the scan, the parser and the diff draw from memlab-core's read limits. Requires memlab-core 0.4.
+Changes are collected in the [release 0.5 section](#release-05): the OpenAI-compatible verifier (`--verifier openai`, `--openai-response-format`), the 2 MB evidence limit holds while reading, and the scan, the parser and the diff draw from memlab-core's read limits. Requires memlab-core 0.4.
 
 ### 0.4.0 - 2026-10-11
 
@@ -704,9 +710,9 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
-### 0.4.1 - Unreleased
+### 0.4.1 - 2026-10-12
 
-Requires memlab-core 0.4 (`>=0.4,<0.5`); no other change. See the [Unreleased section](#unreleased).
+Requires memlab-core 0.4 (`>=0.4,<0.5`); no other change. See the [release 0.5 section](#release-05).
 
 ### 0.4.0 - 2026-10-11
 
@@ -752,9 +758,9 @@ Changes are collected in the [release 0.4 section](#release-04).
 
 ## memlab-mcp
 
-### 0.4.1 - Unreleased
+### 0.5.0 - 2026-10-12
 
-Requires memlab-core 0.4 (`>=0.4,<0.5`); no other change. See the [Unreleased section](#unreleased).
+The `openai` verifier with server-side `--openai-model`, `--openai-provider`, `--openai-base-url`, `--openai-api-key-env` and `--openai-response-format` options (tool arguments cannot change them). Requires memlab-core 0.4 (`>=0.4,<0.5`) and memfalsify 0.5 (`>=0.5,<0.6`). See the [release 0.5 section](#release-05).
 
 ### 0.4.0 - 2026-10-11
 
@@ -803,9 +809,9 @@ Changes are collected in the [release 0.4 section](#release-04).
 
 ## memlab-ui
 
-### 0.1.0 - Unreleased
+### 0.1.0 - 2026-10-12
 
-First version, not yet released. Changes are collected in the [Unreleased section](#unreleased).
+First release. Changes are collected in the [release 0.5 section](#release-05).
 
 ## Repository
 
