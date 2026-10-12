@@ -23,17 +23,46 @@ Transport and secrets:
   from the environment (``trust_env=False``). Certificates are verified the way the SDK and httpx2 ship it:
   through the platform's trust store (``truststore``); on Linux, OpenSSL honours ``SSL_CERT_FILE`` and
   ``SSL_CERT_DIR``, which are the user's own configuration.
-- The key is read from the environment variable the caller names, never taken as an argument, and must consist
-  of the characters keys use (``KEY_CHARS``). The provider's free text is never shown: an error is reported as
-  its HTTP status, the error's type, code and param when each is a plain token (``TOKEN``) that shares no run
-  of ``SHARED_RUN`` characters with the key, and a fixed hint for the status. The model's rationale is the
-  only free text kept: the key in it is redacted (``secret_forms``), long unbroken runs are elided
-  (``LONG_RUN``), and it is withheld if it still shows the key once decoded (``shows_secret``). No
-  ``VerifierError`` keeps the SDK's exception as its cause or context, and the log records of the SDK and the
-  HTTP stack (``OPENAI_LOG=debug``) are cleaned the same way as they are made (``guard_logs``).
+- The key is read from the environment variable the caller names, never taken as an argument, and must be at
+  least ``MIN_KEY_LENGTH`` characters of those keys use (``KEY_CHARS``). The provider's free text is never
+  shown: an error is reported as its HTTP status, the error's type, code and param when each is a plain token
+  (``TOKEN``) that shares no run of ``SHARED_RUN`` characters with the key, and a fixed hint for the status.
+  The model's rationale is the only free text kept: the key in it is redacted (``secret_forms``), a run that
+  shows part of the key once decoded is elided (``elide_secret_runs``), and the rationale is withheld if it
+  still shows the key once decoded (``shows_secret``). Token counts above ``MAX_TOKENS_PER_REQUEST`` count as
+  missing. No ``VerifierError`` keeps the SDK's exception as its cause or context, and the log records of the
+  SDK and the HTTP stack (``OPENAI_LOG=debug``) are cleaned as they are made (``guard_logs``).
 - Only the arguments configure the client. The SDK would otherwise read ``OPENAI_BASE_URL``,
   ``OPENAI_ORG_ID``, ``OPENAI_PROJECT_ID`` and ``OPENAI_CUSTOM_HEADERS`` from the environment and send what they
   hold to whatever endpoint is configured; ``isolated_headers`` removes those headers from every request.
+
+What of a provider's response can reach output (reports in every format, stderr diagnostics, MCP results, the
+Action's summary, log and outputs, SDK log records), and how:
+
+=============================================================  =================================================
+Response field                                                 Treatment
+=============================================================  =================================================
+choices[0].message.content: the verdict's ``relation``         fixed text: one of ``RELATION_CRITERIA``
+choices[0].message.content: the verdict's ``rationale``        rationale-filtered (``OpenAICompatVerifier._rationale``)
+choices[0].message.content when it is not a verdict            dropped: fixed no-verdict reason
+choices[0].message.refusal                                     dropped: fixed "the model refused"
+choices[0].finish_reason                                       dropped: compared with "stop"; fixed reason
+choices[0] tool_calls, function_call, audio, annotations,      dropped: never read
+logprobs, index; choices[1:]
+usage.prompt_tokens, usage.completion_tokens                   numeric-capped: whole numbers up to
+                                                               ``MAX_TOKENS_PER_REQUEST``, else missing
+usage.total_tokens and the *_tokens_details                    dropped: never read
+id, object, created, model, system_fingerprint, service_tier   dropped: never read (the verifier name uses the
+                                                               configured model)
+HTTP status                                                    numeric: the transport's status code
+error.type, error.code, error.param                            token-filtered (``TOKEN``, ``shares_run``)
+error.message, error.detail, any other error field, a non-     dropped: fixed hint per status
+JSON error body
+Location of a 3xx answer                                       dropped: fixed redirect text
+connection, timeout and SDK exceptions                         dropped: fixed text per exception class
+response headers (x-request-id, ...) in SDK debug logs         log-filtered: redacted, withheld if they still
+and anything else an SDK or HTTP log record holds              show the key once decoded (``redact_record``)
+=============================================================  =================================================
 
 Structured output: requests ask for the verdict in the configured ``response_format`` (``FORMATS``): a strict
 JSON schema, any JSON object, or nothing (the instructions ask for the same JSON object every time). There is no
@@ -112,6 +141,11 @@ REDACTED = "[redacted]"
 # The characters real API keys use (OpenAI, xAI, DeepSeek, Gemini, base64 and JWT tokens). A key with others
 # (a backslash or a quote, which a JSON or Python repr would escape) is refused.
 KEY_CHARS = re.compile(r"[A-Za-z0-9._~+/=-]+")
+# Real keys are longer; with this floor, no accepted key fits under MAX_TOKENS_PER_REQUEST as a number.
+MIN_KEY_LENGTH = 16
+# A token count above this, for one request, is not a count: it counts as missing (an all-digit key would
+# otherwise reach the report as a number).
+MAX_TOKENS_PER_REQUEST = 10_000_000
 # An error's type, code or param is shown only when it is a plain token like this, and shares no run of
 # ``SHARED_RUN`` characters with the key (case-insensitively); the message never is.
 TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,40}")
@@ -126,9 +160,9 @@ MAX_RETRIES = 2
 FINISHED = "stop"
 WITHHELD_RATIONALE = "the rationale was withheld because it contained the API key"
 LOG_WITHHELD = "[withheld: contained the API key]"
-# In a rationale, every run of this many non-whitespace characters or more is elided: a key is one long
-# unbroken string in any encoding; natural language loses at most a long path or URL.
-LONG_RUN = re.compile(r"\S{24,}")
+# In a rationale, a run of these characters (those of a key, and those its once-encoded forms add) that shows
+# part of the key once decoded is elided; every other text, any script and any length, is kept.
+CANDIDATE_RUN = re.compile(r"[A-Za-z0-9._~+/=%&#;\\-]{8,}")
 ELIDED = "[\u2026]"
 _ESCAPED = re.compile(r"\\(?:u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|(/))")
 
@@ -266,6 +300,19 @@ def shows_secret(text: str, *secrets: str | None) -> bool:
     """Whether ``text``, as is or decoded once (``decoded_once``), contains a secret (case-sensitively)."""
     views = decoded_once(text)
     return any(secret in view for secret in secrets if secret for view in views)
+
+
+def elide_secret_runs(text: str, secret: str | None) -> str:
+    """``text`` with each ``CANDIDATE_RUN`` that shares ``SHARED_RUN`` characters with ``secret`` in one of its
+    ``decoded_once`` views (case-insensitively) replaced by ``[…]``; nothing else changes."""
+    if not secret:
+        return text
+
+    def one(match: re.Match[str]) -> str:
+        run = match.group(0)
+        return ELIDED if any(shares_run(view, secret) for view in decoded_once(run)) else run
+
+    return CANDIDATE_RUN.sub(one, text)
 
 
 def shares_run(value: str, secret: str | None, run: int = SHARED_RUN) -> bool:
@@ -455,7 +502,10 @@ def _get(obj: Any, name: str) -> Any:
 
 
 def _count(value: Any) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+    """A token count, or None: anything but a whole number from 0 to ``MAX_TOKENS_PER_REQUEST`` is not one."""
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_TOKENS_PER_REQUEST:
+        return value
+    return None
 
 
 def _usage(usage: Any) -> Any:
@@ -631,10 +681,10 @@ class OpenAICompatVerifier:
         return Judgment(relation=verdict.relation, rationale=self._rationale(verdict.rationale), verifier=self.name)
 
     def _rationale(self, text: str) -> str:
-        """The model's rationale, the only free text kept: the key redacted (``secret_forms``), every run of 24
-        or more non-whitespace characters elided (a key is one, in any encoding), and the whole rationale
-        withheld if it still shows the key once decoded (``shows_secret``); then one inert line."""
-        cleaned = LONG_RUN.sub(ELIDED, redact(text, self._secret))
+        """The model's rationale, the only free text kept: the key redacted (``secret_forms``), each run that
+        shows part of the key once decoded elided (``elide_secret_runs``), and the whole rationale withheld if
+        it still shows the key once decoded (``shows_secret``); then one inert line."""
+        cleaned = elide_secret_runs(redact(text, self._secret), self._secret)
         if shows_secret(cleaned, self._secret):
             cleaned = WITHHELD_RATIONALE
         return printable(cleaned)
@@ -658,4 +708,7 @@ class OpenAICompatVerifier:
         if not KEY_CHARS.fullmatch(key):
             raise VerifierError(f"{self.name}: the API key holds characters API keys do not use; only letters, "
                                 "digits and . _ ~ + / = - are accepted")
+        if len(key) < MIN_KEY_LENGTH:
+            raise VerifierError(f"{self.name}: the API key is shorter than {MIN_KEY_LENGTH} characters, which no "
+                                "real key is")
         return key

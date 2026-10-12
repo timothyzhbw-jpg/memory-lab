@@ -10,6 +10,7 @@ import threading
 import time
 import traceback
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from typing import get_args
 from urllib.parse import quote
@@ -284,7 +285,18 @@ def test_keys_with_characters_keys_do_not_use_are_refused(monkeypatch, key):
     assert caught.value.__cause__ is None and caught.value.__context__ is None
 
 
-@pytest.mark.parametrize("key", ["sk-abc123def456ghi789jkl", KEY, "AIzaSyA-b_c0123456789xyz",
+@pytest.mark.parametrize("key", ["sk-short", "123456789012345", "a" * 15])
+def test_keys_shorter_than_16_characters_are_refused(monkeypatch, key):
+    pytest.importorskip("openai")
+    monkeypatch.setenv("TEAM_KEY", key)
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    assert str(caught.value) == ("openai:gpt-model@api.openai.com: the API key is shorter than 16 characters, which "
+                                 "no real key is")
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+
+
+@pytest.mark.parametrize("key", ["sk-abc123def456ghi789jkl", KEY, "AIzaSyA-b_c0123456789xyz", "1234567890123456",
                                  "eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl"])
 def test_real_key_shapes_are_accepted(monkeypatch, key):
     pytest.importorskip("openai")
@@ -478,6 +490,21 @@ def test_malformed_completions_are_no_verdict(mock_sdk, team_key, body):
     assert judge.usage()[0].requests == 1
 
 
+@pytest.mark.parametrize("prompt, completion_tokens, counted", [
+    (10_000_000, 9, (10_000_000, 9)),
+    (10_000_001, 9, (0, 9)),
+    (12345678901234567890, 12345678901234567890, (0, 0)),
+    (-5, 2**63, (0, 0)),
+])
+def test_token_counts_are_capped_per_request(mock_sdk, team_key, prompt, completion_tokens, counted):
+    body = {**completion(), "usage": {"prompt_tokens": prompt, "completion_tokens": completion_tokens}}
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=body)
+    judge = OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    assert judge.judge(CLAIM, COUNTER).relation == "contradicts"
+    [stats] = judge.usage()
+    assert (stats.requests, stats.input_tokens, stats.output_tokens) == (1, *counted)
+
+
 def test_malformed_usage_counts_as_missing(mock_sdk, team_key):
     body = {**completion(), "usage": {"prompt_tokens": "lots", "completion_tokens": True, "total_tokens": []}}
     mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=body)
@@ -505,39 +532,54 @@ def test_the_key_in_a_rationale_is_redacted(team_key):
     assert judgment.rationale == "the passage quotes [redacted] and [redacted]"
 
 
-def test_a_rationale_sharing_letters_with_the_key_is_kept(monkeypatch):
-    monkeypatch.setenv("TEAM_KEY", "sk-xxcustomersxx")
-    rationale = "the customers can export invoices to CSV"
-    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", rationale)),
-                     api_key_env="TEAM_KEY")
+@pytest.mark.parametrize("rationale", [
+    "The passage says CSV export is not available to customers.",
+    "docs/billing.md says the limit is 60 requests per minute, not 100.",
+    "See /usr/local/share/memfalsify/evidence/billing-notes.md for the decision.",
+    "https://wiki.example.test/decisions/2026/billing says otherwise.",
+    # Codex's examples: a Chinese sentence without spaces, and a decisive JSON flag.
+    "\u6bb5\u843d\u5199\u660e\u5ba2\u6237\u4e0d\u80fd\u628a\u53d1\u7968\u5bfc\u51fa\u4e3aCSV\u683c\u5f0f"
+    "\uff0c\u6240\u4ee5\u8fd9\u6761\u8bb0\u5fc6\u88ab\u53cd\u9a73\u4e86\u3002",
+    'The config sets {"customer_invoice_export_enabled":false}, so export is off.',
+])
+def test_a_rationale_without_the_key_is_kept_whole(team_key, rationale):
+    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", rationale)), api_key_env="TEAM_KEY")
     assert judge.judge(CLAIM, CLAIM).rationale == rationale
 
 
-SHORT_KEY = "abcd-efgh-ij"  # short enough that an encoded copy is not a long run
+def test_a_chinese_rationale_loses_only_the_key_run(team_key):
+    rationale = ("\u6bb5\u843d\u5f15\u7528\u4e86sk%2btest%2F0123456789%3dabcdefSECRET\u8fd9\u4e2a\u4ee4\u724c"
+                 "\uff0c\u5ba2\u6237\u4e0d\u80fd\u5bfc\u51faCSV\u3002")
+    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", rationale)),
+                     api_key_env="TEAM_KEY")
+    assert judge.judge(CLAIM, CLAIM).rationale == rationale.replace("sk%2btest%2F0123456789%3dabcdefSECRET",
+                                                                    "[\u2026]")
 
 
-@pytest.mark.parametrize("encoded", ["abcd%2defgh-ij", "abcd%2Defgh%2dij", "%61bcd-efgh-ij", "abcd\\u002defgh-ij",
-                                     "abcd&#45;efgh-ij", "abcd\\x2defgh-ij"])
-def test_a_rationale_showing_the_key_once_decoded_is_withheld(monkeypatch, encoded):
-    monkeypatch.setenv("SHORT_KEY", SHORT_KEY)
-    assert len(encoded) < 24
-    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", f"the token is {encoded}")),
-                     api_key_env="SHORT_KEY")
-    assert judge.judge(CLAIM, CLAIM).rationale == openai_compat.WITHHELD_RATIONALE
-
-
-@pytest.mark.parametrize("rationale, shown", [
-    ("The passage says CSV export is not available to customers.",
-     "The passage says CSV export is not available to customers."),
-    ("docs/billing.md says the limit is 60 requests per minute, not 100.",
-     "docs/billing.md says the limit is 60 requests per minute, not 100."),
-    ("See /usr/local/share/memfalsify/evidence/billing-notes.md for the decision.",
-     "See [\u2026] for the decision."),
-    ("https://wiki.example.test/decisions/2026/billing says otherwise.", "[\u2026] says otherwise."),
-])
-def test_long_unbroken_strings_in_a_rationale_are_elided(team_key, rationale, shown):
+@pytest.mark.parametrize("encoded", ["sk%2btest%2F0123456789%3dabcdefSECRET", "sk+test%2f0123456789=abcdefSECRET",
+                                     "%73k+test/0123456789=abcdefSECRET", "sk+test\\u002f0123456789=abcdefSECRET",
+                                     "sk+test&#47;0123456789&#61;abcdefSECRET", "sk+test\\x2f0123456789=abcdefSECRET",
+                                     "sk%2Btest%2F0123", "0123456789%3dabcd"])
+def test_a_run_showing_part_of_the_key_once_decoded_is_elided(team_key, encoded):
+    rationale = f"the passage quotes {encoded} as the token"
     judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", rationale)), api_key_env="TEAM_KEY")
-    assert judge.judge(CLAIM, CLAIM).rationale == shown
+    assert judge.judge(CLAIM, CLAIM).rationale == "the passage quotes [\u2026] as the token"
+
+
+def test_a_word_shared_with_a_pathological_key_is_the_only_casualty(monkeypatch):
+    monkeypatch.setenv("TEAM_KEY", "sk-xxcustomersxx")  # a key holding an 8-letter word
+    rationale = "the customers can export invoices to CSV"
+    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", rationale)),
+                     api_key_env="TEAM_KEY")
+    assert judge.judge(CLAIM, CLAIM).rationale == "the [\u2026] can export invoices to CSV"
+
+
+def test_the_whole_text_check_withholds_what_the_run_elision_misses(team_key, monkeypatch):
+    monkeypatch.setattr(openai_compat, "elide_secret_runs", lambda text, secret: text)  # a run rule that missed it
+    mixed = "sk%2btest%2F0123456789%3dabcdefSECRET"  # not one of secret_forms, so the literal redaction misses it
+    judge = verifier(fake_client(decide=lambda claim, passage: verdict("supports", f"token {mixed}")),
+                     api_key_env="TEAM_KEY")
+    assert judge.judge(CLAIM, CLAIM).rationale == openai_compat.WITHHELD_RATIONALE
 
 
 # --- provider errors: status, plain-token fields and a fixed hint -----------------------------------
@@ -1068,3 +1110,170 @@ def test_once_encoded_keys_in_log_exceptions_and_stacks_are_withheld(mock_sdk, t
     assert [r.getMessage() for r in records] == ["plain message", "with a stack"]
     assert records[0].exc_text == openai_compat.LOG_WITHHELD and records[1].stack_info == openai_compat.LOG_WITHHELD
     assert_hidden(caplog.text)
+
+
+# --- every response field at once: the key reaches no output ------------------------------------------
+
+DIGIT_KEY = "12345678901234567890"  # all digits: what a token count could carry
+
+
+def key_forms(key):
+    """The key as is and in every once-encoded form a provider could send it."""
+    return {"literal": key,
+            "percent": quote(key, safe=""),
+            "mixed-case percent": "".join(f"%{ord(ch):02x}" if n % 2 else f"%{ord(ch):02X}"
+                                          for n, ch in enumerate(key)),
+            "unicode escapes": "".join(f"\\u{ord(ch):04x}" for ch in key),
+            "HTML references": "".join(f"&#{ord(ch)};" for ch in key),
+            "escaped slash": key.replace("/", "\\/")}
+
+
+def assert_no_key(text, key):
+    assert not openai_compat.shows_secret(text, key), text[:300]
+    for name, form in key_forms(key).items():
+        assert form not in text, name
+
+
+def poisoned(key, index):
+    """A response with the key, literally and once-encoded, in every field a provider controls. Requests rotate
+    through a verdict (with the forms in its rationale), a non-stop finish_reason, a refusal and a non-verdict."""
+    forms = list(key_forms(key).values())
+    every = " ".join(forms)
+    number = int(key) if key.isdigit() else every
+    kind = index % 4
+    content = {0: verdict("contradicts", f"the passage cites {every} here"), 1: verdict("supports", "-"),
+               2: None, 3: every}[kind]
+    first = {"index": 0, "finish_reason": forms[index % len(forms)] if kind == 1 else "stop",
+             "message": {"role": "assistant", "content": content, "refusal": every if kind == 2 else None,
+                         "tool_calls": [{"id": every, "type": "function",
+                                         "function": {"name": every, "arguments": every}}],
+                         "annotations": [{"type": every}], "audio": {"id": every, "transcript": every}},
+             "logprobs": {"content": [{"token": every, "logprob": 0, "bytes": [], "top_logprobs": []}]}}
+    body = {"id": every, "object": "chat.completion", "created": number if key.isdigit() else 0, "model": every,
+            "system_fingerprint": every, "service_tier": every,
+            "choices": [first, {"index": 1, "finish_reason": every, "message": {"content": every}}],
+            "usage": {"prompt_tokens": number, "completion_tokens": number, "total_tokens": number,
+                      "prompt_tokens_details": {"cached_tokens": number},
+                      "completion_tokens_details": {"reasoning_tokens": number}}}
+    headers = {"x-request-id": f"req-{forms[index % len(forms)]}", "openai-model": forms[0],
+               "x-ratelimit-remaining-requests": forms[1], "openai-organization": forms[2]}
+    return body, headers
+
+
+def poisoned_error(key):
+    every = " ".join(key_forms(key).values())
+    return {"error": {"message": every, "type": key, "code": key_forms(key)["percent"], "param": key[:20],
+                      "detail": every, "metadata": {"raw": every}}}
+
+
+@pytest.fixture(params=[KEY, DIGIT_KEY], ids=["mixed", "digits"])
+def poison(request, mock_sdk, monkeypatch, caplog):
+    """The real SDK answering with ``poisoned`` responses, the key in TEAM_KEY, and the SDK's debug log on."""
+    from openai._utils._logs import setup_logging
+    key = request.param
+    monkeypatch.setenv("TEAM_KEY", key)
+    monkeypatch.setenv("OPENAI_LOG", "debug")
+    sdk_logger = logging.getLogger("openai")
+    monkeypatch.setattr(sdk_logger, "level", sdk_logger.level)
+    setup_logging()
+    caplog.set_level(logging.DEBUG)
+
+    def handle(request):
+        body, headers = poisoned(key, len(mock_sdk.seen) - 1)
+        return mock_sdk.httpx2.Response(200, json=body, headers=headers)
+
+    mock_sdk.state["handle"] = handle
+    return SimpleNamespace(key=key, sdk=mock_sdk, caplog=caplog)
+
+
+AUDIT = ["--verifier", "openai", "--openai-model", "gpt-model", "--api-key-env", "TEAM_KEY"]
+
+
+@pytest.mark.parametrize("fmt", ["json", "markdown", "html"])
+def test_the_key_in_every_response_field_reaches_no_report_diagnostic_or_log(two_claims, poison, fmt):
+    result = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"), *AUDIT,
+                                 "--format", fmt])
+    assert result.exit_code == 0, result.output
+    assert len(poison.sdk.seen) == 4
+    for text in (result.stdout, result.stderr, poison.caplog.text):
+        assert_no_key(text, poison.key)
+    if fmt == "json":
+        report = json.loads(result.stdout)
+        assert report["verifier_stats"][0]["input_tokens"] == report["verifier_stats"][0]["output_tokens"] == 0
+        rationales = {e["rationale"] for f in report["findings"] for e in f["evidence"]}
+        [cited] = [r for r in rationales if r.startswith("the passage cites ")]
+        words = cited.removeprefix("the passage cites ").removesuffix(" here").split()
+        assert len(words) == len(key_forms(poison.key)) and set(words) <= {"[redacted]", "[\u2026]"}
+
+
+def test_the_key_in_every_error_field_reaches_no_diagnostic_or_log(two_claims, poison):
+    poison.sdk.state["handle"] = lambda request: poison.sdk.httpx2.Response(
+        401, json=poisoned_error(poison.key), headers=poisoned(poison.key, 0)[1])
+    result = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"), *AUDIT])
+    assert result.exit_code == 2
+    assert result.output == ("error: openai:gpt-model@api.openai.com: HTTP 401: the key in the environment variable "
+                             "you named was refused\n")
+    for text in (result.output, poison.caplog.text):
+        assert_no_key(text, poison.key)
+
+
+@pytest.mark.skipif(importlib.util.find_spec("mcp") is None, reason="the MCP SDK is not installed")
+def test_the_key_in_every_response_field_reaches_no_mcp_result(two_claims, poison):
+    import anyio
+    from mcp import Client
+
+    from memcore.reading import confinement_supported
+    from memlab_mcp.server import create_server
+    if not confinement_supported():
+        pytest.skip("the MCP server needs POSIX confined reads")
+    server = create_server(two_claims, allow_model_verifiers=True, openai_model="gpt-model",
+                           openai_api_key_env="TEAM_KEY")
+
+    async def main():
+        async with Client(server, mode="legacy") as client:
+            return [await client.call_tool("memfalsify_audit", {"memory_file": "MEMORY.md", "evidence_dir": "evidence",
+                                                                "verifier": "openai", "format": fmt})
+                    for fmt in ("json", "markdown")]
+
+    results = anyio.run(main)
+    assert not any(r.is_error for r in results)
+    for result in results:
+        assert_no_key(result.content[0].text, poison.key)
+    assert_no_key(poison.caplog.text, poison.key)
+
+
+def test_the_key_in_every_response_field_reaches_no_action_output(two_claims, poison, monkeypatch, capsys, tmp_path):
+    spec = importlib.util.spec_from_file_location("memfalsify_action_poison",
+                                                  Path(__file__).resolve().parent.parent / "action" /
+                                                  "memfalsify_action.py")
+    action = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(action)
+    runner_dir = tmp_path / "runner"
+    runner_dir.mkdir()
+    env = {"RUNNER_TEMP": str(runner_dir), "GITHUB_STEP_SUMMARY": str(runner_dir / "summary.md"),
+           "GITHUB_OUTPUT": str(runner_dir / "output"), "MEMFALSIFY_MEMORY": "MEMORY.md",
+           "MEMFALSIFY_EVIDENCE": "evidence", "MEMFALSIFY_STRICT": "false", "MEMFALSIFY_VERIFIER": "openai",
+           "MEMFALSIFY_OPENAI_MODEL": "gpt-model", "MEMFALSIFY_API_KEY_ENV": "TEAM_KEY"}
+    for name in ("GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT"):
+        Path(env[name]).write_text("", encoding="utf-8")
+    monkeypatch.chdir(two_claims)
+    assert action.main(env) == 0
+    outputs = Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
+    report = Path(dict(line.split("=", 1) for line in outputs.splitlines())["report"]).read_text(encoding="utf-8")
+    texts = [Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8"), outputs, report, capsys.readouterr().out,
+             poison.caplog.text] + [p.read_text(encoding="utf-8") for p in runner_dir.rglob("*.json")]
+    for text in texts:
+        assert_no_key(text, poison.key)
+
+
+@pytest.mark.parametrize("fmt", ["json", "markdown", "html"])
+def test_a_token_count_holding_an_all_digit_key_is_not_reported(invoices, mock_sdk, monkeypatch, fmt):
+    """One request, so the report's totals would be the count itself."""
+    monkeypatch.setenv("TEAM_KEY", DIGIT_KEY)
+    body, headers = poisoned(DIGIT_KEY, 0)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=body, headers=headers)
+    result = runner.invoke(app, ["audit", str(invoices / "MEMORY.md"), "-e", str(invoices / "evidence"), *AUDIT,
+                                 "--format", fmt])
+    assert result.exit_code == 0, result.output
+    assert len(mock_sdk.seen) == 1
+    assert_no_key(result.output, DIGIT_KEY)
