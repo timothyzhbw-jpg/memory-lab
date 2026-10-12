@@ -15,7 +15,7 @@ memfalsify="packages/memfalsify[all]"
 
 [ -d .venv ] || "$PYTHON" -m venv .venv
 .venv/bin/python -m pip install --quiet --upgrade pip
-.venv/bin/python -m pip install --quiet -e packages/memcore -e "$memfalsify" -e packages/orgmemory -e packages/memlab-mcp -e packages/memlab-ui pytest
+.venv/bin/python -m pip install --quiet -e packages/memcore -e "$memfalsify" -e packages/orgmemory -e packages/memlab-mcp -e packages/memlab-ui pytest "tomli; python_version < '3.11'"
 .venv/bin/python -m pytest -q
 
 cat <<'NEXT'

@@ -1,4 +1,5 @@
 """Confined traversal regressions, including the independent merge review cases."""
+import hashlib
 import io
 import os
 from contextlib import contextmanager, nullcontext
@@ -6,7 +7,7 @@ from contextlib import contextmanager, nullcontext
 import pytest
 
 from conftest import requires_confinement
-from memcore import reading
+from memcore import SidecarError, reading
 from memcore.jsonl import read_jsonl
 from memcore.reading import (ReadLimitError, confined_reads, open_text, read_file_bytes, read_file_text,
                              read_input_bytes, read_limits, walk_files)
@@ -340,7 +341,7 @@ def test_read_limits_bound_files_total_bytes_and_directories(tmp_path):
         with pytest.raises(ReadLimitError):
             with open_text(tmp_path / "big.md"):
                 pass
-    assert not limits.truncated
+    assert limits.truncated  # the page's own per-file limit refused it: its view is incomplete
     with confined_reads(tmp_path), read_limits(total_bytes=150) as limits:
         assert len(read_file_bytes(tmp_path / "a" / "notes.md")) == 99
         with pytest.raises(ReadLimitError) as refused:
@@ -506,3 +507,102 @@ def test_deep_trees_walk_without_recursion_and_stop_at_the_depth_limit(tmp_path,
     finally:
         sys.setrecursionlimit(old)
     assert len(walked) == 65 and limits.exhausted == {"depth"}
+
+
+# --- round 4: consumed bytes, media hashing, os.walk entries, the pinned-handle fallback ----------------------
+
+class _LyingSize:
+    """An fstat result whose size is what it was before the file grew."""
+
+    def __init__(self, result, size):
+        self.result, self.size = result, size
+
+    def __getattr__(self, name):
+        return self.size if name == "st_size" else getattr(self.result, name)
+
+
+@requires_confinement
+def test_refused_reads_are_charged_and_mark_the_view_incomplete(tmp_path, monkeypatch):
+    path = tmp_path / "grows.jsonl"
+    path.write_text("".join('{"n": %d}\n' % i for i in range(200)), encoding="utf-8")
+    real_fstat = os.fstat
+    monkeypatch.setattr(reading.os, "fstat", lambda fd: _LyingSize(real_fstat(fd), 8))
+    with confined_reads(tmp_path), read_limits(file_bytes=100) as limits:
+        with pytest.raises(ReadLimitError):
+            list(read_jsonl(path))
+    assert limits.truncated and 100 < limits.bytes_read <= 101  # what was consumed is charged
+    with confined_reads(tmp_path), read_limits(file_bytes=10) as limits:
+        with pytest.raises(ReadLimitError):
+            read_file_bytes(path)
+    assert limits.truncated and limits.bytes_read == 11
+
+
+@requires_confinement
+def test_a_callers_own_limit_is_a_skip_not_an_incomplete_view(tmp_path):
+    (tmp_path / "big.md").write_bytes(b"x" * 50)
+    with confined_reads(tmp_path), read_limits(file_bytes=1000, total_bytes=1000) as limits:
+        with pytest.raises(ReadLimitError):
+            read_input_bytes(tmp_path, tmp_path / "big.md", max_bytes=10)
+    assert not limits.truncated
+
+
+def test_the_pinned_handle_fallback_enforces_and_charges_the_limits(tmp_path, monkeypatch):
+    """read_input_bytes without O_NOFOLLOW (Windows) reads from a pinned handle; exercise it everywhere."""
+    monkeypatch.setattr(reading, "confinement_supported", lambda: False)
+    (tmp_path / "small.md").write_bytes(b"x" * 10)
+    (tmp_path / "large.md").write_bytes(b"x" * 11)
+    assert read_input_bytes(tmp_path, tmp_path / "small.md", max_bytes=10) == b"x" * 10
+    with pytest.raises(ReadLimitError):
+        read_input_bytes(tmp_path, tmp_path / "large.md", max_bytes=10)
+    (tmp_path / "grows.md").write_bytes(b"x" * 1000)
+    real_fstat = os.fstat
+    monkeypatch.setattr(reading.os, "fstat", lambda fd: _LyingSize(real_fstat(fd), 5))
+    with read_limits(total_bytes=10_000) as limits, pytest.raises(ReadLimitError):
+        read_input_bytes(tmp_path, tmp_path / "grows.md", max_bytes=10)
+    assert limits.bytes_read == 11 and not limits.truncated  # max_bytes is the caller's own limit
+    monkeypatch.setattr(reading.os, "fstat", real_fstat)
+    with read_limits(total_bytes=15) as limits:
+        assert read_input_bytes(tmp_path, tmp_path / "small.md") == b"x" * 10
+        with pytest.raises(ReadLimitError) as refused:
+            read_input_bytes(tmp_path, tmp_path / "large.md")
+    assert refused.value.budget and limits.truncated
+
+
+def test_walk_entries_are_counted_without_confinement_too(tmp_path):
+    for i in range(6):
+        (tmp_path / f"f{i}.md").write_text("x", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    with read_limits(entries=4) as limits:
+        _, dirs, files = list(walk_files(tmp_path))[0]
+    assert len(dirs) + len(files) == 4 and dirs == ["sub"] and limits.exhausted == {"entries"}
+
+
+@requires_confinement
+def test_media_hashing_obeys_the_page_limits(tmp_path):
+    from memcore import load_sidecar
+
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    media = b"\x00" * 5000
+    (evidence / "clip.mp4").write_bytes(media)
+    digest = hashlib.sha256(media).hexdigest()
+    sidecar = (f"WEBVTT\n\nNOTE source_sha256: {digest}\n\n00:00.000 --> 00:02.000\n"
+               "The public API rate limit is 60 requests per minute.\n")
+    (evidence / "clip.mp4.vtt").write_text(sidecar, encoding="utf-8")
+    assert load_sidecar(evidence, "clip.mp4.vtt", sidecar).media_sha256 == digest  # unlimited outside a page
+    with confined_reads(tmp_path), read_limits(file_bytes=1000) as limits:
+        with pytest.raises(SidecarError, match="over this page's read limit"):
+            load_sidecar(evidence, "clip.mp4.vtt", sidecar)
+    assert limits.truncated
+    with confined_reads(tmp_path), read_limits(file_bytes=100_000, total_bytes=3000) as limits:
+        passages, skipped = scan(evidence)
+    assert not passages and any("over this page's read limit" in s.reason for s in skipped)
+    with confined_reads(tmp_path), read_limits(file_bytes=100_000, total_bytes=100_000) as limits:
+        passages, _ = scan(evidence)
+    assert len(passages) == 1 and limits.bytes_read >= 5000  # the hash is charged
+
+
+def test_an_exhausted_budget_that_skips_something_marks_the_view_incomplete():
+    with read_limits(items={"passages": 1}) as limits:
+        assert reading.take("passages") == 1 and not limits.truncated
+        assert not reading.available("passages") and limits.truncated

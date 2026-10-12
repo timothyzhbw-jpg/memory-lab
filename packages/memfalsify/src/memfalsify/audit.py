@@ -423,7 +423,9 @@ class _ConflictIndex:
             lex = _lex_of(claim.text)
             chosen = self._candidates(lex, claim.text, self._prefix(lex.words), None)
         found = []
-        for index in sorted(chosen):
+        candidates = sorted(chosen)
+        # Within read_limits, these comparisons draw from the comparison budget; the rest are not made.
+        for index in candidates[:take("comparisons", len(candidates))]:
             other = self.claims[index]
             if other.id == claim.id:
                 continue

@@ -76,7 +76,7 @@ def read_limits(file_bytes: int | None = None, total_bytes: int | None = None, d
     """Bound the reads and walks in this execution context: at most ``file_bytes`` bytes from one file and
     ``total_bytes`` from all files together, at most ``directories`` directories and ``entries`` directory
     entries over all walks, at most ``depth`` levels below a walk's start, and the named ``items`` budgets
-    that ``take`` draws from. Media hashing (``file_sha256``) streams and is not counted."""
+    that ``take`` draws from. Media hashing (``file_sha256``) streams within the same byte limits."""
     limits = ReadLimits(file_bytes=file_bytes, total_bytes=total_bytes, directories=directories, depth=depth,
                         entries=entries, items=dict(items or {}))
     token = _LIMITS.set(limits)
@@ -105,9 +105,13 @@ def take(kind: str, count: int = 1) -> int:
 
 
 def available(kind: str) -> bool:
-    """Whether the named budget ``kind`` has anything left (always True outside ``read_limits``)."""
+    """Whether the named budget ``kind`` has anything left (always True outside ``read_limits``). False marks the
+    limits truncated: the caller is about to leave something out."""
     limits = _LIMITS.get()
-    return limits is None or kind not in limits.items or limits.used.get(kind, 0) < limits.items[kind]
+    if limits is None or kind not in limits.items or limits.used.get(kind, 0) < limits.items[kind]:
+        return True
+    limits.stop(kind)
+    return False
 
 
 def charge(size: int) -> None:
@@ -115,15 +119,35 @@ def charge(size: int) -> None:
     when they exceed the per-file limit or what is left of the total."""
     limits = _LIMITS.get()
     if limits is not None:
-        _charge(size, limits.file_bytes, limits)
+        _refuse_size(size, None, limits)
+        _refuse_total(size, limits)
         limits.bytes_read += size
 
 
-def _charge(size: int, cap: int | None, limits: ReadLimits | None) -> None:
-    """Refuse ``size`` bytes over ``cap`` or over what is left of the total budget."""
-    if cap is not None and size > cap:
-        raise ReadLimitError(f"larger than {cap} bytes")
-    if limits is not None and limits.total_bytes is not None and size > limits.total_bytes - limits.bytes_read:
+def _refuse_size(size: int, max_bytes: int | None, limits: ReadLimits | None) -> None:
+    """Refuse a file of ``size`` bytes over the limits' per-file cap (which marks them truncated) or over the
+    caller's own ``max_bytes`` (a deliberate skip, which does not)."""
+    if limits is not None and limits.file_bytes is not None and size > limits.file_bytes:
+        limits.stop("bytes")
+        raise ReadLimitError(f"larger than {limits.file_bytes} bytes")
+    if max_bytes is not None and size > max_bytes:
+        raise ReadLimitError(f"larger than {max_bytes} bytes")
+
+
+def _refuse_total(more: int, limits: ReadLimits | None) -> None:
+    """Refuse reading ``more`` bytes when that would pass the total budget."""
+    if limits is not None and limits.total_bytes is not None and more > limits.total_bytes - limits.bytes_read:
+        limits.stop("bytes")
+        raise ReadLimitError("the read budget is used up", budget=True)
+
+
+def _consumed(size: int, count: int, max_bytes: int | None, limits: ReadLimits | None) -> None:
+    """Charge ``size`` bytes just read (``count`` from this file so far), then refuse if they passed a limit:
+    a failed read is charged too, and marks the limits truncated."""
+    if limits is not None:
+        limits.bytes_read += size
+    _refuse_size(count, max_bytes, limits)
+    if limits is not None and limits.total_bytes is not None and limits.bytes_read > limits.total_bytes:
         limits.stop("bytes")
         raise ReadLimitError("the read budget is used up", budget=True)
 
@@ -138,35 +162,36 @@ def _bounds(max_bytes: int | None) -> tuple[ReadLimits | None, int | None]:
 def _read_all(handle: IO[bytes], max_bytes: int | None = None) -> bytes:
     """A binary file's bytes, unless it is larger than ``max_bytes`` or the active limits allow. The size is
     checked with fstat first, and at most one byte past the bound is read, so a file that grows during the read
-    is refused too, without reading the rest."""
+    is refused too, without reading the rest; the bytes it did read are charged."""
     limits, cap = _bounds(max_bytes)
     if cap is None and (limits is None or limits.total_bytes is None):
         return handle.read()
-    _charge(os.fstat(handle.fileno()).st_size, cap, limits)
+    size = os.fstat(handle.fileno()).st_size
+    _refuse_size(size, max_bytes, limits)
+    _refuse_total(size, limits)
     bounds = [b for b in (cap, limits.total_bytes - limits.bytes_read if limits and limits.total_bytes is not None
                           else None) if b is not None]
     data = handle.read(min(bounds) + 1)
-    _charge(len(data), cap, limits)
-    if limits is not None:
-        limits.bytes_read += len(data)
+    _consumed(len(data), len(data), max_bytes, limits)
     return data
 
 
 class _Charged(io.RawIOBase):
-    """A binary stream that charges every byte against a per-file cap and the active limits as it is read,
-    never handing out more than one byte past what they allow."""
+    """A binary stream that charges every byte against the active limits as it is read, never handing out more
+    than one byte past what they allow; bytes read before a refusal are charged too."""
 
-    def __init__(self, handle: IO[bytes], cap: int | None, limits: ReadLimits) -> None:
+    def __init__(self, handle: IO[bytes], limits: ReadLimits) -> None:
         super().__init__()
-        self.handle, self.cap, self.limits, self.count = handle, cap, limits, 0
+        self.handle, self.limits, self.count = handle, limits, 0
 
     def readable(self) -> bool:
         return True
 
     def readinto(self, buffer) -> int:
-        allowed = [b for b in (None if self.cap is None else self.cap - self.count,
-                               None if self.limits.total_bytes is None
-                               else self.limits.total_bytes - self.limits.bytes_read) if b is not None]
+        limits = self.limits
+        allowed = [b for b in (None if limits.file_bytes is None else limits.file_bytes - self.count,
+                               None if limits.total_bytes is None else limits.total_bytes - limits.bytes_read)
+                   if b is not None]
         view = memoryview(buffer)
         if allowed:
             view = view[:max(0, min(allowed)) + 1]
@@ -174,9 +199,7 @@ class _Charged(io.RawIOBase):
         size = len(data)
         view[:size] = data
         self.count += size
-        _charge(self.count, self.cap, None)
-        _charge(size, None, self.limits)
-        self.limits.bytes_read += size
+        _consumed(size, self.count, None, limits)
         return size
 
 
@@ -190,6 +213,22 @@ def _walk_allowed() -> bool:
         return False
     limits.directories_walked += 1
     return True
+
+
+def _trim_entries(dirnames: list[str], filenames: list[str]) -> None:
+    """Count an os.walk listing against the entry budget like a confined listing, keeping only what it allows
+    (directories first)."""
+    limits = _LIMITS.get()
+    if limits is None or limits.entries is None:
+        return
+    left = max(0, limits.entries - limits.entries_listed)
+    total = len(dirnames) + len(filenames)
+    if total > left:
+        limits.stop("entries")
+        keep_dirs = min(len(dirnames), left)
+        dirnames[:] = dirnames[:keep_dirs]
+        filenames[:] = filenames[:left - keep_dirs]
+    limits.entries_listed += min(total, left)
 
 
 def _deeper_allowed(level: int) -> bool:
@@ -314,7 +353,7 @@ def read_head(path: Path, size: int) -> bytes:
         limits = _LIMITS.get()
         if limits is not None:
             size = min(size, os.fstat(handle.fileno()).st_size)
-            _charge(size, None, limits)
+            _refuse_total(size, limits)
         data = handle.read(size)
         if limits is not None:
             limits.bytes_read += len(data)
@@ -363,9 +402,10 @@ def _open_counted(path: Path, encoding: str):
             yield handle
         return
     with _open(path) as handle:
-        _charge(os.fstat(handle.fileno()).st_size, limits.file_bytes, limits)
-        with io.TextIOWrapper(io.BufferedReader(_Charged(handle, limits.file_bytes, limits)),
-                              encoding=encoding) as text:
+        size = os.fstat(handle.fileno()).st_size
+        _refuse_size(size, None, limits)
+        _refuse_total(size, limits)
+        with io.TextIOWrapper(io.BufferedReader(_Charged(handle, limits)), encoding=encoding) as text:
             yield text
 
 
@@ -471,6 +511,7 @@ def walk_files(path: Path, onerror: Callable[[OSError], None] | None = None
         for current, dirnames, filenames in os.walk(path, onerror=onerror):
             if not _walk_allowed():
                 return
+            _trim_entries(dirnames, filenames)
             yield current, dirnames, filenames
             if dirnames and not _deeper_allowed(len(Path(current).relative_to(start).parts) + 1):
                 dirnames[:] = []
@@ -493,10 +534,20 @@ def walk_files(path: Path, onerror: Callable[[OSError], None] | None = None
 
 
 def file_sha256(path: Path, chunk_size: int = 1 << 20) -> str:
-    """SHA-256 of a file's bytes, read in chunks so a large media file never sits in memory."""
+    """SHA-256 of a file's bytes, read in chunks so a large media file never sits in memory. Within
+    ``read_limits`` the per-file and total byte limits apply, checked with fstat first and charged per chunk."""
     digest = hashlib.sha256()
+    limits = _LIMITS.get()
     with _open(path) as handle:
+        if limits is not None:
+            size = os.fstat(handle.fileno()).st_size
+            _refuse_size(size, None, limits)
+            _refuse_total(size, limits)
+        count = 0
         while chunk := handle.read(chunk_size):
+            count += len(chunk)
+            if limits is not None:
+                _consumed(len(chunk), count, None, limits)
             digest.update(chunk)
     return digest.hexdigest()
 

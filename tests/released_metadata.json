@@ -1,0 +1,58 @@
+{
+  "_source": "packages/*/pyproject.toml at the v0.4.0 tag",
+  "memfalsify": {
+    "0.4.0": {
+      "dependencies": [
+        "memlab-core>=0.3,<0.4",
+        "pydantic>=2.12",
+        "typer>=0.17.5"
+      ],
+      "optional-dependencies": {
+        "all": [
+          "memfalsify[llm,jev]"
+        ],
+        "jev": [
+          "typesafe-sdk>=0.7"
+        ],
+        "llm": [
+          "anthropic>=1.13"
+        ]
+      }
+    }
+  },
+  "memlab-core": {
+    "0.3.0": {
+      "dependencies": [
+        "pydantic>=2.12"
+      ],
+      "optional-dependencies": {}
+    }
+  },
+  "memlab-mcp": {
+    "0.4.0": {
+      "dependencies": [
+        "memlab-core>=0.3,<0.4",
+        "memfalsify>=0.4,<0.5",
+        "orgmemory>=0.4,<0.5",
+        "mcp>=2.2,<3",
+        "pydantic>=2.12",
+        "typer>=0.17.5"
+      ],
+      "optional-dependencies": {
+        "models": [
+          "memfalsify[llm,jev]"
+        ]
+      }
+    }
+  },
+  "orgmemory": {
+    "0.4.0": {
+      "dependencies": [
+        "memlab-core>=0.3,<0.4",
+        "pydantic>=2.12",
+        "typer>=0.17.5"
+      ],
+      "optional-dependencies": {}
+    }
+  }
+}

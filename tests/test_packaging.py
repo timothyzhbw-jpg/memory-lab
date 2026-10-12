@@ -7,11 +7,13 @@ import json
 import re
 from pathlib import Path
 
-import pytest
 
-tomllib = pytest.importorskip("tomllib")  # Python 3.11+
-from packaging.requirements import Requirement  # noqa: E402  (a pytest dependency)
-from packaging.version import Version  # noqa: E402
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10: tomli is a test dependency there (CI, setup-local.sh)
+    import tomli as tomllib
+from packaging.requirements import Requirement  # a pytest dependency
+from packaging.version import Version
 
 REPO = Path(__file__).resolve().parent.parent
 # distribution name -> (directory under packages/, import name)
@@ -123,3 +125,24 @@ def test_the_import_check_catches_a_pin_that_is_too_low():
     current = _projects()["memlab-core"][1]
     missing = _missing("memfalsify", "memfalsify", Requirement("memlab-core>=0.3,<0.5"), current)
     assert ("memcore.reading", "ReadLimitError") in missing and ("memcore.reading", "take") in missing
+
+
+# The dependency metadata of released versions, from their tag (see the file's _source).
+RELEASED = json.loads((REPO / "tests" / "released_metadata.json").read_text(encoding="utf-8"))
+
+
+def test_changed_dependency_metadata_gets_a_new_version():
+    """A released version's metadata is on PyPI: a package whose dependencies differ needs a new version."""
+    for name, (project, version) in _projects().items():
+        released = RELEASED.get(name, {}).get(version)
+        if released is None:
+            continue  # a version that was never released
+        current = {"dependencies": project.get("dependencies", []),
+                   "optional-dependencies": project.get("optional-dependencies", {})}
+        assert current == released, f"{name} {version} was released with other dependencies: bump its version"
+
+
+def test_the_released_metadata_check_catches_a_pin_change():
+    released = RELEASED["orgmemory"]["0.4.0"]
+    assert released["dependencies"][0] == "memlab-core>=0.3,<0.4"
+    assert _projects()["orgmemory"][1] != "0.4.0"  # its pin changed, so its version did too

@@ -23,7 +23,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_serializ
 
 from .jsonl import read_jsonl
 from .paths import InputPathError, input_path
-from .reading import entry_names, file_sha256, list_files, read_file_bytes
+from .reading import ReadLimitError, entry_names, file_sha256, list_files, read_file_bytes
 from .sidecar import (LABELS, Parsed, SidecarError, Unit, is_media, media_for, one_line, parse_sidecar,
                       sidecar_base, sidecar_format, time_range)
 
@@ -181,7 +181,11 @@ def _media_sha256(root: Path, media: str, name: str, hashes: dict[Path, str] | N
                            "regular file")
     if hashes is not None and path in hashes:
         return hashes[path]
-    digest = file_sha256(path)
+    try:
+        digest = file_sha256(path)
+    except ReadLimitError:  # only within read_limits, such as a memlab-ui page
+        raise SidecarError(f"cannot check the binding: the media file {shown} is over this page's read limit") \
+            from None
     if hashes is not None:
         hashes[path] = digest
     return digest

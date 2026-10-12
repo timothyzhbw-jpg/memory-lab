@@ -17,8 +17,12 @@ Release 0.4 contains:
 ## Unreleased
 
 Changes after release 0.4. The packages in the Release 0.4 section (memlab-core 0.3.0, memfalsify 0.4.0,
-orgmemory 0.4.0, memlab-mcp 0.4.0) are already released. Not yet released: memlab-core 0.4.0, memfalsify 0.4.1
-and the new memlab-ui 0.1.0; orgmemory and memlab-mcp keep their versions.
+orgmemory 0.4.0, memlab-mcp 0.4.0) are already released. Not yet released: memlab-core 0.4.0, memfalsify 0.4.1,
+orgmemory 0.4.1, memlab-mcp 0.4.1 and the new memlab-ui 0.1.0.
+
+memlab-ui's resource limits are best-effort robustness against a project's own content, not a security
+boundary: they keep a very large or unusual project from tying up the page, and the page says when they cut
+it short.
 
 ### Added
 
@@ -31,14 +35,16 @@ and the new memlab-ui 0.1.0; orgmemory and memlab-mcp keep their versions.
   reports and exports) are recognised by content and listed as left out, never quoted as evidence. It uses
   only the standard library's `http.server` and has no JavaScript. Every page reads in English or Simplified
   Chinese (`?lang=zh`, with a switch in the sidebar). Public API: `memlab_ui.create_server` (binds 127.0.0.1
-  without serving) and `__version__`. Requires memlab-core 0.4, memfalsify 0.4.1 and orgmemory 0.4. See
+  without serving) and `__version__`. Requires memlab-core 0.4, memfalsify 0.4.1 and orgmemory 0.4.1. See
   [docs/ui.md](docs/ui.md).
 
 ### Security
 
 - memlab-ui binds 127.0.0.1 only and checks the `Host` header against DNS rebinding; refuses requests sent by
-  other sites (`Sec-Fetch-Site` other than `same-origin` or `none`, or a foreign `Origin`) before any work; runs a
-  model check only with a random per-run token that only its own form carries; answers GET and HEAD only (405
+  other sites (`Sec-Fetch-Site` other than `same-origin` or `none`, or a foreign `Origin`) before any work; with
+  `--allow-model-verifiers`, runs a model check only for a request carrying the random key it prints in the
+  terminal at start-up (like Jupyter; pages pass it on only to a visitor who already has it, and it is compared
+  as bytes); refuses agent files over 256 KB before parsing them; answers GET and HEAD only (405
   otherwise, HTTP/0.9 gets a 400 with full headers); serves at most 16 connections and computes at most 2 pages
   at once; needs the request line and headers within 10 s in total; confines every path to `--root` with
   confined reads; writes nothing; keeps model verifiers off unless `--allow-model-verifiers`; escapes every
@@ -51,19 +57,24 @@ and the new memlab-ui 0.1.0; orgmemory and memlab-mcp keep their versions.
   bytes before decoding and, for `open_text` streams, as each byte is read; directories, directory entries
   (counted while listing) and depth for every walk; and named budgets that MemFalsify draws from while it
   builds (`claims` parsed, evidence `passages`, claim-passage and old-new `comparisons`). Git objects are charged
-  before their bytes are read. memlab-ui sets these per page and says when a page was cut short; outside
-  `read_limits` nothing is bounded and every read returns what it did before. The confined walk is iterative,
-  so a deep tree meets the depth limit instead of Python's recursion limit.
+  before their bytes are read, media files are hashed within the same byte limits (a sidecar whose media file
+  is over them is skipped with that reason), and bytes read before a refusal are charged too. Internal-conflict
+  comparisons draw from the comparison budget. memlab-ui sets these per page and says when a page was cut
+  short; outside `read_limits` nothing is bounded and every read returns what it did before. Walks are counted
+  the same way with or without confinement; the confined walk is iterative, so a deep tree meets the depth
+  limit instead of Python's recursion limit.
 
 ### Changed
 
 - memlab-core 0.4.0 adds the internal read-limit API above (`read_limits`, `take`, `available`, `charge`,
   `read_head`, `ReadLimitError`, `read_input_bytes(max_bytes=...)`); its public `__all__` is unchanged.
-  memfalsify 0.4.1 and memlab-ui use it and require `memlab-core>=0.4,<0.5` (memlab-ui also
-  `memfalsify>=0.4.1,<0.5`). orgmemory and memlab-mcp need nothing new: their pins now admit memlab-core 0.3 or
-  0.4 (`>=0.3,<0.5`), and their versions stay. `tests/test_packaging.py` checks that every package imports only
-  names the lowest memlab-core its pin admits defines (released versions' names are recorded in
-  `tests/memcore_exports.json`).
+  memfalsify 0.4.1 and memlab-ui use it. memfalsify 0.4.1, orgmemory 0.4.1 and memlab-mcp 0.4.1 require
+  `memlab-core>=0.4,<0.5`: their dependency metadata changed, so their released 0.4.0 versions could not be
+  reused. memlab-ui requires `memfalsify>=0.4.1,<0.5` and `orgmemory>=0.4.1,<0.5`. `tests/test_packaging.py`
+  checks that every package imports only names the lowest memlab-core its pin admits defines (released
+  versions' names are in `tests/memcore_exports.json`) and that a package whose dependencies differ from a
+  released version's (`tests/released_metadata.json`, from the v0.4.0 tag) has a new version. The packaging
+  tests run on Python 3.10 too, with `tomli`, which CI and `scripts/setup-local.sh` install there.
 
 ### Repository
 
@@ -631,6 +642,10 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
+### 0.4.1 - Unreleased
+
+Requires memlab-core 0.4 (`>=0.4,<0.5`); no other change. See the [Unreleased section](#unreleased).
+
 ### 0.4.0 - 2026-10-11
 
 Changes are collected in the [release 0.4 section](#release-04).
@@ -674,6 +689,10 @@ Changes are collected in the [release 0.4 section](#release-04).
   `validate`, `append` and `evidence add`.
 
 ## memlab-mcp
+
+### 0.4.1 - Unreleased
+
+Requires memlab-core 0.4 (`>=0.4,<0.5`); no other change. See the [Unreleased section](#unreleased).
 
 ### 0.4.0 - 2026-10-11
 
