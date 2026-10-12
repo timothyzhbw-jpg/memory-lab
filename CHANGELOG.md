@@ -5,19 +5,19 @@ All notable changes to the four packages in this repository, newest first. The f
 they are 0.x, a minor version may change behavior. Pins between the packages admit one minor version of
 each dependency, for example `memlab-core>=0.2,<0.3`.
 
-Release 0.3 contains:
+Release 0.4 contains:
 
 | Directory | Distribution | Version | Previous release |
 |---|---|---|---|
-| `packages/memcore` | `memlab-core` | 0.2.0 | 0.1.0 |
-| `packages/memfalsify` | `memfalsify` | 0.3.0 | 0.1.0 |
-| `packages/orgmemory` | `orgmemory` | 0.3.0 | 0.1.0 |
-| `packages/memlab-mcp` | `memlab-mcp` | 0.3.0 | none (added after 0.1) |
+| `packages/memcore` | `memlab-core` | 0.3.0 | 0.2.0 |
+| `packages/memfalsify` | `memfalsify` | 0.4.0 | 0.3.0 |
+| `packages/orgmemory` | `orgmemory` | 0.4.0 | 0.3.0 |
+| `packages/memlab-mcp` | `memlab-mcp` | 0.4.0 | 0.3.0 |
 
-## Unreleased
+## Release 0.4
 
 Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0 and memlab-mcp
-0.4.0. The release date is not yet set; all changes since release 0.3 are collected here.
+0.4.0. It was tagged `v0.4.0` on 2026-10-11; all changes since release 0.3 are collected here.
 
 Multimodal evidence through transcript and OCR sidecars (roadmap v0.4; see
 [docs/multimodal.md](docs/multimodal.md)) and HTML reports use the new memlab-core API,
@@ -445,9 +445,9 @@ a symlink out of the root is never read.
 
 ## memlab-core
 
-### 0.3.0 - Pending release 0.4
+### 0.3.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.2.0 - 2026-10-11
 
@@ -477,9 +477,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memfalsify
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -568,9 +568,9 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -612,9 +612,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memlab-mcp
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 

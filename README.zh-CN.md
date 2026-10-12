@@ -611,7 +611,7 @@ steps:
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     with:
       persist-credentials: false
-  - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
+  - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # v0.4.0
     with:
       memory: CLAUDE.md AGENTS.md
 ```
@@ -658,7 +658,7 @@ Action 只使用固定到提交 SHA 的 Action，并从带哈希校验的锁文�
 | **v0.1** | 文本记忆审计、证据追溯、人工确认流程 | 事件日志、状态机、权限规则、决策溯源 |
 | **v0.2** | LLM + Jev 双重验证、cascade 模式 ✓ | 导入 GitHub Issues / PR ✓ |
 | **v0.3** | 记忆的 Git 历史：diff、审查、回滚；跨 Agent 技能打磨 ✓ | 状态冲突与决策审计 ✓ |
-| v0.4 | 多模态证据（带定位的 OCR / 转写）：转写稿与 OCR 旁车文件 ✓（未发布） | 跨平台组织记忆：Jira 导入（离线，基于保存的抓取结果）✓ |
+| v0.4 | 多模态证据（带定位的 OCR / 转写）：转写稿与 OCR 旁车文件 ✓ | 跨平台组织记忆：Jira 导入（离线，基于保存的抓取结果）✓ |
 | v1.0 | 基准测试、稳定 API | 基准测试、稳定 API |
 
 各个包每个版本的变更见 [CHANGELOG.md](CHANGELOG.md)（英文）。

@@ -620,7 +620,7 @@ steps:
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     with:
       persist-credentials: false
-  - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
+  - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>  # v0.4.0
     with:
       memory: CLAUDE.md AGENTS.md
 ```
@@ -668,7 +668,7 @@ paths remain available; CLI configuration helpers are internal.
 | **v0.1** | Text memory audit, evidence tracing, review workflow | Event log, state machine, authority rules, provenance |
 | **v0.2** | LLM + Jev dual verification, cascade mode ✓ | GitHub Issues / PR ingestion ✓ |
 | **v0.3** | Git history of memory: diff, review, rollback; cross-agent skill polish ✓ | State conflicts and decision audit ✓ |
-| v0.4 | Multimodal evidence (OCR / transcription with locators): transcript and OCR sidecars ✓ (unreleased) | Cross-platform organizational memory: Jira import (offline, from saved captures) ✓ |
+| v0.4 | Multimodal evidence (OCR / transcription with locators): transcript and OCR sidecars ✓ | Cross-platform organizational memory: Jira import (offline, from saved captures) ✓ |
 | v1.0 | Benchmark, stable API | Benchmark, stable API |
 
 What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
