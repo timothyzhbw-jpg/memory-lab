@@ -13,8 +13,9 @@ a full CI round. Every failure names file:line and the fix; AGENTS.md ("Windows"
 2. Servers skip on Windows. memlab-mcp (and memlab-ui) refuse to start without the POSIX ``O_NOFOLLOW`` and
    ``dir_fd`` that confined reads need. A test that builds one, through ``create_server``, ``App``, ``serve``
    or ``StdioServerParameters``, directly or through a helper or fixture of its module, needs
-   ``@requires_confinement`` (or a ``pytestmark`` with it). A call inside ``pytest.raises``, or in a test that
-   patches ``confinement_supported``, checks a refusal and runs everywhere.
+   ``@requires_confinement`` (or a ``pytestmark`` with it), or must set ``confinement_supported`` itself with
+   ``monkeypatch.setattr`` so that macOS takes the path Windows takes. That includes a call inside
+   ``pytest.raises``: a test expecting another refusal failed on Windows because the platform check came first.
 3. f-strings for Python 3.10. A backslash, a comment or the enclosing quote inside an f-string's replacement
    field parses only on 3.12+ (PEP 701). On 3.12+ the tokenizer finds them; on 3.10/3.11 the file does not
    parse, which this test reports too.
@@ -127,16 +128,10 @@ def _server_names(tree: ast.Module) -> tuple[set[str], set[str]]:
     return names, modules
 
 
-def _is_raises(item: ast.withitem) -> bool:
-    expr = item.context_expr
-    return isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute) and expr.func.attr == "raises"
-
-
 def _starts_server(function: ast.AST, names: set[str], modules: set[str]) -> int | None:
-    """The line of a call that builds a server, outside ``pytest.raises``; None if there is none."""
+    """The line of a call that builds a server; None if there is none. A call inside ``pytest.raises`` counts:
+    whether the expected refusal comes before the platform check depends on the server's order of checks."""
     def visit(node: ast.AST) -> int | None:
-        if isinstance(node, (ast.With, ast.AsyncWith)) and any(_is_raises(item) for item in node.items):
-            return None  # an expected refusal
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Name) and func.id in names:
@@ -238,7 +233,8 @@ def test_server_tests_are_skipped_without_confined_reads():
                  for line, why in unskipped_server_tests(tree)]
     assert not offenders, (
         "the server refuses to start without POSIX confined reads (Windows): decorate these tests with "
-        "@requires_confinement from conftest.py\n" + "\n".join(offenders))
+        "@requires_confinement from conftest.py, or monkeypatch confinement_supported in them so every OS takes "
+        "the same path\n" + "\n".join(offenders))
 
 
 # --- 3. f-strings that Python 3.10 parses ------------------------------------------------------------------
@@ -333,12 +329,13 @@ def test_refusal(root, monkeypatch):
     with pytest.raises(ValueError):
         create_server(root)
 
-def test_other_host(root):
-    with pytest.raises(ValueError, match="127.0.0.1"):
-        ui_server.create_server(root, host="0.0.0.0")
+def test_create_server_refuses_a_bad_openai_configuration(root, settings, problem):  # as in 96b2d62
+    with pytest.raises(ValueError, match=problem):
+        create_server(root, allow_model_verifiers=True, **settings)
 """
     assert [why for _, why in unskipped_server_tests(ast.parse(servers))] == [
-        "test_forgot_the_marker: line 14 builds a server", "test_forgot_it_with_a_fixture: fixture app builds a server"]
+        "test_forgot_the_marker: line 14 builds a server", "test_forgot_it_with_a_fixture: fixture app builds a server",
+        "test_create_server_refuses_a_bad_openai_configuration: line 30 builds a server"]
     assert unskipped_server_tests(ast.parse("pytestmark = requires_confinement\n" + servers)) == []
 
     if sys.version_info >= (3, 12):
