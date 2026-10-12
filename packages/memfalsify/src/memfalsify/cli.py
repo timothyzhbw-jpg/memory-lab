@@ -355,7 +355,7 @@ def rollback_command(
             _write(output, result.patch, result.files, "patch")
         elif _stdout_is_terminal():
             shown = _screen_patch(result.patch)
-            typer.echo(shown, nl=False)
+            typer.echo(shown.encode("utf-8"), nl=False)  # bytes, so Windows text mode adds no CR to each LF
             if shown.encode("utf-8") != result.patch:
                 typer.echo("note: the patch holds control, bidi or other invisible characters; they are shown "
                            "escaped here. Use --output (or a pipe) for the exact patch.", err=True)

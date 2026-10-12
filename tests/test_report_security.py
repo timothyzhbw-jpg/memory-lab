@@ -380,3 +380,124 @@ def test_output_path_diagnostics_are_escaped(memory_case, tmp_path):
     assert result.exit_code == 0, result.output
     terminal_inert(result.output)  # a status line, not a report
     assert result.output.count("\n") == 1 and "u000a::warning::written.md" in result.output
+
+
+# --- Markdown fields: nested brackets, bare list markers, autolinks; ZWJ/ZWNJ in real text ----------------------
+
+def _render(markdown, gfm=False):
+    """HTML for a document: CommonMark, or cmark-gfm (GitHub's renderer, with autolinks) when ``gfm``."""
+    if gfm:
+        cmarkgfm = pytest.importorskip("cmarkgfm")  # test-only; the GFM autolink extension is not CommonMark
+        return cmarkgfm.github_flavored_markdown_to_html(markdown)
+    return MarkdownIt("commonmark", {"html": True}).render(markdown)
+
+
+def _visible(html):
+    import html as html_lib
+    return html_lib.unescape(re.sub(r"<[^>]*>", "", html)).strip()
+
+
+def _no_markup(html):
+    for tag in ("<a ", "<img", "<ol", "<ul", "<h1", "<h2", "<pre", "<table", "<em", "<strong"):
+        assert tag not in html, html
+
+
+@pytest.mark.parametrize("gfm", [False, True], ids=["commonmark", "gfm"])
+@pytest.mark.parametrize("value", ["![a[b]](http://evil.example/p.png)", "[a[b]](http://evil.example/)",
+                                   "x [a [b] c](javascript:alert(1)) y", "![a[b]][ref]", "[a[b]][ref] and ![c][ref]",
+                                   "[a][ref]", "![a](http://evil.example/p.png)", "[a\\]b](http://evil.example/)",
+                                   "[ref]: http://evil.example/", "[a[b]]: http://evil.example/", "  [a]: x"])
+def test_links_and_images_with_nested_brackets_do_not_survive(value, gfm):
+    from memcore.display import markdown_text, report_text
+    for display in (markdown_text, report_text):
+        shown = display(value)
+        assert not re.search(r"(?<!\\)\[", shown), shown  # every opening bracket is escaped
+        # Even where the document defines the reference the field points at, it stays the text it was.
+        html = _render(f"[ref]: http://evil.example/ref\n\n> {shown}\n\n{shown}\n", gfm)
+        _no_markup(html)
+        assert _visible(html).count(value.strip()) == 2, html
+
+
+@pytest.mark.parametrize("gfm", [False, True], ids=["commonmark", "gfm"])
+@pytest.mark.parametrize("value, escaped", [("1.", "1\\."), ("1)", "1\\)"), ("12.", "12\\."), ("0)", "0\\)"),
+                                            ("1. ", "1\\. "), ("1.5", "1.5"), ("1.item", "1.item"),
+                                            ("3 items", "3 items"), ("v1.", "v1.")])
+def test_ordered_list_markers_are_escaped_even_with_nothing_after_them(value, escaped, gfm):
+    from memcore.display import markdown_text, report_text
+    for display in (markdown_text, report_text):
+        assert display(value) == escaped
+        shown = display(value)
+        for document in (shown, "para\n\n" + shown, f"> {shown}", f"- {shown}\n- {shown}"):
+            assert "<ol" not in _render(document, gfm), document
+
+
+AUTOLINKS = [
+    ("http://evil.example/p?a=1", "http\\://evil.example/p?a=1"),
+    ("https://evil.example", "https\\://evil.example"),
+    ("see ftp://evil.example/x now", "see ftp\\://evil.example/x now"),
+    ("HTTP://EVIL.EXAMPLE", "HTTP\\://EVIL.EXAMPLE"),
+    ("www.evil.example", "www\\.evil.example"),
+    ("WWW.Evil.example/path", "WWW\\.Evil.example/path"),
+    ("(see www.evil.example)", "(see www\\.evil.example)"),
+    # cmark-gfm joins escaped characters back into one text node before it looks for addresses, so no backslash
+    # escape breaks an e-mail autolink: the address becomes a code span (the same text, in code style).
+    ("mallory@evil.example", "`mallory@evil.example`"),
+    ("mailto:m.x+y@evil-site.example", "mailto:`m.x+y@evil-site.example`"),
+    ("ask a@b.co, then c_d@e.example", "ask `a@b.co`, then `c_d@e.example`"),
+]
+
+
+@pytest.mark.parametrize("value, escaped", AUTOLINKS)
+def test_untrusted_urls_hosts_and_addresses_are_escaped(value, escaped):
+    from memcore.display import markdown_text, report_text
+    assert markdown_text(value) == escaped == report_text(value)
+
+
+@pytest.mark.parametrize("gfm", [False, True], ids=["commonmark", "gfm"])
+@pytest.mark.parametrize("value", [v for v, _ in AUTOLINKS] + ["**www.evil.example", "_ http://evil.example"])
+def test_untrusted_urls_hosts_and_addresses_render_as_plain_text(value, gfm):
+    from memcore.display import markdown_text, report_text
+    for display in (markdown_text, report_text):
+        shown = display(value)
+        for document in (shown, f"> {shown}", f"| {shown} |\n|---|\n| {shown} |", f"## {shown}"):
+            html = _render(document, gfm)
+            assert "<a " not in html and "<img" not in html, html
+        assert _visible(_render(shown, gfm)) == value
+
+
+@pytest.mark.parametrize("value", ["@mention", "a@b", "user @ host", "version 1.2.3", "awww.", "www", "http",
+                                   "3:1//", "plain words", "C: not a url", "slack://x.example/y", "synthetic://note",
+                                   "sftp://x.example", "xhttp://x.example", "file://host/path"])
+def test_text_that_cannot_autolink_is_unchanged(value):
+    from memcore.display import markdown_text, report_text
+    assert markdown_text(value) == value == report_text(value)
+
+
+@pytest.mark.parametrize("text", ["\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645", "\u0915\u094d\u200d\u0937",
+                                  "\u0d28\u0d4d\u200d", "\U0001f468\u200d\U0001f469\u200d\U0001f467",
+                                  "\u2764\ufe0f\u200d\U0001f525", "\u0dc1\u0dca\u200d\u0dbb"])
+def test_zwj_and_zwnj_inside_real_text_are_kept(text):
+    from memcore.display import code_span, markdown_text, one_line, report_text, yaml_value
+    assert one_line(text) == text == markdown_text(text) == report_text(text)
+    assert code_span(text) == f"`{text}`"
+    assert json.loads(yaml_value(text)) == text
+
+
+@pytest.mark.parametrize("char", ["\u200c", "\u200d"])
+@pytest.mark.parametrize("template", ["a@b", "@x", "x @y", "x\u00a0@y", "a@@b", "\u0645@\u2060\u0646",
+                                      "\u0645@\u200b\u0646", "\u0645@\u200f\u0646", "\u0645\u200e@\u0646",
+                                      "\u0645\u0646\u202e@", "\u0645\u0646\ufeff@\u0647"])
+def test_zwj_and_zwnj_that_join_nothing_are_still_escaped(char, template):
+    from memcore.display import one_line
+    shown = one_line(template.replace("@", char))
+    assert char not in shown and f"\\u{ord(char):04x}" in shown
+    assert not any(unicodedata.category(c) in {"Cc", "Cf", "Zl", "Zp"} for c in shown)
+
+
+@pytest.mark.parametrize("char", ["\u200b", "\u200e", "\u200f", "\u061c", "\u202a", "\u202b", "\u202c", "\u202d",
+                                  "\u202e", "\u2060", "\u2066", "\u2067", "\u2068", "\u2069", "\ufeff", "\u00ad",
+                                  "\u180e", "\u0890", "\u2028", "\u2029", "\x85", "\x1b", "\U000e0041"])
+def test_every_other_format_control_and_separator_stays_escaped_between_letters(char):
+    from memcore.display import one_line
+    escaped = f"\\u{ord(char):04x}" if ord(char) <= 0xFFFF else f"\\U{ord(char):08x}"
+    assert one_line("\u0645" + char + "\u0646") == "\u0645" + escaped + "\u0646"

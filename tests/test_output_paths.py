@@ -47,7 +47,7 @@ def dataset(root, *, actor="pm", subject="Feature A", sales="sales", unknown=Non
     quote = "Feature A is approved for the November release"
     text = "Notes\n" + quote + "\nEnd\n"
     (root / "sources").mkdir()
-    (root / "sources" / "main.txt").write_text(text, encoding="utf-8")
+    (root / "sources" / "main.txt").write_bytes(text.encode("utf-8"))  # exact bytes: the hash covers them
     start = len("Notes\n")
     (root / "evidence.jsonl").write_text(json.dumps({
         "id": "e1", "path": "sources/main.txt", "sha256": sha256(text.encode("utf-8")).hexdigest(), "quote": quote,

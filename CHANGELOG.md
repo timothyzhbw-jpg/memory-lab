@@ -5,19 +5,74 @@ All notable changes to the four packages in this repository, newest first. The f
 they are 0.x, a minor version may change behavior. Pins between the packages admit one minor version of
 each dependency, for example `memlab-core>=0.2,<0.3`.
 
-Release 0.3 contains:
+Release 0.4 contains:
 
 | Directory | Distribution | Version | Previous release |
 |---|---|---|---|
-| `packages/memcore` | `memlab-core` | 0.2.0 | 0.1.0 |
-| `packages/memfalsify` | `memfalsify` | 0.3.0 | 0.1.0 |
-| `packages/orgmemory` | `orgmemory` | 0.3.0 | 0.1.0 |
-| `packages/memlab-mcp` | `memlab-mcp` | 0.3.0 | none (added after 0.1) |
+| `packages/memcore` | `memlab-core` | 0.3.0 | 0.2.0 |
+| `packages/memfalsify` | `memfalsify` | 0.4.0 | 0.3.0 |
+| `packages/orgmemory` | `orgmemory` | 0.4.0 | 0.3.0 |
+| `packages/memlab-mcp` | `memlab-mcp` | 0.4.0 | 0.3.0 |
 
 ## Unreleased
 
+Changes after release 0.4 (`v0.4.0`), not yet released. The package versions are unchanged.
+
+### memfalsify
+
+#### Added
+
+- `--verifier openai` on `audit` and `diff` (`memfalsify.OpenAICompatVerifier`, new extra `[openai]`, also in
+  `[all]`): one verifier for any OpenAI-compatible Chat Completions API. `--provider` presets the base URL
+  and the key's environment variable for `openai` (default), `grok` (xAI), `deepseek`, `gemini` (Google's
+  OpenAI-compatible endpoint) and `ollama` (`http://localhost:11434/v1`, no key); `--base-url` and
+  `--api-key-env` override them. `--openai-model` is required: model names differ between providers, so
+  there is no default. Memory claims and evidence passages are sent to the configured endpoint.
+  - The base URL must be `https://`, or `http://` only to `localhost`, `127.0.0.1` or `::1`; a user name,
+    password, query or fragment in it is refused, and no message repeats it.
+  - The key is read from the named variable, never taken as an argument, and must hold only the characters
+    keys use. It is never printed: errors are built from the provider's status, type, code, param and
+    message, each redacted (also URL-encoded or escaped forms); no error keeps the SDK exception as its cause
+    or context; and a log filter redacts the SDK's and the HTTP stack's records (`OPENAI_LOG=debug`). The
+    OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are
+    ignored, so settings meant for one provider never reach another.
+  - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy and
+    certificate variables from the environment are not used.
+  - Requests ask for the verdict as a strict JSON schema (`response_format` `json_schema`). After HTTP 400
+    or 422 with an error that names the format, the verifier asks for `json_object`, then plain text, keeps
+    the format that worked and says so on stderr; any other error stops the audit at once. The first request
+    settles the format while concurrent ones wait. Only an answer with `finish_reason` `stop` is read; an
+    unfinished one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
+    outside the schema), an empty answer and a refusal are no verdict (`unrelated`), never support.
+  - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
+    requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
+    `cascade` still pair Claude with Jev.
+  - The pre-commit hooks (`memfalsify-pre-commit diff` and `audit`) take the same four options.
+
+### memlab-mcp
+
+#### Added
+
+- `memfalsify_audit` and `memfalsify_diff` accept `verifier: "openai"`, refused unless the server runs with
+  `--allow-model-verifiers`. Its endpoint comes only from server flags (`--openai-model`,
+  `--openai-provider`, `--openai-base-url`, `--openai-api-key-env`), checked at startup; no tool argument
+  names a provider, URL, model or key variable, so a client cannot send text elsewhere. Without
+  `--openai-model` the verifier is refused as not configured.
+
+### Repository
+
+#### Added
+
+- GitHub Action: `verifier: openai`, with the inputs `openai-model`, `provider`, `base-url` and
+  `api-key-env` (passed through `env:` and checked before the audit), and a hash-pinned lock set
+  `action/requirements/openai.txt`. `all.txt` (dual and cascade) still holds only the Claude and Jev SDKs.
+- MemFalsify benchmark: `run.py --verifier openai` with the same options, and a documented local Ollama run.
+  No model results are recorded.
+
+## Release 0.4
+
 Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0 and memlab-mcp
-0.4.0. The release date is not yet set; all changes since release 0.3 are collected here.
+0.4.0. It was tagged `v0.4.0` on 2026-10-11; all changes since release 0.3 are collected here.
 
 Multimodal evidence through transcript and OCR sidecars (roadmap v0.4; see
 [docs/multimodal.md](docs/multimodal.md)) and HTML reports use the new memlab-core API,
@@ -155,33 +210,6 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
   and full SHA-256, issues and proposed actions; for `diff`, the changed, added and removed claims).
   Works with `--output`. `history` stays `markdown` or `json`. The examples have `report.html` next to
   `report.md`.
-
-- `--verifier openai` on `audit` and `diff` (`memfalsify.OpenAICompatVerifier`, new extra `[openai]`, also in
-  `[all]`): one verifier for any OpenAI-compatible Chat Completions API. `--provider` presets the base URL
-  and the key's environment variable for `openai` (default), `grok` (xAI), `deepseek`, `gemini` (Google's
-  OpenAI-compatible endpoint) and `ollama` (`http://localhost:11434/v1`, no key); `--base-url` and
-  `--api-key-env` override them. `--openai-model` is required: model names differ between providers, so
-  there is no default. Memory claims and evidence passages are sent to the configured endpoint.
-  - The base URL must be `https://`, or `http://` only to `localhost`, `127.0.0.1` or `::1`; a user name,
-    password, query or fragment in it is refused, and no message repeats it.
-  - The key is read from the named variable, never taken as an argument, and must hold only the characters
-    keys use. It is never printed: errors are built from the provider's status, type, code, param and
-    message, each redacted (also URL-encoded or escaped forms); no error keeps the SDK exception as its cause
-    or context; and a log filter redacts the SDK's and the HTTP stack's records (`OPENAI_LOG=debug`). The
-    OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are
-    ignored, so settings meant for one provider never reach another.
-  - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy and
-    certificate variables from the environment are not used.
-  - Requests ask for the verdict as a strict JSON schema (`response_format` `json_schema`). After HTTP 400
-    or 422 with an error that names the format, the verifier asks for `json_object`, then plain text, keeps
-    the format that worked and says so on stderr; any other error stops the audit at once. The first request
-    settles the format while concurrent ones wait. Only an answer with `finish_reason` `stop` is read; an
-    unfinished one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
-    outside the schema), an empty answer and a refusal are no verdict (`unrelated`), never support.
-  - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
-    requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
-    `cascade` still pair Claude with Jev.
-  - The pre-commit hooks (`memfalsify-pre-commit diff` and `audit`) take the same four options.
 
 #### Changed
 
@@ -438,11 +466,6 @@ a symlink out of the root is never read.
   on Python 3.10 through 3.13, check paths as the tools do, and accept a revision only as a non-empty
   string that does not start with `-` or contain a control character. The tool resolves that revision to a
   commit. Prompts embed no file contents and never tell the agent to write a file.
-- `memfalsify_audit` and `memfalsify_diff` accept `verifier: "openai"`, refused unless the server runs with
-  `--allow-model-verifiers`. Its endpoint comes only from server flags (`--openai-model`,
-  `--openai-provider`, `--openai-base-url`, `--openai-api-key-env`), checked at startup; no tool argument
-  names a provider, URL, model or key variable, so a client cannot send text elsewhere. Without
-  `--openai-model` the verifier is refused as not configured.
 
 #### Changed
 
@@ -461,11 +484,6 @@ a symlink out of the root is never read.
   workspace (or, with `diff-base`, diffs each one). The `exclude` globs also leave instruction files out
   of discovery.
 - The `memfalsify` skill covers the new formats, `memfalsify discover` and `memory: auto`.
-- GitHub Action: `verifier: openai`, with the inputs `openai-model`, `provider`, `base-url` and
-  `api-key-env` (passed through `env:` and checked before the audit), and a hash-pinned lock set
-  `action/requirements/openai.txt`. `all.txt` (dual and cascade) still holds only the Claude and Jev SDKs.
-- MemFalsify benchmark: `run.py --verifier openai` with the same options, and a documented local Ollama run.
-  No model results are recorded.
 - Test fixtures for every format in `tests/fixtures/formats/`.
 - An Organizational Memory benchmark (`benchmarks/orgmemory`): ten labeled datasets (233 labels, 598
   checks) that attack the authority rules, from unknown and look-alike actors, same-instant decisions,
@@ -482,9 +500,9 @@ a symlink out of the root is never read.
 
 ## memlab-core
 
-### 0.3.0 - Pending release 0.4
+### 0.3.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.2.0 - 2026-10-11
 
@@ -514,9 +532,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memfalsify
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -605,9 +623,9 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -649,9 +667,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memlab-mcp
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
