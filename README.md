@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <img src="assets/logo.png" alt="Memory Lab" width="420">
+  </picture>
+</p>
+
 # Memory Lab: Verified Memory Infrastructure for AI Agents
 
 English | [中文](README.zh-CN.md)

@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <img src="assets/logo.png" alt="Memory Lab" width="420">
+  </picture>
+</p>
+
 # Memory Lab：让 AI Agent 的记忆可验证
 
 [English](README.md) | 中文
