@@ -32,18 +32,24 @@ Changes after release 0.4 (`v0.4.0`), not yet released. The package versions are
     password, query or fragment in it is refused, and no message repeats it.
   - The key is read from the named variable, never taken as an argument, and must hold only the characters
     keys use. It is never printed: errors are built from the provider's status, type, code, param and
-    message, each redacted (also URL-encoded or escaped forms); no error keeps the SDK exception as its cause
-    or context; and a log filter redacts the SDK's and the HTTP stack's records (`OPENAI_LOG=debug`). The
-    OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are
-    ignored, so settings meant for one provider never reach another.
-  - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy and
-    certificate variables from the environment are not used.
+    message, and any of them that contains the key in any encoding (percent-escaped in either case,
+    `\u`-escaped, partly escaped) is withheld whole; no error keeps the SDK exception as its cause or
+    context; and the SDK's and the HTTP stack's log records (`OPENAI_LOG=debug`) are sanitized when they are
+    made, messages, exceptions and stacks alike, including loggers created later. The OpenAI SDK's
+    `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are ignored, so
+    settings meant for one provider never reach another.
+  - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy variables
+    are not used. Certificates are checked against the system trust store, never `SSL_CERT_FILE` or
+    `SSL_CERT_DIR`: through the OS on macOS and Windows, and on Linux against OpenSSL's built-in CA
+    locations (or the usual bundle files).
   - Requests ask for the verdict as a strict JSON schema (`response_format` `json_schema`). After HTTP 400
-    or 422 with an error that names the format, the verifier asks for `json_object`, then plain text, keeps
+    or 422 with an error about the format (its param, else a format code, else its message, never a model
+    that happens to be named that way), the verifier asks for `json_object`, then plain text, keeps
     the format that worked and says so on stderr; any other error stops the audit at once. The first request
     settles the format while concurrent ones wait. Only an answer with `finish_reason` `stop` is read; an
     unfinished one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
-    outside the schema), an empty answer and a refusal are no verdict (`unrelated`), never support.
+    outside the schema), an empty answer, a malformed response and a refusal are no verdict (`unrelated`), never
+    support.
   - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
     requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
     `cascade` still pair Claude with Jev.

@@ -66,10 +66,10 @@ memfalsify audit MEMORY.md --evidence docs --verifier openai --base-url https://
 ```
 
 - `--base-url` 和 `--api-key-env` 会覆盖预设。base URL 必须是 `https://`；只有 `localhost`、`127.0.0.1` 和 `::1` 允许明文 `http://`；带用户名、密码、查询参数或片段的 URL 会被拒绝。
-- `--api-key-env` 接收的是变量**名**。没有直接传 key 的选项，所以 key 不会出现在 shell 历史或进程列表里。key 只能包含真实 key 使用的字符（字母、数字和 `. _ ~ + / = -`）。key 从不输出：错误信息由服务商返回的状态码、错误类型、代码、参数和消息拼成，每一项都先遮掉 key（包括 URL 编码或转义后的形式）；设置 `OPENAI_LOG=debug` 时，SDK 的日志也会被遮掉。
-- 端点只由这些选项决定。OpenAI SDK 自己的环境变量（`OPENAI_BASE_URL`、`OPENAI_ORG_ID`、`OPENAI_PROJECT_ID`、`OPENAI_CUSTOM_HEADERS`）不会生效，给一个服务商的设置不会被发给另一个。环境里的代理变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）和证书变量（`SSL_CERT_FILE`、`SSL_CERT_DIR`）同样不生效：请求直接发到 base URL，本地服务也一样。重定向不会被跟随，审计以退出码 2 结束。
+- `--api-key-env` 接收的是变量**名**。没有直接传 key 的选项，所以 key 不会出现在 shell 历史或进程列表里。key 只能包含真实 key 使用的字符（字母、数字和 `. _ ~ + / = -`）。key 从不输出：错误信息由服务商返回的状态码、错误类型、代码、参数和消息拼成，其中任何一项含有 key（包括百分号编码、`\u` 转义或其他转义形式）都会整项隐去。设置 `OPENAI_LOG=debug` 时，SDK 和 HTTP 日志里含有 key 的消息、异常和调用栈同样会被隐去。
+- 端点只由这些选项决定。OpenAI SDK 自己的环境变量（`OPENAI_BASE_URL`、`OPENAI_ORG_ID`、`OPENAI_PROJECT_ID`、`OPENAI_CUSTOM_HEADERS`）不会生效，给一个服务商的设置不会被发给另一个。环境里的代理变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）同样不生效：请求直接发到 base URL，本地服务也一样。证书按系统的信任库校验，从不使用 `SSL_CERT_FILE` 或 `SSL_CERT_DIR`：macOS 和 Windows 上由操作系统校验；Linux 和其他使用 OpenSSL 的平台上，使用编译进 OpenSSL 的 CA 位置，没有的话使用第一个常见的证书包文件（例如 `/etc/ssl/certs/ca-certificates.crt`）；都没有时，所有 https 证书都会校验失败。重定向不会被跟随，审计以退出码 2 结束。
 - 记忆和证据片段会发送到配置的端点（本地服务除外）。只对允许发往该服务商的材料使用它。
-- 验证器以严格 JSON schema（`response_format` 为 `json_schema`）请求判断。端点返回 HTTP 400 或 422，且错误里点名了格式（`response_format`、`json_schema` 或 `json_object`）时，改为请求 JSON 对象（`json_object`），再不行就请求纯文本；之后沿用可用的格式，并在 stderr 上说明。其他错误（例如模型不存在）会让审计立即结束。第一个请求确定格式时，其他请求等待，不论 `--max-concurrency` 是多少。只读取正常结束（`finish_reason` 为 `stop`）的回答：被截断（`length`）、被过滤或其他未正常结束的回答，以及不是合法判断的回答，一律记为无判断（`unrelated`），绝不会算作支持。
+- 验证器以严格 JSON schema（`response_format` 为 `json_schema`）请求判断。端点返回 HTTP 400 或 422，且错误针对的是格式（错误参数为 `response_format`；或者错误没有参数、也没有具体代码时，消息说的是 `response_format`、`json_schema` 或 `json_object`，而不是恰好这样命名的模型）时，改为请求 JSON 对象（`json_object`），再不行就请求纯文本；之后沿用可用的格式，并在 stderr 上说明。其他错误（例如模型不存在）会让审计立即结束。第一个请求确定格式时，其他请求等待，不论 `--max-concurrency` 是多少。只读取正常结束（`finish_reason` 为 `stop`）的回答：被截断（`length`）、被过滤或其他未正常结束的回答、格式不对的响应，以及不是合法判断的回答，一律记为无判断（`unrelated`），绝不会算作支持。
 - 这个验证器不支持 `--batch`（退出码 2）。`dual` 和 `cascade` 仍然是 Claude 配 Jev。
 
 ## 3. 模型审计的成本
