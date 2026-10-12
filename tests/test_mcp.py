@@ -724,7 +724,10 @@ def test_openai_missing_key_is_a_generic_tool_error(root, monkeypatch):
     ({"openai_model": "m", "openai_base_url": "http://gateway.example.test/v1"}, "must use https"),
     ({"openai_model": "m", "openai_api_key_env": "sk-not-a-name"}, "never the key itself"),
 ])
-def test_create_server_refuses_a_bad_openai_configuration(root, settings, problem):
+@pytest.mark.parametrize("confinement", [True, False])
+def test_create_server_refuses_a_bad_openai_configuration(root, monkeypatch, settings, problem, confinement):
+    """The openai settings are checked before the platform, so the error names them on Windows too."""
+    monkeypatch.setattr(memlab_server, "confinement_supported", lambda: confinement)
     with pytest.raises(ValueError, match=problem):
         create_server(root, allow_model_verifiers=True, **settings)
 

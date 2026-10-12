@@ -4,6 +4,8 @@ import importlib.util
 import json
 import logging
 import shutil
+import ssl
+import sys
 import threading
 import time
 import traceback
@@ -403,7 +405,8 @@ def test_api_error_text_never_carries_the_key(monkeypatch):
     with pytest.raises(VerifierError) as caught:
         judge.judge(CLAIM, COUNTER)
     message = str(caught.value)
-    assert "Incorrect API key provided: [redacted]" in message
+    assert message == ("openai:test-model@api.openai.com: HTTP 401 (type invalid_request_error): "
+                       f"{openai_compat.WITHHELD}")
     assert all(SECRET[i:i + 8] not in message for i in range(len(SECRET) - 7))
 
 
@@ -611,8 +614,8 @@ def test_cli_api_error_exits_2_and_never_shows_the_key(two_claims, mock_sdk, mon
                                  "--format", fmt, "-o", str(out)])
     assert result.exit_code == 2 and not out.exists()
     assert result.output.startswith("error: openai:gpt-model@api.openai.com: HTTP 401 (type invalid_request_error): "
-                                    "Incorrect API key provided: [redacted]")
-    assert "[redacted]" in result.output and "Traceback" not in result.output
+                                    "the provider's message was withheld because it contained the API key")
+    assert "Traceback" not in result.output
     assert all(SECRET[i:i + 8] not in result.output for i in range(len(SECRET) - 7))
 
 
@@ -700,7 +703,7 @@ def test_provider_errors_are_built_from_fields_not_from_the_body_repr(mock_sdk, 
         OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
     message = str(caught.value)
     assert message == ("openai:gpt-model@api.openai.com: HTTP 401 (type invalid_request_error, code "
-                       "invalid_api_key): Incorrect API key provided: [redacted] ([redacted])")
+                       "invalid_api_key): the provider's message was withheld because it contained the API key")
     no_key(message, KEY)
 
 
@@ -769,7 +772,7 @@ def test_sdk_debug_logs_never_carry_the_key(mock_sdk, monkeypatch, caplog):
     assert judge.judge(CLAIM, COUNTER).relation == "contradicts"
     late.debug("late logger sees %s and %s", KEY, quote_key(KEY))
     logged = caplog.text + "".join(record.getMessage() for record in caplog.records)
-    assert "request_id: req-[redacted]" in logged and "late logger sees [redacted] and [redacted]" in logged
+    assert logged.count("[log text withheld because it contained the API key]") >= 2
     no_key(logged, KEY)
 
 
@@ -784,7 +787,9 @@ def test_production_client_follows_no_redirect_and_ignores_proxies(mock_sdk, mon
     # With trust_env, the proxy settings would route both requests away from the transport under test.
     assert [str(r.url) for r in mock_sdk.seen] == ["https://api.openai.com/v1/chat/completions",
                                                    "http://localhost:11434/v1/chat/completions"]
-    assert mock_sdk.options == [{"follow_redirects": False, "trust_env": False}] * 2
+    assert [{k: v for k, v in o.items() if k != "verify"} for o in mock_sdk.options] == \
+        [{"follow_redirects": False, "trust_env": False}] * 2
+    assert all(isinstance(o["verify"], ssl.SSLContext) for o in mock_sdk.options)
 
 
 @pytest.mark.parametrize("status, location", [
@@ -875,3 +880,293 @@ def test_cli_max_concurrency_4_costs_one_request_per_refused_format(two_claims, 
     assert result.exit_code == 0, result.output
     assert len(client.chat.completions.calls) == 4 + 2  # four pairs, plus one request per refused format
     assert result.stderr.count("the endpoint refused") == 2
+
+
+# --- security review, round 3 -------------------------------------------------------------------------
+
+WITHHELD = openai_compat.WITHHELD
+LOG_WITHHELD = openai_compat.LOG_WITHHELD
+
+
+def percent(text, lower=False, mixed=False):
+    out = []
+    for n, ch in enumerate(text):
+        if ch.isalnum() and ch not in "+/=":
+            out.append(ch)
+            continue
+        code = f"%{ord(ch):02X}"
+        if lower or (mixed and n % 2):
+            code = code.lower()
+        out.append(code)
+    return "".join(out)
+
+
+def uescape(text, every=1):
+    return "".join(f"\\u{ord(ch):04x}" if n % every == 0 else ch for n, ch in enumerate(text))
+
+
+ENCODED = {
+    "lowercase percent": percent(KEY, lower=True),
+    "mixed-case percent": percent(KEY, mixed=True),
+    "every character percent-escaped": "".join(f"%{ord(ch):02x}" for ch in KEY),
+    "unicode escapes": uescape(KEY),
+    "partly unicode-escaped": uescape(KEY, every=3),
+    "partly percent-escaped": KEY[:10] + percent(KEY[10:], lower=True),
+    "percent and unicode mixed": uescape(KEY[:9]) + percent(KEY[9:], lower=True),
+    "escaped slash and lowercase percent": KEY.replace("/", "\\/").replace("+", "%2b").replace("=", "%3d"),
+    "double percent-encoding": percent(percent(KEY, lower=True), lower=True),
+    "html references": "".join(f"&#{ord(ch)};" for ch in KEY),
+}
+
+
+@pytest.mark.parametrize("encoded", list(ENCODED.values()), ids=list(ENCODED))
+def test_holds_secret_sees_through_encodings(encoded):
+    assert encoded != KEY and KEY not in encoded
+    assert openai_compat.holds_secret(f"Incorrect API key provided: {encoded}.", KEY)
+    assert not openai_compat.holds_secret("The model `gpt-x` does not exist", KEY)
+
+
+@pytest.mark.parametrize("encoded", list(ENCODED.values()), ids=list(ENCODED))
+def test_sdk_401_diagnostics_with_an_encoded_key_are_withheld(mock_sdk, monkeypatch, encoded):
+    """The provider's own message, as real SDK diagnostics carry it, with the key escaped in some way."""
+    monkeypatch.setenv("TEAM_KEY", KEY)
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(401, json={"error": {
+        "message": f"Incorrect API key provided: {encoded}.", "type": "invalid_request_error",
+        "code": "invalid_api_key"}})
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
+    assert str(caught.value) == ("openai:gpt-model@api.openai.com: HTTP 401 (type invalid_request_error, code "
+                                 f"invalid_api_key): {WITHHELD}")
+
+
+def test_an_encoded_key_in_any_error_field_is_withheld(team_key):
+    error = status_error(400, "fine", code=percent(KEY, lower=True), param=uescape(KEY, every=2))
+    with pytest.raises(VerifierError) as caught:
+        verifier(fake_client(error=error), api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
+    assert str(caught.value) == (f"openai:test-model@api.openai.com: HTTP 400 (type invalid_request_error, code "
+                                 f"{WITHHELD}, param {WITHHELD}): fine")
+
+
+@pytest.fixture
+def team_key(monkeypatch):
+    monkeypatch.setenv("TEAM_KEY", KEY)
+    return KEY
+
+
+def test_messages_without_the_key_are_kept(mock_sdk, team_key):
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(404, json={"error": {
+        "message": "The model `gpt-nope` does not exist", "type": "invalid_request_error",
+        "code": "model_not_found"}})
+    with pytest.raises(VerifierError) as caught:
+        OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER)
+    assert str(caught.value).endswith("(type invalid_request_error, code model_not_found): The model `gpt-nope` "
+                                      "does not exist")
+
+
+def test_a_logger_created_during_a_request_cannot_log_the_key(mock_sdk, team_key, caplog):
+    caplog.set_level(logging.DEBUG)
+
+    def handle(request):
+        name = f"httpx2.created_mid_request_{len(mock_sdk.seen)}"
+        assert name not in logging.Logger.manager.loggerDict  # created here, after every per-request filter pass
+        logging.getLogger(name).warning("auth header Bearer %s (%s)", KEY, percent(KEY, lower=True))
+        return mock_sdk.httpx2.Response(200, json=completion())
+
+    mock_sdk.state["handle"] = handle
+    assert OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY").judge(CLAIM, COUNTER).relation == "contradicts"
+    [record] = [r for r in caplog.records if r.name.startswith("httpx2.created_mid_request")]
+    assert record.getMessage() == LOG_WITHHELD and record.args is None
+    no_key(caplog.text, KEY)
+
+
+def test_exceptions_and_stacks_in_sdk_log_records_are_withheld(mock_sdk, team_key, caplog):
+    caplog.set_level(logging.DEBUG)
+    OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    logger = logging.getLogger("openai.round3")
+    try:
+        raise RuntimeError(f"request failed for {uescape(KEY)}")
+    except RuntimeError:
+        logger.exception("plain message")
+    logger.warning("with a stack", stack_info=True)
+    stack = logger.makeRecord(logger.name, logging.WARNING, __file__, 1, "made by hand", None, None,
+                              sinfo=f"Stack (most recent call last):\n  token={percent(KEY, lower=True)}")
+    logger.handle(stack)
+    sdk_logger = logging.getLogger("openai._base_client")  # filtered since the verifier was built
+    direct = logging.LogRecord(sdk_logger.name, logging.ERROR, __file__, 1, "direct %s", (KEY,),
+                               (RuntimeError, RuntimeError(KEY), None), sinfo=f"stack {KEY}")
+    sdk_logger.handle(direct)  # made without the record factory: the logger's filter sanitizes it
+    records = [r for r in caplog.records if r.name in ("openai.round3", "openai._base_client")]
+    assert [r.getMessage() for r in records] == ["plain message", "with a stack", "made by hand", LOG_WITHHELD]
+    assert records[0].exc_info is None and records[0].exc_text == LOG_WITHHELD
+    assert records[1].stack_info and "with a stack" in records[1].stack_info  # no key there: kept
+    assert records[2].stack_info == LOG_WITHHELD
+    assert records[3].exc_info is None and records[3].exc_text == LOG_WITHHELD and records[3].stack_info == LOG_WITHHELD
+    no_key(caplog.text, KEY)
+
+
+def test_a_replaced_record_factory_is_wrapped_again(mock_sdk, team_key, caplog, monkeypatch):
+    caplog.set_level(logging.DEBUG)
+    judge = OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    plain = logging.LogRecord
+    monkeypatch.setattr(logging, "_logRecordFactory", plain)  # another library resets the factory
+    assert judge.judge(CLAIM, COUNTER).relation == "contradicts"  # each request re-installs the guard
+    assert getattr(logging.getLogRecordFactory(), "_memfalsify_guard", False)
+    logging.getLogger("httpcore2.round3_after_reset").warning("key %s", KEY)
+    no_key(caplog.text, KEY)
+
+
+@pytest.mark.parametrize("error", [
+    {"param": "model", "code": "model_not_found", "message": "The model 'json_schema-not-found' does not exist"},
+    {"code": "model_not_found", "message": "The model 'json_schema-not-found' does not exist"},
+    {"message": "The model 'json_schema-not-found' does not exist"},
+    {"message": "The model `json_object` does not exist or you do not have access to it."},
+    {"code": "context_length_exceeded", "message": "response_format and messages exceed the context"},
+    {"param": "messages", "message": "json_schema is not supported for this message format"},
+])
+def test_a_format_word_inside_a_model_name_or_another_param_does_not_downgrade(error):
+    lines = []
+    client = fake_client(error=status_error(400, **error))
+    judge = verifier(client, progress=lines.append)
+    with pytest.raises(VerifierError):
+        judge.judge(CLAIM, COUNTER)
+    assert len(client.chat.completions.calls) == 1 and lines == [] and judge.response_format == "json_schema"
+
+
+@pytest.mark.parametrize("fields", [
+    {"code": "invalid_request_error", "message": "This response_format type is unavailable now"},
+    {"code": "unsupported_parameter", "message": "json_schema is not supported with this model"},
+    {"code": "json_schema_not_supported", "message": "Unsupported."},
+    {"code": "400", "message": "'json_object' is not supported"},
+])
+def test_a_generic_or_format_code_still_lets_the_message_decide(fields):
+    class Refusing(FakeCompletions):
+        def create(self, **kwargs):
+            if kwargs.get("response_format", {}).get("type") == "json_schema":
+                self.calls.append(kwargs)
+                raise status_error(400, **fields)
+            return super().create(**kwargs)
+
+    judge = verifier(SimpleNamespace(chat=SimpleNamespace(completions=Refusing())))
+    assert judge.judge(CLAIM, COUNTER).relation == "contradicts" and judge.response_format == "json_object"
+
+
+def test_tls_context_on_linux_ignores_the_certificate_variables(monkeypatch, tmp_path):
+    """On the OpenSSL path, the CA locations compiled into OpenSSL are loaded; SSL_CERT_FILE and SSL_CERT_DIR are
+    not, and neither is anything through OpenSSL's default paths (which read those variables)."""
+    system = tmp_path / "system-bundle.pem"
+    system.write_text("system", encoding="utf-8")
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "attacker.pem"))
+    monkeypatch.setenv("SSL_CERT_DIR", str(tmp_path))
+    monkeypatch.setattr(openai_compat.sys, "platform", "linux")
+    monkeypatch.setattr(ssl, "get_default_verify_paths", lambda: ssl.DefaultVerifyPaths(
+        str(tmp_path / "attacker.pem"), str(tmp_path), "SSL_CERT_FILE", str(system), "SSL_CERT_DIR",
+        str(tmp_path / "no-such-dir")))
+    made = []
+
+    def create(cafile=None, capath=None, cadata=None, **kwargs):
+        made.append((cafile, capath, cadata))
+        return ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+    def env_paths(self):
+        raise AssertionError("OpenSSL's default paths read SSL_CERT_FILE and SSL_CERT_DIR")
+
+    monkeypatch.setattr(ssl, "create_default_context", create)
+    monkeypatch.setattr(ssl.SSLContext, "set_default_verify_paths", env_paths)
+    monkeypatch.setattr(ssl.SSLContext, "load_default_certs", env_paths)
+    assert isinstance(openai_compat.tls_context(), ssl.SSLContext)
+    assert made == [(str(system), None, None)]
+    system.unlink()  # no compiled-in bundle: the usual bundle paths, and else no CA at all (https fails closed)
+    monkeypatch.setattr(openai_compat, "CA_FILES", (str(tmp_path / "missing.pem"),))
+    context = openai_compat.tls_context()
+    assert made == [(str(system), None, None)] and context.cert_store_stats()["x509_ca"] == 0
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the control relies on OpenSSL reading SSL_CERT_FILE, as on "
+                                                    "Linux and macOS")
+def test_tls_context_on_linux_does_not_load_a_ca_named_by_ssl_cert_file(monkeypatch, tmp_path):
+    """A real CA certificate in the file SSL_CERT_FILE names: Python's default context loads it, ours does not."""
+    pytest.importorskip("cryptography")
+    from datetime import datetime, timedelta, timezone
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "memfalsify test CA from SSL_CERT_FILE")])
+    now = datetime.now(timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(days=1))
+            .not_valid_after(now + timedelta(days=1))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+            .sign(key, hashes.SHA256()))
+    bundle = tmp_path / "env-ca.pem"
+    bundle.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    monkeypatch.setenv("SSL_CERT_FILE", str(bundle))
+    monkeypatch.setattr(openai_compat.sys, "platform", "linux")
+
+    def subjects(context):
+        return {dict(item[0] for item in ca["subject"]).get("commonName") for ca in context.get_ca_certs()}
+
+    assert "memfalsify test CA from SSL_CERT_FILE" in subjects(ssl.create_default_context())  # the variable works
+    assert "memfalsify test CA from SSL_CERT_FILE" not in subjects(openai_compat.tls_context())
+
+
+def test_tls_context_on_macos_and_windows_is_the_system_trust_store(monkeypatch):
+    truststore = pytest.importorskip("truststore")
+    for platform in ("darwin", "win32"):
+        monkeypatch.setattr(openai_compat.sys, "platform", platform)
+        assert isinstance(openai_compat.tls_context(), truststore.SSLContext)
+
+
+MALFORMED = {
+    "choices is a number": {"choices": 1},
+    "choices is a mapping": {"choices": {"a": 1}},
+    "a choice is a number": {"choices": [5]},
+    "the message is text": {"choices": [{"index": 0, "finish_reason": "stop", "message": "text"}]},
+    "content is a number": {"choices": [{"index": 0, "finish_reason": "stop", "message": {"content": 5}}]},
+    "content is a list": {"choices": [{"index": 0, "finish_reason": "stop",
+                                       "message": {"content": [verdict("supports")]}}]},
+    "finish_reason is a number": {"choices": [{"index": 0, "finish_reason": 7,
+                                               "message": {"content": verdict("supports")}}]},
+    "the body is a list": [1, 2],
+    "the body is text": "just text",
+}
+
+
+@pytest.mark.parametrize("body", list(MALFORMED.values()), ids=list(MALFORMED))
+def test_malformed_completions_are_no_verdict(mock_sdk, team_key, body):
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=body)
+    judge = OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    judgment = judge.judge(CLAIM, CLAIM)
+    assert judgment.relation == "unrelated"
+    assert judgment.rationale == ("no verdict (finish_reason: None; the response is not a well-formed chat "
+                                  "completion)")
+    assert judge.usage()[0].requests == 1
+
+
+def test_malformed_usage_counts_as_missing(mock_sdk, team_key):
+    body = {**completion(), "usage": {"prompt_tokens": "lots", "completion_tokens": True, "total_tokens": []}}
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=body)
+    judge = OpenAICompatVerifier("gpt-model", api_key_env="TEAM_KEY")
+    assert judge.judge(CLAIM, COUNTER).relation == "contradicts"
+    [stats] = judge.usage()
+    assert (stats.requests, stats.input_tokens, stats.output_tokens) == (1, 0, 0)
+
+
+@pytest.mark.parametrize("body", [{"choices": 1}, {"choices": {"a": 1}}], ids=["number", "mapping"])
+def test_cli_reports_malformed_completions_as_no_verdict(two_claims, mock_sdk, team_key, body):
+    mock_sdk.state["handle"] = lambda request: mock_sdk.httpx2.Response(200, json=body)
+    result = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"),
+                                 "--verifier", "openai", "--openai-model", "gpt-model", "--api-key-env", "TEAM_KEY",
+                                 "--format", "json"])
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.stdout)
+    assert [f["status"] for f in report["findings"]] == ["insufficient_evidence", "insufficient_evidence"]
+    assert report["verifier_stats"][0]["requests"] == 4
+    strict = runner.invoke(app, ["audit", str(two_claims / "MEMORY.md"), "-e", str(two_claims / "evidence"),
+                                 "--verifier", "openai", "--openai-model", "gpt-model", "--api-key-env", "TEAM_KEY",
+                                 "--strict"])
+    assert strict.exit_code == 0 and "Traceback" not in strict.output

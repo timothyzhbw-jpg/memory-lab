@@ -12,38 +12,44 @@ Transport and secrets:
 
 - The base URL must use https; plain http is accepted only for localhost, 127.0.0.1 and ::1. A base URL with a
   user name, password, query or fragment is refused, and error messages never repeat it.
-- Requests go only there: the HTTP client follows no redirect (a 3xx is an error) and ignores proxy and
-  certificate settings from the environment (``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, ...).
+- Requests go only there: the HTTP client follows no redirect (a 3xx is an error), ignores proxy settings from
+  the environment (``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, ...) and verifies certificates with
+  ``tls_context``, which never reads ``SSL_CERT_FILE`` or ``SSL_CERT_DIR``.
 - The key is read from the environment variable the caller names, never taken as an argument, and must consist
   of the characters keys use (``KEY_CHARS``). It is never shown: error messages are built from the fields of the
-  provider's error (status, type, code, param, message), each passed through ``redact``; no ``VerifierError``
-  keeps the SDK's exception as its cause or context; and a log filter redacts it from the SDK's and the HTTP
-  stack's log records (``OPENAI_LOG=debug``).
+  provider's error (status, type, code, param, message), and a field that holds the key in any encoding
+  (``holds_secret``: percent-escaped in either case, backslash-escaped, HTML references, or a mix) is withheld
+  whole; no ``VerifierError`` keeps the SDK's exception as its cause or context; and the log records of the SDK
+  and the HTTP stack (``OPENAI_LOG=debug``) are sanitized as they are made (``guard_logs``).
 - Only the arguments configure the client. The SDK would otherwise read ``OPENAI_BASE_URL``,
   ``OPENAI_ORG_ID``, ``OPENAI_PROJECT_ID`` and ``OPENAI_CUSTOM_HEADERS`` from the environment and send what they
   hold to whatever endpoint is configured; ``isolated_headers`` removes those headers from every request.
 
 Structured output: a request asks for a JSON verdict with ``response_format`` ``json_schema`` (strict). An
-endpoint that answers HTTP 400 or 422 with an error naming the format (``response_format``, ``json_schema`` or
-``json_object``) is asked again with ``json_object``, then with no ``response_format`` at all; the instructions
-ask for the same JSON object every time. Any other error ends the audit at once. The first request settles the
-format while concurrent ones wait, so each refused format costs one extra request per run. Only an answer that
-ended normally (``finish_reason`` ``stop``) is read. An answer that did not, one that is not a JSON verdict
-(invalid JSON, a repeated or unknown key, a relation outside the schema), an empty answer and a refusal are all
-recorded as no verdict (``unrelated``, with the reason in the rationale), never as support.
+endpoint that answers HTTP 400 or 422 with an error about the format (``names_format``: by its param, else by a
+code naming the format, else by its message, never by a model that happens to be named that way) is asked again
+with ``json_object``, then with no ``response_format`` at all; the instructions ask for the same JSON object
+every time. Any other error ends the audit at once. The first request settles the format while concurrent ones
+wait, so each refused format costs one extra request per run. Only an answer that ended normally
+(``finish_reason`` ``stop``) is read. An answer that did not, a malformed response, one that is not a JSON
+verdict (invalid JSON, a repeated or unknown key, a relation outside the schema), an empty answer and a refusal
+are all recorded as no verdict (``unrelated``, with the reason in the rationale), never as support.
 """
 from __future__ import annotations
 
+import html
 import logging
 import os
 import re
+import ssl
+import sys
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from pydantic import ConfigDict
 
@@ -98,8 +104,22 @@ MAX_RETRIES = 2
 # Gemini is assumed to follow OpenAI. length, content_filter, tool_calls, insufficient_system_resource, any
 # other value and none at all are no verdict, even when the text parses.
 FINISHED = "stop"
-# An HTTP 400 or 422 whose error mentions one of these refuses the format, not the request.
+# A 400 or 422 refuses the format, not the request, when its error names the format: by ``param``
+# (response_format or response_format.<field>) when there is one; else by a ``code`` naming the format (a code
+# naming anything else, such as model_not_found, settles it the other way; generic codes say nothing); else by
+# the message, where the words must stand alone, not inside a quoted model name such as 'json_schema-test'.
 _FORMAT_ERROR = re.compile(r"response_format|json_schema|json_object", re.IGNORECASE)
+_FORMAT_WORD = re.compile(r"(?<![\w-])(?:response_format|json_schema|json_object)(?![\w-])", re.IGNORECASE)
+_QUOTED_MODEL = re.compile(r"\bmodels?\s*:?\s*(?:'[^']*'|\"[^\"]*\"|`[^`]*`)", re.IGNORECASE)
+_GENERIC_CODE = re.compile(r"(?:invalid|bad|unsupported)_(?:request|parameter|params?|value|argument)s?(?:_error)?"
+                           r"|\d+", re.IGNORECASE)
+# What replaces provider text, or a log record's text, that contains the key in any encoding.
+WITHHELD = "the provider's message was withheld because it contained the API key"
+LOG_WITHHELD = "[log text withheld because it contained the API key]"
+_ESCAPE = re.compile(r"\\(?:u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8})|x([0-9A-Fa-f]{2})|([^\w\s]))")
+# Where OpenSSL builds look for CA certificates when the compiled-in defaults hold none (truststore's list).
+CA_FILES = ("/etc/ssl/cert.pem", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", "/etc/pki/tls/cert.pem",
+            "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/ca-bundle.pem")
 
 
 @dataclass(frozen=True)
@@ -196,7 +216,8 @@ def redact(text: str, *secrets: str | None) -> str:
     consecutive characters of one of those forms, replaced by ``[redacted]``.
 
     The run rule covers an error body that quotes part of a key, or the key cut at a line end. Whole forms of
-    every secret go first, longest first, so a key that shares a run with another is still replaced whole."""
+    every secret go first, longest first, so a key that shares a run with another is still replaced whole.
+    Encodings other than ``secret_forms`` are ``holds_secret``'s business."""
     forms = sorted({form for secret in secrets if secret for form in secret_forms(secret)}, key=len, reverse=True)
     for form in forms:
         text = text.replace(form, REDACTED)
@@ -219,8 +240,71 @@ def redact(text: str, *secrets: str | None) -> str:
     return "".join(out)
 
 
+def _unescape(text: str) -> str:
+    """Backslash escapes undone: ``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX`` and an escaped punctuation character
+    such as ``\\/``."""
+    def one(match: re.Match[str]) -> str:
+        code = match.group(1) or match.group(2) or match.group(3)
+        if code is None:
+            return match.group(4)
+        value = int(code, 16)
+        return chr(value) if value <= 0x10FFFF else match.group(0)
+
+    return _ESCAPE.sub(one, text)
+
+
+def decodings(text: str, rounds: int = 4) -> list[str]:
+    """``text``, and what it reads as once the encodings a provider may apply to quoted text are undone, again
+    and again: percent-escapes (``%2f`` or ``%2F``), backslash escapes (``\\u0073``, ``\\/``) and HTML character
+    references. Each round undoes all three, so a key escaped in parts, or twice, comes out whole."""
+    forms = [text]
+    for _ in range(rounds):
+        decoded = html.unescape(_unescape(unquote(forms[-1], errors="replace")))
+        if decoded == forms[-1]:
+            break
+        forms.append(decoded)
+    return forms
+
+
+def holds_secret(text: str, *secrets: str | None) -> bool:
+    """Whether ``text``, in any of its ``decodings``, contains a secret or a run of ``REDACT_RUN`` of its
+    characters."""
+    runs = set()
+    for secret in secrets:
+        if secret:
+            runs |= ({secret} if len(secret) < REDACT_RUN else
+                     {secret[i:i + REDACT_RUN] for i in range(len(secret) - REDACT_RUN + 1)})
+    if not runs:
+        return False
+    return any(run in form for form in decodings(text) for run in runs)
+
+
+def sanitize_record(record: logging.LogRecord, secrets: list[str]) -> None:
+    """Withhold every part of ``record`` that holds a secret: the message (with its arguments), the exception
+    and the stack. An exception is rendered to ``exc_text`` and ``exc_info`` dropped either way, so no handler
+    formats the live exception, whose attributes (an SDK error's body) the text does not show."""
+    if not secrets:
+        return
+    try:
+        message = record.getMessage()
+    except Exception:  # a malformed record: judge what it would print at best
+        message = f"{record.msg} {record.args}"
+    if holds_secret(message, *secrets):
+        record.msg, record.args = LOG_WITHHELD, None
+    if record.exc_info:
+        try:
+            text = logging.Formatter().formatException(record.exc_info)
+        except Exception:
+            text = "[exception could not be rendered]"
+        record.exc_text, record.exc_info = text, None
+    if record.exc_text and holds_secret(record.exc_text, *secrets):
+        record.exc_text = LOG_WITHHELD
+    if record.stack_info and holds_secret(record.stack_info, *secrets):
+        record.stack_info = LOG_WITHHELD
+
+
 class _KeyFilter(logging.Filter):
-    """Redacts every registered key from log records of the SDK and its HTTP stack.
+    """Registered keys, and their withholding from log records of the SDK and its HTTP stack.
 
     With ``OPENAI_LOG=debug`` the SDK logs, among other things, a response's ``x-request-id`` header as the
     endpoint sent it; an endpoint that echoes the key there would put it in the log."""
@@ -235,18 +319,12 @@ class _KeyFilter(logging.Filter):
             if secret not in self._secrets:
                 self._secrets.append(secret)
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    def secrets(self) -> list[str]:
         with self._lock:
-            secrets = list(self._secrets)
-        if not secrets:
-            return True
-        try:
-            message = record.getMessage()
-        except Exception:  # a malformed record is the logging module's business, not a reason to drop it
-            return True
-        cleaned = redact(message, *secrets)
-        if cleaned != message:
-            record.msg, record.args = cleaned, None
+            return list(self._secrets)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        sanitize_record(record, self.secrets())
         return True
 
 
@@ -255,20 +333,66 @@ _LOG_FILTER = _KeyFilter()
 LOGGER_ROOTS = ("openai", "httpx", "httpx2", "httpcore", "httpcore2")
 
 
-def guard_logs(secret: str | None) -> None:
-    """Redact ``secret`` from the SDK's and the HTTP stack's log records, for the rest of the process.
+def _guarded_factory(previous: Callable[..., logging.LogRecord]) -> Callable[..., logging.LogRecord]:
+    def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = previous(*args, **kwargs)
+        if str(record.name).split(".", 1)[0] in LOGGER_ROOTS:
+            sanitize_record(record, _LOG_FILTER.secrets())
+        return record
 
-    A filter on a logger sees only the records logged on that logger, not those of its children, so it goes on
-    each existing logger under ``LOGGER_ROOTS``; every request calls this again, for loggers created
-    since."""
+    factory._memfalsify_guard = True  # type: ignore[attr-defined]
+    return factory
+
+
+def guard_logs(secret: str | None) -> None:
+    """Withhold ``secret`` from the log records of the SDK and the HTTP stack, for the rest of the process.
+
+    Two layers: the log record factory (chained to whatever factory was set before) sanitizes every new record
+    of a logger under ``LOGGER_ROOTS`` as it is made, which covers loggers created at any time, even during a
+    request; and a filter on those loggers sanitizes records made some other way when they are handled. A
+    filter only sees its own logger's records, so it goes on each existing logger of those names. Every
+    request calls this again, which re-installs the factory if someone replaced it."""
     if secret:
         _LOG_FILTER.add(secret)
+    current = logging.getLogRecordFactory()
+    if not getattr(current, "_memfalsify_guard", False):
+        logging.setLogRecordFactory(_guarded_factory(current))
     names = list(logging.Logger.manager.loggerDict)
     for name in [*LOGGER_ROOTS, *names]:
         if name.split(".", 1)[0] in LOGGER_ROOTS:
             logger = logging.getLogger(name)
             if _LOG_FILTER not in logger.filters:
                 logger.addFilter(_LOG_FILTER)
+
+
+def _holds_hashed_certs(directory: str) -> bool:
+    """Whether ``directory`` holds certificates under OpenSSL's hashed names (``1a2b3c4d.0``)."""
+    try:
+        return any(re.fullmatch(r"[0-9a-fA-F]{8}\.[0-9]", name) for name in os.listdir(directory))
+    except OSError:
+        return False
+
+
+def tls_context() -> ssl.SSLContext:
+    """The TLS context for https endpoints, independent of the environment.
+
+    On macOS and Windows, ``truststore`` verifies through the system's own trust store, which no environment
+    variable changes. On Linux and other OpenSSL platforms, truststore and Python's default context both load
+    CA certificates through OpenSSL's default paths, which ``SSL_CERT_FILE`` and ``SSL_CERT_DIR`` override; this
+    context loads the locations compiled into OpenSSL instead (or the first usual bundle in ``CA_FILES``), never
+    those variables. With no CA certificates found, every https certificate fails verification."""
+    if sys.platform in ("darwin", "win32"):
+        import truststore
+
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    paths = ssl.get_default_verify_paths()  # openssl_cafile and openssl_capath are the compiled-in locations
+    cafile = paths.openssl_cafile if paths.openssl_cafile and os.path.isfile(paths.openssl_cafile) else None
+    capath = paths.openssl_capath if paths.openssl_capath and _holds_hashed_certs(paths.openssl_capath) else None
+    if cafile is None and capath is None:
+        cafile = next((candidate for candidate in CA_FILES if os.path.isfile(candidate)), None)
+    if cafile is None and capath is None:
+        return ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # verifies against nothing: https fails closed
+    return ssl.create_default_context(cafile=cafile, capath=capath)
 
 
 def isolated_headers(api_key: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
@@ -343,13 +467,23 @@ def parse_verdict(text: str) -> StrictVerdict | None:
         return None
 
 
+def _get(obj: Any, name: str) -> Any:
+    """An attribute of an SDK object, or a key of a mapping (the SDK leaves malformed parts as plain data)."""
+    return obj.get(name) if isinstance(obj, Mapping) else getattr(obj, name, None)
+
+
+def _count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def _usage(usage: Any) -> Any:
-    """Chat Completions token counts under the names ``UsageMeter`` reads. ``prompt_tokens`` includes any
-    tokens the provider served from its own cache; the cache counters stay null for this backend."""
+    """Chat Completions token counts under the names ``UsageMeter`` reads; a count that is not a whole number
+    counts as missing. ``prompt_tokens`` includes any tokens the provider served from its own cache; the cache
+    counters stay null for this backend."""
     if usage is None:
         return None
-    return SimpleNamespace(input_tokens=getattr(usage, "prompt_tokens", None),
-                           output_tokens=getattr(usage, "completion_tokens", None))
+    return SimpleNamespace(input_tokens=_count(_get(usage, "prompt_tokens")),
+                           output_tokens=_count(_get(usage, "completion_tokens")))
 
 
 def _scalar(value: Any) -> str | None:
@@ -359,6 +493,15 @@ def _scalar(value: Any) -> str | None:
     if isinstance(value, (bool, int, float)):
         return str(value)
     return None
+
+
+def names_format(param: str | None, code: str | None, message: str | None) -> bool:
+    """Whether an error's param, code or message names the response format (see ``_FORMAT_WORD``)."""
+    if param is not None:
+        return param == "response_format" or param.startswith("response_format.")
+    if code is not None and not _GENERIC_CODE.fullmatch(code):
+        return bool(_FORMAT_ERROR.search(code))
+    return bool(message and _FORMAT_WORD.search(_QUOTED_MODEL.sub(" ", message)))
 
 
 @dataclass(frozen=True)
@@ -410,17 +553,18 @@ class OpenAICompatVerifier:
 
     def _client(self) -> Any:
         """The SDK client: our own HTTP client, which follows no redirect (a 307 or 308 would resend the claim,
-        the evidence and the key to wherever the endpoint points) and ignores proxy and certificate settings
-        from the environment (``trust_env=False``), so requests go only to the configured base URL."""
+        the evidence and the key to wherever the endpoint points), ignores proxy settings from the environment
+        (``trust_env=False``) and verifies certificates with ``tls_context``, so requests go only to the
+        configured base URL."""
         openai = self._sdk
         key = self._secret or NO_KEY
         failure = None
         try:
-            http = openai.DefaultHttpxClient(follow_redirects=False, trust_env=False)
+            http = openai.DefaultHttpxClient(follow_redirects=False, trust_env=False, verify=tls_context())
             return openai.OpenAI(api_key=key, base_url=self.endpoint.base_url,
                                  default_headers=isolated_headers(key), http_client=http, max_retries=MAX_RETRIES)
         except openai.OpenAIError as exc:  # the SDK's own configuration errors: fixed texts, no response body
-            failure = self._shown(f"{self.name}: {exc}")
+            failure = f"{self.name}: {self._field(str(exc), 500)}"
         raise VerifierError(failure)
 
     def usage(self) -> list[VerifierStats]:
@@ -501,8 +645,8 @@ class OpenAICompatVerifier:
             text += ": " + self._field(message, 500)
         # Only an error that names the format means "ask in another format"; any other 400 (an unknown model,
         # a context that is too long) is reported at once.
-        mentions = " ".join(value for value in (message, *fields.values()) if value)
-        refused = mode != "text" and status in (400, 422) and bool(_FORMAT_ERROR.search(mentions))
+        refused = mode != "text" and status in (400, 422) and names_format(fields.get("param"), fields.get("code"),
+                                                                            message)
         return Failure(f"{self.name}: {text}", detail=text, format_refused=refused)
 
     def _without_response(self, exc: Exception) -> str:
@@ -517,27 +661,46 @@ class OpenAICompatVerifier:
         return f"the request failed ({type(exc).__name__})"
 
     def _field(self, value: str, limit: int) -> str:
-        cleaned = redact(value, self._secret)
-        return self._shown(cleaned[:limit] + ("..." if len(cleaned) > limit else ""))
+        """Provider text for a diagnostic: withheld whole if it holds the key in any encoding, else cut to
+        ``limit`` characters and made one inert line."""
+        if holds_secret(value, self._secret):
+            return WITHHELD
+        return self._shown(value[:limit] + ("..." if len(value) > limit else ""))
 
     def _judgment(self, response: Any) -> Judgment:
-        choices = getattr(response, "choices", None) or []
-        if not choices:
+        """A verdict from a well-formed, normally finished completion; no verdict for anything else.
+
+        The SDK does not validate responses, so a malformed envelope (choices that are not a list, a choice
+        without a message, content or finish_reason of the wrong type) arrives as it was sent; it counts as no
+        verdict, like a completion without choices or with an empty answer."""
+        malformed = "the response is not a well-formed chat completion"
+        if isinstance(response, (str, bytes, int, float, list)):
+            return self._no_verdict(None, malformed)
+        choices = _get(response, "choices")
+        if choices is None or (isinstance(choices, list) and not choices):
             return self._no_verdict(None, "the response has no answer")
+        if not isinstance(choices, list):
+            return self._no_verdict(None, malformed)
         choice = choices[0]
-        finish = getattr(choice, "finish_reason", None)
-        message = getattr(choice, "message", None)
-        if getattr(message, "refusal", None):
+        message = _get(choice, "message")
+        finish = _get(choice, "finish_reason")
+        if isinstance(choice, (str, bytes, int, float, list)) or isinstance(message, (str, bytes, int, float, list)):
+            return self._no_verdict(None, malformed)
+        refusal, content = _get(message, "refusal"), _get(message, "content")
+        if not all(value is None or isinstance(value, str) for value in (finish, refusal, content)):
+            return self._no_verdict(None, malformed)
+        if refusal:
             return self._no_verdict(finish, "the model refused")
         if finish != FINISHED:
             return self._no_verdict(finish, "the answer did not end normally (only finish_reason stop is used)")
-        content = getattr(message, "content", None)
-        if not isinstance(content, str) or not content.strip():
+        if not content or not content.strip():
             return self._no_verdict(finish, "the answer is empty")
         verdict = parse_verdict(content)
         if verdict is None:
             return self._no_verdict(finish, "the answer is not a JSON verdict")
-        return Judgment(relation=verdict.relation, rationale=self._shown(verdict.rationale), verifier=self.name)
+        return Judgment(relation=verdict.relation, verifier=self.name,
+                        rationale=self._shown(WITHHELD if holds_secret(verdict.rationale, self._secret)
+                                              else verdict.rationale))
 
     def _no_verdict(self, finish: Any, why: str) -> Judgment:
         return Judgment(relation="unrelated", verifier=self.name,

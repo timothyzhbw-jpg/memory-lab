@@ -636,8 +636,7 @@ def test_action_openai_api_failure_exits_2_without_the_key(tmp_path, monkeypatch
            "MEMFALSIFY_API_KEY_ENV": "TEAM_OPENAI_KEY"}
     assert action.main(env) == 2
     log = capsys.readouterr().out
-    assert ("MemFalsify CLI: error: openai:gpt-model@api.openai.com: HTTP 401: Incorrect API key provided: "
-            "[redacted]") in log
+    assert ("MemFalsify CLI: error: openai:gpt-model@api.openai.com: HTTP 401: the provider's message was withheld because it contained the API key") in log
     assert "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2)" in log
     summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
     for text in (log, summary):

@@ -369,11 +369,12 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False, o
     The ``openai_*`` arguments configure the ``openai`` verifier (model, provider preset, base URL and the name of
     the key's environment variable). They are fixed here, by whoever starts the server, and are never tool
     arguments, so a client cannot send memory and evidence text elsewhere."""
+    # The openai configuration is checked first: a bad value is reported as such on every platform.
+    openai = openai_settings(openai_model, openai_provider, openai_base_url, openai_api_key_env)
+    configured = f"{openai.model} at {openai.endpoint().host}" if openai else None
     ws = Workspace(Path(root))
     if not confinement_supported():
         raise ValueError("the MCP server requires POSIX O_NOFOLLOW and dir_fd support for confined reads")
-    openai = openai_settings(openai_model, openai_provider, openai_base_url, openai_api_key_env)
-    configured = f"{openai.model} at {openai.endpoint().host}" if openai else None
     if allow_model_verifiers:
         verifier_help = ("lexical (default: offline, free), or llm (Claude), jev (TypeSafe Jev), dual (llm + jev), "
                          "cascade (jev, escalating unsure answers to llm) or openai ("
