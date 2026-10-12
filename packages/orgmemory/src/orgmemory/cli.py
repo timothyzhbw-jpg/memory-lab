@@ -16,6 +16,7 @@ from memcore.jsonutil import loads_at
 
 from memcore.cli import SafeTyperGroup
 from memcore.display import one_line as terminal_text
+from memcore.terminal import diagnostic_line
 from memcore.display import json_shield as _json_shield
 
 from .audit import DEFAULT_STALE_DAYS, audit
@@ -56,7 +57,7 @@ class TextFormat(str, Enum):
 
 
 def _fail(message: str) -> None:
-    typer.echo(f"error: {terminal_text(message)}", err=True)
+    typer.echo(f"error: {diagnostic_line(message)}", err=True)
     raise typer.Exit(2)
 
 

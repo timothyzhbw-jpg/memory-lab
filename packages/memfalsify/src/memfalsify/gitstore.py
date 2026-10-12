@@ -20,9 +20,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath, PureWindowsPath
 
-from memcore.display import code_span as _code_span, one_line, report_text
+from memcore.display import code_span as _code_span, report_text
 from memcore.paths import InputPathError, component_skip_reason, input_path
 from memcore.reading import confinement_root, read_input_text
+from memcore.terminal import diagnostic_line
 
 from .corpus import Skipped
 from .formats import detect
@@ -57,8 +58,8 @@ class GitError(HistoryError):
 
 
 def printable(text: str) -> str:
-    """Untrusted diagnostics on one line, with invisible characters escaped."""
-    return one_line(text)
+    """Untrusted diagnostics on one line: whitespace runs collapse to one space, invisible characters are escaped."""
+    return diagnostic_line(text)
 
 
 def show_text(text: str) -> str:
