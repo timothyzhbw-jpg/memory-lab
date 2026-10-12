@@ -19,7 +19,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `jira:ACME-1/transition/20105`: jira:61a0c3e5f2b1d40069a1b2c3 (roles: product_manager) chose **approve** at 2026-10-10T16:00:00+00:00
-  - evidence `jira:ACME-1/transition/20105/fact` · `sources/jira/ACME-1/transition-20105-35b880d158a7.txt:1` · https://acme.atlassian.net/rest/api/3/issue/10001/changelog · sha256 `35b880d158a7`
+  - evidence `jira:ACME-1/transition/20105/fact` · `sources/jira/ACME-1/transition-20105-35b880d158a7.txt:1` · https\://acme.atlassian.net/rest/api/3/issue/10001/changelog · sha256 `35b880d158a7`
     > Jira transition 20105 on ACME-1 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-10T16:00:00.000Z: status 10007 to 10003
 
 **Conflicts**
@@ -55,7 +55,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `jira:ACME-2/transition/20204`: jira:61a0c3e5f2b1d40069a1b2c3 (roles: product_manager) chose **approve** at 2026-10-07T09:00:00+00:00
-  - evidence `jira:ACME-2/transition/20204/fact` · `sources/jira/ACME-2/transition-20204-c8eebafb7ae4.txt:1` · https://acme.atlassian.net/rest/api/3/issue/10002/changelog · sha256 `c8eebafb7ae4`
+  - evidence `jira:ACME-2/transition/20204/fact` · `sources/jira/ACME-2/transition-20204-c8eebafb7ae4.txt:1` · https\://acme.atlassian.net/rest/api/3/issue/10002/changelog · sha256 `c8eebafb7ae4`
     > Jira transition 20204 on ACME-2 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-07T09:00:00.000Z: status 10002 to 10003
 
 **Event history**
@@ -114,7 +114,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `jira:ACME-4/transition/20402`: jira:61a0c3e5f2b1d40069a1b2c3 (roles: product_manager) chose **revoke** at 2026-10-10T09:00:00+00:00
-  - evidence `jira:ACME-4/transition/20402/fact` · `sources/jira/ACME-4/transition-20402-6b0934847273.txt:1` · https://acme.atlassian.net/rest/api/3/issue/10004/changelog · sha256 `6b0934847273`
+  - evidence `jira:ACME-4/transition/20402/fact` · `sources/jira/ACME-4/transition-20402-6b0934847273.txt:1` · https\://acme.atlassian.net/rest/api/3/issue/10004/changelog · sha256 `6b0934847273`
     > Jira transition 20402 on ACME-4 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-10T09:00:00.000Z: status 10003 to 10005
 
 **Event history**
@@ -141,7 +141,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `jira:ACME-5/transition/20501`: jira:61a0c3e5f2b1d40069a1b2c3 (roles: product_manager) chose **reject** at 2026-10-07T10:00:00+00:00
-  - evidence `jira:ACME-5/transition/20501/fact` · `sources/jira/ACME-5/transition-20501-fa4ab53ea648.txt:1` · https://acme.atlassian.net/rest/api/3/issue/10005/changelog · sha256 `fa4ab53ea648`
+  - evidence `jira:ACME-5/transition/20501/fact` · `sources/jira/ACME-5/transition-20501-fa4ab53ea648.txt:1` · https\://acme.atlassian.net/rest/api/3/issue/10005/changelog · sha256 `fa4ab53ea648`
     > Jira transition 20501 on ACME-5 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-07T10:00:00.000Z: status 10000 to 10004
 
 **Event history**
@@ -195,7 +195,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `jira:ACME-7/transition/20701`: jira:61a0c3e5f2b1d40069a1b2c3 (roles: product_manager) chose **reject** at 2026-10-10T12:00:00+00:00
-  - evidence `jira:ACME-7/transition/20701/fact` · `sources/jira/ACME-7/transition-20701-05e21c792d71.txt:1` · https://acme.atlassian.net/rest/api/3/issue/10007/changelog · sha256 `05e21c792d71`
+  - evidence `jira:ACME-7/transition/20701/fact` · `sources/jira/ACME-7/transition-20701-05e21c792d71.txt:1` · https\://acme.atlassian.net/rest/api/3/issue/10007/changelog · sha256 `05e21c792d71`
     > Jira transition 20701 on ACME-7 by jira:61a0c3e5f2b1d40069a1b2c3 (atlassian) at 2026-10-10T12:00:00.000Z: status 10000 to 10004
 
 **Event history**

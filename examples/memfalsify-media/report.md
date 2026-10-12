@@ -54,7 +54,7 @@
 
 **Evidence**
 - supports (candidate, unconfirmed) · `recordings/standup-2026-10-06.mp4#t=17.5,21.25` (00:00:17.500-00:00:21.250) · transcript `recordings/standup-2026-10-06.mp4.vtt:12` · sha256 `92e1e06a69ee` · media sha256 `4c4369d2dc7b` · source restates the claim (term coverage 1.00)
-  > <v Sam>Bulk export waits for the billing schema migration.
+  > &lt;v Sam&gt;Bulk export waits for the billing schema migration.
 
 **Proposed actions** (not applied)
 - `confirm_support`: Possible supporting evidence; confirm it to mark this memory supported.

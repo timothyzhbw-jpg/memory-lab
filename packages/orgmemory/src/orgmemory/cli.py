@@ -3,7 +3,6 @@ files only outside the dataset; every other command only appends."""
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -14,7 +13,11 @@ from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from memcore import EvidenceError, ManifestEntry, append_jsonl, load_manifest, locate_quote
 from memcore.jsonutil import loads_at
-from memcore.sidecar import one_line
+
+from memcore.cli import SafeTyperGroup
+from memcore.display import one_line as terminal_text
+from memcore.terminal import diagnostic_line
+from memcore.display import json_shield as _json_shield
 
 from .audit import DEFAULT_STALE_DAYS, audit
 from .authority import POLICY_LOG
@@ -25,7 +28,7 @@ from .models import Event, PolicyChange
 from .replay import Dataset, replay, validation_summary
 from .report import audit_markdown, changes_markdown, explain, to_markdown
 
-app = typer.Typer(no_args_is_help=True, add_completion=False,
+app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
                   help="Replay organizational decisions under explicit authority rules.")
 evidence_app = typer.Typer(no_args_is_help=True, help="Manage the evidence manifest.")
 app.add_typer(evidence_app, name="evidence")
@@ -53,17 +56,8 @@ class TextFormat(str, Enum):
     json = "json"
 
 
-_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
-
-def _json_shield(text: str) -> str:
-    """Replace raw C1, bidi and line-separator characters with JSON ``\\uXXXX`` escapes."""
-    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
-
-
 def _fail(message: str) -> None:
-    flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
-    typer.echo(f"error: {flat}", err=True)
+    typer.echo(f"error: {diagnostic_line(message)}", err=True)
     raise typer.Exit(2)
 
 
@@ -72,8 +66,8 @@ def _echo_exact(text: str) -> None:
     typer.echo(text.encode("utf-8"), nl=False)
 
 
-def _as_of(value: Optional[str]) -> Optional[datetime]:
-    return TypeAdapter(AwareDatetime).validate_python(value) if value else None
+def _as_of(value: Optional[str], flag: str = "--as-of") -> Optional[datetime]:
+    return _moment(value, flag) if value is not None else None
 
 
 def _load(dataset: Path) -> Dataset:
@@ -143,7 +137,7 @@ def _moment(value: str, flag: str) -> datetime:
     try:
         return TypeAdapter(AwareDatetime).validate_python(value)
     except ValidationError:
-        _fail(f"{flag} must be an ISO 8601 time with a timezone, like 2026-10-07T23:59:59Z")
+        _fail(f"{flag} must be an ISO 8601 time with a timezone; expected a datetime like 2026-10-07T23:59:59Z")
 
 
 @app.command("changes")
@@ -210,7 +204,7 @@ def export_command(
     except (ValueError, OSError) as exc:
         _fail(str(exc))
     for path in written:
-        typer.echo(f"wrote {path}")
+        typer.echo(f"wrote {terminal_text(str(path))}")
     typer.echo(f"exported {len(records)} decision(s) of {subjects} subject(s), as of {when}; subjects without an "
                "authorized decision are left out")
 
@@ -235,7 +229,7 @@ def append_command(dataset: Path = DATASET,
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
     append_jsonl(dataset / "events.jsonl", new.model_dump(mode="json", exclude_none=True))
-    typer.echo(f"appended {new.id}")
+    typer.echo(f"appended {terminal_text(new.id)}")
 
 
 def _record_role_change(dataset: Path, action: str, id: str, timestamp: str, actor: str, subject_actor: str,
@@ -250,7 +244,7 @@ def _record_role_change(dataset: Path, action: str, id: str, timestamp: str, act
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
     append_jsonl(dataset / POLICY_LOG, change.model_dump(mode="json", exclude_none=True))
-    typer.echo(f"appended {change.id} to {POLICY_LOG}")
+    typer.echo(f"appended {terminal_text(change.id)} to {POLICY_LOG}")
 
 
 ROLE_CHANGE_OPTIONS = dict(
@@ -315,7 +309,7 @@ def evidence_add(
         _fail(str(exc))
     append_jsonl(manifest, entry.model_dump(mode="json"))
     where = span.location if span.media is None else f"{span.citation} ({span.media.label} {span.location})"
-    typer.echo(one_line(f"registered {id} at {where}"))
+    typer.echo(terminal_text(f"registered {id} at {where}"))
 
 
 github_app = typer.Typer(no_args_is_help=True, help="Ingest GitHub issues and pull requests.")
@@ -371,7 +365,7 @@ def github_sync(
         transport = github_fetch.PersistentTransport()
         try:
             client = github_fetch.Client(transport, token, max_wait=max_wait, progress=github_fetch.FetchProgress())
-            summary = run_sync(dataset, repo, client, full=full, since=_as_of(since), issues=issue or [],
+            summary = run_sync(dataset, repo, client, full=full, since=_as_of(since, "--since"), issues=issue or [],
                                save_capture=save_capture, dry_run=dry_run)
         finally:
             # Plain Transport fakes need not implement resource management.

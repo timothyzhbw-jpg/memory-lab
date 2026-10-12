@@ -73,6 +73,16 @@ def no_network(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", refuse)
 
 
+@pytest.fixture(autouse=True)
+def plain_cli_output(monkeypatch):
+    """Typer forces Rich styling when GITHUB_ACTIONS or FORCE_COLOR is set, so CI output would carry ESC
+    sequences of its own. Tests check that untrusted text never yields an ESC, so styling stays off."""
+    monkeypatch.setenv("_TYPER_FORCE_DISABLE_TERMINAL", "1")
+    monkeypatch.setenv("NO_COLOR", "1")
+    for name in ("FORCE_COLOR", "PY_COLORS"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def github_dataset(tmp_path):
     root = tmp_path / "github"

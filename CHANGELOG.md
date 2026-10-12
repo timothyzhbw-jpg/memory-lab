@@ -25,6 +25,21 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
 
 ### Security
 
+- MemFalsify audit, diff and history Markdown, orgmemory replay/explain (including YAML state),
+  audit, changes and ADR exports, CLI diagnostics and Action summaries use shared memcore display
+  helpers: untrusted fields occupy one line with control, format and separator characters visibly
+  escaped, then literal Markdown or safely quoted YAML. Paths and review metadata receive the same
+  treatment. Action logs and annotations retain workflow-command escaping and also escape terminal
+  controls, preventing forged report headings, YAML fence breaks and runner commands.
+
+- `memfalsify rollback` without `--output` shows the patch with control, bidi and other invisible
+  characters escaped (`\uXXXX`) when stdout is a terminal, and says so on stderr. A pipe, a redirect and
+  `--output` still get the exact bytes, so `git apply` works. No untrusted value starts an output line
+  any more, so none can read as a workflow command: the self-approval finding's detail now begins
+  `approved by <actor>, who had also requested the subject`, `orgmemory export --format csv` quotes a
+  subject that starts with `::` (the cell decodes to the same text), and HTML quotes write each line
+  break as `&#10;` (the same layout). `orgmemory validate` prints the actors without a role with
+  `one_line`, so a Windows path keeps its single backslashes.
 - GitHub fetch rejects percent-encoded credential reflection in JSON strings and response headers,
   including header names. Pagination stays on the original listing endpoint and preserves its query
   filters, allowing only pagination changes: at most one positive `page` and one `after` cursor

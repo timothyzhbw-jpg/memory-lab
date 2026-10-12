@@ -1,5 +1,6 @@
 {
   "revision": "3e3058e",
+  "note": "The seven github-acme-web Markdown cases were re-pinned when bare http(s)/ftp URLs became inert in GFM: their bytes equal the revision's output with a backslash before the colon of each URL (https\\://), nothing else.",
   "cases": [
     {
       "dataset": "feature-a",
@@ -150,7 +151,7 @@
         "replay"
       ],
       "exit_code": 0,
-      "sha256": "275ff6ea00918e56a9a53b479ed6607413536216d2db3edf740d4c27e5f6271f"
+      "sha256": "61c63b13d94771eef446b3f5c906e69133cc4e36b43221274b1302d77aa949e6"
     },
     {
       "dataset": "github-acme-web",
@@ -169,7 +170,7 @@
         "acme/web#1"
       ],
       "exit_code": 0,
-      "sha256": "f7b25c98c6a656341774c7998024e3d9543bdd0551ba5e9398a3590063b69a8e"
+      "sha256": "43a84d2cb472d369c891fbb91f93a9093da93c8e4f210ddaf12824bf6b67b10e"
     },
     {
       "dataset": "github-acme-web",
@@ -179,7 +180,7 @@
         "2026-10-07T23:59:59Z"
       ],
       "exit_code": 0,
-      "sha256": "7b8f00dff89116cea696d596ccd056793e409bd8a834951339b31568e2181056"
+      "sha256": "8943fee277a7aba4079c640cb3fe5f453ffd1ea4b158278dd88cef02c3873280"
     },
     {
       "dataset": "github-acme-web",
@@ -202,7 +203,7 @@
         "2026-10-07T23:59:59Z"
       ],
       "exit_code": 0,
-      "sha256": "469740efd68c27b98ba9708f72bd110e4d63a6c0c475ae40ef29e2b3d01ef437"
+      "sha256": "524ee62b380e0c6cedee452dfc4cb7283d040dffc5066edacc1a356f8dac4318"
     },
     {
       "dataset": "github-acme-web",
@@ -212,7 +213,7 @@
         "2026-10-31T00:00:00Z"
       ],
       "exit_code": 0,
-      "sha256": "57a0e293c996f7669e563e12267bfbb7f7875ee08a5e1248f583de4ac33cf9a7"
+      "sha256": "03d3977489e19cd6ac3c8c9e318a53ef1903d7087e675c73402485a88dcc5cf6"
     },
     {
       "dataset": "github-acme-web",
@@ -235,7 +236,7 @@
         "2026-10-31T00:00:00Z"
       ],
       "exit_code": 0,
-      "sha256": "57a0e293c996f7669e563e12267bfbb7f7875ee08a5e1248f583de4ac33cf9a7"
+      "sha256": "03d3977489e19cd6ac3c8c9e318a53ef1903d7087e675c73402485a88dcc5cf6"
     },
     {
       "dataset": "github-acme-web",
@@ -245,7 +246,7 @@
         "2026-10-07T23:59:59Z"
       ],
       "exit_code": 0,
-      "sha256": "5088527dbc05b65d88823698ed68461da38de7d95754a6236cac30680a6665a0"
+      "sha256": "c579a2739e828b3c776c86460195a3e3ccfb29498bc5e2f32f6d8e3d0506b40b"
     },
     {
       "dataset": "github-acme-web",

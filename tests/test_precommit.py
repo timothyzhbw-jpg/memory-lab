@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -223,6 +224,23 @@ def _stage_contradiction(repo) -> None:
 
 
 @needs_git
+@pytest.mark.parametrize("mode", ["diff", "audit"])
+def test_hook_usage_error_carries_no_rich_styling_in_ci(tmp_path, monkeypatch, mode):
+    """pre-commit also runs in CI, where GITHUB_ACTIONS or FORCE_COLOR makes Typer force Rich colour. The hook's
+    stderr must stay plain text, so an ESC in it can only come from untrusted text. conftest keeps styling off for
+    every test: undo that and run the hook as a fresh process, as the manifest does (``python -m``)."""
+    monkeypatch.delenv("_TYPER_FORCE_DISABLE_TERMINAL", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    proc = subprocess.run([sys.executable, "-X", "utf8", "-m", "memfalsify.precommit", mode,
+                           "--verifier=no-such-verifier"], cwd=tmp_path, env=env, capture_output=True, check=False)
+    log = proc.stdout.decode("utf-8") + proc.stderr.decode("utf-8")
+    assert proc.returncode == 2 and "no-such-verifier" in log  # the usage error did reach the output
+    assert "\x1b" not in log
+
+
 def test_hook_diff_fails_only_for_attention_and_audit_checks_old_claims(repo, monkeypatch):
     repo.commit("base", {"CLAUDE.md": "- The main database runs PostgreSQL 15.\n",
                          "MEMORY.md": "- The cache uses Redis.\n",
@@ -331,11 +349,12 @@ def test_hook_markdown_keeps_untrusted_text_inert_and_json_escapes_controls(repo
         result = runner.invoke(app, [mode, *common])
         assert result.exit_code in (0, 1), result.output
         assert esc not in result.stdout and rlo not in result.stdout and cr not in result.stdout
-        assert "\ufffd" in result.stdout and "sessions" in result.stdout
+        assert "u001b" in result.stdout and "u202e" in result.stdout and "sessions" in result.stdout
     payload = runner.invoke(app, ["audit", *common, "--format", "json"])
     assert payload.exit_code in (0, 1), payload.output
-    assert rlo in payload.stdout and esc not in payload.stdout and cr not in payload.stdout
-    assert "\\u001b" in payload.stdout
+    # JSON on a terminal escapes format characters too; the parsed data keeps them (checked below).
+    assert rlo not in payload.stdout and esc not in payload.stdout and cr not in payload.stdout
+    assert "\\u001b" in payload.stdout and "\\u202e" in payload.stdout
     data = json.loads(payload.stdout)
     quotes = [e["span"]["quote"] for report in data["reports"] for finding in report["findings"]
               for e in finding["evidence"]]

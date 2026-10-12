@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-import re
+import sys
 from collections.abc import Callable, Iterable
 from datetime import date
 from enum import Enum
@@ -12,10 +12,14 @@ from typing import Optional
 import typer
 from pydantic import ValidationError
 
+from memcore.cli import SafeTyperGroup
+from memcore.display import one_line as terminal_text
+from memcore.terminal import diagnostic_line
+from memcore.display import json_shield as _json_shield
+
 from . import jev, llm
 from .audit import ATTENTION, audit
 from .discover import discover, discovery_to_markdown
-from .gitstore import show_text
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
 from .htmlreport import diff_to_html, to_html
 from .memory import claim_record, parse_memory
@@ -23,7 +27,7 @@ from .report import to_markdown
 from .rollback import rollback_patch
 from .verify import CascadeVerifier, DualVerifier, LexicalVerifier, Verifier, VerifierError
 
-app = typer.Typer(no_args_is_help=True, add_completion=False,
+app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
                   help="Audit agent memory and instruction files against evidence. Never modifies memory.")
 
 # Memory files are Markdown: MEMORY.md and the instruction files `discover` lists.
@@ -85,30 +89,22 @@ def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_
             "max_judged": None if lexical else max_judged}
 
 
-# C1, bidi, zero-width and line separators. json.dumps already escapes C0. Replacing the raw
-# character with a \\uXXXX escape keeps json.loads able to restore it and a terminal unable to act on it.
-_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
-
-def _json_shield(text: str) -> str:
-    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
 def concurrency(choice: VerifierChoice, max_concurrency: int) -> int:
     """Model verifiers wait on the network, so they run requests in parallel; lexical judging stays serial."""
     return 1 if choice is VerifierChoice.lexical else max_concurrency
 
 
 def _progress(message: str) -> None:
-    typer.echo(message, err=True)
+    typer.echo(diagnostic_line(message), err=True)
 
 
 def _fail(message: str) -> None:
-    flat = "".join(ch if ch.isprintable() else "\ufffd" for ch in " ".join(message.split()))
-    typer.echo(f"error: {flat}", err=True)
+    typer.echo(f"error: {diagnostic_line(message)}", err=True)
     raise typer.Exit(2)
 
 
 def _emit(text: str, markdown: bool) -> None:
-    typer.echo(show_text(text) if markdown else _json_shield(text), nl=False)
+    typer.echo(text if markdown else _json_shield(text), nl=False)
 
 
 def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "report") -> None:
@@ -116,7 +112,25 @@ def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "re
     if output.resolve() in {Path(p).resolve() for p in protected}:
         _fail(f"refusing to overwrite a memory file with the {what}")
     output.write_bytes(data)
-    typer.echo(f"wrote {output}", err=True)
+    typer.echo(f"wrote {terminal_text(str(output))}", err=True)
+
+
+def _stdout_is_terminal() -> bool:
+    try:
+        return sys.stdout.isatty()
+    except (AttributeError, ValueError):  # no stdout, or a closed one
+        return False
+
+
+def _screen_patch(patch: bytes) -> str:
+    """A patch for a person's terminal: control, bidi, zero-width and separator characters shown as ``\\uXXXX``
+    escapes (a hostile revision could otherwise clear the screen or reorder text). Line breaks, a CRLF and tabs
+    stay, so the layout is the patch's own."""
+    def line(raw: str) -> str:
+        body, cr = (raw[:-1], "\r") if raw.endswith("\r") else (raw, "")
+        return "\t".join(terminal_text(part) for part in body.split("\t")) + cr
+
+    return "\n".join(line(raw) for raw in patch.decode("utf-8", errors="replace").split("\n"))
 
 
 def _echo_exact(text: str) -> None:
@@ -290,7 +304,10 @@ def rollback_command(
     follow_links: bool = typer.Option(True, help="Also look in local .md files the memory file links to or "
                                                  "@-imports"),
 ) -> None:
-    """Print (never apply) a patch restoring a claim's text as of a revision, or re-adding a removed claim."""
+    """Print (never apply) a patch restoring a claim's text as of a revision, or re-adding a removed claim.
+
+    The patch goes out byte for byte to a pipe, a redirect or --output. On a terminal, control and bidi
+    characters in it are shown escaped; use --output for a patch to apply."""
     try:
         result = rollback_patch(memory, claim, to, follow_links=follow_links)
     except (ValidationError, ValueError, OSError) as exc:
@@ -298,6 +315,12 @@ def rollback_command(
     if result.patch is not None:
         if output:
             _write(output, result.patch, result.files, "patch")
+        elif _stdout_is_terminal():
+            shown = _screen_patch(result.patch)
+            typer.echo(shown.encode("utf-8"), nl=False)  # bytes, so Windows text mode adds no CR to each LF
+            if shown.encode("utf-8") != result.patch:
+                typer.echo("note: the patch holds control, bidi or other invisible characters; they are shown "
+                           "escaped here. Use --output (or a pipe) for the exact patch.", err=True)
         else:
             typer.echo(result.patch, nl=False)  # bytes go out as-is, so line endings survive on Windows
     typer.echo(result.message, err=True)

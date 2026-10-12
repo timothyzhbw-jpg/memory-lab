@@ -3,64 +3,33 @@ and of the changes between two times."""
 from __future__ import annotations
 
 import json
-import re
-import unicodedata
 from collections import Counter
-from html import escape
 from typing import Callable, Optional
 
 from memcore import EvidenceSpan
-from memcore.sidecar import one_line, show_line
+from memcore.display import (UNSAFE_CATEGORIES, code_span as _audit_code, markdown_text as _safe,
+                             one_line as _one_line, report_text, table_code, yaml_value as _yaml_value)
 
 from .audit import SEVERITIES, AuditFinding, AuditReport, CitedEvent
 from .changes import KINDS as CHANGE_KINDS, ChangesReport
 from .models import DatedPolicy, ReplayResult, RoleChange, SubjectState, TrailEntry
 
-# Terminal and bidi controls. Newlines and tabs stay so the report can still break lines.
-_TERMINAL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
 
 def terminal_safe(text: str) -> str:
-    """Replay text safe to print: control and bidi characters become U+FFFD. Newlines and tabs stay."""
-    return _TERMINAL.sub("\ufffd", text)
+    """Compatibility helper for complete text: preserve renderer line breaks, escape each line."""
+    return "\n".join(_one_line(line) for line in text.split("\n"))
 
 
-def _yaml_value(value) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return "null"
-    if isinstance(value, list):
-        return "[" + ", ".join(_yaml_value(v) for v in value) + "]"
-    return json.dumps(value, ensure_ascii=False) if any(c in str(value) for c in ":#[]{},'\"") else str(value)
-
-
-def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = str,
+def cite(span: EvidenceSpan, indent: str = "  ", clean: Callable[[str], str] = report_text,
          code: Callable[[str], str] | None = None) -> list[str]:
-    """One evidence citation: id, location, source, short hash, then the exact quote.
-
-    A quote from a transcript or OCR sidecar is located in the media file first (``clip.mp4#t=12.5,17``), then
-    in the sidecar whose bytes the hash covers.
-
-    ``explain`` and ``replay`` use the default ``clean`` (``str``). They split cue lines first, then drop
-    terminal and bidi controls on each line, and they flatten ids and paths onto one line. The audit passes
-    ``_safe``, which already escapes those characters (a newline becomes a ``\\u`` escape) before the split."""
-    code = code or (lambda value: f"`{clean(value)}`")
-    # Identity, not a copy of ``str``: only the default display path scrubs. Audits pass ``_safe``.
-    literal = clean is str
-
-    def field(value: str) -> str:
-        return one_line(value) if literal else value
-
-    where = code(field(span.location))
+    """A single-line literal quote and safe citation fields (audit can supply its own cleaner)."""
+    code = code or _audit_code
+    where = code(span.location)
     if span.media is not None:
         when = f" ({span.media.time_range})" if span.media.time_range else ""
-        where = f"{code(field(span.citation))}{when} · {span.media.label} {where}"
-    raw = span.quote if literal else clean(span.quote)
-    lines = [show_line(line) if literal else line for line in re.split(r"\r\n|\r|\n", raw)]
-    return [f"{indent}- evidence {code(field(str(span.id)))} · {where} · {clean(field(str(span.source_uri)))} "
-            f"· sha256 `{span.sha256[:12]}`",
-            *(f"{indent}  > {line}" for line in lines)]
+        where = f"{code(span.citation)}{when} · {span.media.label} {where}"
+    return [f"{indent}- evidence {code(str(span.id))} · {where} · {clean(str(span.source_uri))} "
+            f"· sha256 `{span.sha256[:12]}`", f"{indent}  > {clean(span.quote)}"]
 
 
 def state_block(state: SubjectState) -> list[str]:
@@ -82,10 +51,10 @@ def _role_names(roles: list[str]) -> str:
     return ", ".join(roles) or "none"
 
 
-def role_change_text(change: RoleChange, clean: Callable[[str], str] = str,
+def role_change_text(change: RoleChange, clean: Callable[[str], str] = report_text,
                      code: Callable[[str], str] | None = None) -> str:
     """One applied policy-log entry: who changed whose role, when, and the roles before and after."""
-    code = code or (lambda value: f"`{clean(value)}`")
+    code = code or _audit_code
     verb = (f"granted {clean(change.role)} to" if change.action == "grant"
             else f"removed {clean(change.role)} from")
     note = f"; note: {clean(_one_line(json.dumps(change.note, ensure_ascii=False)))}" if change.note else ""
@@ -111,30 +80,34 @@ def explain(result: ReplayResult, subject: str) -> str:
 def _explain(result: ReplayResult, subject: str, rows: list[TrailEntry]) -> str:
     """``explain`` with the subject's trail entries already selected (``to_markdown`` groups them once)."""
     state = result.states[subject]
-    out = [f"## {subject}", ""] + state_block(state) + [""]
+    out = [f"## {report_text(subject)}", ""] + state_block(state) + [""]
     decision = state.last_authorized_decision
     changes = result.dated_policy.role_changes if result.dated_policy else []
     if decision:
+        roles = report_text(", ".join(decision.roles))
         out += ["**Why this is the current status**", "",
-                f"- `{decision.event_id}`: {decision.actor} (roles: {', '.join(decision.roles)}) "
+                f"- {_audit_code(decision.event_id)}: {report_text(decision.actor)} (roles: {roles}) "
                 f"chose **{decision.action}** at {decision.timestamp.isoformat()}"]
         for span in decision.evidence:
             out += cite(span)
         later = [c for c in changes if c.subject_actor == decision.actor and c.timestamp > decision.timestamp]
         if later:
-            out.append(f"  - {decision.actor}'s roles changed later: " + "; ".join(
-                f"{'gained' if c.action == 'grant' else 'lost'} {c.role} at {c.timestamp.isoformat()} "
-                f"(`{c.change_id}`)" for c in later)
+            out.append(f"  - {report_text(decision.actor)}'s roles changed later: " + "; ".join(
+                f"{'gained' if c.action == 'grant' else 'lost'} {report_text(c.role)} at {c.timestamp.isoformat()} "
+                f"({_audit_code(c.change_id)})" for c in later)
                 + ". The decision stands: it is judged by the roles held when it was made.")
         out.append("")
     else:
         out += ["No authorized decision yet.", ""]
     if state.pending_changes:
         out += ["**Ignored: actor lacked authority**", ""]
-        out += [f"- `{c.event_id}`: {c.actor} tried to {c.action}; {c.reason}" for c in state.pending_changes]
+        out += [f"- {_audit_code(c.event_id)}: {report_text(c.actor)} tried to {c.action}; {report_text(c.reason)}"
+                for c in state.pending_changes]
         out.append("")
     if state.conflicts:
-        out += ["**Conflicts**", ""] + [f"- {c.kind} {c.event_ids}: {c.detail}" for c in state.conflicts] + [""]
+        out += ["**Conflicts**", ""]
+        out += [f"- {c.kind} {report_text(str(c.event_ids))}: {report_text(c.detail)}" for c in state.conflicts]
+        out.append("")
     actors = {e.actor for e in rows}
     relevant = [c for c in changes if c.subject_actor in actors]
     if relevant:
@@ -146,9 +119,9 @@ def _explain(result: ReplayResult, subject: str, rows: list[TrailEntry]) -> str:
                 out += cite(span)
         out.append("")
     out += ["**Event history**", "", "| Time | Event | Actor | Action | Outcome | Status |", "|---|---|---|---|---|---|"]
-    out += [f"| {e.timestamp.isoformat()} | `{e.event_id}` | {e.actor} ({', '.join(e.roles) or 'no role'}) | "
+    out += [f"| {e.timestamp.isoformat()} | {table_code(e.event_id)} | {report_text(e.actor)} ({report_text(', '.join(e.roles) or 'no role')}) | "
             f"{e.action} | {e.outcome} | {e.status_before} → {e.status_after} |" for e in rows]
-    return terminal_safe("\n".join(out) + "\n")
+    return "\n".join(out) + "\n"
 
 
 def to_markdown(result: ReplayResult) -> str:
@@ -162,66 +135,7 @@ def to_markdown(result: ReplayResult) -> str:
            f"- Mode: **{result.mode}** (the event log was not modified)", ""]
     for subject in result.states:
         out.append(_explain(result, subject, grouped.get(subject, [])))
-    return terminal_safe("\n".join(out))
-
-
-# Control, format (bidi, zero-width) and line/paragraph separator characters.
-UNSAFE_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
-_LINE_CLASSES = frozenset(UNSAFE_CATEGORIES)
-_ASCII_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
-_MARKUP = re.compile(r"[\\`*_{}\[\]#|~&<>]")
-_LEADING = re.compile(r"^(?:\s*[-+=]|\s*\d+[.)](?=\s))")
-_MARKDOWN_CHARS = re.compile(r"([\\`*_{}\[\]#|~])")
-_LEADING_SPACES = re.compile(r"^ +")
-_LEADING_MARK = re.compile(r"^(\s*)([-+=])")
-_LEADING_NUMBER = re.compile(r"^(\s*\d+)([.)])(?=\s)")
-_BACKTICKS = re.compile(r"`+")
-
-
-def _plain_line(text: str) -> bool:
-    """True when ``_one_line`` would copy every character unchanged."""
-    if text.isascii():
-        # ASCII Cc is C0 plus DEL. Format and separator characters are all above ASCII.
-        return _ASCII_CONTROL.search(text) is None
-    for char in text:
-        if unicodedata.category(char) in _LINE_CLASSES:
-            return False
-    return True
-
-
-def _one_line(text: str) -> str:
-    """Untrusted text kept on one line: control, format (bidi, zero-width) and separator characters are escaped."""
-    if _plain_line(text):
-        return text
-    return "".join(c if unicodedata.category(c) not in _LINE_CLASSES
-                   else f"\\u{ord(c):04x}" if ord(c) <= 0xFFFF else f"\\U{ord(c):08x}" for c in text)
-
-
-def _safe(text: str) -> str:
-    """Literal Markdown text, including in headings and evidence blockquotes."""
-    text = _one_line(text)
-    if _MARKUP.search(text) is None and _LEADING.search(text) is None and not text.startswith(" "):
-        return text  # nothing to escape: skip the substitutions
-    text = escape(text, quote=False)
-    text = _MARKDOWN_CHARS.sub(r"\\\1", text)
-    # Leading spaces would make an evidence blockquote an indented code block: keep them as references.
-    text = _LEADING_SPACES.sub(lambda spaces: "&#32;" * len(spaces.group()), text)
-    # Block syntax can still be recognized at the start of a one-line quote/detail.
-    text = _LEADING_MARK.sub(r"\1\\\2", text)
-    return _LEADING_NUMBER.sub(r"\1\\\2", text)
-
-
-def _audit_code(text: str) -> str:
-    """Code spans need a delimiter longer than any backtick run in the data."""
-    text = _one_line(text)
-    if "`" not in text:
-        # Padding protects significant edge spaces. A single space on both sides is not significant.
-        if text.startswith(" ") and text.endswith(" ") and text.strip():
-            return f"` {text} `"
-        return f"`{text}`"
-    fence = "`" * (1 + max(len(run) for run in _BACKTICKS.findall(text)))
-    # A backtick anywhere uses the padded form so the delimiter stays unambiguous.
-    return f"{fence} {text} {fence}"
+    return "\n".join(out)
 
 
 def _cited_events(events: list[CitedEvent], subject: Optional[str]) -> list[str]:

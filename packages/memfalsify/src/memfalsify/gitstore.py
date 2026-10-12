@@ -20,8 +20,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath, PureWindowsPath
 
+from memcore.display import code_span as _code_span, report_text
 from memcore.paths import InputPathError, component_skip_reason, input_path
 from memcore.reading import confinement_root, read_input_text
+from memcore.terminal import diagnostic_line
 
 from .corpus import Skipped
 from .formats import detect
@@ -30,8 +32,6 @@ from .memory import Claim, merge_duplicates, normalize_memory, parse_text
 HEX = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # C0/C1 controls and the bidi, zero-width and line-separator characters that can disguise text.
 CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-# Same set, but keep tab and newline so a Markdown report can still break lines.
-DISPLAY = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
 # Global options: literal pathspecs (file names are not globs) and no config that changes what we parse.
 GIT_OPTIONS = ("--literal-pathspecs", "-c", "core.quotePath=false", "-c", "log.showSignature=false",
                "-c", "log.follow=false")
@@ -58,24 +58,18 @@ class GitError(HistoryError):
 
 
 def printable(text: str) -> str:
-    """Untrusted text (git messages, commit subjects) on one line, without terminal or bidi controls."""
-    return CONTROL.sub("\ufffd", " ".join(text.split()))
+    """Untrusted diagnostics on one line: whitespace runs collapse to one space, invisible characters are escaped."""
+    return diagnostic_line(text)
 
 
 def show_text(text: str) -> str:
-    """Memory or evidence text for a report: terminal and bidi controls removed, line breaks kept."""
-    return DISPLAY.sub("\ufffd", text)
+    """An untrusted report field as single-line literal Markdown."""
+    return report_text(text)
 
 
 def code_span(text: str) -> str:
-    """Untrusted text as one Markdown code span, whatever backticks it contains.
-
-    Whitespace is collapsed, so a newline in a path or a pattern cannot open a new Markdown line.
-    """
-    text = " ".join(show_text(text).split())
-    fence = "`" * (max((len(run) for run in re.findall(r"`+", text)), default=0) + 1)
-    pad = " " if text[:1] == "`" or text[-1:] == "`" else ""
-    return f"{fence}{pad}{text}{pad}{fence}"
+    """A literal single-line code span, preserving the established delimiter padding."""
+    return _code_span(text, pad_backticks=False)
 
 
 def check_revision(rev: str) -> str:

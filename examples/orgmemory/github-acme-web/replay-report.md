@@ -19,7 +19,7 @@ unauthorized_change_attempts: ["gh:acme/web#1/event/107", "gh:acme/web#1/event/1
 **Why this is the current status**
 
 - `gh:acme/web#1/event/105`: gh:zhou-pm:5003 (roles: product_manager) chose **reject** at 2026-10-07T15:30:00+00:00
-  - evidence `gh:acme/web#1/event/105/fact` · `sources/github/acme/web/1/event-105-c2a1c517e9cc.txt:1` · https://api.github.com/repos/acme/web/issues/events/105 · sha256 `c2a1c517e9cc`
+  - evidence `gh:acme/web#1/event/105/fact` · `sources/github/acme/web/1/event-105-c2a1c517e9cc.txt:1` · https\://api.github.com/repos/acme/web/issues/events/105 · sha256 `c2a1c517e9cc`
     > GitHub event 105 on acme/web#1 by gh:zhou-pm:5003 (User) at 2026-10-07T15:30:00Z: closed (state_reason not_planned, commit none)
 
 **Ignored: actor lacked authority**
@@ -56,7 +56,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `gh:acme/web#2/event/207`: gh:zhou-pm:5003 (roles: product_manager) chose **approve** at 2026-10-07T10:00:00+00:00
-  - evidence `gh:acme/web#2/event/207/fact` · `sources/github/acme/web/2/event-207-b9890b2ca38e.txt:1` · https://api.github.com/repos/acme/web/issues/events/207 · sha256 `b9890b2ca38e`
+  - evidence `gh:acme/web#2/event/207/fact` · `sources/github/acme/web/2/event-207-b9890b2ca38e.txt:1` · https\://api.github.com/repos/acme/web/issues/events/207 · sha256 `b9890b2ca38e`
     > GitHub event 207 on acme/web#2 by gh:zhou-pm:5003 (User) at 2026-10-07T10:00:00Z: merged (commit 54bb654c9e60)
 
 **Conflicts**
@@ -141,9 +141,9 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `gh:acme/web#5/event/502`: gh:zhou-pm:5003 (roles: product_manager) chose **revoke** at 2026-10-10T10:00:00+00:00
-  - evidence `gh:acme/web#5/event/502/fact` · `sources/github/acme/web/5/event-502-907481344b21.txt:1` · https://api.github.com/repos/acme/web/issues/events/502 · sha256 `907481344b21`
+  - evidence `gh:acme/web#5/event/502/fact` · `sources/github/acme/web/5/event-502-907481344b21.txt:1` · https\://api.github.com/repos/acme/web/issues/events/502 · sha256 `907481344b21`
     > GitHub event 502 on acme/web#5 by gh:zhou-pm:5003 (User) at 2026-10-10T10:00:00Z: review_dismissed review 501 (was approved)
-  - evidence `gh:acme/web#5/event/502/text` · `sources/github/acme/web/5/event-502-907481344b21.txt:4` · https://api.github.com/repos/acme/web/issues/events/502 · sha256 `907481344b21`
+  - evidence `gh:acme/web#5/event/502/text` · `sources/github/acme/web/5/event-502-907481344b21.txt:4` · https\://api.github.com/repos/acme/web/issues/events/502 · sha256 `907481344b21`
     > Approved too early: the billing migration slipped to November.
 
 **Event history**
@@ -170,9 +170,9 @@ unauthorized_change_attempts: ["gh:acme/web#6/event/602"]
 **Why this is the current status**
 
 - `gh:acme/web#6/review/601`: gh:zhou-pm:5003 (roles: product_manager) chose **reject** at 2026-10-06T10:00:00+00:00
-  - evidence `gh:acme/web#6/review/601@a8490d7f6e90/fact` · `sources/github/acme/web/6/review-601-ad3111cafa43.txt:1` · https://github.com/acme/web/pull/6#pullrequestreview-601 · sha256 `ad3111cafa43`
+  - evidence `gh:acme/web#6/review/601@a8490d7f6e90/fact` · `sources/github/acme/web/6/review-601-ad3111cafa43.txt:1` · https\://github.com/acme/web/pull/6#pullrequestreview-601 · sha256 `ad3111cafa43`
     > GitHub review 601 on acme/web#6 by gh:zhou-pm:5003 (User) at 2026-10-06T10:00:00Z: changes_requested on commit c0ffee00c0ff
-  - evidence `gh:acme/web#6/review/601@a8490d7f6e90/text` · `sources/github/acme/web/6/review-601-ad3111cafa43.txt:4` · https://github.com/acme/web/pull/6#pullrequestreview-601 · sha256 `ad3111cafa43`
+  - evidence `gh:acme/web#6/review/601@a8490d7f6e90/text` · `sources/github/acme/web/6/review-601-ad3111cafa43.txt:4` · https\://github.com/acme/web/pull/6#pullrequestreview-601 · sha256 `ad3111cafa43`
     > Not until the billing migration lands.
 
 **Ignored: actor lacked authority**
@@ -203,11 +203,11 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `gh:acme/web#7/review/701`: gh:zhou-pm:5003 (roles: product_manager) chose **approve** at 2026-10-06T12:00:00+00:00
-  - evidence `gh:acme/web#7/review/701@55f1d3e9d8ec/fact` · `sources/github/acme/web/7/review-701-2681090de1bd.txt:1` · https://github.com/acme/web/pull/7#pullrequestreview-701 · sha256 `2681090de1bd`
+  - evidence `gh:acme/web#7/review/701@55f1d3e9d8ec/fact` · `sources/github/acme/web/7/review-701-2681090de1bd.txt:1` · https\://github.com/acme/web/pull/7#pullrequestreview-701 · sha256 `2681090de1bd`
     > GitHub review 701 on acme/web#7 by gh:zhou-pm:5003 (User) at 2026-10-06T12:00:00Z: dismissed on commit 7a7a7a7a7a7a
-  - evidence `gh:acme/web#7/review/701@55f1d3e9d8ec/text` · `sources/github/acme/web/7/review-701-2681090de1bd.txt:4` · https://github.com/acme/web/pull/7#pullrequestreview-701 · sha256 `2681090de1bd`
+  - evidence `gh:acme/web#7/review/701@55f1d3e9d8ec/text` · `sources/github/acme/web/7/review-701-2681090de1bd.txt:4` · https\://github.com/acme/web/pull/7#pullrequestreview-701 · sha256 `2681090de1bd`
     > Looks good.
-  - evidence `gh:acme/web#7/event/702/fact` · `sources/github/acme/web/7/event-702-500d1312635a.txt:1` · https://api.github.com/repos/acme/web/issues/events/702 · sha256 `500d1312635a`
+  - evidence `gh:acme/web#7/event/702/fact` · `sources/github/acme/web/7/event-702-500d1312635a.txt:1` · https\://api.github.com/repos/acme/web/issues/events/702 · sha256 `500d1312635a`
     > GitHub event 702 on acme/web#7 by gh:lin-eng:5002 (User) at 2026-10-07T08:00:00Z: review_dismissed review 701 (was approved, by commit 7b7b7b7b7b7b)
 
 **Event history**
@@ -359,7 +359,7 @@ unauthorized_change_attempts: []
 **Why this is the current status**
 
 - `gh:acme/web#13/event/1302`: gh:zhou-pm:5003 (roles: product_manager) chose **revoke** at 2026-10-10T11:00:00+00:00
-  - evidence `gh:acme/web#13/event/1302/fact` · `sources/github/acme/web/13/event-1302-96770770ecf3.txt:1` · https://api.github.com/repos/acme/web/issues/events/1302 · sha256 `96770770ecf3`
+  - evidence `gh:acme/web#13/event/1302/fact` · `sources/github/acme/web/13/event-1302-96770770ecf3.txt:1` · https\://api.github.com/repos/acme/web/issues/events/1302 · sha256 `96770770ecf3`
     > GitHub event 1302 on acme/web#13 by gh:zhou-pm:5003 (User) at 2026-10-10T11:00:00Z: reopened
 
 **Event history**

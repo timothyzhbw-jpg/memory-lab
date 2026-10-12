@@ -1,16 +1,15 @@
 """Render an AuditReport as a Markdown document a reviewer can read top to bottom."""
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 
 from memcore import EvidenceSpan
-from memcore.sidecar import one_line
+from memcore.display import report_text
 
 from .audit import AuditReport, Finding
 from .corpus import REPORT_HEADER
 from .formats import Value
-from .gitstore import code_span, printable, show_text
+from .gitstore import code_span, show_text
 
 LABELS = {
     "challenged": "CHALLENGED",
@@ -24,13 +23,11 @@ LABELS = {
 
 
 def _quote(text: str, *, scrub: bool = False) -> str:
-    if scrub:
-        text = show_text(text)
-    return "> " + text.replace("\n", "\n> ")
+    return "> " + show_text(text)
 
 
 def _as_is(text: str) -> str:
-    return text
+    return report_text(text)
 
 
 def source(span: EvidenceSpan, show: Callable[[str], str] = _as_is) -> str:
@@ -48,12 +45,12 @@ def source(span: EvidenceSpan, show: Callable[[str], str] = _as_is) -> str:
 
 def skipped_line(path: str, reason: str, show: Callable[[str], str] = _as_is) -> str:
     """One bullet. A file name or a diagnostic is untrusted and must not break the list or the terminal."""
-    return f"- {code_span(path)}: {show(one_line(reason))}"
+    return f"- {code_span(path)}: {show(reason)}"
 
 
 def quote_lines(quote: str, show: Callable[[str], str] = _as_is, indent: str = "  ") -> list[str]:
-    """A blockquote line per line of the quote (a transcript cue can span several lines)."""
-    return [f"{indent}> {show(line)}" for line in re.split(r"\r\n|\r|\n", quote)]
+    """One literal blockquote line, including escaped cue line breaks."""
+    return [f"{indent}> {show(quote)}"]
 
 
 def _code(text: str) -> str:
@@ -70,10 +67,10 @@ def metadata_line(metadata: dict[str, Value]) -> str:
 
 def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
     def show(text: str) -> str:
-        return show_text(text) if scrub else text
+        return show_text(text)
 
     where = code_span(f.location) + (f" · {code_span(f.section)}" if f.section else "")
-    out = [f"### {LABELS[f.status]} · `{f.memory_id}`", "", _quote(f.text, scrub=scrub), "", where, ""]
+    out = [f"### {LABELS[f.status]} · {code_span(f.memory_id)}", "", _quote(f.text, scrub=scrub), "", where, ""]
     if f.metadata:
         out += [metadata_line(f.metadata), ""]
     if f.evidence:
@@ -90,7 +87,7 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
         out.append("")
     if f.proposals:
         out.append("**Proposed actions** (not applied)")
-        out += [f"- `{p.action}`: {show(p.reason)}" for p in f.proposals]
+        out += [f"- {code_span(p.action)}: {show(p.reason)}" for p in f.proposals]
         out.append("")
     return out
 
@@ -99,9 +96,8 @@ def usage_lines(report: AuditReport) -> list[str]:
     """One line per model backend: requests, and the tokens the API reported (cache writes and reads for Claude)."""
     out = []
     for stats in report.verifier_stats:
-        # The name is a code span on one line. A backtick or a newline in it would break the span.
-        name = printable(stats.verifier).replace("`", "'")
-        line = f"- API usage of `{name}`: {stats.requests} request(s)"
+        name = code_span(stats.verifier)
+        line = f"- API usage of {name}: {stats.requests} request(s)"
         if stats.batched_requests:
             line += f" ({stats.batched_requests} through the Message Batches API)"
         line += f" · input tokens: {stats.input_tokens}"
@@ -113,13 +109,9 @@ def usage_lines(report: AuditReport) -> list[str]:
 
 
 def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
-    """Render the report. ``scrub`` strips terminal and bidi controls from untrusted text.
-
-    Paths are always code spans without controls. The CLI keeps memory and evidence text literal; the
-    pre-commit hook scrubs, because it prints the report on a terminal during ``git commit``.
-    """
+    """Render single-line literal fields. ``scrub`` is retained for API compatibility."""
     def show(text: str) -> str:
-        return show_text(text) if scrub else text
+        return show_text(text)
 
     out = [REPORT_HEADER, "",
            f"- Memory: {code_span(report.memory_file)} ({len(report.files_read)} file(s): "
@@ -127,7 +119,7 @@ def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
            (f"- Evidence root: {code_span(report.evidence_root)}" if report.evidence_root
             else "- Evidence root: none supplied"),
            *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in report.excluded)] if report.excluded else []),
-           f"- Verifier: `{report.verifier}` · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
+           f"- Verifier: {code_span(report.verifier)} · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
            *usage_lines(report),
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]
@@ -138,5 +130,5 @@ def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
         out += ["## Skipped evidence", ""]
         out += [skipped_line(s.path, s.reason, show) for s in report.skipped_evidence]
         out.append("")
-    out += ["## Limitations", ""] + [f"- {line}" for line in report.limitations]
+    out += ["## Limitations", ""] + [f"- {show(line)}" for line in report.limitations]
     return "\n".join(out) + "\n"

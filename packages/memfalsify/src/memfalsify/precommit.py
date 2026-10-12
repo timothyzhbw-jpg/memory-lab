@@ -13,6 +13,7 @@ The manifest launches this module with ``python -X utf8`` so the report is UTF-8
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -20,6 +21,10 @@ from typing import Optional
 
 import typer
 from pydantic import ValidationError
+
+from memcore.cli import SafeTyperGroup
+from memcore.display import json_shield
+from memcore.terminal import diagnostic_line
 
 from . import __version__, jev, llm
 from .audit import ATTENTION
@@ -33,7 +38,7 @@ from .verify import VerifierError
 # Basenames the hooks accept. The manifest ``files`` regex must name the same three.
 MEMORY_NAMES = frozenset({"CLAUDE.md", "AGENTS.md", "MEMORY.md"})
 
-app = typer.Typer(no_args_is_help=True, add_completion=False,
+app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
                   help="Check staged CLAUDE.md, AGENTS.md and MEMORY.md. Never modifies them.")
 
 
@@ -50,7 +55,7 @@ def _configure_stdio() -> None:
 
 
 def _fail(message: str) -> None:
-    typer.echo(f"error: {message}", err=True)
+    typer.echo(f"error: {diagnostic_line(message)}", err=True)
     raise typer.Exit(2)
 
 
@@ -180,7 +185,7 @@ def _execute(mode: str, filenames: list[str] | None, *, evidence: Path | None, e
     if fmt is Format.json:
         payload = {"tool": "memfalsify", "version": __version__, "hook": mode, "attention": attention,
                    "reports": dumped}
-        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", nl=False)
+        typer.echo(json_shield(json.dumps(payload, indent=2, ensure_ascii=False)) + "\n", nl=False)
     if strict and attention:
         raise typer.Exit(1)
 
@@ -306,8 +311,19 @@ def audit_command(
              min_coverage=min_coverage)
 
 
+def _plain_output() -> None:
+    """Keep Rich styling out of the hook's output. pre-commit also runs in CI, where GITHUB_ACTIONS or
+    FORCE_COLOR makes Typer force Rich colour; an ESC in the output should then come only from untrusted text,
+    which ``terminal_text`` has already made inert. Typer reads these variables when it first renders an error
+    or help, after this runs. The hook is a process of its own, so it sets them for itself."""
+    os.environ.update({"_TYPER_FORCE_DISABLE_TERMINAL": "1", "NO_COLOR": "1"})
+    for name in ("FORCE_COLOR", "PY_COLORS"):
+        os.environ.pop(name, None)
+
+
 def main() -> None:
     _configure_stdio()
+    _plain_output()
     app()
 
 

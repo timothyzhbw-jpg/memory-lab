@@ -390,7 +390,7 @@ def test_crlf_rev_parse_still_opens_the_repository(repo, tmp_path, monkeypatch):
 
 def test_diff_and_history_markdown_strip_terminal_controls(repo, tmp_path):
     """Claim text, headings and evidence quotes are untrusted. Diff and history Markdown must not carry
-    terminal or bidi controls into a terminal or a job summary. ``audit`` Markdown stays literal."""
+    terminal or bidi controls into a terminal or a job summary. Audit Markdown uses the same field escaping."""
     esc, rlo = "\x1b\x07", "\u202e"
     repo.commit("one", {"MEMORY.md": "- The cache uses Redis.\n"})
     repo.write({"MEMORY.md": f"# {esc}{rlo}Infra\n\n- The cache uses {esc}{rlo}Redis for sessions.\n",
@@ -400,7 +400,7 @@ def test_diff_and_history_markdown_strip_terminal_controls(repo, tmp_path):
     markdown = diff_to_markdown(diff)
     history = history_to_markdown(memory_history(memory))
     for report in (markdown, history):
-        assert esc not in report and rlo not in report and "\ufffd" in report
+        assert esc not in report and rlo not in report and "u001b" in report and "u202e" in report
         assert "Redis for sessions" in report
     assert any(esc in (e.span.quote or "") for f in diff.audit.findings for e in f.evidence)
     assert esc not in markdown.split("## Audit of added and changed claims", 1)[1]
@@ -409,11 +409,12 @@ def test_diff_and_history_markdown_strip_terminal_controls(repo, tmp_path):
                                  "-o", str(out)])
     assert result.exit_code == 0, result.output
     written = out.read_bytes()
-    assert esc.encode() not in written and rlo.encode() not in written and "\ufffd".encode() in written
+    assert esc.encode() not in written and rlo.encode() not in written and b"u001b" in written and b"u202e" in written
     payload = diff.model_dump_json()
     assert rlo in payload and "\\u001b" in payload  # JSON keeps the text; only C0 is escaped
     audited = to_markdown(audit(memory, repo.root / "evidence"))
-    assert esc in audited and rlo in audited
+    assert esc not in audited and rlo not in audited
+    assert "u001b" in audited and "u202e" in audited
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows forbids control characters in file names")

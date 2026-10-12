@@ -293,15 +293,25 @@ def _json_cell(values: list) -> str:
     return "".join(map(_json_char, json.dumps(values, ensure_ascii=False)))
 
 
+def _csv_row(cells) -> str:
+    """One CSV row. The subject, which starts it, is quoted when it begins ``::`` so that a CI log reader does
+    not take the row for a workflow command (the cell decodes to the same text)."""
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\n").writerow(cells)
+    row = buffer.getvalue()
+    if row.lstrip().startswith("::"):  # an unquoted first cell: it holds no comma, quote or line break
+        first, comma, rest = row.partition(",")
+        row = f'"{first}"{comma}{rest}'
+    return row
+
+
 def decisions_csv(records: list[DecisionRecord]) -> str:
     """One row per record; list columns are JSON arrays, so they decode to the exact values."""
-    buffer = io.StringIO()
-    writer = csv.writer(buffer, lineterminator="\n")
-    writer.writerow(CSV_COLUMNS)
+    rows = [_csv_row(CSV_COLUMNS)]
     for record in records:
         decision = record.events[record.decision]
         evidence = decision.evidence
-        writer.writerow([
+        rows.append(_csv_row([
             _cell(record.subject), _cell(record.file_name), record.status, record.current_status,
             decision.timestamp.isoformat(), _cell(decision.event_id), decision.action, _cell(decision.actor),
             _json_cell(decision.roles), _cell(decision.supersedes), _json_cell(record.earlier_decisions),
@@ -311,8 +321,8 @@ def decisions_csv(records: list[DecisionRecord]) -> str:
             _json_cell([c.event_id for c in record.unauthorized_change_attempts]),
             _json_cell([c.kind for c in record.conflicts]), _json_cell([s.id for s in evidence]),
             _json_cell([s.sha256 for s in evidence]), _json_cell([s.source_uri for s in evidence]),
-            _json_cell([s.quote for s in evidence]), record.as_of.isoformat() if record.as_of else ""])
-    return buffer.getvalue()
+            _json_cell([s.quote for s in evidence]), record.as_of.isoformat() if record.as_of else ""]))
+    return "".join(rows)
 
 
 # --- writing -----------------------------------------------------------------------------------------
