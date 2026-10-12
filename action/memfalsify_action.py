@@ -15,7 +15,8 @@ import shlex
 import sys
 import tempfile
 import traceback
-from contextlib import redirect_stderr, redirect_stdout
+from collections.abc import Iterator
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from memcore.display import one_line, report_text
@@ -30,7 +31,32 @@ from memfalsify.gitstore import code_span
 
 ERROR = 2
 SUMMARY_LIMIT = 1_000_000  # GitHub rejects step summaries over 1 MiB.
+COLOUR_VARIABLES = ("FORCE_COLOR", "PY_COLORS")  # either one makes Typer force Rich styling
 AUTO = "auto"  # memory input: audit every instruction file `memfalsify discover` finds in the workspace
+
+
+@contextmanager
+def plain_cli_output() -> Iterator[None]:
+    """Keep Rich styling out of the CLI's output while it runs.
+
+    On a runner, GITHUB_ACTIONS (and often FORCE_COLOR) makes Typer force Rich styling even though the output is
+    captured here, and ``_log_text`` would then print Rich's own SGR codes as literal ``\\u001b[1;33m`` text.
+    ``_TYPER_FORCE_DISABLE_TERMINAL`` stops that; Typer reads it, and the colour variables, when it first renders
+    an error or help, which happens inside this block. NO_COLOR covers Rich itself. The variables are put back
+    afterwards.
+    """
+    saved = {name: os.environ.get(name) for name in ("_TYPER_FORCE_DISABLE_TERMINAL", "NO_COLOR", *COLOUR_VARIABLES)}
+    os.environ.update({"_TYPER_FORCE_DISABLE_TERMINAL": "1", "NO_COLOR": "1"})
+    for name in COLOUR_VARIABLES:
+        os.environ.pop(name, None)
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def _escape(text: str) -> str:
@@ -56,7 +82,7 @@ def run_cli(args: list[str]) -> int:
     """Run ``memfalsify`` in this process and return its exit code."""
     output = io.StringIO()
     try:
-        with redirect_stdout(output), redirect_stderr(output):
+        with redirect_stdout(output), redirect_stderr(output), plain_cli_output():
             try:
                 app(args, prog_name="memfalsify", windows_expand_args=False)
             except SystemExit as exc:

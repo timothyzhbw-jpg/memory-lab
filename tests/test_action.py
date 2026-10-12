@@ -2,6 +2,8 @@ import importlib.util
 import os
 import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path, PureWindowsPath
 
 import pytest
@@ -113,6 +115,26 @@ def test_action_keeps_cli_error_text_out_of_the_job_summary(tmp_path, monkeypatc
                         r"[link](https://evil.invalid)\u000a## Verdict\u000a%3A%3Aerror%3A%3Aforged")
     assert [line for line in log if line.startswith("::")] == [
         "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2); see the step log"]
+
+
+def test_action_usage_error_log_carries_no_rich_styling_on_a_github_runner(tmp_path, monkeypatch, runner_env):
+    """Real runners set GITHUB_ACTIONS (and often FORCE_COLOR), which makes Typer force Rich colour. The log line
+    would then show Rich's own SGR codes as literal ``\\u001b[...`` text. tests/conftest.py keeps styling off for
+    every test, so undo that here and run the Action as a fresh process, as action.yml does: Typer reads the
+    variables when it first renders an error."""
+    monkeypatch.delenv("_TYPER_FORCE_DISABLE_TERMINAL", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    (tmp_path / "CLAUDE.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
+    env = {**os.environ, **runner_env, "MEMFALSIFY_MEMORY": "CLAUDE.md", "MEMFALSIFY_VERIFIER": "no-such-verifier",
+           "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    proc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "action" / "memfalsify_action.py")],
+                          cwd=tmp_path, env=env, capture_output=True, check=False)
+    log = proc.stdout.decode("utf-8") + proc.stderr.decode("utf-8")
+    assert proc.returncode == 2
+    assert "MemFalsify CLI: " in log and "no-such-verifier" in log  # the usage error did reach the log
+    assert "\\u001b" not in log and "\x1b" not in log
 
 
 def test_action_without_memory_files_notices_and_succeeds(tmp_path, monkeypatch, capsys, runner_env):

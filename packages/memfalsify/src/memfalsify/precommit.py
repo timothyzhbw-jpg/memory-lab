@@ -13,6 +13,7 @@ The manifest launches this module with ``python -X utf8`` so the report is UTF-8
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -310,8 +311,19 @@ def audit_command(
              min_coverage=min_coverage)
 
 
+def _plain_output() -> None:
+    """Keep Rich styling out of the hook's output. pre-commit also runs in CI, where GITHUB_ACTIONS or
+    FORCE_COLOR makes Typer force Rich colour; an ESC in the output should then come only from untrusted text,
+    which ``terminal_text`` has already made inert. Typer reads these variables when it first renders an error
+    or help, after this runs. The hook is a process of its own, so it sets them for itself."""
+    os.environ.update({"_TYPER_FORCE_DISABLE_TERMINAL": "1", "NO_COLOR": "1"})
+    for name in ("FORCE_COLOR", "PY_COLORS"):
+        os.environ.pop(name, None)
+
+
 def main() -> None:
     _configure_stdio()
+    _plain_output()
     app()
 
 
