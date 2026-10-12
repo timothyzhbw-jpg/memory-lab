@@ -2,8 +2,8 @@
 
 [English](api.md) | 中文
 
-从 `memcore`、`memfalsify`、`orgmemory`、`memlab_mcp` 包根导入。`memcore` 的发行包名为
-`memlab-core`，`memlab_mcp` 为 `memlab-mcp`。每个包通过明确的 `__all__` 列出公开名称，
+从 `memcore`、`memfalsify`、`orgmemory`、`memlab_mcp`、`memlab_ui` 包根导入。`memcore` 的发行包名为
+`memlab-core`，`memlab_mcp` 为 `memlab-mcp`，`memlab_ui` 为 `memlab-ui`。每个包通过明确的 `__all__` 列出公开名称，
 wheel 中包含 `py.typed`。支持 Python 3.10+。
 
 ## 稳定性与语义化版本
@@ -24,8 +24,8 @@ wheel 中包含 `py.typed`。支持 Python 3.10+。
 
 明确内部实现：不在 `__all__` 中的名称、下划线辅助函数、CLI 模块／app 与选项枚举、
 `build_verifier`、`preselection`、默认模型常量、报告标题与格式化函数、分词／排序、Git 对象存储
-辅助函数、GitHub 映射上下文／锁／游标／apply 内部流程、MCP 工作区与工具注册类。
-原有路径保留，但无稳定性承诺。CLI 与 MCP 协议接口另有文档。
+辅助函数、GitHub 映射上下文／锁／游标／apply 内部流程、MCP 工作区与工具注册类，以及网页界面的
+请求处理、工作区与页面模块。原有路径保留，但无稳定性承诺。CLI、MCP 与网页界面另有文档。
 偶然暴露的子模块属性不是公开导出；原定义模块导入为 `from memfalsify.audit import audit`，
 推荐的可调用函数导入为 `from memfalsify import audit`。
 
@@ -167,6 +167,21 @@ from memlab_mcp import create_server
 server = create_server(root=Path("examples"), allow_model_verifiers=False)
 # Start serving separately through the installed MCP SDK or CLI.
 ```
+
+### 构建本地网页界面
+
+```python
+from pathlib import Path
+from memlab_ui import create_server
+
+server = create_server(root=Path("examples"), port=0)
+print(server.server_address)  # ('127.0.0.1', <a free port>)
+server.server_close()  # or server.serve_forever() to answer requests
+```
+
+需要安装 `memlab-ui`。`create_server` 只绑定 127.0.0.1；`host` 为其他值、根目录不是目录或平台不支持
+POSIX 限制读取时抛出 `ValueError`，端口无法绑定时抛出 `OSError`。返回尚未开始服务的标准库
+`ThreadingHTTPServer`。页面、安全规则与命令行见 [ui.zh-CN.md](ui.zh-CN.md)。
 
 ## 导出参考
 
@@ -393,4 +408,15 @@ validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Ite
 
 ```python
 create_server(root: Path | str='.', allow_model_verifiers: bool=False) -> MCPServer
+```
+
+### `memlab_ui`
+
+| API | 用途 |
+|---|---|
+| `memlab_ui.__version__` | 已安装发行包的版本字符串。 |
+| `memlab_ui.create_server` | 把只读网页界面绑定到 127.0.0.1，root="."、port=0（空闲端口）、allow_model_verifiers=False；不启动服务。拒绝其他主机。要求支持 POSIX 限制读取。 |
+
+```python
+create_server(root: Path | str='.', port: int=0, allow_model_verifiers: bool=False, host: str='127.0.0.1') -> ThreadingHTTPServer
 ```

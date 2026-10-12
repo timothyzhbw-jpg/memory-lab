@@ -12,13 +12,13 @@ git clone https://github.com/timothyzhbw-jpg/memory-lab && cd memory-lab
 source .venv/bin/activate
 ```
 
-The script creates `.venv`, installs `memcore`, `memfalsify`, `orgmemory` and `memlab-mcp` in editable mode together with the Claude and Jev SDKs (`--minimal` leaves those out), and runs the test suite. Run it again at any time; it reuses `.venv`. If `python3` is older than 3.10, point it at a newer interpreter: `PYTHON=python3.12 ./scripts/setup-local.sh`.
+The script creates `.venv`, installs `memcore`, `memfalsify`, `orgmemory`, `memlab-mcp` and `memlab-ui` in editable mode together with the Claude and Jev SDKs (`--minimal` leaves those out), and runs the test suite. Run it again at any time; it reuses `.venv`. If `python3` is older than 3.10, point it at a newer interpreter: `PYTHON=python3.12 ./scripts/setup-local.sh`.
 
 On Windows, run the same steps by hand in PowerShell:
 
 ```powershell
 py -3 -m venv .venv
-.venv\Scripts\python -m pip install -e packages/memcore -e "packages/memfalsify[all]" -e packages/orgmemory -e packages/memlab-mcp pytest
+.venv\Scripts\python -m pip install -e packages/memcore -e "packages/memfalsify[all]" -e packages/orgmemory -e packages/memlab-mcp -e packages/memlab-ui pytest
 .venv\Scripts\python -m pytest -q
 ```
 

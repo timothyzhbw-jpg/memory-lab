@@ -1,5 +1,5 @@
 """Package metadata: each version agrees with ``__version__``, and every pin between the packages admits
-the version in this repository, so the four packages install together from one checkout."""
+the version in this repository, so the five packages install together from one checkout."""
 import re
 from pathlib import Path
 
@@ -11,7 +11,8 @@ from packaging.requirements import Requirement  # noqa: E402  (a pytest dependen
 REPO = Path(__file__).resolve().parent.parent
 # distribution name -> (directory under packages/, import name)
 PACKAGES = {"memlab-core": ("memcore", "memcore"), "memfalsify": ("memfalsify", "memfalsify"),
-            "orgmemory": ("orgmemory", "orgmemory"), "memlab-mcp": ("memlab-mcp", "memlab_mcp")}
+            "orgmemory": ("orgmemory", "orgmemory"), "memlab-mcp": ("memlab-mcp", "memlab_mcp"),
+            "memlab-ui": ("memlab-ui", "memlab_ui")}
 
 
 def _projects() -> dict[str, tuple[dict, str]]:

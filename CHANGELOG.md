@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the four packages in this repository, newest first. The format follows
+All notable changes to the packages in this repository, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each package has its own version number. While
 they are 0.x, a minor version may change behavior. Pins between the packages admit one minor version of
 each dependency, for example `memlab-core>=0.2,<0.3`.
@@ -16,8 +16,8 @@ Release 0.3 contains:
 
 ## Unreleased
 
-Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0 and memlab-mcp
-0.4.0. The release date is not yet set; all changes since release 0.3 are collected here.
+Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0, memlab-mcp 0.4.0 and the
+new memlab-ui 0.1.0. The release date is not yet set; all changes since release 0.3 are collected here.
 
 Multimodal evidence through transcript and OCR sidecars (roadmap v0.4; see
 [docs/multimodal.md](docs/multimodal.md)) and HTML reports use the new memlab-core API,
@@ -85,6 +85,16 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
 
 ### Added
 
+- `memlab-ui` (`packages/memlab-ui`): a local, read-only web page for trying Memory Lab without the command
+  line, started as `memlab-ui --root DIR [--port N]`. Home lists the agent files under the root; "Check an
+  agent file" runs the lexical audit (or, when the root is a repository, the diff since a revision) and
+  shows each flagged statement next to the quote that seems to disagree; "Team decisions" shows each
+  topic's status, the deciding quote, a timeline of what counted, audit findings and changes between two
+  dates. It uses only the standard library's `http.server`, binds 127.0.0.1, checks the `Host` header
+  against DNS rebinding, answers GET and HEAD only, confines every path to `--root` with confined reads,
+  writes nothing, keeps model verifiers off unless `--allow-model-verifiers`, escapes every untrusted value
+  and sends a strict Content-Security-Policy that loads only its own logo and favicon. Every page reads in
+  English or Simplified Chinese (`?lang=zh`, with a switch in the sidebar). See [docs/ui.md](docs/ui.md).
 - Explicit package-root Python APIs for `memcore`, `memfalsify`, `orgmemory`, and `memlab_mcp`,
   including evidence reading, memory audits and Git history, organizational replay and GitHub ingestion,
   and MCP server construction. Existing module import paths remain available.
@@ -421,10 +431,19 @@ a symlink out of the root is never read.
 - The orgmemory tools read an optional `policy-log.jsonl`, refusing one that is a symlink leaving the server
   root. `orgmemory_validate` prints the same lines as `orgmemory validate`.
 
+### memlab-ui
+
+#### Added
+
+- First version, 0.1.0: see the release section's Added list and [docs/ui.md](docs/ui.md). Public API:
+  `memlab_ui.create_server` (binds 127.0.0.1 without serving) and `__version__`. Requires memlab-core 0.3,
+  memfalsify 0.4 and orgmemory 0.4.
+
 ### Repository
 
 #### Added
 
+- `scripts/setup-local.sh` and the CI install lines include `-e packages/memlab-ui`.
 - GitHub Action: `memory: auto` audits every instruction file `memfalsify discover` finds in the
   workspace (or, with `diff-base`, diffs each one). The `exclude` globs also leave instruction files out
   of discovery.
@@ -656,6 +675,13 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
   `orgmemory_validate`, `orgmemory_replay` and `orgmemory_explain`. Every path is confined to `--root`
   through descriptor-based opens that refuse symlinks. Model verifiers need `--allow-model-verifiers`.
   Errors carry no tracebacks, backend diagnostics or outside-root paths.
+
+## memlab-ui
+
+### 0.1.0 - Pending release 0.4
+
+First version. Changes are collected in the [release 0.4 section](#unreleased); the release date is not
+yet set.
 
 ## Repository
 
