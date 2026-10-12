@@ -557,9 +557,10 @@ memlab-ui --root /path/to/project      # then open http://127.0.0.1:8765/  (--po
 - *Team decisions* shows each topic of a decision log with its status, who decided and on which quote, a timeline of
   which events counted, the decision audit's findings in plain sentences, and what changed between two dates.
 
-It binds 127.0.0.1 only, rejects requests whose `Host` header is not 127.0.0.1 or localhost (DNS rebinding), answers
-GET and HEAD only, confines every path to `--root` with the same descriptor-based reads as the MCP server, writes
-nothing, keeps model verifiers off unless started with `--allow-model-verifiers`, escapes every untrusted value and
+It binds 127.0.0.1 only, rejects requests whose `Host` header is not 127.0.0.1 or localhost (DNS rebinding) and
+requests sent by other websites (`Sec-Fetch-Site`, `Origin`), answers GET and HEAD only, bounds the connections,
+pages, bytes and folders each request may use, confines every path to `--root` with the same descriptor-based reads
+as the MCP server, writes nothing, keeps model verifiers off unless started with `--allow-model-verifiers`, escapes every untrusted value and
 sends a strict Content-Security-Policy with no JavaScript and nothing loaded from elsewhere. Pages are in English or
 Simplified Chinese (`?lang=zh`). Pages, options, safety rules and limits: [docs/ui.md](docs/ui.md).
 

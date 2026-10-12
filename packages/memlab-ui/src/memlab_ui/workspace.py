@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from memcore import EvidenceError, resolve_inside, walk_files
 from memcore.paths import SKIP_DIRS, InputPathError, input_path
+from memcore.reading import ReadLimitError, current_read_limits
 from memfalsify import GitError, HistoryError, parse_memory
 from memfalsify.discover import discover
 from orgmemory import Dataset
@@ -28,7 +29,6 @@ from .i18n import _
 DATASET_FILES = ("events.jsonl", "policy.json", "evidence.jsonl")
 MEMORY_NAMES = ("MEMORY.md",)
 MAX_DEPTH = 4          # folders offered as evidence, below the root
-MAX_DIRECTORIES = 5000  # directories looked at when building the lists
 MAX_VALUE = 4096       # characters accepted in one form value
 
 
@@ -167,6 +167,8 @@ class Workspace:
 
     def failure(self, exc: Exception) -> str:
         """Library errors can carry rejected file contents or outside paths. Do not echo them."""
+        if isinstance(exc, ReadLimitError):
+            return _("A file is too large for this page. Use the memfalsify or orgmemory command for it.")
         if isinstance(exc, EvidenceError):
             if "requires --evidence" in str(exc):
                 return _("A reviews file needs a folder to compare against.")
@@ -195,8 +197,8 @@ class Workspace:
         With ``count``, each agent file is parsed to count its statements.
 
         Hidden directories, skipped directories (node_modules, __pycache__, venv), nested git repositories
-        and symlinked directories are not searched, as in discovery. The walk stops after
-        ``MAX_DIRECTORIES`` directories and says so."""
+        and symlinked directories are not searched, as in discovery. Discovery, this walk and the evidence scan
+        share the page's directory budget (``read_limits``); ``truncated`` says it ran out."""
         found = Inventory()
         agents: dict[str, str] = {}
         try:
@@ -209,15 +211,9 @@ class Workspace:
         def skip(error: OSError) -> None:
             return None
 
-        seen = 0
         for current, dirnames, filenames in walk_files(self.root, onerror=skip):
             here = Path(current)
             relative = PurePosixPath(*here.relative_to(self.root).parts)
-            seen += 1
-            if seen > MAX_DIRECTORIES:
-                found.truncated = True
-                dirnames[:] = []
-                break
             if relative.parts and ".git" in dirnames + filenames:
                 dirnames[:] = []
                 continue
@@ -242,6 +238,8 @@ class Workspace:
             found.files.append(AgentFile(path=path, agent=agents[path],
                                          statements=self.statements(path) if count else None))
         found.directories.sort()
+        limits = current_read_limits()
+        found.truncated = bool(limits and limits.truncated)
         return found
 
     def statements(self, relative: str) -> int | None:

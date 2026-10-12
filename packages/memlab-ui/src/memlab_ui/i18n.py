@@ -57,7 +57,7 @@ def n_(count: int, one: str, many: str, **values: object) -> str:
 ZH: dict[str, str] = {
     # shell
     "Home": "首页",
-    "Check an agent file": "检查智能体文件",
+    "Check an agent file": "检查 Agent 文件",
     "Team decisions": "团队决策",
     "Main": "主导航",
     "Skip to content": "跳到正文",
@@ -82,17 +82,17 @@ ZH: dict[str, str] = {
     "Check": "检查",
     "Compared with the whole project. Nothing is changed and nothing leaves this computer.":
         "与整个项目对照。不会修改任何文件，也不会有任何内容离开这台电脑。",
-    "No agent files here yet": "这里还没有智能体文件",
+    "No agent files here yet": "这里还没有 Agent 文件",
     "This folder has no CLAUDE.md, AGENTS.md, GEMINI.md, MEMORY.md or agent rule files. Start memlab-ui with "
     "--root set to a project that has one.":
-        "这个文件夹里没有 CLAUDE.md、AGENTS.md、GEMINI.md、MEMORY.md 或智能体规则文件。请用 --root 指向一个"
+        "这个文件夹里没有 CLAUDE.md、AGENTS.md、GEMINI.md、MEMORY.md 或 Agent 规则文件。请用 --root 指向一个"
         "包含这些文件的项目，重新启动 memlab-ui。",
     "Check {name}": "检查 {name}",
     "See team decisions": "查看团队决策",
     "Suggestions": "建议",
     "Start here": "从这里开始",
     "Pick a file.": "选一个文件。",
-    "Choose the agent file you want to check.": "选择要检查的智能体文件。",
+    "Choose the agent file you want to check.": "选择要检查的 Agent 文件。",
     "Press Check.": "点“检查”。",
     "Each statement is compared with your project.": "每一条陈述都会与项目对照。",
     "Look at what's flagged.": "看被标出的内容。",
@@ -101,22 +101,21 @@ ZH: dict[str, str] = {
         "看看 CLAUDE.md、AGENTS.md 或 MEMORY.md 里哪些陈述仍有项目文件支持。",
     "See what was decided, who could decide it, and which messages did not count.":
         "看看决定了什么、谁有权决定，以及哪些消息不算数。",
-    "Agent files in this project": "本项目中的智能体文件",
+    "Agent files in this project": "本项目中的 Agent 文件",
     "{n} file found by name; none of them was changed.": "按文件名找到 {n} 个文件；都没有被修改。",
     "{n} files found by name; none of them was changed.": "按文件名找到 {n} 个文件；都没有被修改。",
     "File": "文件",
-    "Agent": "智能体",
+    "Agent": "Agent",
     "Statements": "陈述",
     "Action": "操作",
     "can't read": "无法读取",
     "None found.": "没有找到。",
-    "This folder is large, so only part of it was searched.": "这个文件夹很大，只搜索了其中一部分。",
-    "Agent memory": "智能体记忆",
+    "Agent memory": "Agent 记忆",
     # check: form
     "Pick a file and press Check. Each statement in it is compared with your project, and anything that seems "
     "to disagree is shown side by side.":
         "选一个文件，然后点“检查”。文件里的每条陈述都会与项目对照，看起来有出入的地方会并排显示。",
-    "Agent file": "智能体文件",
+    "Agent file": "Agent 文件",
     "Choose a file": "选择文件",
     "Compare against": "对照范围",
     "The whole project (recommended)": "整个项目（推荐）",
@@ -163,11 +162,9 @@ ZH: dict[str, str] = {
     "Confirmed both ways": "两方面都有确认",
     "Checkers disagree": "检查器意见不一",
     "Confirmed by a reviewer": "已由审阅者确认",
-    "Probably fine": "大概没问题",
     "Can't tell": "无法判断",
-    "Look at these": "请看这些",
+    "Look at these": "需要看一下",
     "Something in your project seems to disagree.": "项目里似乎有内容与之不符。",
-    "Your project says the same thing.": "项目里有相同的说法。",
     "Nothing in your project talks about it.": "项目里没有提到它。",
     "A reviewer confirmed the source is right: update or remove this line in {file}.":
         "审阅者已确认来源是对的：请更新或删除 {file} 中的这一行。",
@@ -187,14 +184,10 @@ ZH: dict[str, str] = {
     "Why: {why}": "原因：{why}",
     "Your docs say": "你的文档写道",
     "Your project says": "你的项目写道",
-    "Your docs agree": "你的文档一致",
-    "Your project agrees": "你的项目一致",
-    "Your agent file says": "你的智能体文件写道",
+    "Your agent file says": "你的 Agent 文件写道",
     "at {where}": "位于 {where}",
     "{n} more source": "另外 {n} 个来源",
     "{n} more sources": "另外 {n} 个来源",
-    "{n} more source agrees.": "另有 {n} 个来源一致。",
-    "{n} more sources agree.": "另有 {n} 个来源一致。",
     "Nothing in the folder you compared against mentions this. That means unchecked, not wrong.":
         "对照范围内没有提到这一点。这表示没有核实，并不表示错误。",
     "Statement ID {id}": "陈述 ID {id}",
@@ -207,8 +200,6 @@ ZH: dict[str, str] = {
     "May disagree with another statement in the same file.": "可能与同一文件中的另一条陈述矛盾。",
     "Says the same thing as another statement.": "与另一条陈述重复。",
     "Summary": "概览",
-    "Nothing to look at: no statement seems to disagree with your project.":
-        "没有需要看的：没有陈述与项目不符。",
     "Show the {n} other statement": "显示其余 {n} 条陈述",
     "Show the {n} other statements": "显示其余 {n} 条陈述",
     "{n} file was not read": "{n} 个文件未读取",
@@ -225,10 +216,6 @@ ZH: dict[str, str] = {
     " and {linked}": " 及 {linked}",
     "{n} thing in {name} may be out of date": "{name} 中有 {n} 处可能已过时",
     "{n} things in {name} may be out of date": "{name} 中有 {n} 处可能已过时",
-    "{n} new or changed thing in {name} may be out of date": "{name} 中有 {n} 处新增或改动的内容可能已过时",
-    "{n} new or changed things in {name} may be out of date": "{name} 中有 {n} 处新增或改动的内容可能已过时",
-    "Nothing in {name} looks out of date": "{name} 中没有看起来过时的内容",
-    "Nothing new or changed in {name} looks out of date": "{name} 中新增或改动的内容没有看起来过时的",
     "No statements were found in this file.": "这个文件里没有找到陈述。",
     "About this check: the quick check compares words. It can miss a source that says the same thing in other "
     "words, and it can flag a sentence that only looks like a disagreement. A flag means \"read this\", not "
@@ -256,7 +243,7 @@ ZH: dict[str, str] = {
     "Removed": "已删除",
     "was at {where}": "原位于 {where}",
     # workspace messages
-    "The agent file": "智能体文件",
+    "The agent file": "Agent 文件",
     "The folder to compare against": "对照文件夹",
     "The reviews file": "审阅文件",
     "The decision log": "决策日志",
@@ -333,7 +320,6 @@ ZH: dict[str, str] = {
     "Not counted: it withdraws a decision that is no longer the current one": "不算数：它撤回的不是当前有效的决定",
     "Not counted: {roles} can't {action}": "不算数：{roles}无权{action}",
     "someone without a role": "没有角色的人",
-    "event {id}": "事件 {id}",
     "{who} tried {times} to do something their role does not allow ({actions}) on {topics}. It was not counted.":
         "{who} 曾 {times} 尝试做其角色不允许的事（{actions}），涉及 {topics}。这些都不算数。",
     "{n} time": "{n} 次",
@@ -432,4 +418,49 @@ ZH: dict[str, str] = {
     "Each field may appear only once in the address.": "每个字段在地址中只能出现一次。",
     "A field in the address is too long.": "地址中的某个字段太长。",
     "The request could not be understood.": "无法理解这个请求。",
+    # added after the review
+    "Similar text found": "找到相似说法",
+    "Your project has a passage that looks alike. It's a word match, not proof.":
+        "项目里有相似的句子。只是字词相近，不代表一定正确。",
+    "A model judged a passage to agree. That is not proof.": "模型认为有段落与之一致，但这不代表一定正确。",
+    "No contradictions found in {name}": "{name} 里没有发现矛盾",
+    " \u00b7 {n} statement couldn't be checked": "，另有 {n} 条无法核对",
+    " \u00b7 {n} statements couldn't be checked": "，另有 {n} 条无法核对",
+    "A reviewer confirmed": "审阅者已确认",
+    "Similar text": "相似的说法",
+    "{n} more similar passage.": "另有 {n} 段相似的文字。",
+    "{n} more similar passages.": "另有 {n} 段相似的文字。",
+    "Statement ID": "陈述 ID",
+    "Statement": "陈述",
+    "Details": "详情",
+    "Media file": "媒体文件",
+    "Source": "来源",
+    "Event ID": "事件 ID",
+    "larger than 2 MB": "大于 2 MB",
+    "not read: this page's reading budget was used up": "未读取：本页面的读取额度已用完",
+    "not text (not UTF-8)": "不是文本（不是 UTF-8）",
+    "a Memory Lab report, which is never evidence": "Memory Lab 报告，从不作为证据",
+    "an image, audio or video file without a transcript or OCR text next to it":
+        "图片、音频或视频文件，旁边没有转写稿或 OCR 文本",
+    "in a hidden folder, or a hidden file": "位于隐藏文件夹中，或本身是隐藏文件",
+    "in a folder that is never read": "位于从不读取的文件夹中",
+    "a linked folder, which is not followed": "链接的文件夹，不会跟随",
+    "a link to outside the folder": "指向文件夹之外的链接",
+    "a broken link": "失效的链接",
+    "not a regular file": "不是普通文件",
+    "an agent file that could not be read": "无法读取的 Agent 文件",
+    "This file has more than {n} statements, too many to compare here. Check it without \"Changed since\", or "
+    "run memfalsify diff.":
+        "这个文件有超过 {n} 条陈述，太多了，无法在这里比较。请不用“只看此后改动”来检查，或运行 memfalsify diff。",
+    "Only the first {checked} of {n} statements were checked.": "只检查了 {n} 条陈述中的前 {checked} 条。",
+    "Something in the decision log needs a look.": "决策日志里有需要查看的地方。",
+    "This request came from another website, so it was not run. Open the page from the address memlab-ui "
+    "printed.":
+        "这个请求来自其他网站，因此没有执行。请从 memlab-ui 打印出的地址打开本页面。",
+    "Busy": "正忙",
+    "Memory Lab is busy with other pages. Wait a moment and try again.": "Memory Lab 正在处理其他页面。请稍等后再试。",
+    "This project is large, so only part of it was read. Results may be incomplete.":
+        "这个项目很大，只读取了其中一部分。结果可能不完整。",
+    "A file is too large for this page. Use the memfalsify or orgmemory command for it.":
+        "有文件太大，无法在本页面读取。请改用 memfalsify 或 orgmemory 命令。",
 }

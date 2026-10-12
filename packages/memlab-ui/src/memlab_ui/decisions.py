@@ -6,7 +6,7 @@ changed between two dates. Event logs and evidence are untrusted text. Nothing i
 """
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
@@ -17,8 +17,8 @@ from orgmemory import audit as decision_audit
 from orgmemory import changes as decision_changes
 
 from .i18n import _
-from .pages import (attr, error_card, fill, href, lang_field, plural, quote, role_words, select, span_detail,
-                    span_place, text_input, when)
+from .pages import (attr, details, error_card, fill, href, lang_field, plural, quote, role_words, select,
+                    span_details, span_place, text_input, when)
 from .workspace import InputError, Inventory, Workspace
 
 STATUS = {"approved": ("Approved", "approved"), "rejected": ("Rejected", "rejected"),
@@ -73,13 +73,17 @@ def t(message: str, **values: object) -> str:
 
 
 def moment(value: str | None, label: str) -> datetime | None:
-    """A date means the end of that day in UTC; a full ISO 8601 time needs its timezone."""
+    """A date means the whole of that day in UTC: everything before the next midnight. Event times have
+    microsecond resolution and the libraries' cutoffs are inclusive, so the cutoff is the last microsecond before
+    that midnight (23:59:59.5 is in the day). A full ISO 8601 time needs its timezone and is used as given."""
     if not value:
         return None
     if len(value) == 10:
         try:
-            return datetime.combine(datetime.strptime(value, "%Y-%m-%d").date(), time(23, 59, 59), timezone.utc)
-        except ValueError:
+            day = datetime.strptime(value, "%Y-%m-%d").date()
+            midnight = datetime.combine(day, time(0), timezone.utc) + timedelta(days=1)
+            return midnight - timedelta(microseconds=1)
+        except (ValueError, OverflowError):
             pass
     else:
         try:
@@ -99,17 +103,21 @@ def _who(actor: str, roles: list[str]) -> str:
     return f"<strong>{h.text(actor)}</strong> <span class=\"muted\">({shown})</span>"
 
 
-def _quotes(spans, base: str, css: str = "q") -> str:
-    """Evidence quotes; ``base`` is the dataset folder, where evidence paths start."""
+def _quotes(spans, base: str, css: str = "q", event: str | None = None) -> str:
+    """Evidence quotes with a short file:line label each; paths from the project folder, sources, hashes and the
+    event's ID are folded into Details. ``base`` is the dataset folder, where evidence paths start."""
     if not spans:
         return ""
-    out = [quote(spans[0].quote, css=css), f'<p class="small">{span_place(spans[0], base)}</p>',
-           span_detail(spans[0], base)]
+    rows = [(_("Event ID"), h.code(event))] if event else []
+    for span in spans:
+        rows += span_details(span, base)
+    out = [quote(spans[0].quote, css=css), f'<p class="small">{span_place(spans[0])}</p>']
     if len(spans) > 1:
-        rest = "".join(f'<div class="more">{quote(s.quote)}<p class="small">{span_place(s, base)}</p>'
-                       f"{span_detail(s, base)}</div>" for s in spans[1:])
+        rest = "".join(f'<div class="more">{quote(s.quote)}<p class="small">{span_place(s)}</p></div>'
+                       for s in spans[1:])
         label = plural(len(spans) - 1, "{n} more quote", "{n} more quotes")
         out.append(f"<details><summary>{h.text(label)}</summary>{rest}</details>")
+    out.append(details(rows))
     return "".join(out)
 
 
@@ -136,15 +144,16 @@ def _timeline(entries: list[TrailEntry], data: Dataset, base: str) -> str:
         spans = [data.evidence[i] for i in entry.evidence_ids if i in data.evidence]
         items.append(f'<li class="{"counted" if tone == "counted" else "uncounted"}">'
                      '<span class="mark" aria-hidden="true"></span>'
-                     f'<p class="small">{when(entry.timestamp)} &middot; '
-                     f'{fill("event {id}", id=h.code(entry.event_id))}</p>'
+                     f'<p class="small">{when(entry.timestamp)}</p>'
                      f"<p>{_who(entry.actor, entry.roles)} {what}</p>"
-                     f'<p class="verdict {tone}">{h.text(verdict)}</p>{_quotes(spans, base)}</li>')
+                     f'<p class="verdict {tone}">{h.text(verdict)}</p>'
+                     f"{_quotes(spans, base, event=entry.event_id)}</li>")
     return f'<ol class="timeline">{"".join(items)}</ol>'
 
 
 def sentence(finding: AuditFinding, stale_days: int) -> str:
-    """One audit finding in a plain sentence, with its severity and the report's own detail in small print."""
+    """One audit finding as a plain sentence of the page's own, with its severity. The report's English
+    detail is not shown: the sentence says the same in the page's language."""
     s = f"<strong>{h.text(finding.subject)}</strong>" if finding.subject is not None else t("a topic")
     a = f"<strong>{h.text(finding.actor)}</strong>" if finding.actor is not None else t("Someone")
     kind = finding.kind
@@ -158,10 +167,9 @@ def sentence(finding: AuditFinding, stale_days: int) -> str:
     elif kind in FINDING:
         text = fill(FINDING[kind], s=s, a=a, days=str(stale_days))
     else:
-        text = h.text(finding.detail)
+        text = t("Something in the decision log needs a look.")
     label, tone = SEVERITY[finding.severity]
-    return (f'<li><span class="pill {tone}">{t(label)}</span> {text} '
-            f'<span class="small">({h.code(finding.kind)}: {h.text(finding.detail)})</span></li>')
+    return f'<li><span class="pill {tone}">{t(label)}</span> {text}</li>'
 
 
 def _detail(state: SubjectState, result: ReplayResult, report: AuditReport, data: Dataset, base: str) -> str:
@@ -173,7 +181,7 @@ def _detail(state: SubjectState, result: ReplayResult, report: AuditReport, data
         line = fill("{verb} {who} on {when}. It is based on:", verb=t(DECIDED[decision.action]),
                     who=_who(decision.actor, decision.roles), when=when(decision.timestamp))
         out.append(f'<p class="lead">{line}</p>')
-        out.append(_quotes(decision.evidence, base, css="big-quote"))
+        out.append(_quotes(decision.evidence, base, css="big-quote", event=decision.event_id))
     else:
         out.append(f'<p class="lead">{t("No one with the right role has decided yet.")}</p>')
     facts = []
@@ -207,7 +215,8 @@ def _changes(report: ChangesReport) -> str:
     if not report.subjects:
         out.append(f'<p class="card">{t("Nothing changed in that time.")}</p>')
     for subject in report.subjects:
-        before = status_pill(subject.status_before) if subject.status_before else f'<span class="muted">{t("new")}</span>'
+        before = (status_pill(subject.status_before) if subject.status_before
+                  else f'<span class="muted">{t("new")}</span>')
         items = []
         for change in subject.changes:
             line = f"<strong>{t(CHANGE.get(change.kind, change.kind))}</strong>"
@@ -216,7 +225,7 @@ def _changes(report: ChangesReport) -> str:
             people = "; ".join(fill("{who} {action} on {when}", who=_who(e.actor, e.roles),
                                     action=t(ACTION.get(e.action, e.action)), when=when(e.timestamp))
                                for e in change.events)
-            items.append(f"<li>{line}<br>{people} <span class=\"small\">({h.text(change.detail)})</span></li>")
+            items.append(f"<li>{line}<br>{people}</li>")
         out.append(f'<div class="card"><h3 class="flush">{h.text(subject.subject)}</h3>'
                    f"<p>{before} &rarr; {status_pill(subject.status_after)}</p>"
                    f'<ul class="attention-list">{"".join(items)}</ul></div>')
@@ -240,8 +249,6 @@ def _form(ws: Workspace, inventory: Inventory, params: dict[str, str]) -> str:
     options = [(d, _("This folder") if d == "." else d) for d in inventory.datasets]
     if chosen and chosen not in inventory.datasets and ws.inside(chosen):
         options.insert(0, (chosen, chosen))
-    if not chosen and len(options) == 1:
-        chosen = options[0][0]
     return "\n".join([
         '<form class="card" method="get" action="/decisions">',
         '<div class="row">',
@@ -275,8 +282,10 @@ def render(ws: Workspace, inventory: Inventory, params: dict[str, str]) -> tuple
     out = [f"<h1>{t('Team decisions')}</h1>", f'<p class="lead">{t(LEAD)}</p>', _form(ws, inventory, params)]
     if not inventory.datasets and not params.get("dataset"):
         out.append(f'<p class="muted">{t("No decision log was found in this folder.")}</p>')
-    if not params.get("dataset"):
         return 200, "\n".join(out), ""
+    if not params.get("dataset"):  # open the first log straight away; the picker stays above
+        params = {**params, "dataset": inventory.datasets[0]}
+        out[2] = _form(ws, inventory, params)
     cannot = _("We couldn't open this decision log")
     try:
         data = ws.dataset(params["dataset"])

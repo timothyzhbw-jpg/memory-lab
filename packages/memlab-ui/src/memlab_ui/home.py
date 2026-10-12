@@ -89,7 +89,5 @@ def render(inventory: Inventory, *, models: bool) -> str:
                 f"<tbody>{''.join(rows)}</tbody></table></div>"]
     else:
         out.append(f'<p class="muted">{t("None found.")}</p>')
-    if inventory.truncated:
-        out.append(f'<p class="small">{t("This folder is large, so only part of it was searched.")}</p>')
     out.append("</section>")
     return "\n".join(out)

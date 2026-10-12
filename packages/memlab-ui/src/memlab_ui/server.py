@@ -5,11 +5,18 @@ Safety follows the MCP server (docs/mcp.md):
 - It listens on 127.0.0.1 only and refuses any other host. A request must carry exactly one ``Host`` header
   naming 127.0.0.1 or localhost with the server's port, so a page on another site cannot reach it through
   DNS rebinding; requests from a non-loopback address are refused too.
-- Only GET and HEAD are answered and every form uses GET: nothing a request does changes state. No page
-  writes a file, appends an event, records a review or applies a patch.
+- A request another site sent (``Sec-Fetch-Site`` other than ``same-origin`` or ``none``, or an ``Origin``
+  that is not this server's) is refused before any work, so a page elsewhere cannot make it run checks, and
+  at most ``MAX_PAGES`` pages are computed at once (503 beyond that).
+- At most ``MAX_CONNECTIONS`` connections are served at once (more are closed at once), and the request line
+  and headers must arrive within ``HEADER_DEADLINE`` seconds in total, so slow clients cannot pin threads.
+- Only GET and HEAD are answered (405 for every other method) and every form uses GET: nothing a request does
+  changes state. No page writes a file, appends an event, records a review or applies a patch.
 - Every path in a request is resolved inside ``--root`` (``workspace.Workspace``), and each page runs inside
   ``memcore.confined_reads``, so a file swapped for an outward symlink after the check is still refused.
-  Without POSIX ``O_NOFOLLOW`` and ``dir_fd`` support the server refuses to start.
+  Without POSIX ``O_NOFOLLOW`` and ``dir_fd`` support the server refuses to start. Each page also runs within
+  ``read_limits``: bytes per file and per request, and directories walked by discovery, the lists and the
+  evidence scan together; a page that hit a limit says its view is incomplete.
 - Model verifiers, which send text to external APIs and cost money, are refused unless the server was
   started with ``--allow-model-verifiers``.
 - Every untrusted value is escaped by ``memcore.htmlpage``; pages carry a strict Content-Security-Policy, run
@@ -17,28 +24,39 @@ Safety follows the MCP server (docs/mcp.md):
 """
 from __future__ import annotations
 
+import io
 import sys
+import threading
+import time
 from collections.abc import Iterable
-from importlib import resources
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib import resources
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
 import typer
 
 from memcore import confined_reads, confinement_supported
+from memcore.reading import read_limits
 
 from . import check, decisions, home
-from .i18n import language
-from .pages import CSP, STATIC, language_switch, message_page, page
+from .i18n import _, language
+from .pages import CSP, STATIC, language_switch, message_page, notice, page
 from .workspace import MAX_VALUE, Workspace
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_FIELDS = 32
 ROUTES = ("/", "/check", "/decisions")
+QUERY_KEYS = ("file", "evidence", "reviews", "as_of", "since", "verifier", "dataset", "subject", "from", "to")
 PATH_FIELDS = ("file", "evidence", "reviews", "dataset")
+MAX_CONNECTIONS = 16       # connections served at once; more are closed straight away
+MAX_PAGES = 2              # pages computed at once; more get 503
+HEADER_DEADLINE = 10.0     # seconds for the request line and all headers together
+FILE_BYTES = 8_000_000     # per file read for a page (evidence files keep MemFalsify's own 2 MB limit)
+TOTAL_BYTES = 64_000_000   # all files read for one page
+DIRECTORIES = 20_000       # directories one page may walk: discovery, the lists and the evidence scan together
 HEADERS = (
     ("Content-Type", "text/html; charset=utf-8"),
     ("Content-Security-Policy", CSP + "; frame-ancestors 'none'"),
@@ -52,11 +70,19 @@ HEADERS = (
 ASSET_HEADERS = (
     ("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"),
     ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "no-referrer"),
     ("Cache-Control", "max-age=3600"),
     ("Cross-Origin-Resource-Policy", "same-origin"),
 )
 NOT_LOCAL = ("This page answers only at http://127.0.0.1 or http://localhost on the port memlab-ui printed. "
              "Open that address instead.")
+CROSS_SITE = ("This request came from another website, so it was not run. Open the page from the address "
+              "memlab-ui printed.")
+BUSY = "Memory Lab is busy with other pages. Wait a moment and try again."
+LARGE = "This project is large, so only part of it was read. Results may be incomplete."
+FAILED = (b"<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><title>Something went wrong</title>"
+          b"</head><body><p>Something went wrong. Reload the page.</p></body></html>\n")
 
 
 @dataclass
@@ -87,6 +113,7 @@ class App:
         self.models = allow_model_verifiers
         self.port = port
         self.static = static_files()
+        self.pages = threading.BoundedSemaphore(MAX_PAGES)
 
     # --- checks before any page runs ----------------------------------------------------------------
 
@@ -99,11 +126,24 @@ class App:
             allowed |= {HOST, "localhost"}
         return values[0].strip().lower() in allowed
 
+    @staticmethod
+    def same_origin(headers: list[tuple[str, str]], host: str) -> bool:
+        """Not sent by another site: Sec-Fetch-Site, when present, is same-origin or none (typed, bookmarked),
+        and Origin, when present, is exactly this server's origin as the browser addressed it."""
+        sites = [value.strip().lower() for name, value in headers if name.lower() == "sec-fetch-site"]
+        origins = [value.strip().lower() for name, value in headers if name.lower() == "origin"]
+        if any(site not in ("same-origin", "none") for site in sites) or len(sites) > 1:
+            return False
+        return not origins or (len(origins) == 1 and origins[0] == f"http://{host.strip().lower()}")
+
     def handle(self, method: str, target: str, headers: Iterable[tuple[str, str]],
                client: str = HOST) -> Response:
+        headers = list(headers)
         hosts = [value for name, value in headers if name.lower() == "host"]
         if not client.startswith("127.") or not self.host_allowed(hosts):
             return self.message(403, "Not available", NOT_LOCAL)
+        if not self.same_origin(headers, hosts[0]):
+            return self.message(403, "Not available", CROSS_SITE)
         if method not in ("GET", "HEAD"):
             response = self.message(405, "Not possible here",
                                     "This page only shows things: it never changes or uploads anything.")
@@ -116,24 +156,33 @@ class App:
         if path.startswith("/static/") or path == "/favicon.ico":
             return self.asset(path)
         with language("zh" if params.get("lang") == "zh" else "en"):
-            # The switch links back to this page with the same fields, except a path outside the root.
-            kept = {key: value for key, value in params.items()
-                    if key not in PATH_FIELDS or not value or self.ws.inside(value)}
-            switch = language_switch(path, kept)
+            # The switch links to a known page with known fields only, minus any path outside the root.
+            kept = {key: value for key, value in params.items() if key in QUERY_KEYS
+                    and (key not in PATH_FIELDS or not value or self.ws.inside(value))}
+            switch = language_switch(path, kept) if path in ROUTES else language_switch("/", {})
             if path not in ROUTES:
                 return self.message(404, "Page not found", "There is no such page. Use the links on the left.",
                                     switch)
+            if not self.pages.acquire(blocking=False):
+                response = self.message(503, "Busy", BUSY, switch)
+                response.headers.append(("Retry-After", "5"))
+                return response
             try:
-                with confined_reads(self.ws.root):
-                    status, html = self.page(path, params, switch)
+                with confined_reads(self.ws.root), read_limits(FILE_BYTES, TOTAL_BYTES, DIRECTORIES) as limits:
+                    status, html = self.page(path, params, switch, limits)
             except Exception:  # never a traceback or a library message on the page
                 return self.message(500, "Something went wrong",
                                     "The page could not be built. Check that the files are readable and valid.",
                                     switch)
+            finally:
+                self.pages.release()
         return self.respond(status, html)
 
     def parse(self, target: str) -> tuple[str, dict[str, str]]:
-        parts = urlsplit(target)
+        try:
+            parts = urlsplit(target)
+        except ValueError:  # e.g. an unclosed IPv6 bracket in an absolute-form target
+            raise BadRequest("The address is not a path on this server.") from None
         if parts.scheme or parts.netloc or not parts.path.startswith("/"):
             raise BadRequest("The address is not a path on this server.")
         try:
@@ -151,16 +200,21 @@ class App:
 
     # --- pages ----------------------------------------------------------------------------------------
 
-    def page(self, path: str, params: dict[str, str], switch: str) -> tuple[int, str]:
+    def page(self, path: str, params: dict[str, str], switch: str, limits) -> tuple[int, str]:
         root = str(self.ws.root)
+        topics = ""
         if path == "/":
+            status, title, active = 200, "Home", "home"
             body = home.render(self.ws.inventory(), models=self.models)
-            return 200, page("Home", body, active="home", root=root, switch=switch)
-        if path == "/check":
+        elif path == "/check":
+            title, active = "Check an agent file", "check"
             status, body = check.render(self.ws, self.ws.inventory(count=False), params, models=self.models)
-            return status, page("Check an agent file", body, active="check", root=root, switch=switch)
-        status, body, topics = decisions.render(self.ws, self.ws.inventory(count=False), params)
-        return status, page("Team decisions", body, active="decisions", root=root, topics=topics, switch=switch)
+        else:
+            title, active = "Team decisions", "decisions"
+            status, body, topics = decisions.render(self.ws, self.ws.inventory(count=False), params)
+        if limits.truncated:  # one notice, whichever walk or read hit a limit
+            body = notice(_(LARGE)) + "\n" + body
+        return status, page(title, body, active=active, root=root, topics=topics, switch=switch)
 
     def asset(self, path: str) -> Response:
         """A shipped image by its exact name; nothing else is served from disk."""
@@ -177,6 +231,25 @@ class App:
         return self.respond(status, message_page(title, text, root=str(self.ws.root), switch=switch))
 
 
+class _HeaderDeadline(io.RawIOBase):
+    """Reads the socket, but only until a fixed moment: the request line and headers must arrive within
+    ``HEADER_DEADLINE`` seconds in total, however slowly a client trickles bytes."""
+
+    def __init__(self, sock, deadline: float) -> None:
+        super().__init__()
+        self.sock, self.deadline = sock, deadline
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        left = self.deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("request headers took too long")
+        self.sock.settimeout(min(left, Handler.timeout))
+        return self.sock.recv_into(buffer)
+
+
 class Handler(BaseHTTPRequestHandler):
     """The HTTP side: hands each request to ``App.handle`` and writes the response. Logs one line per request
     with the method, a known route (or ``-``) and the status, never the query or a header value."""
@@ -185,9 +258,34 @@ class Handler(BaseHTTPRequestHandler):
     timeout = 30
     server: "Server"
 
+    def setup(self) -> None:
+        super().setup()
+        self.rfile.close()
+        self.rfile = io.BufferedReader(_HeaderDeadline(self.connection, time.monotonic() + HEADER_DEADLINE))
+
+    def parse_request(self) -> bool:
+        """HTTP/0.9 ("GET /" without a version) gets no headers in reply, so it is refused, framed as HTTP/1.0."""
+        if not super().parse_request():
+            return False
+        if self.request_version == "HTTP/0.9":
+            self.send_error(400)
+            return False
+        return True
+
+    def __getattr__(self, name: str):
+        """Every other method is answered by ``App.handle`` too: 405, with the usual headers."""
+        if name.startswith("do_"):
+            return self._serve
+        raise AttributeError(name)
+
     def _serve(self) -> None:
-        response = self.server.app.handle(self.command, self.path, list(self.headers.items()),
-                                          self.client_address[0])
+        self.connection.settimeout(self.timeout)  # the headers are in; the reply gets the ordinary timeout
+        try:
+            response = self.server.app.handle(self.command, self.path, list(self.headers.items()),
+                                              self.client_address[0])
+        except Exception:  # App.handle answers every error itself; this is the last resort
+            sys.stderr.write("memlab-ui: internal error\n")
+            response = Response(500, FAILED, list(HEADERS))
         self._write(response)
 
     def _write(self, response: Response) -> None:
@@ -200,12 +298,11 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(response.body)
 
     do_GET = do_HEAD = _serve
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_TRACE = do_CONNECT = _serve
 
     def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
-        """Malformed requests and unknown methods get the same headers as every page, and no echo."""
+        """Malformed requests get the same headers as every page, framed as HTTP/1.0, and no echo."""
         self.close_connection = True
-        if self.request_version == "HTTP/0.9":  # a malformed request line: still send a status line and headers
+        if self.request_version == "HTTP/0.9":
             self.request_version = "HTTP/1.0"
         try:
             response = self.server.app.message(code, "Bad request", "The request could not be understood.")
@@ -214,8 +311,11 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
-        target = getattr(self, "path", None)
-        route = urlsplit(target).path if isinstance(target, str) else "-"
+        try:
+            target = getattr(self, "path", None)
+            route = urlsplit(target).path if isinstance(target, str) else "-"
+        except ValueError:
+            route = "-"
         route = route if route in ROUTES else "-"
         command = getattr(self, "command", None)
         command = command if command in ("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS") else "-"
@@ -226,8 +326,32 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class Server(ThreadingHTTPServer):
+    """At most ``MAX_CONNECTIONS`` connections at once: a further one is closed without a thread."""
     daemon_threads = True
     app: App
+
+    def server_bind(self) -> None:
+        self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        super().server_bind()
+
+    def process_request(self, request, client_address) -> None:
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+    def handle_error(self, request, client_address) -> None:
+        sys.stderr.write("memlab-ui: a connection failed\n")  # never a traceback with request data
 
 
 def create_server(root: Path | str = ".", port: int = 0, allow_model_verifiers: bool = False,

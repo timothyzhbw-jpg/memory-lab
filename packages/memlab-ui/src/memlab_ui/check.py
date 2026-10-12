@@ -6,12 +6,13 @@ each next to the source that seems to disagree; the rest are folded away. Nothin
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from memcore import htmlpage as h
-from memfalsify import (ATTENTION, AuditReport, DiffReport, EvidenceFinding, Finding, HistoryError, VerifierError,
-                        audit, memory_diff)
+from memfalsify import (ATTENTION, AuditReport, DiffReport, EvidenceFinding, Finding, HistoryError, Issue,
+                        VerifierError, audit_claims, memory_diff, parse_memory)
 from memfalsify import jev, llm
 from memfalsify.audit import SEVERITY
 # The verifier choices and passage limits are the CLI's (internal, as in the MCP server): same defaults.
@@ -19,7 +20,7 @@ from memfalsify.cli import VerifierChoice, build_verifier, preselection
 from memfalsify.gitstore import check_revision
 
 from .i18n import _
-from .pages import (error_card, fill, lang_field, location_code, plural, quote, select, span_detail,
+from .pages import (details, error_card, fill, lang_field, location_code, plural, quote, select, span_details,
                     span_place, text_input, where)
 from .workspace import InputError, Inventory, Workspace
 
@@ -38,7 +39,7 @@ PILL = {
     "candidate_counterevidence": ("Possible conflict", "attention"),
     "disputed": ("Checkers disagree", "attention"),
     "supported": ("Confirmed by a reviewer", "fine"),
-    "candidate_support": ("Probably fine", "fine"),
+    "candidate_support": ("Similar text found", "fine"),
     "insufficient_evidence": ("Can't tell", "grey"),
 }
 ADVICE = {
@@ -64,9 +65,29 @@ ISSUES = {
 }
 TILES = (
     ("attention", "Look at these", "Something in your project seems to disagree."),
-    ("fine", "Probably fine", "Your project says the same thing."),
+    ("fine", "Similar text found", "Your project has a passage that looks alike. It's a word match, not proof."),
     ("grey", "Can't tell", "Nothing in your project talks about it."),
 )
+MODEL_SIMILAR = "A model judged a passage to agree. That is not proof."
+MAX_STATEMENTS = 1000  # statements checked per page
+DATASET_SETTINGS = ("policy.json", "github.json", "jira.json")
+SKIP_REASONS = (
+    ("larger than 2 MB", "larger than 2 MB"),
+    ("not read: the read budget", "not read: this page's reading budget was used up"),
+    ("not UTF-8 text", "not text (not UTF-8)"),
+    ("MemFalsify report", "a Memory Lab report, which is never evidence"),
+    ("media file", "an image, audio or video file without a transcript or OCR text next to it"),
+    ("hidden component", "in a hidden folder, or a hidden file"),
+    ("skipped directory", "in a folder that is never read"),
+    ("symlinked directory not followed", "a linked folder, which is not followed"),
+    ("symlink escapes evidence root", "a link to outside the folder"),
+    ("broken or cyclic symlink", "a broken link"),
+    ("not a regular file", "not a regular file"),
+    ("memory skipped", "an agent file that could not be read"),
+)
+TOO_MANY_FOR_DIFF = ("This file has more than {n} statements, too many to compare here. Check it without "
+                     "\"Changed since\", or run memfalsify diff.")
+PARTLY_CHECKED = "Only the first {checked} of {n} statements were checked."
 DOCS = {".md", ".markdown", ".txt", ".rst", ".adoc", ".mdx", ".vtt", ".srt", ".json"}
 LEAD = ("Pick a file and press Check. Each statement in it is compared with your project, and anything that seems "
         "to disagree is shown side by side.")
@@ -151,6 +172,14 @@ def header() -> str:
 
 # --- running the check --------------------------------------------------------------------------------
 
+@dataclass
+class Result:
+    """A report, and how many of the file's statements it covers (the rest are over ``MAX_STATEMENTS``)."""
+    report: AuditReport | DiffReport
+    statements: int
+    checked: int
+
+
 def choice_of(params: dict[str, str], models: bool) -> VerifierChoice:
     value = params.get("verifier") or "lexical"
     if value not in VERIFIERS:
@@ -169,7 +198,31 @@ def as_of_date(value: str | None) -> date | None:
         raise InputError(_("\"Treat today as\" must be a date like 2026-10-10.")) from None
 
 
-def run(ws: Workspace, params: dict[str, str], *, models: bool) -> AuditReport | DiffReport:
+def _glob(path: str) -> str:
+    """``path`` as an fnmatch pattern that matches only itself."""
+    return re.sub(r"([*?\[])", r"[\1]", path)
+
+
+def exclusions(ws: Workspace, evidence: Path, inventory: Inventory) -> list[str]:
+    """What is never evidence on this page: record files, JSON Lines (reviews, event logs, evidence manifests,
+    sync state) and CSV (such as decision exports), and the settings of decision logs inside the folder. Their
+    records are not prose a reader can compare, and a review must not count as evidence for itself."""
+    base = ws.show(evidence)
+    patterns = ["*.jsonl", "*.csv"]
+    for dataset in inventory.datasets:
+        if base == WHOLE:
+            inside = dataset
+        elif dataset == base:
+            inside = WHOLE
+        elif dataset.startswith(base + "/"):
+            inside = dataset[len(base) + 1:]
+        else:
+            continue
+        patterns += [_glob(name if inside == WHOLE else f"{inside}/{name}") for name in DATASET_SETTINGS]
+    return patterns
+
+
+def run(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models: bool) -> Result:
     choice = choice_of(params, models)
     memory = ws.file(params["file"], "The agent file", instructions=True)
     evidence = ws.directory(params.get("evidence") or WHOLE, "The folder to compare against")
@@ -183,21 +236,39 @@ def run(ws: Workspace, params: dict[str, str], *, models: bool) -> AuditReport |
             check_revision(since)
         except HistoryError:
             raise InputError(_(BAD_REVISION)) from None
+    exclude = exclusions(ws, evidence, inventory)
     try:
+        skipped: list = []
+        claims, files = parse_memory(memory, skipped=skipped)
+        if since is not None and len(claims) > MAX_STATEMENTS:
+            raise InputError(_(TOO_MANY_FOR_DIFF, n=MAX_STATEMENTS))
         judged = {"verifier": build_verifier(choice, llm.DEFAULT_MODEL, jev.DEFAULT_MODEL), **preselection(choice)}
         if since is None:
-            report = audit(memory, evidence, reviews, as_of=reference, **judged)
-            return report.model_copy(update={"memory_file": ws.show(memory), "evidence_root": ws.show(evidence)})
-        diff = memory_diff(memory, since, None, evidence_root=evidence, reviews=reviews, as_of=reference, **judged)
+            # audit(), with at most MAX_STATEMENTS statements checked (conflicts still look at all of them).
+            base = memory.parent.resolve()
+            only = [claim.id for claim in claims[:MAX_STATEMENTS]] if len(claims) > MAX_STATEMENTS else None
+            report = audit_claims(claims, memory_file=str(memory), files_read=[f.relative_to(base).as_posix()
+                                                                                for f in files],
+                                  memory_paths=files, evidence_root=evidence, reviews=reviews, as_of=reference,
+                                  exclude=exclude, only=only, **judged)
+            report.skipped_evidence[:0] = [s.model_copy(update={"reason": "memory skipped: " + s.reason})
+                                          for s in skipped]
+            report = report.model_copy(update={"memory_file": ws.show(memory), "evidence_root": ws.show(evidence)})
+            return Result(report, len(claims), min(len(claims), MAX_STATEMENTS))
+        diff = memory_diff(memory, since, None, evidence_root=evidence, reviews=reviews, as_of=reference,
+                           exclude=exclude, **judged)
     except VerifierError:
         raise InputError(_(MODEL_FAILED)) from None
     except HistoryError as exc:
         raise InputError(ws.history_failure(exc)) from None
+    except InputError:
+        raise
     except (ValueError, OSError) as exc:
         raise InputError(ws.failure(exc)) from None
     shown = ws.show(memory)
-    return diff.model_copy(update={"memory_file": shown, "audit": diff.audit.model_copy(
+    diff = diff.model_copy(update={"memory_file": shown, "audit": diff.audit.model_copy(
         update={"memory_file": shown, "evidence_root": ws.show(evidence)})})
+    return Result(diff, len(claims), len(claims))
 
 
 # --- the results --------------------------------------------------------------------------------------
@@ -242,31 +313,45 @@ def _why(e: EvidenceFinding, verifier: str) -> str:
         for prefix, words in WHY:
             if e.rationale.startswith(prefix):
                 return t(words)
+        return ""
     return h.text(_("Why: {why}", why=e.rationale))
 
 
-def _source_label(e: EvidenceFinding, base: str | None) -> str:
+def _source_label(e: EvidenceFinding) -> str:
     docs = PurePosixPath(e.span.path).suffix.lower() in DOCS
     if e.relation == "supports":
-        who = "Your docs agree" if docs else "Your project agrees"
+        who = "A reviewer confirmed" if e.confirmed else "Similar text"
     else:
         who = "Your docs say" if docs else "Your project says"
-    return f'<p class="side-label">{t(who)} &middot; {span_place(e.span, base)}</p>'
+    return f'<p class="side-label">{t(who)} &middot; {span_place(e.span)}</p>'
 
 
-def _claim_place(memory_file: str, location: str) -> str:
+def _claim_label(location: str) -> str:
+    path, line = where(location)
+    return location_code(PurePosixPath(path).name, line)
+
+
+def _claim_path(memory_file: str, location: str) -> str:
     path, line = where(location)
     folder = PurePosixPath(memory_file).parent.as_posix()
-    shown = path if folder in (".", "") else f"{folder}/{path}"
-    return location_code(shown, line)
+    return location_code(path if folder in (".", "") else f"{folder}/{path}", line)
+
+
+def _issue(issue: Issue) -> str:
+    """An issue in the page's own words. Where it points at other statements, their file:line labels."""
+    words = t(ISSUES[issue.kind]) if issue.kind in ISSUES else h.text(issue.kind)
+    others = []
+    if issue.kind == "internal_conflict":
+        others = re.findall(r" at (\S+?:\d+):", issue.detail)[:1]
+    elif issue.kind == "duplicate":
+        others = re.findall(r"[^\s,]+?:\d+", issue.detail.removeprefix("also stated at "))
+    if others:
+        words += " (" + ", ".join(_claim_label(o) for o in others) + ")"
+    return f"<li>{words}</li>"
 
 
 def _issues(f: Finding) -> str:
-    if not f.issues:
-        return ""
-    items = "".join(f"<li>{t(ISSUES[i.kind]) if i.kind in ISSUES else h.text(i.kind)} "
-                    f'<span class="small">({h.text(i.detail)})</span></li>' for i in f.issues)
-    return f'<ul class="issues">{items}</ul>'
+    return f'<ul class="issues">{"".join(_issue(i) for i in f.issues)}</ul>' if f.issues else ""
 
 
 def _pill(status: str) -> str:
@@ -278,61 +363,70 @@ def _heading(f: Finding, tag: str) -> str:
     return f'<h4>{_pill(f.status)}{tag}<span class="sr-only"> {t("at {where}", where=f.location)}</span></h4>'
 
 
-def _agent_says(report: AuditReport, f: Finding) -> str:
-    place = _claim_place(report.memory_file, f.location)
-    return f'<p class="side-label">{t("Your agent file says")} &middot; {place}</p>'
+def _agent_says(f: Finding) -> str:
+    return f'<p class="side-label">{t("Your agent file says")} &middot; {_claim_label(f.location)}</p>'
+
+
+def _details(f: Finding, report: AuditReport, sources: list[EvidenceFinding]) -> str:
+    """The technical facts of a card, folded: statement ID and full path, each source's file, link and hash."""
+    rows = [(_("Statement ID"), h.code(f.memory_id)), (_("Statement"), _claim_path(report.memory_file, f.location))]
+    for e in sources:
+        rows += span_details(e.span, report.evidence_root)
+    return details(rows)
 
 
 def _flagged(f: Finding, report: AuditReport, tag: str = "") -> str:
     against = [e for e in f.evidence if e.relation in ("contradicts", "disputed")]
     other = [e for e in f.evidence if e.relation == "supports"]
-    base = report.evidence_root
     file_name = PurePosixPath(where(f.location)[0]).name
     first = against[0] if against else None
     claim_marks, source_marks = marks(first, f.text, report.verifier) if first else ([], [])
     out = ['<article class="card finding">', _heading(f, tag), '<div class="compare">',
-           f"<div>{_agent_says(report, f)}{quote(f.text, claim_marks)}</div>"]
+           f"<div>{_agent_says(f)}{quote(f.text, claim_marks)}</div>"]
     if first is not None:
-        out.append(f"<div>{_source_label(first, base)}{quote(first.span.quote, source_marks)}</div>")
+        out.append(f"<div>{_source_label(first)}{quote(first.span.quote, source_marks)}</div>")
     out.append("</div>")
-    if first is not None:
-        out.append(f'<p class="small">{_why(first, report.verifier)}</p>{span_detail(first.span, base)}')
+    if first is not None and (why := _why(first, report.verifier)):
+        out.append(f'<p class="small">{why}</p>')
     out.append(f'<p class="advice">{t(ADVICE[f.status], file=file_name)}</p>')
     rest = against[1:] + other
     if rest:
-        items = "".join(f'<div class="more">{_source_label(e, base)}{quote(e.span.quote)}'
-                        f'<p class="small">{_why(e, report.verifier)}</p>{span_detail(e.span, base)}</div>'
+        items = "".join(f'<div class="more">{_source_label(e)}{quote(e.span.quote)}'
+                        + (f'<p class="small">{why}</p>' if (why := _why(e, report.verifier)) else "") + "</div>"
                         for e in rest)
         out.append(f"<details><summary>{h.text(plural(len(rest), '{n} more source', '{n} more sources'))}"
                    f"</summary>{items}</details>")
     out.append(_issues(f))
-    out.append(f'<p class="small">{t("Statement ID {id}", id=f.memory_id)}</p></article>')
-    return "\n".join(out)
-
-
-def _other(f: Finding, report: AuditReport, tag: str = "") -> str:
-    out = ['<article class="card">', _heading(f, tag), _agent_says(report, f), quote(f.text)]
-    support = [e for e in f.evidence if e.relation == "supports"]
-    if support:
-        e = support[0]
-        out += [f'<div class="more">{_source_label(e, report.evidence_root)}{quote(e.span.quote)}',
-                span_detail(e.span, report.evidence_root), "</div>"]
-        if len(support) > 1:
-            more = plural(len(support) - 1, "{n} more source agrees.", "{n} more sources agree.")
-            out.append(f'<p class="small">{h.text(more)}</p>')
-    elif f.status == "insufficient_evidence":
-        out.append(f'<p class="small">{t(UNCHECKED)}</p>')
-    out.append(_issues(f))
+    out.append(_details(f, report, against + other))
     out.append("</article>")
     return "\n".join(out)
 
 
-def _tiles(findings: list[Finding]) -> str:
+def _other(f: Finding, report: AuditReport, tag: str = "") -> str:
+    out = ['<article class="card">', _heading(f, tag), _agent_says(f), quote(f.text)]
+    support = [e for e in f.evidence if e.relation == "supports"]
+    if support:
+        e = support[0]
+        out.append(f'<div class="more">{_source_label(e)}{quote(e.span.quote)}</div>')
+        if len(support) > 1:
+            more = plural(len(support) - 1, "{n} more similar passage.", "{n} more similar passages.")
+            out.append(f'<p class="small">{h.text(more)}</p>')
+    elif f.status == "insufficient_evidence":
+        out.append(f'<p class="small">{t(UNCHECKED)}</p>')
+    out.append(_issues(f))
+    out.append(_details(f, report, support[:1]))
+    out.append("</article>")
+    return "\n".join(out)
+
+
+def _tiles(findings: list[Finding], verifier: str) -> str:
     counts = {"attention": sum(f.status in ATTENTION for f in findings),
               "fine": sum(f.status in FINE for f in findings),
               "grey": sum(f.status == "insufficient_evidence" for f in findings)}
     out = [f'<ul class="tiles" aria-label="{h.text(_("Summary"))}">']
     for tone, name, why in TILES:
+        if tone == "fine" and verifier != "lexical":
+            why = MODEL_SIMILAR
         number = f'<span class="num">{counts[tone]}</span>'
         if counts[tone]:
             target = "look" if tone == "attention" else "others"
@@ -349,12 +443,10 @@ def _findings(report: AuditReport, tags: dict[str, str] | None = None) -> list[s
     findings = sorted(report.findings, key=lambda f: order[f.status])
     flagged = [f for f in findings if f.status in ATTENTION]
     rest = [f for f in findings if f.status not in ATTENTION]
-    out = [_tiles(report.findings)]
+    out = [_tiles(report.findings, report.verifier)]
     if flagged:
         out.append(f'<h3 id="look">{t("Look at these")}</h3>')
         out += [_flagged(f, report, tags.get(f.memory_id, "")) for f in flagged]
-    elif report.findings:
-        out.append(f'<p class="card">{t("Nothing to look at: no statement seems to disagree with your project.")}</p>')
     if rest:
         label = plural(len(rest), "Show the {n} other statement", "Show the {n} other statements")
         out.append(f'<details class="others" id="others"><summary>{h.text(label)}</summary>')
@@ -363,10 +455,18 @@ def _findings(report: AuditReport, tags: dict[str, str] | None = None) -> list[s
     return out
 
 
+def _reason(text: str) -> str:
+    """A skip reason in the page's words; reasons the page does not know stay as the library wrote them."""
+    for prefix, words in SKIP_REASONS:
+        if text.startswith(prefix):
+            return t(words)
+    return h.text(text)
+
+
 def _skipped(report: AuditReport) -> list[str]:
     if not report.skipped_evidence:
         return []
-    rows = "".join(f'<tr><th scope="row">{h.code(s.path)}</th><td>{h.text(s.reason)}</td></tr>'
+    rows = "".join(f'<tr><th scope="row">{h.code(s.path)}</th><td>{_reason(s.reason)}</td></tr>'
                    for s in report.skipped_evidence)
     label = plural(len(report.skipped_evidence), "{n} file was not read", "{n} files were not read")
     return [f"<details><summary>{h.text(label)}</summary><div class=\"card scroll\"><table>"
@@ -375,42 +475,50 @@ def _skipped(report: AuditReport) -> list[str]:
             f"<tbody>{rows}</tbody></table></div></details>"]
 
 
-def _subtitle(report: AuditReport) -> str:
+def _subtitle(report: AuditReport, result: Result) -> str:
     against = t("the whole project") if report.evidence_root in (None, WHOLE) else h.code(report.evidence_root)
-    method = _(VERIFIERS.get(report.verifier, report.verifier)).split(" (")[0].split("\uff08")[0]
+    method = _(VERIFIERS.get(report.verifier, report.verifier)).split(" (")[0].split("（")[0]
     linked = len(report.files_read) - 1
     files = h.text(_(" and {linked}", linked=plural(linked, "{n} linked file", "{n} linked files"))) if linked > 0 \
         else ""
-    statements = h.text(plural(len(report.findings), "{n} statement", "{n} statements"))
+    statements = h.text(plural(result.statements, "{n} statement", "{n} statements"))
     line = fill(SUBTITLE, statements=statements, file=h.code(report.memory_file), linked=files, against=against,
                 date=h.when(report.as_of), method=h.text(method))
-    return f'<p class="small">{line}</p>'
+    out = f'<p class="small">{line}</p>'
+    if result.checked < result.statements:
+        out += f'<p class="small">{t(PARTLY_CHECKED, checked=result.checked, n=result.statements)}</p>'
+    return out
 
 
-def _title(count: int, name: str, changed: bool = False) -> str:
-    if count and changed:
-        return h.text(plural(count, "{n} new or changed thing in {name} may be out of date",
-                             "{n} new or changed things in {name} may be out of date", name=name))
-    if count:
-        return h.text(plural(count, "{n} thing in {name} may be out of date",
+def _title(findings: list[Finding], name: str) -> str:
+    flagged = sum(f.status in ATTENTION for f in findings)
+    if flagged:
+        return h.text(plural(flagged, "{n} thing in {name} may be out of date",
                              "{n} things in {name} may be out of date", name=name))
-    if changed:
-        return t("Nothing new or changed in {name} looks out of date", name=name)
-    return t("Nothing in {name} looks out of date", name=name)
+    unknown = sum(f.status == "insufficient_evidence" for f in findings)
+    title = _("No contradictions found in {name}", name=name)
+    if unknown:
+        title += plural(unknown, " · {n} statement couldn't be checked",
+                        " · {n} statements couldn't be checked")
+    return h.text(title)
 
 
-def results(report: AuditReport | DiffReport) -> str:
+def _note(verifier: str) -> str:
+    return f'<p class="card small">{t(HONEST if verifier == "lexical" else MODEL_NOTE)}</p>'
+
+
+def results(result: Result) -> str:
+    report = result.report
     if isinstance(report, DiffReport):
         return diff_results(report)
     name = PurePosixPath(report.memory_file).name
-    flagged = sum(f.status in ATTENTION for f in report.findings)
     out = ['<section id="results" aria-labelledby="results-title">',
-           f'<h2 id="results-title">{_title(flagged, name)}</h2>', _subtitle(report)]
+           f'<h2 id="results-title">{_title(report.findings, name)}</h2>', _subtitle(report, result)]
     if not report.findings:
         out.append(f'<p class="card">{t("No statements were found in this file.")}</p>')
     out += _findings(report)
     out += _skipped(report)
-    out.append(f'<p class="card small">{t(HONEST if report.verifier == "lexical" else MODEL_NOTE)}</p>')
+    out.append(_note(report.verifier))
     out.append("</section>")
     return "\n".join(out)
 
@@ -418,7 +526,6 @@ def results(report: AuditReport | DiffReport) -> str:
 def diff_results(report: DiffReport) -> str:
     audit_report = report.audit
     name = PurePosixPath(report.memory_file).name
-    flagged = sum(f.status in ATTENTION for f in audit_report.findings)
     summary = report.summary
     tags = {}
     for c in report.changes:
@@ -429,7 +536,7 @@ def diff_results(report: DiffReport) -> str:
     since = fill(SINCE, rev=h.code(report.base.rev), added=str(summary["added"]), changed=str(summary["changed"]),
                  removed=str(summary["removed"]), unchanged=str(summary["unchanged"]), date=h.when(audit_report.as_of))
     out = ['<section id="results" aria-labelledby="results-title">',
-           f'<h2 id="results-title">{_title(flagged, name, changed=True)}</h2>', f'<p class="small">{since}</p>']
+           f'<h2 id="results-title">{_title(audit_report.findings, name)}</h2>', f'<p class="small">{since}</p>']
     if summary["added"] + summary["changed"]:
         out += _findings(audit_report, tags)
     else:
@@ -437,8 +544,8 @@ def diff_results(report: DiffReport) -> str:
     changed = [c for c in report.changes if c.change == "changed" and c.old and c.new]
     if changed:
         items = "".join(f'<div class="card"><p class="side-label">{t("It used to say")} &middot; '
-                        f"{location_code(*where(c.old.location))}</p>{quote(c.old.text)}"
-                        f'<p class="side-label">{t("Now it says")} &middot; {location_code(*where(c.new.location))}'
+                        f"{_claim_label(c.old.location)}</p>{quote(c.old.text)}"
+                        f'<p class="side-label">{t("Now it says")} &middot; {_claim_label(c.new.location)}'
                         f"</p>{quote(c.new.text)}</div>" for c in changed)
         label = plural(len(changed), "{n} changed statement: before and after",
                        "{n} changed statements: before and after")
@@ -446,12 +553,12 @@ def diff_results(report: DiffReport) -> str:
     removed = [c for c in report.changes if c.change == "removed" and c.old]
     if removed:
         items = "".join(f'<div class="card"><p class="side-label">{t("Removed")} &middot; '
-                        f"{fill('was at {where}', where=location_code(*where(c.old.location)))}"
+                        f"{fill('was at {where}', where=_claim_label(c.old.location))}"
                         f"</p>{quote(c.old.text)}</div>" for c in removed)
         label = plural(len(removed), "{n} statement was removed", "{n} statements were removed")
         out.append(f"<details><summary>{h.text(label)}</summary>{items}</details>")
     out += _skipped(audit_report)
-    out.append(f'<p class="card small">{t(HONEST if audit_report.verifier == "lexical" else MODEL_NOTE)}</p>')
+    out.append(_note(audit_report.verifier))
     out.append("</section>")
     return "\n".join(out)
 
@@ -461,7 +568,7 @@ def render(ws: Workspace, inventory: Inventory, params: dict[str, str], *, model
     status, below = 200, []
     if params.get("file"):
         try:
-            below.append(results(run(ws, params, models=models)))
+            below.append(results(run(ws, inventory, params, models=models)))
         except Refused as exc:
             status, below = 403, [error_card(_("This check is switched off"), str(exc))]
         except InputError as exc:

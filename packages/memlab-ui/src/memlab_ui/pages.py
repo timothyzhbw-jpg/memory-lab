@@ -11,6 +11,7 @@ import html
 import re
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlencode
 
 from memcore import EvidenceSpan
@@ -83,7 +84,13 @@ p { margin: .5rem 0; }
 .folder { margin-top: auto; background: var(--card); border: .5px solid var(--line); border-radius: 14px;
           padding: .75rem .85rem; font-size: .8rem; color: var(--muted); }
 .folder p { margin: .15rem 0; }
-.folder .mono { color: var(--text); font-size: .78rem; }
+.folder .mono { color: var(--text); font-size: .85rem; overflow-wrap: anywhere; }
+.details { margin: .6rem 0 0; }
+.details summary { min-height: 44px; font-size: .85rem; font-weight: 400; color: var(--soft); }
+.details dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .2rem .9rem; margin: 0;
+              font-size: .82rem; color: var(--muted); }
+.details dt { color: var(--soft); }
+.details dd { margin: 0; overflow-wrap: anywhere; }
 .lang { display: flex; align-items: center; gap: .3rem; margin: -.5rem 0 0; padding: 0 .4rem; font-size: 13px;
         color: var(--soft); }
 .lang svg { flex: 0 0 14px; }
@@ -298,26 +305,41 @@ def under(base: str | None, path: str) -> str:
     return path if base in (None, "", ".") else f"{base}/{path}"
 
 
-def span_place(span: EvidenceSpan, base: str | None = None) -> str:
-    """Where a quote is, for a label: ``docs/api.md:3``, or the media file and position of a sidecar quote.
-    ``base`` is the evidence root relative to the root, so the path reads from the project folder."""
+def span_place(span: EvidenceSpan) -> str:
+    """A short label for a quote: the file name and line (``api.md:3``), or for a transcript or OCR sidecar the
+    media file's name and the position in it. The full path and the hash are in ``span_details``."""
     media = span.media
     if media is None:
-        return location_code(under(base, span.path), span.line)
+        return location_code(PurePosixPath(span.path).name, span.line)
     position = media.time_range or media.locator
-    return (f"{h.code(under(base, media.path or span.path))} "
+    return (f"{h.code(PurePosixPath(media.path or span.path).name)} "
             f"<span class=\"small\">({h.text(media.label)}, {h.text(position)})</span>")
 
 
-def span_detail(span: EvidenceSpan, base: str | None = None) -> str:
-    """The small print under a quote: the sidecar it came from, source link, hash prefix."""
-    parts = []
+def span_details(span: EvidenceSpan, base: str | None = None) -> list[tuple[str, str]]:
+    """Rows for a card's Details: where the quote is (from the project folder), its source and its hash.
+    ``base`` is the folder the span's path is relative to, itself relative to the root."""
+    rows = [(_("File"), location_code(under(base, span.path), span.line))]
     if span.media is not None:
-        parts.append(location_code(under(base, span.path), span.line))
+        rows.append((_("Media file"), h.code(under(base, span.media.path or span.path))))
     if span.source_uri is not None:
-        parts.append(h.link(span.source_uri))
-    parts.append(f"sha256 {h.code(span.sha256[:12])}")
-    return '<p class="small">' + " &middot; ".join(parts) + "</p>"
+        rows.append((_("Source"), h.link(span.source_uri)))
+    rows.append(("SHA-256", h.code(span.sha256)))
+    return rows
+
+
+def details(rows: list[tuple[str, str]]) -> str:
+    """A folded "Details" block of (plain-text label, HTML value) rows for the technical facts of a card."""
+    if not rows:
+        return ""
+    items = "".join(f"<dt>{h.text(label)}</dt><dd>{value}</dd>" for label, value in rows)
+    return f'<details class="details"><summary>{h.text(_("Details"))}</summary><dl>{items}</dl></details>'
+
+
+def notice(text: str) -> str:
+    """A quiet banner with one plain-text sentence."""
+    return (f'<div class="card banner" role="status"><span class="dot attention" aria-hidden="true"></span>'
+            f"<span>{h.text(text)}</span></div>")
 
 
 def quote(text: str, marks: Iterable[tuple[int, int]] = (), css: str = "q") -> str:
@@ -418,7 +440,8 @@ def page(title: str, body: str, *, active: str | None, root: str, topics: str = 
         f'<nav class="nav" aria-label="{attr(_("Main"))}"><ul>{"".join(nav)}</ul></nav>\n'
         f"{topics}"
         f'<div class="folder"><p>{h.text(_("Project folder"))}</p>'
-        f'<p class="mono">{h.text(root)}</p><p>{h.text(_("Read-only: nothing here changes a file."))}</p></div>\n'
+        f'<p class="mono" title="{attr(root)}">{h.text(PurePosixPath(Path(root).as_posix()).name or root)}</p>'
+        f'<p>{h.text(_("Read-only: nothing here changes a file."))}</p></div>\n'
         f"{switch}"
         "</aside>\n"
         f'<main id="main" class="content" tabindex="-1"><div class="column">\n{body}\n</div></main>\n'

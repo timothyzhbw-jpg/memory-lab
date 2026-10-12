@@ -15,6 +15,7 @@ import re
 import shutil
 import socket
 import threading
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote as urlquote
@@ -23,7 +24,7 @@ import pytest
 from typer.testing import CliRunner
 
 from conftest import EXAMPLES, requires_confinement, snapshot
-from memcore import confinement_root
+from memcore import confinement_root, reading
 from memfalsify import ATTENTION, LexicalVerifier, VerifierError, audit, parse_memory
 from memlab_ui import create_server, i18n
 from memlab_ui import check as ui_check
@@ -149,13 +150,15 @@ def test_check_shows_the_lexical_audit_in_plain_words(app, root):
     shown, page = text(response), body(response)
     assert f"{len(flagged)} things in MEMORY.md may be out of date" in shown
     assert f"Look at these {len(flagged)} Look at these Something in your project seems to disagree." in shown
-    assert f"Probably fine {len(fine)} Probably fine Your project says the same thing." in shown
+    assert (f"Similar text found {len(fine)} Similar text found Your project has a passage that looks alike. "
+            "It's a word match, not proof.") in shown
+    assert "Probably fine" not in shown
     assert f"Can't tell {len(unknown)} Can't tell Nothing in your project talks about it." in shown
     assert page.count('<article class="card finding">') == len(flagged)
     for finding in expected.findings:
         assert finding.text in shown
-    assert "Your agent file says · memfalsify/infra.md:6" in shown
-    assert "Your docs say · memfalsify/evidence/docs/api.md:3" in shown
+    assert "Your agent file says · infra.md:6" in shown
+    assert "Your docs say · api.md:3" in shown
     assert "<mark>100</mark>" in page and "<mark>60</mark>" in page  # the differing values
     assert "The numbers are different." in shown
     assert "demo-reviewer confirmed this in a review." in shown
@@ -172,7 +175,7 @@ def test_check_compares_with_the_whole_project_by_default(app):
     assert response.status == 200
     assert "compared with the whole project" in shown
     assert "1 thing in AGENTS.md may be out of date" in shown
-    assert "Your docs say · memfalsify/evidence/docs/api.md:3" in shown
+    assert "Your docs say · api.md:3" in shown
 
 
 @requires_confinement
@@ -197,14 +200,14 @@ def repo(git_repo):
 
 @requires_confinement
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
-def test_changed_since_runs_the_diff_inside_a_git_root(repo):
+def test_changed_since_runs_the_diff_inside_a_git_root(repo, monkeypatch):
     app = make_app(repo.root)
     assert 'name="since"' in body(get(app, "/check"))
     before = snapshot(repo.root)
     response = get(app, "/check?file=CLAUDE.md&since=HEAD")
     shown = text(response)
     assert response.status == 200, shown
-    assert "1 new or changed thing in CLAUDE.md may be out of date" in shown
+    assert "1 thing in CLAUDE.md may be out of date" in shown
     assert "Since HEAD: 1 added, 1 changed, 1 removed, 1 unchanged (not checked again)" in shown
     assert "Changed" in shown and "New" in shown
     assert "It used to say · CLAUDE.md:3 The API rate limit is 60 requests per minute." in shown
@@ -217,6 +220,9 @@ def test_changed_since_runs_the_diff_inside_a_git_root(repo):
         assert refused.status == 400 and message in text(refused)
         assert "fatal:" not in text(refused) and str(repo.root.parent) not in text(refused).replace(
             str(repo.root), "")
+    monkeypatch.setattr(ui_check, "MAX_STATEMENTS", 2)
+    too_many = get(app, "/check?file=CLAUDE.md&since=HEAD")
+    assert too_many.status == 400 and "more than 2 statements" in text(too_many)
 
 
 @requires_confinement
@@ -231,9 +237,9 @@ def test_decisions_page_lists_the_logs(app):
     response = get(app, "/decisions")
     page = body(response)
     assert response.status == 200
-    assert '<option value="feature-a">feature-a</option>' in page
+    assert '<option value="feature-a" selected>feature-a</option>' in page  # the first log opens directly
     assert '<option value="github-acme-web">github-acme-web</option>' in page
-    assert 'class="topics"' not in page
+    assert 'class="topics"' in page and "Feature A" in text(response)
 
 
 @requires_confinement
@@ -346,11 +352,13 @@ def test_hidden_and_skipped_folders_are_not_read(app, root):
 def test_pages_read_inside_confined_reads(app, root, monkeypatch):
     seen = []
 
+    original = ui_check.audit_claims
+
     def spy(*args, **kwargs):
         seen.append(confinement_root())
-        return audit(*args, **kwargs)
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(ui_check, "audit", spy)
+    monkeypatch.setattr(ui_check, "audit_claims", spy)
     assert get(app, link("/check", file=MEMORY, evidence=EVIDENCE)).status == 200
     assert seen == [root.resolve()]
 
@@ -570,7 +578,7 @@ def test_unexpected_errors_show_no_traceback(app, monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError(f"boom {SECRET} /etc/passwd")
 
-    monkeypatch.setattr(ui_check, "audit", boom)
+    monkeypatch.setattr(ui_check, "audit_claims", boom)
     response = get(app, f"/check?file={MEMORY}")
     page = body(response)
     assert response.status == 500 and "Something went wrong" in page
@@ -628,18 +636,20 @@ def test_language_switch_keeps_the_page_and_its_fields(app):
 def test_chinese_pages_say_the_same_things(app, root):
     shown = text(get(app, "/?lang=zh"))
     assert "你的 AI 助手记住的东西还对吗？" in shown and "不会修改任何文件，也不会有任何内容离开这台电脑。" in shown
-    assert "要检查哪个文件？" in shown and "本项目中的智能体文件" in shown
+    assert "要检查哪个文件？" in shown and "本项目中的 Agent 文件" in shown and "检查 Agent 文件" in shown
+    assert "智能体" not in shown
     response = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, reviews=REVIEWS, as_of="2026-10-10",
                              lang="zh"))
     shown = text(response)
     assert response.status == 200
-    assert "MEMORY.md 中有 4 处可能已过时" in shown and "你的智能体文件写道" in shown and "两边的数字不同。" in shown
+    assert "MEMORY.md 中有 4 处可能已过时" in shown and "你的 Agent 文件写道" in shown and "两边的数字不同。" in shown
+    assert "需要看一下" in shown and "找到相似说法" in shown and "项目里有相似的句子。只是字词相近，不代表一定正确。" in shown
     assert "<mark>100</mark>" in body(response)
     shown = text(get(app, "/decisions?dataset=feature-a&lang=zh"))
     assert "拒绝人 zhou (product manager)" in shown and "不算数：account manager无权批准" in shown
     assert "事情经过" in shown and "两个日期之间的变化" in shown
     refused = get(app, link("/check", file="../outside.md", lang="zh"))
-    assert refused.status == 400 and "智能体文件不在本页面可读取的文件夹内。" in text(refused)
+    assert refused.status == 400 and "Agent 文件不在本页面可读取的文件夹内。" in text(refused)
     assert get(app, link("/check", file=MEMORY, verifier="llm", lang="zh")).status == 403
     for page in (body(get(app, target)) for target in ("/?lang=zh", f"/check?file={MEMORY}&lang=zh",
                                                        "/decisions?dataset=github-acme-web&lang=zh")):
@@ -699,6 +709,178 @@ def test_message_constants_are_all_translated():
                     assert value in i18n.ZH, value
     for english, chinese in i18n.ZH.items():
         assert set(re.findall(r"\{\w+\}", english)) == set(re.findall(r"\{\w+\}", chinese)), english
+
+
+# --- fixes from the security review and the walkthrough ------------------------------------------------------
+
+@requires_confinement
+@pytest.mark.parametrize("extra", [[("Origin", "https://evil.example")], [("Origin", "null")],
+                                   [("Origin", f"http://localhost:{PORT}")],
+                                   [("Origin", f"http://{HOST}"), ("Origin", f"http://{HOST}")],
+                                   [("Sec-Fetch-Site", "cross-site")], [("Sec-Fetch-Site", "same-site")],
+                                   [("Sec-Fetch-Site", "same-origin"), ("Origin", "https://evil.example")]])
+def test_cross_site_requests_are_refused_before_any_work(root, monkeypatch, extra):
+    app = make_app(root, allow_model_verifiers=True)
+
+    def never(*args, **kwargs):
+        raise AssertionError("a cross-site request ran a check")
+
+    monkeypatch.setattr(ui_check, "build_verifier", never)
+    monkeypatch.setattr(ui_check, "audit_claims", never)
+    target = link("/check", file=MEMORY, evidence=EVIDENCE, verifier="llm")
+    response = app.handle("GET", target, [("Host", HOST), *extra], "127.0.0.1")
+    assert response.status == 403
+    assert "came from another website" in text(response) and "evil" not in body(response)
+
+
+@requires_confinement
+def test_same_origin_typed_and_linked_requests_still_work(app):
+    for extra in ([], [("Sec-Fetch-Site", "none")], [("Sec-Fetch-Site", "same-origin")],
+                  [("Origin", f"http://{HOST}")], [("Sec-Fetch-Site", "same-origin"), ("Origin", f"http://{HOST}")]):
+        assert app.handle("GET", "/", [("Host", HOST), *extra], "127.0.0.1").status == 200, extra
+    other = app.handle("GET", "/", [("Host", f"localhost:{PORT}"), ("Origin", f"http://localhost:{PORT}")],
+                       "127.0.0.1")
+    assert other.status == 200
+
+
+@requires_confinement
+def test_at_most_two_pages_are_computed_at_once(app):
+    assert app.pages.acquire(blocking=False) and app.pages.acquire(blocking=False)
+    try:
+        busy = get(app, f"/check?file={MEMORY}")
+        assert busy.status == 503 and ("Retry-After", "5") in busy.headers
+        assert "busy with other pages" in text(busy)
+        assert get(app, "/static/ui-light.png").status == 200  # images are not computed
+    finally:
+        app.pages.release()
+        app.pages.release()
+    assert get(app, f"/check?file={MEMORY}").status == 200
+
+
+@requires_confinement
+def test_page_budgets_are_reported_as_incomplete(app, monkeypatch):
+    monkeypatch.setattr(ui_server, "DIRECTORIES", 3)
+    shown = text(get(app, "/"))
+    assert "This project is large, so only part of it was read. Results may be incomplete." in shown
+    monkeypatch.setattr(ui_server, "DIRECTORIES", 20_000)
+    assert "This project is large" not in text(get(app, "/"))
+    monkeypatch.setattr(ui_server, "TOTAL_BYTES", 1000)
+    response = get(app, link("/check", file=MEMORY, evidence=EVIDENCE))
+    assert response.status == 200 and "This project is large" in text(response)
+    assert "not read: this page's reading budget was used up" in text(response)
+    monkeypatch.setattr(ui_server, "TOTAL_BYTES", 64_000_000)
+    monkeypatch.setattr(ui_server, "FILE_BYTES", 100)
+    refused = get(app, link("/check", file=MEMORY, evidence=EVIDENCE))
+    assert refused.status == 400 and "A file is too large for this page." in text(refused)
+    monkeypatch.setattr(ui_server, "FILE_BYTES", 8_000_000)
+    monkeypatch.setattr(ui_check, "MAX_STATEMENTS", 3)
+    limited = get(app, link("/check", file=MEMORY, evidence=EVIDENCE))
+    assert "Only the first 3 of 10 statements were checked." in text(limited)
+    assert body(limited).count("<h4>") == 3
+
+
+@requires_confinement
+def test_evidence_files_over_the_limit_are_never_read_whole(app, root, monkeypatch):
+    (root / "memfalsify" / "evidence" / "huge.md").write_bytes(b"The rate limit is 60.\n" * 120_000)
+    sizes = []
+    original = reading._read_all
+
+    def spy(handle, max_bytes=None):
+        data = original(handle, max_bytes)
+        sizes.append(len(data))
+        return data
+
+    monkeypatch.setattr(reading, "_read_all", spy)
+    shown = text(get(app, link("/check", file=MEMORY, evidence=EVIDENCE)))
+    assert "huge.md larger than 2 MB" in shown
+    assert max(sizes) < 2_000_000
+
+
+@requires_confinement
+def test_no_contradictions_headline_says_what_was_not_checked(app, root):
+    (root / "notes.md").write_text("- The office plant is a fern.\n- Lunch is at noon.\n", encoding="utf-8")
+    shown = text(get(app, "/check?file=notes.md"))
+    assert "No contradictions found in notes.md · 2 statements couldn't be checked" in shown
+    assert "looks out of date" not in shown
+    zh = text(get(app, "/check?file=notes.md&lang=zh"))
+    assert "notes.md 里没有发现矛盾，另有 2 条无法核对" in zh
+
+
+@requires_confinement
+def test_review_and_record_files_are_never_evidence(app, root):
+    response = get(app, link("/check", file=MEMORY, reviews=REVIEWS))  # the whole project, with the reviews
+    page = body(response)
+    assert '{&quot;memory_id&quot;' not in page and '{"memory_id"' not in page
+    (root / "export.csv").write_text("subject,limit\npublic API rate limit,60 requests per minute\n", encoding="utf-8")
+    (root / "notes.jsonl").write_text('{"text": "The public API rate limit is 60 requests per minute."}\n',
+                                      encoding="utf-8")
+    shown = text(get(app, "/check?file=AGENTS.md"))
+    assert "events.jsonl" not in shown and "evidence.jsonl" not in shown and "policy.json" not in shown
+    assert "reviews.jsonl:" not in shown and "export.csv" not in shown and "notes.jsonl" not in shown
+    assert "Your docs say · api.md:3" in shown  # prose evidence still counts
+
+
+@requires_confinement
+def test_technical_facts_are_folded_into_details(app):
+    page = body(get(app, link("/check", file=MEMORY, evidence=EVIDENCE, reviews=REVIEWS, as_of="2026-10-10")))
+    outside = re.sub(r'<details class="details">.*?</details>', "", page, flags=re.S)
+    assert "sha256" not in outside.lower() and "m-27e874e0" not in outside
+    assert "SHA-256" in page and "Statement ID" in page and "<summary>Details</summary>" in page
+    decided = body(get(app, "/decisions?dataset=github-acme-web&subject=acme%2Fweb%231"))
+    outside = re.sub(r'<details class="details">.*?</details>', "", decided, flags=re.S)
+    assert "https://" not in outside and "sha256" not in outside.lower() and "gh:acme/web#1/" not in outside
+    assert "https://" in decided and "Event ID" in decided
+    feature = body(get(app, "/decisions?dataset=feature-a"))
+    assert "synthetic://" not in re.sub(r'<details class="details">.*?</details>', "", feature, flags=re.S)
+    zh = body(get(app, "/decisions?dataset=feature-a&lang=zh"))
+    assert "<summary>&#35814;&#24773;</summary>" in zh  # 详情
+
+
+@requires_confinement
+def test_chinese_decisions_have_no_english_sentence_fragments(app):
+    for target in ("/decisions?dataset=feature-a&as_of=2026-10-31&from=2026-10-05&to=2026-10-08&lang=zh",
+                   "/decisions?dataset=github-acme-web&lang=zh"):
+        shown = text(get(app, target))
+        for english in ("attempt(s)", "the policy ignored", "unauthorized_attempts", "pending approval from",
+                        "raised by", "since 20", "Not counted", "approved it", "asked for it"):
+            assert english not in shown, (target, english)
+    shown = text(get(app, "/decisions?dataset=feature-a&lang=zh"))
+    assert "zhou (product manager)" in shown and "wu 曾 1 次 尝试做其角色不允许的事（批准），涉及 Feature A。" in shown
+
+
+def test_a_date_covers_the_whole_day():
+    end = ui_decisions.moment("2026-10-07", "x")
+    assert end == datetime(2026, 10, 7, 23, 59, 59, 999_999, tzinfo=timezone.utc)
+    assert datetime(2026, 10, 7, 23, 59, 59, 500_000, tzinfo=timezone.utc) <= end
+    assert datetime(2026, 10, 8, tzinfo=timezone.utc) > end
+    assert ui_decisions.moment("2026-10-07T12:00:00Z", "x") == datetime(2026, 10, 7, 12, tzinfo=timezone.utc)
+
+
+@requires_confinement
+def test_language_links_are_built_from_known_pages_and_fields(app):
+    for target in ("/\\evil.example/", "/nope?file=x&next=http://evil.example", "//evil.example/"):
+        page = body(get(app, target))
+        assert not [h for h in re.findall(r'href="([^"]*)"', page) if "evil" in h or "\\" in h], target
+        switch = re.search(r'<p class="lang".*?</p>', page, re.S)
+        assert switch is None or re.findall(r'href="([^"]*)"', switch.group(0)) == ["/?lang=zh"], target
+    page = body(get(app, f"/check?file={MEMORY}&next=http://evil.example&lang=zh"))
+    switch = re.search(r'<p class="lang".*?</p>', page, re.S).group(0)
+    assert re.findall(r'href="([^"]*)"', switch) == ["/check?file=memfalsify%2FMEMORY.md"]
+
+
+@requires_confinement
+def test_malformed_targets_are_a_plain_bad_request(app):
+    for target in ("http://[secret/", "http://[::1", "/check?file=%ZZ"):
+        response = get(app, target)
+        assert response.status in (200, 400), target
+        assert "secret" not in body(response)
+    assert get(app, "http://[secret/").status == 400
+
+
+@requires_confinement
+def test_sidebar_shows_the_folder_name_with_the_path_as_a_tooltip(app, root):
+    page = body(get(app, "/"))
+    assert f'<p class="mono" title="{html.escape(str(root.resolve()), quote=True)}">root</p>' in page
 
 
 # --- starting the server -----------------------------------------------------------------------------------
@@ -809,10 +991,77 @@ def test_served_over_loopback_only(served, root, capsys):
     status, headers, _ = request(served, method="POST", extra=b"Content-Length: 0\r\n")
     assert status == 405 and headers["allow"] == "GET, HEAD"
     status, headers, payload = request(served, method="BREW")
-    assert status == 501 and headers["content-security-policy"] == HEADER_CSP and b"BREW" not in payload
+    assert status == 405 and headers["allow"] == "GET, HEAD" and headers["content-security-policy"] == HEADER_CSP
+    assert b"BREW" not in payload
     status, headers, _ = exchange(served, b"GET /\x1b[31m HTTP/1.1 junk\r\n\r\n")
     assert status == 400 and headers["content-security-policy"] == HEADER_CSP
     request(served, target="/check?file=%1b%5b31mquery-secret")
     log = capsys.readouterr().err
     assert "memlab-ui: GET /check 200" in log and "memlab-ui: GET / 403" in log
     assert "query-secret" not in log and "evil" not in log and "\x1b" not in log and "BREW" not in log
+
+
+@requires_confinement
+def test_served_rejects_http_0_9_and_odd_targets_with_full_headers(served, capsys):
+    status, headers, payload = exchange(served, b"GET /\r\n\r\n")
+    assert status == 400 and headers["content-security-policy"] == HEADER_CSP
+    assert headers["x-frame-options"] == "DENY"
+    status, headers, payload = exchange(served, b"GET http://[secret/ HTTP/1.1\r\nHost: 127.0.0.1:"
+                                        + str(served.server_address[1]).encode() + b"\r\n\r\n")
+    assert status == 400 and headers["content-security-policy"] == HEADER_CSP and b"secret" not in payload
+    status, headers, _ = request(served, target="/static/ui-light.png")
+    assert status == 200 and headers["x-frame-options"] == "DENY" and headers["referrer-policy"] == "no-referrer"
+    assert headers["cache-control"] == "max-age=3600"
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and "secret" not in err and "memlab-ui: GET - 400" in err
+
+
+def closed_by_peer(connection, seconds: float) -> bool:
+    """Whether the server closes ``connection`` within ``seconds`` while we keep sending a byte at a time."""
+    started = time.monotonic()
+    while time.monotonic() - started < seconds:
+        try:
+            connection.sendall(b"X")
+            connection.settimeout(0.3)
+            if connection.recv(100) == b"":
+                return True
+        except TimeoutError:
+            continue
+        except OSError:
+            return True
+    return False
+
+
+@requires_confinement
+def test_served_caps_connections_and_the_time_for_headers(root, loopback, monkeypatch):
+    monkeypatch.setattr(ui_server, "MAX_CONNECTIONS", 2)
+    monkeypatch.setattr(ui_server, "HEADER_DEADLINE", 1.0)
+    server = create_server(root, 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    address = ("127.0.0.1", server.server_address[1])
+    try:
+        slow = [socket.create_connection(address, timeout=10) for _ in range(2)]
+        for connection in slow:
+            connection.sendall(b"GET / HTTP/1.1\r\n")
+        time.sleep(0.2)
+        extra = socket.create_connection(address, timeout=10)
+        started = time.monotonic()
+        try:
+            assert extra.recv(100) == b""  # closed at once: no thread for a third connection
+        except ConnectionResetError:
+            pass
+        assert time.monotonic() - started < 1
+        extra.close()
+        # Each byte arrives well within the per-read timeout, but the headers never finish: the deadline ends it.
+        assert closed_by_peer(slow[0], 4)
+        for connection in slow:
+            connection.close()
+        time.sleep(1.2)
+        status, _headers, _payload = exchange(server, b"GET / HTTP/1.1\r\nHost: 127.0.0.1:"
+                                              + str(address[1]).encode() + b"\r\n\r\n")
+        assert status == 200  # both slots were given back
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
