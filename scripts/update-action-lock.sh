@@ -7,10 +7,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# One lock per verifier set: lexical (default), llm ([llm]), jev ([jev]), all (dual and cascade, [all]).
+# One lock per verifier set: lexical (default), llm ([llm]), jev ([jev]), openai ([openai]), and all (dual and
+# cascade: [llm] and [jev]).
 # --universal resolves once for every platform and Python >= 3.10 (the packages' requires-python), so one
 # file serves Linux, macOS and Windows on any Python the action's python-version input can select.
-for set in lexical llm jev all; do
+for set in lexical llm jev openai all; do
   uv pip compile --universal --python-version 3.10 --generate-hashes \
     --custom-compile-command "scripts/update-action-lock.sh" \
     "$@" "action/requirements/$set.in" -o "action/requirements/$set.txt"
