@@ -4,7 +4,7 @@ Labeled cases for measuring how well each `memfalsify` verifier judges remembere
 
 The [lexical results](RESULTS.md) record the offline lexical baseline. The original eight cases were labeled after independent audits and lead adjudication. The three cases added later received an [independent Codex audit](../../AUDIT_CODEX.md) of all 63 claims, with judgments made from the evidence before opening their labels; RESULTS.md identifies the cases.
 
-It answers four questions per verifier (`lexical`, `llm`, `jev`, `dual`, `cascade`):
+It answers four questions per verifier (`lexical`, `llm`, `jev`, `dual`, `cascade`, `openai`):
 
 - Does it **flag the claims the evidence contradicts**, without flagging claims that are fine?
 - Does it **find support** for the claims the evidence supports?
@@ -21,6 +21,8 @@ python benchmarks/memfalsify/run.py --verifier llm                    # Claude
 python benchmarks/memfalsify/run.py --verifier jev                    # TypeSafe AI's Jev
 python benchmarks/memfalsify/run.py --verifier dual                   # Claude and Jev, disagreements become disputed
 python benchmarks/memfalsify/run.py --verifier cascade --accept-at 0.8
+python benchmarks/memfalsify/run.py --verifier openai --openai-model <model>      # OpenAI (OPENAI_API_KEY)
+python benchmarks/memfalsify/run.py --verifier openai --provider ollama --openai-model <model>   # local Ollama
 python benchmarks/memfalsify/run.py --case <case-id> --case <other-id> --json results.json
 python benchmarks/memfalsify/run.py --check                           # validate labels only; calls no verifier
 ```
@@ -33,14 +35,18 @@ python benchmarks/memfalsify/run.py --check                           # validate
 | `llm` | `pip install -e 'packages/memfalsify[llm]'` | Anthropic credentials (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or an `ant auth login` profile) |
 | `jev` | `pip install -e 'packages/memfalsify[jev]'` | `TYPESAFE_API_KEY`, and network access to `api.typesafe.ai` |
 | `dual`, `cascade` | `pip install -e 'packages/memfalsify[llm,jev]'` | both of the above |
+| `openai` | `pip install -e 'packages/memfalsify[openai]'` | the key in the provider's variable (`OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`) or the one `--api-key-env` names, and network access to that endpoint; none for `--provider ollama` |
 
-Pass credentials through the environment (for example `export TYPESAFE_API_KEY=...` in your shell); never write them into a case or a results file. The model verifiers send every claim and the pre-selected evidence passages of the selected cases to the Anthropic and/or TypeSafe API. A missing SDK, missing credentials or an API failure stops the run with exit code 2 before a partial report is printed.
+Pass credentials through the environment (for example `export TYPESAFE_API_KEY=...` in your shell); never write them into a case or a results file. The model verifiers send every claim and the pre-selected evidence passages of the selected cases to the Anthropic and/or TypeSafe API, or with `openai` to the configured endpoint. A missing SDK, missing credentials or an API failure stops the run with exit code 2 before a partial report is printed.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `--verifier` | `lexical` | Which verifier to score |
 | `--llm-model`, `--jev-model` | as in `memfalsify audit` | Model for the `llm` / `jev` side |
 | `--accept-at` | 0.8 | `cascade`: accept Jev at this confidence, otherwise ask Claude |
+| `--openai-model` | none (required with `openai`) | `openai`: the model, as the provider names it |
+| `--provider` | `openai` | `openai`: preset base URL and key variable: `openai`, `grok`, `deepseek`, `gemini`, `ollama` |
+| `--base-url`, `--api-key-env` | the provider's | `openai`: another OpenAI-compatible base URL (https, or http only for localhost, 127.0.0.1 or ::1), and the name of the variable holding its key |
 | `--case ID` | all cases | Run only these cases (repeatable) |
 | `--json OUT` | none | Also write every number and every per-claim prediction as JSON |
 | `--min-coverage`, `--max-judged` | as in `memfalsify audit` | Passage pre-selection: 0.5 and unbounded for `lexical`, 0.2 and 8 for the model verifiers |
@@ -48,6 +54,25 @@ Pass credentials through the environment (for example `export TYPESAFE_API_KEY=.
 | `--check` | off | Validate the labels and stop |
 
 Each case is audited with `audit()` and the CLI's defaults for the chosen verifier (`memfalsify.cli.build_verifier` and `memfalsify.cli.preselection`), with the case's `as_of` as the reference date, the default 180-day staleness window, linked `.md` files followed, and **no reviews**. The markdown report goes to stdout; the exit code is 0 whatever the scores are.
+
+### A local run with Ollama
+
+The `openai` verifier with `--provider ollama` judges with a model on your own machine, so no claim or passage
+leaves it and no key is needed. With [Ollama](https://ollama.com) installed:
+
+```bash
+ollama serve &                      # the API on http://localhost:11434 (the desktop app starts it too)
+ollama pull <model>                 # any chat model you choose; larger ones judge better and run slower
+pip install -e 'packages/memfalsify[openai]'
+python benchmarks/memfalsify/run.py --verifier openai --provider ollama --openai-model <model> --json ollama.json
+```
+
+`--base-url http://127.0.0.1:<port>/v1` points at another local OpenAI-compatible server instead. The request
+asks for the verdict as a strict JSON schema; a server that rejects that format is asked for a JSON object, then
+for plain text, and the switch is printed on stderr. An answer that is not a valid verdict counts as no
+verdict (`unrelated`), so a model that ignores the format scores as one that finds nothing. Results depend on the
+model, its quantization and the Ollama version: record those next to any numbers you publish. No Ollama results
+are recorded in [RESULTS.md](RESULTS.md) yet.
 
 ## Case format
 
