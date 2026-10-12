@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set up a local development environment: .venv, the packages (editable, including memlab-mcp), and the test suite.
+# Set up a local development environment: .venv, the packages (editable, including memlab-mcp and memlab-ui), and the test suite.
 # Usage: ./scripts/setup-local.sh [--minimal]   (--minimal skips the optional Claude / Jev / OpenAI verifier SDKs)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,12 +15,13 @@ memfalsify="packages/memfalsify[all]"
 
 [ -d .venv ] || "$PYTHON" -m venv .venv
 .venv/bin/python -m pip install --quiet --upgrade pip
-.venv/bin/python -m pip install --quiet -e packages/memcore -e "$memfalsify" -e packages/orgmemory -e packages/memlab-mcp pytest
+.venv/bin/python -m pip install --quiet -e packages/memcore -e "$memfalsify" -e packages/orgmemory -e packages/memlab-mcp -e packages/memlab-ui pytest "tomli; python_version < '3.11'"
 .venv/bin/python -m pytest -q
 
 cat <<'NEXT'
 
 Ready. Activate the environment with:  source .venv/bin/activate
+Try it in a browser, read-only:          memlab-ui --root examples   (then open http://127.0.0.1:8765/)
 Model verifiers read their keys from the environment (never commit them):
   export ANTHROPIC_API_KEY=...     # memfalsify --verifier llm / dual / cascade
   export TYPESAFE_API_KEY=...      # memfalsify --verifier jev / dual / cascade

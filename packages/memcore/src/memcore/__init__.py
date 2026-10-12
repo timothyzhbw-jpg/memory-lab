@@ -1,6 +1,6 @@
 """Shared evidence primitives for Verified Memory Infrastructure."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .evidence import (
     EvidenceError,

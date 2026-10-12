@@ -1,6 +1,6 @@
 # orgmemory benchmark results
 
-Measured locally on 2026-10-11 with orgmemory 0.4.0 and memlab-core 0.3.0, offline. Reproduce from the repository root:
+Measured locally on 2026-10-11 with orgmemory 0.4.0 and memlab-core 0.3.0, and again on 2026-10-12 with orgmemory 0.4.1 and memlab-core 0.4.0 (the same results), offline. Reproduce from the repository root:
 
 ```bash
 .venv/bin/python benchmarks/orgmemory/run.py --json -   # exits 1 because of the mismatches below
@@ -41,7 +41,7 @@ Acts after the change (*Webhooks*) are judged correctly either way. orgmemory no
 
 ## Harness output
 
-- orgmemory 0.4.0 · cases: 10 · labels: 233 · checks: 598
+- orgmemory 0.4.1 · cases: 10 · labels: 233 · checks: 598
 - Result: 590/598 checks pass, 8 fail
 
 ## By check kind

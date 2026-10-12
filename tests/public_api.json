@@ -139,5 +139,9 @@
   "memlab_mcp": [
     "__version__",
     "create_server"
+  ],
+  "memlab_ui": [
+    "__version__",
+    "create_server"
   ]
 }

@@ -2,8 +2,8 @@
 
 English | [中文](api.zh-CN.md)
 
-Import from the package roots: `memcore`, `memfalsify`, `orgmemory`, and `memlab_mcp`.
-The distributions for `memcore` and `memlab_mcp` are `memlab-core` and `memlab-mcp`.
+Import from the package roots: `memcore`, `memfalsify`, `orgmemory`, `memlab_mcp`, and `memlab_ui`.
+The distributions for `memcore`, `memlab_mcp` and `memlab_ui` are `memlab-core`, `memlab-mcp` and `memlab-ui`.
 Each package has an explicit `__all__` and wheel-included `py.typed`. Python 3.10+ is supported.
 
 ## Stability and semantic versioning
@@ -30,8 +30,9 @@ available through 1.3; removal requires 2.0. This change introduces no deprecati
 Explicitly internal: names absent from `__all__`, underscore helpers, CLI modules/apps and
 option enums, `build_verifier`, `preselection`, default-model constants, report headers and
 formatting helpers, tokenization/ranking, Git object-store helpers, GitHub mapping contexts,
-locks/cursors/apply internals, and MCP workspace/tool-registration classes. These paths remain
-available but have no stability promise. CLI and MCP wire interfaces have separate documentation.
+locks/cursors/apply internals, MCP workspace/tool-registration classes, and the UI's request handler,
+workspace and page modules. These paths remain available but have no stability promise. CLI, MCP and
+web UI interfaces have separate documentation.
 Incidental submodule attributes are not public exports. A legacy import is
 `from memfalsify.audit import audit`; the preferred callable import is `from memfalsify import audit`.
 
@@ -185,6 +186,22 @@ from memlab_mcp import create_server
 server = create_server(root=Path("examples"), allow_model_verifiers=False)
 # Start serving separately through the installed MCP SDK or CLI.
 ```
+
+### Local web UI construction
+
+```python
+from pathlib import Path
+from memlab_ui import create_server
+
+server = create_server(root=Path("examples"), port=0)
+print(server.server_address)  # ('127.0.0.1', <a free port>)
+server.server_close()  # or server.serve_forever() to answer requests
+```
+
+Install `memlab-ui` for this package. `create_server` binds 127.0.0.1 only and raises `ValueError` for
+another `host`, a root that is not a directory, or a platform without POSIX confinement; it raises
+`OSError` when the port cannot be bound. It returns a standard-library `ThreadingHTTPServer` that has not
+started serving. Pages, safety rules and the command line: [ui.md](ui.md).
 
 Install `memlab-mcp` for this package. Construction requires an existing root and POSIX
 confinement, otherwise raises `ValueError`. It registers read-only tools without starting a
@@ -417,4 +434,15 @@ validate(events: list[Event], evidence: dict[str, EvidenceSpan], policy_log: Ite
 
 ```python
 create_server(root: Path | str='.', allow_model_verifiers: bool=False, openai_model: Optional[str]=None, openai_provider: Optional[str]=None, openai_base_url: Optional[str]=None, openai_api_key_env: Optional[str]=None, openai_response_format: Optional[str]=None) -> MCPServer
+```
+
+### `memlab_ui`
+
+| API | Purpose |
+|---|---|
+| `memlab_ui.__version__` | Installed distribution version string. |
+| `memlab_ui.create_server` | Bind the read-only web UI to 127.0.0.1 with root=".", port=0 (a free port) and allow_model_verifiers=False; does not start serving. Refuses any other host. Requires supported POSIX confinement. |
+
+```python
+create_server(root: Path | str='.', port: int=0, allow_model_verifiers: bool=False, host: str='127.0.0.1') -> ThreadingHTTPServer
 ```

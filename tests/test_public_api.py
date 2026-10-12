@@ -123,7 +123,7 @@ def test_readme_checker_rejects_internal_names(source):
 
 @pytest.mark.parametrize("package", PACKAGES)
 def test_typed_markers_are_explicit_package_data(package):
-    directory = "memlab-mcp" if package == "memlab_mcp" else package
+    directory = package.replace("_", "-") if package.startswith("memlab_") else package
     root = REPO / "packages" / directory
     assert (root / "src" / package / "py.typed").is_file()
     config = (root / "pyproject.toml").read_text(encoding="utf-8")
@@ -138,7 +138,7 @@ def test_typed_markers_are_explicit_package_data(package):
 
 def _documented_signatures(text):
     """Last Python fence under each package heading is the signature block."""
-    parts = re.split(r"^### `(memcore|memfalsify|orgmemory|memlab_mcp)`\s*$", text, flags=re.M)
+    parts = re.split(r"^### `(memcore|memfalsify|orgmemory|memlab_mcp|memlab_ui)`\s*$", text, flags=re.M)
     found = {}
     index = 1
     while index < len(parts) - 1:

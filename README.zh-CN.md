@@ -48,6 +48,8 @@ pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
 
 按需安装即可：`memcore` 加上任意一个工具就能单独使用。需要模型验证时再装 `pip install -e 'packages/memfalsify[all]'`。
 
+更习惯用浏览器？`pip install -e packages/memlab-ui` 后运行 `memlab-ui --root examples`，就会打开一个覆盖两个工具的本地只读网页（见[网页](#网页)）。它需要 macOS 或 Linux：与 MCP 服务器一样，在 Windows 上会以退出码 2 结束。
+
 ### MemFalsify：审计一份中文 MEMORY.md
 
 ```bash
@@ -540,6 +542,30 @@ codex mcp add memlab -- /absolute/path/to/memory-lab/.venv/bin/memlab-mcp --root
 
 `memlab-mcp` 是一个只读的 [Model Context Protocol](https://modelcontextprotocol.io) 服务器，给本地 Agent 提供十个工具：`memfalsify_claims`、`memfalsify_audit`、`memfalsify_diff`、`memfalsify_history`、`memfalsify_rollback`、`orgmemory_validate`、`orgmemory_replay`、`orgmemory_explain`、`orgmemory_audit` 和 `orgmemory_changes`。`memfalsify_diff` 比较 git 里一份记忆文件的基准修订版本和另一端（默认是工作区），只审计新增或修改过的记忆。`memfalsify_history` 给出每条记忆由哪个提交引入、最后由哪个提交修改，并列出被删除的记忆。`memfalsify_rollback` 返回一条记忆的补丁，从不应用它。用 `pip install -e packages/memlab-mcp` 安装（`./scripts/setup-local.sh` 已包含）。所有路径都限制在 `--root` 之内。这三个 git 工具还会拒绝工作区、git 目录、公共目录或对象库落在该根目录之外的仓库。不加 `--allow-model-verifiers` 启动时，模型验证器一律关闭；加上之后，`memfalsify_audit` 和 `memfalsify_diff` 才能使用它们。`openai` 验证器的端点和模型只能由服务器的 `--openai-*` 启动参数设定，工具参数无法更改。五个只读资源按 URI 返回同样的文本：`memlab://memory/<path>/claims`（JSON）和 `/audit`（Markdown，一律使用 lexical 验证器），以及 `memlab://dataset/<path>/state`、`/audit` 和 `/explain/<subject>`（Markdown）。三个提示词 `audit_memory`、`review_memory_changes` 和 `explain_status` 引导 Agent 走完技能里“先出报告”的流程。它们把参数当作数据引用，从不让 Agent 写文件。工具、资源、提示词的参数，客户端注册方式和限制见 [docs/mcp.zh-CN.md](docs/mcp.zh-CN.md)。
 
+## 网页
+
+`memlab-ui` 是一个本地只读网页，适合不想学命令行的人。用 `pip install -e packages/memlab-ui` 安装
+（`./scripts/setup-local.sh` 已包含），然后对一个项目文件夹启动它：
+
+```bash
+memlab-ui --root /path/to/project      # 然后打开 http://127.0.0.1:8765/（用 --port N 更换端口）
+```
+
+- “首页”列出项目中的 Agent 文件（`memfalsify discover` 找到的文件，再加上 `MEMORY.md`），一步就能检查其中一个。
+- “检查 Agent 文件”把文件与整个项目或某个文件夹做词法审计，可以附带审阅文件、基准日期；根文件夹是 git 仓库时，还可以
+  只检查某个修订之后改动的陈述。每条被标出的陈述都与看起来有出入的引文并排显示，不同的数值会被高亮，并附一句建议；
+  其余陈述折叠起来。
+- “团队决策”显示决策日志中每个主题的状态、由谁依据哪段引文作出决定、哪些事件算数的时间线、用平实语言写出的决策
+  审计发现，以及两个日期之间的变化。
+
+它只绑定 127.0.0.1，拒绝 `Host` 头不是 127.0.0.1 或 localhost 的请求（防 DNS 重绑定）以及其他网站发来的请求
+（`Sec-Fetch-Site`、`Origin`），只响应 GET 和 HEAD，限制每个请求可用的连接、页面、字节数和文件夹数量，
+用与 MCP 服务器相同的基于文件描述符的受限读取把所有路径限制在 `--root` 之内，不写任何文件，除非用
+`--allow-model-verifiers` 启动否则不启用模型验证器（启用后也只对它在终端打印的带密钥地址运行模型检查），转义所有不可信内容，并发送严格的 Content-Security-Policy：
+没有 JavaScript，也不从其他地方加载任何内容。页面有英文和简体中文两种语言（`?lang=zh`）。与 MCP 服务器一样，它需要
+POSIX `O_NOFOLLOW` 和 `dir_fd` 支持，因此在 Windows 上会拒绝启动并以退出码 2 结束。页面、选项、安全规则和局限见
+[docs/ui.zh-CN.md](docs/ui.zh-CN.md)。
+
 ## 验证后端：词法、LLM、Jev、兼容 OpenAI 的模型
 
 验证器判断一条记忆和一段证据的关系：`supports`（支持）、`contradicts`（反驳）或 `unrelated`（无关），并给出理由。内置四个后端，`dual` 和 `cascade` 是 Claude 与 Jev 的组合方式：
@@ -666,7 +692,7 @@ Action 只使用固定到提交 SHA 的 Action，并从带哈希校验的锁文�
 
 ## Python API
 
-从 `memcore`、`memfalsify`、`orgmemory` 和 `memlab_mcp` 包根导入库函数与模型。
+从 `memcore`、`memfalsify`、`orgmemory`、`memlab_mcp` 和 `memlab_ui` 包根导入库函数与模型。
 每个包通过 `__all__` 明确列出公开名称，并附带 `py.typed`。
 [API 参考](docs/api.zh-CN.md)介绍解析、审计、Git 历史、回放、GitHub 导入和服务器构建，
 包含示例及 1.0 的稳定性政策。原有模块导入路径继续可用；CLI 配置辅助函数属于内部实现。

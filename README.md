@@ -49,6 +49,8 @@ pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
 
 Install only what you need: `memcore` plus either tool works on its own.
 
+Prefer a browser? `pip install -e packages/memlab-ui` and `memlab-ui --root examples` open a local, read-only page for both tools (see [*Web page*](#web-page)). It needs macOS or Linux: on Windows it exits with code 2, like the MCP server.
+
 ### MemFalsify: audit a MEMORY.md
 
 ```bash
@@ -544,6 +546,33 @@ Checks, updates, the `config.toml` form, Windows and other details: [docs/instal
 
 `memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent ten tools: `memfalsify_claims`, `memfalsify_audit`, `memfalsify_diff`, `memfalsify_history`, `memfalsify_rollback`, `orgmemory_validate`, `orgmemory_replay`, `orgmemory_explain`, `orgmemory_audit` and `orgmemory_changes`. `memfalsify_diff` compares a memory file in git between a base revision and a head (default: the working tree) and audits only the claims that were added or changed. `memfalsify_history` reports the commits that introduced and last changed each claim, plus removals. `memfalsify_rollback` returns a patch for one claim and never applies it. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`. The three git tools also refuse a repository whose work tree, git directory, common directory or object store lies outside that root. Model verifiers stay off unless the server is started with `--allow-model-verifiers`, which enables them for `memfalsify_audit` and `memfalsify_diff`. The `openai` verifier's endpoint and model are set only by the server's `--openai-*` flags, never by a tool argument. Five read-only resources return the same text by URI: `memlab://memory/<path>/claims` (JSON) and `/audit` (Markdown, always the lexical verifier), and `memlab://dataset/<path>/state`, `/audit` and `/explain/<subject>` (Markdown). Three prompts, `audit_memory`, `review_memory_changes` and `explain_status`, walk an agent through the skills' report-first workflows. They quote their arguments as data and never tell the agent to write a file. Tools, resources, prompts, arguments and client registration: [docs/mcp.md](docs/mcp.md).
 
+## Web page
+
+`memlab-ui` is a local, read-only web page for people who would rather not learn the command line. Install it with
+`pip install -e packages/memlab-ui` (`./scripts/setup-local.sh` already does) and start it on a project folder:
+
+```bash
+memlab-ui --root /path/to/project      # then open http://127.0.0.1:8765/  (--port N to change it)
+```
+
+- *Home* lists the agent files in the project (what `memfalsify discover` finds, plus `MEMORY.md`) and checks one in a
+  single step.
+- *Check an agent file* runs the lexical audit against the whole project or one folder, optionally with a reviews
+  file, a reference date, or, when the root is a git repository, only the statements changed since a revision. Each
+  flagged statement is shown next to the quote that seems to disagree, with the differing values highlighted and one
+  line of advice; the rest are folded away.
+- *Team decisions* shows each topic of a decision log with its status, who decided and on which quote, a timeline of
+  which events counted, the decision audit's findings in plain sentences, and what changed between two dates.
+
+It binds 127.0.0.1 only, rejects requests whose `Host` header is not 127.0.0.1 or localhost (DNS rebinding) and
+requests sent by other websites (`Sec-Fetch-Site`, `Origin`), answers GET and HEAD only, bounds the connections,
+pages, bytes and folders each request may use, confines every path to `--root` with the same descriptor-based reads
+as the MCP server, writes nothing, keeps model verifiers off unless started with `--allow-model-verifiers` (and
+then runs them only for the address with the key it prints in the terminal), escapes every untrusted value and
+sends a strict Content-Security-Policy with no JavaScript and nothing loaded from elsewhere. Pages are in English or
+Simplified Chinese (`?lang=zh`). Like the MCP server, it needs POSIX `O_NOFOLLOW` and `dir_fd` support, so on
+Windows it refuses to start and exits with code 2. Pages, options, safety rules and limits: [docs/ui.md](docs/ui.md).
+
 ## Verifier backends: lexical, LLM, Jev, OpenAI-compatible
 
 A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Four backends ship; `dual` and `cascade` combine Claude and Jev:
@@ -675,8 +704,8 @@ only SHA-pinned actions and installs its Python dependencies from hash-pinned lo
 
 ## Python API
 
-Import library functions and models from `memcore`, `memfalsify`, `orgmemory`, and
-`memlab_mcp`. Each package declares its public names in `__all__` and ships `py.typed`.
+Import library functions and models from `memcore`, `memfalsify`, `orgmemory`, `memlab_mcp`,
+and `memlab_ui`. Each package declares its public names in `__all__` and ships `py.typed`.
 The [API reference](docs/api.md) covers parsing, auditing, Git history, replay, GitHub ingestion,
 and server construction, with examples and the stability policy for 1.0. Existing module import
 paths remain available; CLI configuration helpers are internal.

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
 from memcore.paths import InputPathError, input_path
-from memcore.reading import confined_reads, confinement_root, confinement_supported
+from memcore.reading import confined_reads, confinement_root, confinement_supported, take
 
 from . import __version__
 from .corpus import Passage, Skipped, scan
@@ -145,7 +145,8 @@ def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
     if not words:
         return []
     ranked = []
-    for passage in passages:
+    # Within read_limits, comparisons draw from a budget; the passages past it are not compared.
+    for passage in passages[:take("comparisons", len(passages))]:
         shared = len(words & passage.words)
         score = coverage(claim.text, passage.span.quote) if shared else 0.0
         if shared and score >= min_coverage:
@@ -422,7 +423,9 @@ class _ConflictIndex:
             lex = _lex_of(claim.text)
             chosen = self._candidates(lex, claim.text, self._prefix(lex.words), None)
         found = []
-        for index in sorted(chosen):
+        candidates = sorted(chosen)
+        # Within read_limits, these comparisons draw from the comparison budget; the rest are not made.
+        for index in candidates[:take("comparisons", len(candidates))]:
             other = self.claims[index]
             if other.id == claim.id:
                 continue
