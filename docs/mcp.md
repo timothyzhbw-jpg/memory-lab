@@ -35,7 +35,7 @@ For root-relative paths, a tool returns the text the matching command prints whe
 
 Invalid tool calls return MCP tool errors and leave the connection usable. Schema-validation errors report field names without rejected values; errors conceal outside-root path arguments, backend diagnostics and tracebacks. Model-verifier failures report a generic error suggesting SDK, credentials and backend checks.
 
-The default verifier is `lexical`, which runs offline. `llm`, `jev`, `dual`, and `cascade` send memory and evidence text to external APIs and cost money. The server refuses them unless it was started with `--allow-model-verifiers`. With that flag, `memfalsify_audit` and `memfalsify_diff` are marked as reaching outside the local machine. On `memfalsify_diff` the model verifiers use the CLI's default model names and passage limits (at most 8 passages per claim, coverage 0.2). There is no argument for `--llm-model`, `--jev-model`, `--accept-at`, `--max-judged` or `--min-coverage`.
+The default verifier is `lexical`, which runs offline. `llm`, `jev`, `dual`, `cascade` and `openai` send memory and evidence text to external APIs and cost money. The server refuses them unless it was started with `--allow-model-verifiers`. `openai` also needs an endpoint configured when the server starts (see [Run](#run)); the tools take no provider, base URL, model or key argument, so a client cannot send the text anywhere else, and the `verifier` description names the configured model and host. With that flag, `memfalsify_audit` and `memfalsify_diff` are marked as reaching outside the local machine. On `memfalsify_diff` the model verifiers use the CLI's default model names and passage limits (at most 8 passages per claim, coverage 0.2). There is no argument for `--llm-model`, `--jev-model`, `--accept-at`, `--max-judged` or `--min-coverage`.
 
 `base`, `head` and `to` must be non-empty, must not start with `-` and must not contain control characters. Each is resolved to a commit. The memory file must sit in a git work tree whose top level, git directory, common directory (for a linked worktree, the main repository) and object store all resolve inside `--root`, with no `objects/info/alternates` and no symlinks in the object store. Otherwise the git tools refuse the file. `GIT_DIR` and the other git location variables are ignored, and git's own diagnostics are not returned, because they can name paths outside the root. Commit subjects and author names in a result are untrusted. These three tools follow local `.md` links, as the CLIs do by default. They have no `follow_links` switch, and no `--output`, `--strict` or `--stale-days`. A diff audit uses the 180-day staleness window.
 
@@ -103,6 +103,24 @@ memlab-mcp --root /absolute/path/to/data --allow-model-verifiers
 ```
 
 Model verifiers read `ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY` from the environment. See [local-setup.md](local-setup.md). Do not commit a key or paste one into a chat.
+
+The `openai` verifier (any OpenAI-compatible Chat Completions API) is configured only by server flags, never by a tool call:
+
+```bash
+memlab-mcp --root /absolute/path/to/data --allow-model-verifiers \
+  --openai-provider ollama --openai-model <model>                       # a local Ollama server, no key
+memlab-mcp --root /absolute/path/to/data --allow-model-verifiers \
+  --openai-provider grok --openai-model <model>                         # reads XAI_API_KEY
+```
+
+| Flag | Meaning |
+|---|---|
+| `--openai-model` | The model, as the provider names it. Required to enable `openai`; there is no default |
+| `--openai-provider` | Preset base URL and key variable: `openai` (default, `OPENAI_API_KEY`), `grok` (`XAI_API_KEY`), `deepseek` (`DEEPSEEK_API_KEY`), `gemini` (`GEMINI_API_KEY`) or `ollama` (`http://localhost:11434/v1`, no key) |
+| `--openai-base-url` | Another base URL: `https://`, or `http://` only for `localhost`, `127.0.0.1` or `::1`; no user name, password, query or fragment |
+| `--openai-api-key-env` | The name of the environment variable that holds the key, overriding the provider's. Never the key itself |
+
+The server checks these flags at startup and exits 2 on a bad value, without repeating the URL or variable name. Without `--openai-model`, a call with `verifier: "openai"` is refused as not configured. The key variable must be in the server's environment: pass it with `-e` (Claude Code) or `--env` (Codex) when you register the server, or start the client from a shell that has it. The memory and evidence text of each call goes to that endpoint; the [local setup](local-setup.md#openai-compatible-providers---verifier-openai) page explains the presets, the structured-output fallback and how the key is kept out of output.
 
 ## Register with Claude Code
 

@@ -3,7 +3,7 @@
 Monorepo with three Python packages (Python 3.10+):
 
 - `packages/memcore` — shared evidence core (models, JSONL store, retrieval)
-- `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory. Verifier backends: `verify.py` (lexical, `DualVerifier`, `CascadeVerifier`), `llm.py` (Claude, extra `[llm]`), `jev.py` (TypeSafe AI's Jev judgment model via `typesafe-sdk`, extra `[jev]`)
+- `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory. Verifier backends: `verify.py` (lexical, `DualVerifier`, `CascadeVerifier`), `llm.py` (Claude, extra `[llm]`), `jev.py` (TypeSafe AI's Jev judgment model via `typesafe-sdk`, extra `[jev]`), `openai_compat.py` (any OpenAI-compatible Chat Completions API: OpenAI, Grok, DeepSeek, Gemini, Ollama; extra `[openai]`)
 - `packages/orgmemory` — `orgmemory` CLI: event replay, permissions, state machine, decision provenance
 
 Skills live in `skills/`, example inputs and generated reports in `examples/`. The Claude Code plugin manifests are `.claude-plugin/marketplace.json` and `skills/.claude-plugin/plugin.json`; `tests/test_packaging_agents.py` checks them.
@@ -17,5 +17,5 @@ Skills live in `skills/`, example inputs and generated reports in `examples/`. T
 ## Conventions
 
 - CLIs use Typer, data models use Pydantic, storage is JSONL.
-- Model backends import `anthropic` / `typesafe_sdk` lazily; the default path must keep working without them. Tests never use the network: a fake Anthropic client, and the real TypeSafe SDK on an `httpx2.MockTransport`.
+- Model backends import `anthropic` / `typesafe_sdk` / `openai` lazily; the default path must keep working without them. Tests never use the network: fake Anthropic and Chat Completions clients, and the real TypeSafe and openai SDKs on an `httpx2.MockTransport`.
 - License is Apache-2.0.

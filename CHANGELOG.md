@@ -156,6 +156,26 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
   Works with `--output`. `history` stays `markdown` or `json`. The examples have `report.html` next to
   `report.md`.
 
+- `--verifier openai` on `audit` and `diff` (`memfalsify.OpenAICompatVerifier`, new extra `[openai]`, also in
+  `[all]`): one verifier for any OpenAI-compatible Chat Completions API. `--provider` presets the base URL
+  and the key's environment variable for `openai` (default), `grok` (xAI), `deepseek`, `gemini` (Google's
+  OpenAI-compatible endpoint) and `ollama` (`http://localhost:11434/v1`, no key); `--base-url` and
+  `--api-key-env` override them. `--openai-model` is required: model names differ between providers, so
+  there is no default. Memory claims and evidence passages are sent to the configured endpoint.
+  - The base URL must be `https://`, or `http://` only to `localhost`, `127.0.0.1` or `::1`; a user name,
+    password, query or fragment in it is refused, and no message repeats it.
+  - The key is read from the named variable, never taken as an argument, never printed, and redacted from
+    provider error messages. The OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and
+    `OPENAI_CUSTOM_HEADERS` are ignored, so settings meant for one provider never reach another.
+  - Requests ask for the verdict as a strict JSON schema (`response_format` `json_schema`). After HTTP 400
+    or 422 the verifier asks for `json_object`, then plain text, keeps the format that worked and says so on
+    stderr. An answer that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
+    outside the schema), an empty answer and a refusal are no verdict (`unrelated`), never support.
+  - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
+    requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
+    `cascade` still pair Claude with Jev.
+  - The pre-commit hooks (`memfalsify-pre-commit diff` and `audit`) take the same four options.
+
 #### Changed
 
 - Lexical judging of Chinese text, with no new dependency. Text without CJK characters is read exactly as
@@ -411,6 +431,11 @@ a symlink out of the root is never read.
   on Python 3.10 through 3.13, check paths as the tools do, and accept a revision only as a non-empty
   string that does not start with `-` or contain a control character. The tool resolves that revision to a
   commit. Prompts embed no file contents and never tell the agent to write a file.
+- `memfalsify_audit` and `memfalsify_diff` accept `verifier: "openai"`, refused unless the server runs with
+  `--allow-model-verifiers`. Its endpoint comes only from server flags (`--openai-model`,
+  `--openai-provider`, `--openai-base-url`, `--openai-api-key-env`), checked at startup; no tool argument
+  names a provider, URL, model or key variable, so a client cannot send text elsewhere. Without
+  `--openai-model` the verifier is refused as not configured.
 
 #### Changed
 
@@ -429,6 +454,11 @@ a symlink out of the root is never read.
   workspace (or, with `diff-base`, diffs each one). The `exclude` globs also leave instruction files out
   of discovery.
 - The `memfalsify` skill covers the new formats, `memfalsify discover` and `memory: auto`.
+- GitHub Action: `verifier: openai`, with the inputs `openai-model`, `provider`, `base-url` and
+  `api-key-env` (passed through `env:` and checked before the audit), and a hash-pinned lock set
+  `action/requirements/openai.txt`. `all.txt` (dual and cascade) still holds only the Claude and Jev SDKs.
+- MemFalsify benchmark: `run.py --verifier openai` with the same options, and a documented local Ollama run.
+  No model results are recorded.
 - Test fixtures for every format in `tests/fixtures/formats/`.
 - An Organizational Memory benchmark (`benchmarks/orgmemory`): ten labeled datasets (233 labels, 598
   checks) that attack the authority rules, from unknown and look-alike actors, same-instant decisions,
