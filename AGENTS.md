@@ -22,7 +22,7 @@ Skills live in `skills/`, example inputs and generated reports in `examples/`. T
 
 ### Windows
 
-Development happens on macOS; CI also tests Windows, where text mode writes each LF as CRLF. `tests/test_windows_guard.py` checks these rules:
+Development happens on macOS; CI also tests Windows, where text mode writes each LF as CRLF. `tests/test_windows_guard.py` checks three of these rules: text-mode writes, server-test markers and f-strings that only Python 3.12 parses. Exact output and forward slashes are conventions for review.
 
 - Write test fixtures and any hashed or golden-compared file as bytes: `write_text_exact(path, text)` from `tests/conftest.py` in tests, `path.write_bytes(text.encode("utf-8"))` elsewhere. A `write_text` or text-mode `open(..., "w")` needs `newline=""`; `python scripts/exact_writes.py` rewrites the tests.
 - Write exact output as bytes: `typer.echo(text.encode("utf-8"), nl=False)` or `sys.stdout.buffer`.

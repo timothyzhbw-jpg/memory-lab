@@ -176,4 +176,4 @@ Co-Authored-By: <模型> <noreply@...>
 | 一次性能优化把单个词的记忆条目漏出了冲突检查，被审查者发现。 | 优化必须附带一个固定随机种子的对照测试，和最直接的实现比对结果。 |
 | 主 agent 的额度在子 agent 干到一半时用完了。 | 每个窗口最多用到 95%；事先指定代理主 agent 和后备人选。 |
 | 一个无界面运行的 agent 写不了报告文件。 | agent 写不了文件时，把它的标准输出存下来当作报告。 |
-| Windows 上的失败总是到 CI 里才出现，要等最慢的 job 跑上 9 到 12 分钟：用 `write_text` 写的测试数据变成了 CRLF，证据哈希随之改变；按文本输出到终端的补丁多出了 CR；一个新的 MCP 测试漏掉了只适用于 POSIX 的 `@requires_confinement` 标记。 | `tests/test_windows_guard.py` 在所有系统上用一秒以内检查 `AGENTS.md`（"Windows" 一节）里的规则；`pytest --simulate-windows-newlines` 在 macOS 或 Linux 上重现 CRLF 转换，CI 里有一个 job 专门跑它，约 3 分钟。 |
+| Windows 上的失败总是到 CI 里才出现，要等最慢的 job 跑上 9 到 12 分钟：用 `write_text` 写的测试数据变成了 CRLF，证据哈希随之改变；按文本输出到终端的补丁多出了 CR；一个新的 MCP 测试漏掉了只适用于 POSIX 的 `@requires_confinement` 标记。 | `tests/test_windows_guard.py` 在所有系统上用一秒以内检查 `AGENTS.md`（"Windows" 一节）里的三条规则（文本模式写入、服务器测试的标记、只有 Python 3.12 能解析的 f-string）；`pytest --simulate-windows-newlines` 在 macOS 或 Linux 上重现 CRLF 转换，CI 里有一个 job 专门跑它，约 3 分钟。 |
