@@ -68,7 +68,7 @@ jobs:
   memfalsify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
         with:
           exclude: |

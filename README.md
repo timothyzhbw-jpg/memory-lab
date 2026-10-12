@@ -322,6 +322,7 @@ orgmemory explain        <dataset> "acme/web#12"
 - The token is the first non-empty `GITHUB_TOKEN` or `GH_TOKEN` (`GH_TOKEN=$(gh auth token)` works); there is no `--token` flag. A fine-grained, read-only token with Issues, Pull requests and Metadata read access is enough. Without a token the run is unauthenticated: public repositories only, 60 requests per hour.
 - The first run reads everything; `--since ISO-TIME` (with timezone) can bound it, and is refused once the repository has a cursor. Later runs read what changed since the last complete sync, with a 5-minute overlap. `--full` rescans everything and `--issue N` (repeatable) refreshes chosen numbers; it cannot be combined with `--full` or `--since`. Rerunning is safe: IDs are deterministic, so nothing already in the log is appended twice. GitHub may not mark an issue as updated for every change (labels, dependency links), so run `--full` now and then.
 - `sync` reuses a verified HTTPS connection to `api.github.com` (system CA store, 30-second timeout per request), and closes it when the run ends, including on errors. If the connection fails before any response bytes arrive, the GET is retried once on a fresh connection; rate limits and other retries keep their existing behavior. Setting `HTTPS_PROXY` / `https_proxy` or `ALL_PROXY` / `all_proxy` selects the existing urllib transport instead, with urllib’s proxy rules and no connection reuse. Transports never follow redirects automatically; the client permits only validated same-origin redirects.
+- Pagination stays on the requested listing and preserves its query filters. Responses reflecting the token in JSON strings or headers, including percent-encoded copies, are refused. Both transports limit each response body to 8 MiB; an oversized page stops the sync with exit 2, without appending records or saving a capture.
 - During `sync`, fetch progress goes to stderr at most once every 5 seconds, showing fully fetched issues/PRs, requests and the remaining rate-limit quota (`unknown` if unavailable). Each rate-limit sleep also prints its duration and UTC wake time. Short runs may show no progress; stdout stays unchanged, including the summary and `--dry-run` JSONL.
 - `--dry-run` fetches (this spends requests), prints the summary and the planned events, and writes no dataset files or lock. `--save-capture` writes the fetched issues and timelines, as the API returned them, to a new file that `convert` can apply later; it works with `--dry-run`, so you can review a capture before applying it. The file contains raw and possibly private text. The destination is create-only and must not overlap the importer’s managed files or `policy.json` / `github.json`.
 - Exit codes: `0` complete, including "nothing new"; `2` error, nothing appended; `3` partial: rate limiting beyond `--max-wait` (default 3600 s) or repeated server or network errors stopped the fetch, fully fetched items were applied, and the cursor did not move, so run it again later. A malformed capture, including JSON nested too deeply or a timeline id of the wrong type, is exit 2 and appends nothing.
@@ -609,7 +610,7 @@ Set `persist-credentials: false` on checkout to keep the job token out of `.git/
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     with:
       persist-credentials: false
   - uses: timothyzhbw-jpg/memory-lab@<40-character SHA>
@@ -618,7 +619,9 @@ steps:
 ```
 
 Memory and evidence inputs skip hidden components and ignored directories in both their original paths
-and resolved symlink targets. The action also warns and skips memory symlinks that leave the workspace.
+and resolved symlink targets. The action also warns and skips memory symlinks that leave the workspace. It uses
+only SHA-pinned actions and installs its Python dependencies from hash-pinned lock files
+([details](docs/github-action.md#dependencies-and-pinning)).
 
 ## Trust boundaries and limitations
 
@@ -631,6 +634,7 @@ and resolved symlink targets. The action also warns and skips memory symlinks th
 - A repeated key in a JSON object is rejected, including in a nested object. Keeping the last value would let one `events.jsonl` line show one `actor` to a person reading the file and another to replay, and would let a `policy.json` that names an actor twice grant the second list of roles.
 - Evidence is UTF-8 text. Images, audio, video and PDF count only through transcript and OCR sidecars you provide, which are someone's reading of the media: a matching `source_sha256` shows which bytes a sidecar describes, not that it is accurate. Media without a usable sidecar is reported as skipped.
 - Lexical judging of Chinese has no dictionary: it misses paraphrases (冻结招聘 for 不招) and reads negation and modality from fixed cue lists. Only Han characters are split into n-grams; Japanese kana and Korean Hangul are not.
+- Hard links are not detected. A hard link is another name for the same file, so a file on the same filesystem that is hard-linked into the evidence directory is read and can be quoted in a report, wherever its other name lives (symlinks are checked and rejected; a hard link cannot be told from the original, and skipping every file with more than one link would also skip legitimate ones). Git does not store hard links, so a checkout or a pull request cannot plant one; anyone who can write to the audited directory can. Audit only directories you control (see the [GitHub Action](docs/github-action.md) notes).
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).
 - GitHub import: a GitHub account is not an authenticated person. Automation that acts with a person's own token (for example a workflow using a maintainer's personal access token) cannot be told apart from that person; reviews carry no app marker; merge-queue and auto-merge merges are attributed to whoever GitHub records; labels applied by issue templates may be attributed to the issue author. Do not list labels in `github.json` that templates, bots or token-backed workflows apply, and be careful which accounts you map.
 - `policy.json` is global: mapping a `gh:` account to a role grants that role on the subjects of every imported repository.
@@ -663,6 +667,8 @@ paths remain available; CLI configuration helpers are internal.
 What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
+
+Several AI agents develop this repository together. Roles, the gates a change passes before it reaches `main`, and the report and log formats are in [process/README.md](process/README.md).
 
 ```bash
 pip install pytest

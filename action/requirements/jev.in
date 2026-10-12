@@ -1,0 +1,3 @@
+# The [jev] extra of memfalsify (TypeSafe AI's Jev), on top of the lexical set.
+-r lexical.in
+typesafe-sdk>=0.7

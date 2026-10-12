@@ -4,6 +4,7 @@ import json
 import urllib.request
 import urllib.response
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 import pytest
 
@@ -175,6 +176,125 @@ def test_started_at_must_come_from_a_response_before_the_listing():
 # --- pagination ------------------------------------------------------------------------
 
 FIRST_PAGE = "GET /repos/acme/web/issues?state=all"
+CLICK_NEXT_LINK = (
+    '<https://api.github.com/repositories/19103692/issues?state=all&sort=updated&direction=asc'
+    '&since=2026-09-01T00%3A00%3A00Z&per_page=100'
+    '&after=Y3Vyc29yOnYyOpLPAAABoMaGLAjPAAAAAUAtgH8%3D&page=2>; rel="next"'
+)
+
+
+@pytest.mark.parametrize("named_path", [False, True])
+def test_pagination_accepts_real_click_cursor_link(named_path):
+    header = CLICK_NEXT_LINK
+    if named_path:
+        header = header.replace("/repositories/19103692/", "/repos/pallets/click/")
+    params = {"state": "all", "sort": "updated", "direction": "asc",
+              "since": "2026-09-01T00:00:00Z", "per_page": "100"}
+    first = f"GET /repos/pallets/click/issues?{urlencode(params)}"
+    second = "GET " + header.split("<", 1)[1].split(">", 1)[0]
+    c, transport, _ = client({first: reply([{"n": 1}], link=header), second: [{"n": 2}]})
+    assert list(c.pages("/repos/pallets/click/issues", params, repo="pallets/click", repo_id=19103692)) == [
+        [{"n": 1}], [{"n": 2}]]
+    assert transport.keys == [key(first.removeprefix("GET ")), key(second.removeprefix("GET "))]
+
+
+@pytest.mark.parametrize("query", [
+    "after=A", "after=" + "A" * 512, "after=AZaz09%2B%2F%3D_-", "after=A&page=0002",
+])
+def test_pagination_accepts_bounded_cursor_with_optional_page(query):
+    second = f"GET /repositories/1001/issues?state=all&{query}"
+    c, transport, _ = client({FIRST_PAGE: reply([{"n": 1}], link=link(second)), second: [{"n": 2}]})
+    assert list(c.pages("/repos/acme/web/issues", {"state": "all"}, repo="acme/web", repo_id=1001)) == [
+        [{"n": 1}], [{"n": 2}]]
+    assert transport.keys == [FIRST_PAGE, key(second.removeprefix("GET "))]
+
+
+@pytest.mark.parametrize("query", [
+    "state=open&after=A&page=2", "state=all&sort=updated&after=A&page=2",
+    "after=A&page=2", "state=all&state=all&after=A&page=2",
+    "state=all&after=A&after=B&page=2", "state=all&after=A&%61fter=A&page=2",
+    "state=all&after=&page=2", "state=all&after=" + "A" * 513 + "&page=2",
+    "state=all&after=A%21&page=2", "state=all&after=A%20B&page=2",
+    "state=all&after=A+B&page=2", "state=all&after=A%0AB&page=2",
+    "state=all&after=%252F&page=2", "state=all&after=%C3%A9&page=2",
+    "state=all&after=A&page=0", "state=all&after=A&page=2&page=3",
+    "state=all&before=A&page=2",
+])
+def test_pagination_refuses_invalid_cursor_or_changed_filters(query):
+    second = f"GET /repositories/1001/issues?{query}"
+    c, transport, _ = client({FIRST_PAGE: reply([], link=link(second)), second: []})
+    pages = c.pages("/repos/acme/web/issues", {"state": "all"}, repo="acme/web", repo_id=1001)
+    assert next(pages) == []
+    with pytest.raises(GitHubError, match="Link next URL"):
+        next(pages)
+    assert transport.keys == [FIRST_PAGE]
+
+
+@pytest.mark.parametrize("where", ["json-value", "json-key", "escaped-json", "header-value", "header-name",
+                                   "encoded-header-name"])
+@pytest.mark.parametrize("status", [200, 403])
+def test_percent_encoded_credential_reflection_is_rejected(where, status):
+    encoded = ''.join(f'%{ord(ch):02X}' for ch in TOKEN)
+    body, headers = {"safe": "ok"}, {}
+    if where == "json-value":
+        body = {"nested": [{"body": f"prefix {encoded} suffix"}]}
+    elif where == "json-key":
+        body = {encoded: "ok"}
+    elif where == "escaped-json":
+        body = ('{"body":"' + ''.join('\\u%04x' % ord(ch) for ch in encoded) + '"}').encode()
+    elif where == "header-value":
+        headers = {"X-Reflected": encoded}
+    else:
+        headers = {TOKEN if where == "header-name" else encoded: "ok"}
+    c, transport, clock = client({REPO: reply(body, status=status, headers=headers)})
+    with pytest.raises(GitHubError, match="reflected the credential") as raised:
+        c.get_json(f"{API}/repos/acme/web")
+    assert TOKEN not in str(raised.value) and encoded not in str(raised.value)
+    assert transport.keys == [REPO] and clock.sleeps == []
+
+
+@pytest.mark.parametrize("path,target", [
+    ("issues", "contents/private"), ("issues", "pulls"), ("pulls", "issues"),
+    ("issues/5/timeline", "issues/6/timeline"), ("issues/5/timeline", "issues/5/comments"),
+    ("issues/5/comments", "issues/6/comments"), ("pulls/5/reviews", "pulls/6/reviews"),
+    ("issues", "issues/5/timeline"), ("issues", "issues/"), ("issues", "%69ssues"),
+])
+@pytest.mark.parametrize("prefix", ["/repos/acme/web/", "/repositories/1001/"])
+def test_pagination_next_cannot_leave_requested_listing(path, target, prefix):
+    first = f"GET /repos/acme/web/{path}?per_page=100"
+    escaped = f"GET {prefix}{target}?page=2&per_page=100"
+    c, transport, _ = client({first: reply([], link=link(escaped)), escaped: []})
+    pages = c.pages(f"/repos/acme/web/{path}", {"per_page": "100"}, repo="acme/web", repo_id=1001)
+    assert next(pages) == []
+    with pytest.raises(GitHubError, match="Link next URL"):
+        next(pages)
+    assert transport.keys == [first]
+
+
+@pytest.mark.parametrize("query", [
+    "page=2", "page=2&state=open", "page=2&state=all&sort=updated",
+    "page=2&state=all&state=open", "page=2&page=3&state=all", "page=0&state=all",
+    "page=-1&state=all", "page=abc&state=all", "state=all", "page=2&state=all#fragment",
+])
+def test_pagination_next_preserves_query_semantics(query):
+    target = f"GET /repositories/1001/issues?{query}"
+    c, transport, _ = client({FIRST_PAGE: reply([], link=link(target)), target: []})
+    pages = c.pages("/repos/acme/web/issues", {"state": "all"}, repo="acme/web", repo_id=1001)
+    assert next(pages) == []
+    with pytest.raises(GitHubError, match="Link next URL"):
+        next(pages)
+    assert transport.keys == [FIRST_PAGE]
+
+
+@pytest.mark.parametrize("path", ["issues", "pulls", "issues/5/timeline", "issues/5/comments", "pulls/5/reviews"])
+def test_pagination_accepts_same_listing_and_equivalent_queries(path):
+    params = {"per_page": "100", "since": "2026-10-09T11:55:00Z"}
+    first = f"GET /repos/acme/web/{path}?{urlencode(params)}"
+    second = f"GET /repositories/1001/{path}?since=2026-10-09T11%3a55%3a00Z&page=2&per_page=100"
+    c, transport, _ = client({first: reply([{"n": 1}], link=link(second)), second: [{"n": 2}]})
+    assert list(c.pages(f"/repos/acme/web/{path}", params, repo="acme/web", repo_id=1001)) == [
+        [{"n": 1}], [{"n": 2}]]
+    assert transport.keys == [key(first.removeprefix("GET ")), key(second.removeprefix("GET "))]
 
 
 def test_pagination_link_validation_follows_repo_links():
@@ -237,7 +357,7 @@ class FakeHTTPS(urllib.request.HTTPSHandler):
 
     def __init__(self, table):
         super().__init__()
-        self.table, self.seen = table, []
+        self.table, self.seen, self.readers = table, [], []
 
     def https_open(self, req):
         self.seen.append(req)
@@ -249,9 +369,44 @@ class FakeHTTPS(urllib.request.HTTPSHandler):
         message = http.client.HTTPMessage()
         for name, value in {"Date": DATE, **headers}.items():
             message[name] = value
-        response = urllib.response.addinfourl(io.BytesIO(body), message, req.full_url, status)
+        reader = TrackingBody(body)
+        self.readers.append(reader)
+        response = urllib.response.addinfourl(reader, message, req.full_url, status)
         response.msg = http.client.responses.get(status, "")
         return response
+
+
+class TrackingBody(io.BytesIO):
+    def __init__(self, body):
+        super().__init__(body)
+        self.bytes_read = 0
+
+    def read(self, size=-1):
+        data = super().read(size)
+        self.bytes_read += len(data)
+        return data
+
+
+@pytest.mark.parametrize("status", [200, 302, 403, 404, 410, 502])
+def test_urllib_response_size_cap_stops_reading_early(status):
+    cap = 8 * 1024 * 1024
+    body = b'x' * (cap * 2)
+    url = f"{API}/repos/acme/web"
+    transport, https = real_transport({url: (status, {}, body)})
+    clock = FakeClock()
+    with pytest.raises(GitHubError, match="response body exceeds") as raised:
+        Client(transport, TOKEN, sleep=clock.sleep, clock=clock.clock).get(url)
+    assert raised.value.status is None
+    assert https.readers[0].bytes_read == cap + 1 < len(body)
+    assert https.readers[0].closed and len(https.seen) == 1 and clock.sleeps == []
+
+
+def test_urllib_response_at_size_cap_is_accepted():
+    body = b'x' * (8 * 1024 * 1024)
+    url = f"{API}/repos/acme/web"
+    transport, https = real_transport({url: (200, {}, body)})
+    assert transport(url, {})[2] == body
+    assert https.readers[0].bytes_read == len(body) and https.readers[0].closed
 
 
 def real_transport(table):

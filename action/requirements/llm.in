@@ -1,0 +1,3 @@
+# The [llm] extra of memfalsify (Claude), on top of the lexical set.
+-r lexical.in
+anthropic>=1.13

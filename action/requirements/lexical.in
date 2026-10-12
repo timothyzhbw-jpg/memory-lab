@@ -1,0 +1,6 @@
+# Runtime dependencies of memlab-core and memfalsify (the default lexical verifier), plus the build
+# backend the action's own packages need (packages/*/pyproject.toml: setuptools>=77).
+# Keep these ranges in step with packages/memcore and packages/memfalsify; tests/test_action.py checks it.
+pydantic>=2.12
+typer>=0.17.5
+setuptools>=77
