@@ -110,7 +110,7 @@ def test_action_keeps_cli_error_text_out_of_the_job_summary(tmp_path, monkeypatc
     assert len([line for line in log if line.startswith("MemFalsify CLI: ")]) == 1
     cli_line = next(line for line in log if line.startswith("MemFalsify CLI: "))
     assert cli_line == (r"MemFalsify CLI: error: C:\Users\ada\MEMORY.md " + r"\u001b[2J\u2028<img src=x> **bold** "
-                        r"[link](https://evil.invalid)\u000a## Verdict\u000a%3A%3Aerror%3A%3Aforged")
+                        r"[link](https://evil.invalid) ## Verdict %3A%3Aerror%3A%3Aforged")
     assert [line for line in log if line.startswith("::")] == [
         "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2); see the step log"]
 

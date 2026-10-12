@@ -247,8 +247,9 @@ def test_cli_errors_are_single_line_and_escape_controls(package):
     result = runner.invoke(app, [])
     assert result.exit_code == 2
     terminal_inert(result.output)
-    # One line; every control, format and separator character is a visible \u escape; the rest is untouched.
-    assert result.output == ("error: x\\u001b[2J\\u2028\\u2060\\U000e0041\\u000a## Verdict\\u000a::error::forged "
+    # One line: ordinary line breaks become spaces; every control, format and separator character is a
+    # visible \u escape; the rest is untouched.
+    assert result.output == ("error: x\\u001b[2J\\u2028\\u2060\\U000e0041 ## Verdict ::error::forged "
                             "` **bold** [link](https://evil.invalid) <img src=x> |\n")
 
 
