@@ -127,8 +127,9 @@ def test_action_usage_error_log_carries_no_rich_styling_on_a_github_runner(tmp_p
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("FORCE_COLOR", "1")
     (tmp_path / "CLAUDE.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
-    env = {**os.environ, **runner_env, "MEMFALSIFY_MEMORY": "CLAUDE.md", "MEMFALSIFY_VERIFIER": "no-such-verifier",
-           "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    # A real runner also sets GITHUB_WORKSPACE to its own checkout; point it at this test's workspace.
+    env = {**os.environ, **runner_env, "GITHUB_WORKSPACE": str(tmp_path), "MEMFALSIFY_MEMORY": "CLAUDE.md",
+           "MEMFALSIFY_VERIFIER": "no-such-verifier", "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
     proc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "action" / "memfalsify_action.py")],
                           cwd=tmp_path, env=env, capture_output=True, check=False)
     log = proc.stdout.decode("utf-8") + proc.stderr.decode("utf-8")
