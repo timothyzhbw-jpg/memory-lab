@@ -1,11 +1,13 @@
 """Confined traversal regressions, including the independent merge review cases."""
 import os
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 
 import pytest
 
 from conftest import requires_confinement
-from memcore.reading import confined_reads, walk_files
+from memcore import reading
+from memcore.reading import (ReadLimitError, confined_reads, open_text, read_file_bytes, read_input_bytes,
+                             read_limits, walk_files)
 from memfalsify.corpus import scan
 
 
@@ -264,3 +266,114 @@ def test_confined_walk_rejects_directory_swap_before_descent(tmp_path, monkeypat
             list(walk_files(root, onerror=onerror))
     assert called == ["docs"]
     assert len(errors) == 1
+
+
+# --- size and traversal limits (memlab-ui sets them per request) ---------------------------------------------
+
+def _context(confined, root):
+    return confined_reads(root) if confined else nullcontext()
+
+
+@pytest.mark.parametrize("confined", [False, pytest.param(True, marks=requires_confinement)])
+def test_max_bytes_refuses_a_larger_file_without_reading_it(tmp_path, monkeypatch, confined):
+    (tmp_path / "small.md").write_bytes(b"x" * 10)
+    (tmp_path / "large.md").write_bytes(b"x" * 11)
+    with _context(confined, tmp_path):
+        assert read_input_bytes(tmp_path, tmp_path / "small.md", max_bytes=10) == b"x" * 10
+        with pytest.raises(ReadLimitError) as refused:
+            read_input_bytes(tmp_path, tmp_path / "large.md", max_bytes=10)
+    assert refused.value.budget is False
+    # Without max_bytes nothing changes.
+    assert read_input_bytes(tmp_path, tmp_path / "large.md") == b"x" * 11
+
+
+@requires_confinement  # the Windows branch reads from a pinned handle the test cannot wrap
+@pytest.mark.parametrize("confined", [False, True])
+def test_a_file_that_grows_during_the_read_is_refused_after_limit_plus_one(tmp_path, monkeypatch, confined):
+    (tmp_path / "growing.md").write_bytes(b"x" * 1000)
+    real_fstat = os.fstat
+
+    class Small:  # fstat ran before the file grew
+        def __init__(self, result):
+            self.result = result
+
+        def __getattr__(self, name):
+            return 5 if name == "st_size" else getattr(self.result, name)
+
+    monkeypatch.setattr(reading.os, "fstat", lambda fd: Small(real_fstat(fd)))
+    sizes = []
+    original = reading._open
+
+    class Recorder:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def read(self, size=-1):
+            sizes.append(size)
+            return self.handle.read(size)
+
+        def fileno(self):
+            return self.handle.fileno()
+
+    @contextmanager
+    def recording(path, encoding=None):
+        with original(path, encoding) as handle:
+            yield Recorder(handle)
+
+    monkeypatch.setattr(reading, "_open", recording)
+    with _context(confined, tmp_path), pytest.raises(ReadLimitError):
+        read_input_bytes(tmp_path, tmp_path / "growing.md", max_bytes=10)
+    assert sizes == [11]
+
+
+@requires_confinement
+def test_read_limits_bound_files_total_bytes_and_directories(tmp_path):
+    for name in ("a", "b", "c"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "notes.md").write_text("The rate limit is 60 per minute.\n" * 3, encoding="utf-8")
+    (tmp_path / "big.md").write_text("word " * 200, encoding="utf-8")
+    with confined_reads(tmp_path), read_limits(file_bytes=500) as limits:
+        with pytest.raises(ReadLimitError):
+            read_file_bytes(tmp_path / "big.md")
+        with pytest.raises(ReadLimitError):
+            with open_text(tmp_path / "big.md"):
+                pass
+    assert not limits.truncated
+    with confined_reads(tmp_path), read_limits(total_bytes=150) as limits:
+        assert len(read_file_bytes(tmp_path / "a" / "notes.md")) == 99
+        with pytest.raises(ReadLimitError) as refused:
+            read_file_bytes(tmp_path / "b" / "notes.md")
+    assert refused.value.budget and limits.truncated and limits.bytes_read == 99
+    with confined_reads(tmp_path), read_limits(directories=2) as limits:
+        walked = [current for current, _dirs, _files in walk_files(tmp_path)]
+    assert len(walked) == 2 and limits.truncated
+    with confined_reads(tmp_path), read_limits(total_bytes=150) as limits:
+        passages, skipped = scan(tmp_path)
+    assert limits.truncated
+    assert any(s.reason == "not read: the read budget for this request is used up" for s in skipped)
+    assert passages
+
+
+def test_walk_limits_apply_without_confinement_too(tmp_path):
+    for name in ("a", "b", "c"):
+        (tmp_path / name).mkdir()
+    with read_limits(directories=3) as limits:
+        assert len(list(walk_files(tmp_path))) == 3
+    assert limits.truncated
+    assert len(list(walk_files(tmp_path))) == 4  # no limits outside the context
+
+
+def test_scan_skips_files_over_two_megabytes_while_reading(tmp_path, monkeypatch):
+    (tmp_path / "huge.md").write_bytes(b"The limit is 60.\n" * 130_000)
+    (tmp_path / "ok.md").write_text("The limit is 60.\n", encoding="utf-8")
+    largest = []
+    original = reading._read_all
+
+    def spy(handle, max_bytes=None):
+        largest.append(max_bytes)
+        return original(handle, max_bytes)
+
+    monkeypatch.setattr(reading, "_read_all", spy)
+    passages, skipped = scan(tmp_path)
+    assert {"path": "huge.md", "reason": "larger than 2 MB"} in [s.model_dump() for s in skipped]
+    assert set(largest) == {2_000_000} and [p.span.path for p in passages] == ["ok.md"]

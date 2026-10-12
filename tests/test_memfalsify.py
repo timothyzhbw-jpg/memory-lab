@@ -191,10 +191,10 @@ def test_unreadable_evidence_fails_closed(memfalsify_demo, monkeypatch):
     import memfalsify.corpus as corpus
     original = corpus.read_input_bytes
 
-    def read(root, path):
+    def read(root, path, **options):
         if Path(path).name == "api.md":
             raise PermissionError("cannot read api.md")
-        return original(root, path)
+        return original(root, path, **options)
 
     monkeypatch.setattr(corpus, "read_input_bytes", read)
     result = runner.invoke(app, cli_args(memfalsify_demo))

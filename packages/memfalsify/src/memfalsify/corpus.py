@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from memcore import EvidenceSpan, MediaRef, SidecarError, load_sidecar, make_span, sha256_bytes, sidecar_format
 from memcore.paths import InputPathError, input_path
-from memcore.reading import read_input_bytes, walk_files
+from memcore.reading import ReadLimitError, read_input_bytes, walk_files
 from memcore.sidecar import LABELS, MEDIA_SUFFIXES
 
 from .text import features, sentence_spans
@@ -22,6 +22,7 @@ from .text import features, sentence_spans
 MEDIA = MEDIA_SUFFIXES
 NO_SIDECAR = "media file: no usable transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it"
 MAX_BYTES = 2_000_000
+BUDGET_SKIPPED = "not read: the read budget for this request is used up"
 REPORT_HEADER = "# MemFalsify audit report"
 DIFF_HEADER = "# MemFalsify diff report"
 HISTORY_HEADER = "# MemFalsify claim history"
@@ -125,12 +126,13 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 local.append(Skipped(path=relative, reason=NO_SIDECAR))
                 continue
             try:
-                raw = read_input_bytes(root, resolved)
+                # The limit holds while reading: a larger file is refused after at most MAX_BYTES + 1 bytes.
+                raw = read_input_bytes(root, resolved, max_bytes=MAX_BYTES)
             except InputPathError as exc:
                 local.append(Skipped(path=relative, reason=str(exc)))
                 continue
-            if len(raw) > MAX_BYTES:
-                local.append(Skipped(path=relative, reason="larger than 2 MB"))
+            except ReadLimitError as exc:
+                local.append(Skipped(path=relative, reason=BUDGET_SKIPPED if exc.budget else "larger than 2 MB"))
                 continue
             try:
                 if b"\x00" in raw:
