@@ -11,7 +11,7 @@ import json
 from pathlib import Path, PurePosixPath
 
 from memcore.paths import SKIP_DIRS
-from memcore.reading import read_head, walk_files
+from memcore.reading import read_file_bytes, read_head, walk_files
 from memfalsify.corpus import is_report
 
 HEAD = 16 * 1024
@@ -103,9 +103,13 @@ def internal_files(evidence: Path) -> list[tuple[str, str]]:
                 continue
             try:
                 head = read_head(path, HEAD + 1)
+                complete = len(head) <= HEAD
+                if not complete and head.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"{"):
+                    # A JSON report has its marker inside: read all of it, within the page's per-file limit.
+                    head, complete = read_file_bytes(path), True
             except (OSError, ValueError):
-                continue  # the scan reports what it cannot read
-            reason = classify(name, head[:HEAD], len(head) <= HEAD, decision_folder)
+                continue  # the scan reports what it cannot read; a file over the read limit stays evidence
+            reason = classify(name, head if complete else head[:HEAD], complete, decision_folder)
             if reason is not None:
                 found.append((PurePosixPath(*path.relative_to(evidence).parts).as_posix(), reason))
     return found

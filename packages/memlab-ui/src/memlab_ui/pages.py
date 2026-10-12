@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlencode
@@ -242,11 +244,29 @@ def attr(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+_KEY: ContextVar[str | None] = ContextVar("memlab_ui_key", default=None)
+
+
+@contextmanager
+def request_key(key: str | None) -> Iterator[None]:
+    """The run's key while serving a request that carried it (None otherwise): links and forms keep it."""
+    token = _KEY.set(key)
+    try:
+        yield
+    finally:
+        _KEY.reset(token)
+
+
+def _kept() -> list[tuple[str, str]]:
+    """The fields every link keeps: the language, and the key when this request carried a valid one."""
+    kept = [("lang", "zh")] if current() == "zh" else []
+    return kept + ([("key", key)] if (key := _KEY.get()) else [])
+
+
 def query(path: str, params: dict[str, str | None]) -> str:
-    """A same-site address with its query, unescaped; the page's language is kept."""
-    pairs = [(key, value) for key, value in params.items() if value and key != "lang"]
-    if current() == "zh":
-        pairs.append(("lang", "zh"))
+    """A same-site address with its query, unescaped; the page's language (and key) are kept."""
+    pairs = [(key, value) for key, value in params.items() if value and key not in ("lang", "key")]
+    pairs += _kept()
     return path + ("?" + urlencode(pairs) if pairs else "")
 
 
@@ -256,8 +276,8 @@ def href(path: str, **params: str | None) -> str:
 
 
 def lang_field() -> str:
-    """The hidden form field that keeps the page's language across a form submission."""
-    return '<input type="hidden" name="lang" value="zh">' if current() == "zh" else ""
+    """The hidden form fields that keep the page's language (and key) across a form submission."""
+    return "".join(f'<input type="hidden" name="{name}" value="{attr(value)}">' for name, value in _kept())
 
 
 def plain(value: object) -> str:
@@ -399,9 +419,10 @@ def error_card(title: str, message: str) -> str:
 def language_switch(path: str, params: dict[str, str]) -> str:
     """"English / 中文" at the foot of the sidebar: the current language as text, the other as a link to the
     same page and fields."""
-    rest = {key: value for key, value in params.items() if key != "lang"}
-    english = attr(path + ("?" + urlencode(list(rest.items())) if rest else ""))
-    chinese = attr(path + "?" + urlencode([*rest.items(), ("lang", "zh")]))
+    rest = [(key, value) for key, value in params.items() if key not in ("lang", "key")]
+    rest += [("key", key)] if (key := _KEY.get()) else []
+    english = attr(path + ("?" + urlencode(rest) if rest else ""))
+    chinese = attr(path + "?" + urlencode([*rest, ("lang", "zh")]))
     if current() == "zh":
         links = (f'<a href="{english}" lang="en" hreflang="en">English</a> / '
                  '<span lang="zh-CN" aria-current="true">中文</span>')

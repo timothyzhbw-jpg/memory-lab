@@ -23,7 +23,7 @@ default. Press Ctrl+C to stop it.
 | `--root DIR` | The project folder the page may read (default: the current directory). Paths outside it are refused; a file hard-linked into it from elsewhere is read like any other (see *Hard links* below). |
 | `--port N` | Port on 127.0.0.1 (default 8765; `0` picks a free port and prints it). A busy port exits with code 2. |
 | `--host HOST` | Only `127.0.0.1` is accepted. Any other value exits with code 2: the page has no login, so other machines must not reach it. |
-| `--allow-model-verifiers` | Offers the `llm`, `jev`, `dual` and `cascade` verifiers under *More options*. They send memory and evidence text to external APIs and cost money; see [local-setup.md](local-setup.md) for their keys. |
+| `--allow-model-verifiers` | Offers the `llm`, `jev`, `dual` and `cascade` verifiers under *More options*, on the address with the key that memlab-ui then prints (see *Model checks need the key* below). They send memory and evidence text to external APIs and cost money; see [local-setup.md](local-setup.md) for their API keys. |
 
 Every page reads in English or Simplified Chinese. `?lang=zh` selects Chinese; links and forms keep the
 language, and the *English / 中文* link at the foot of the sidebar switches it on the same page.
@@ -113,18 +113,25 @@ The page follows the [MCP server's](mcp.md) rules, adapted to a browser:
   and not `same-origin` or `none`, or its `Origin` header is present and not exactly the server's own origin. A
   page on another site therefore cannot make the server run checks with an image or a frame. Opening the address,
   a bookmark or the page's own links still works, and a quick (lexical) check keeps its own bookmarkable address.
-- **Model checks need the form.** With `--allow-model-verifiers`, a check that uses a model also needs a random
-  token that the server makes when it starts and puts only into its own form. A request without it, such as a
-  link, a bookmark or a client that sends neither `Origin` nor `Sec-Fetch-Site`, shows the filled-in form and a
-  *Check* button instead of sending any text out. A restart makes a new token.
-- **Bounded work.** At most 2 pages are computed at once (others get 503 with `Retry-After`), at most 16
+- **Model checks need the key.** With `--allow-model-verifiers`, memlab-ui makes a random key when it starts and
+  prints the address with it (`http://127.0.0.1:8765/?key=...`) in the terminal only, as Jupyter does. A model
+  check runs only for a request that carries that key; pages pass it on in their links and forms only to a
+  visitor whose request already had it, so a visitor without it never sees it. This keeps other users of the same
+  computer, and websites that make a browser or another program send requests here, from sending your files to a
+  model or spending your API credit, as long as they cannot read your terminal. Quick (lexical) checks need no key.
+  A restart makes a new key.
+- **Bounded work.** These limits are best-effort robustness against your own project's content, not a security
+  boundary: they keep a very large or unusual project from tying up the page. At most 2 pages are computed at once (others get 503 with `Retry-After`), at most 16
   connections are served at once (more are closed straight away), and the request line and headers must arrive
   within 10 seconds in total, however slowly. Each page reads at most 8 MB from one file and 64 MB in all,
   counted in bytes as they are read (a file that grows while being read, or streams line by line, is stopped at
   the limit), git objects included. It walks at most 20,000 folders and lists at most 100,000 directory entries
   across discovery, the lists and the evidence scan, at most 64 levels deep. It parses at most 5,000 statements and
-  checks at most 1,000, builds at most 5,000 evidence passages and makes at most 2,000,000 statement-to-passage
-  and old-to-new statement comparisons; each is counted while it is built. A page that reached a limit says
+  checks at most 1,000, builds at most 5,000 evidence passages and makes at most 2,000,000 statement-to-passage,
+  statement-to-statement (internal conflicts) and old-to-new statement comparisons; each is counted while it is
+  built. Media files are hashed within the same byte limits (a transcript or OCR file whose media file is over
+  them is left out with that reason). An agent file over 256 KB is refused before it is parsed. A page that
+  reached a limit says
   *This project is large, so only part of it was read*; *Only statements changed since* refuses instead when either
   version of the file is too large to compare. Evidence files over 2 MB are skipped after reading at most 2 MB and
   one byte.
@@ -168,7 +175,7 @@ The page follows the [MCP server's](mcp.md) rules, adapted to a browser:
   page shows from the root, so run it on a computer you do not share, or choose a root you are happy to show.
 - A browser that sends neither `Sec-Fetch-Site` nor `Origin` (older browsers) is not protected from cross-site GET
   requests for quick checks; they can make the server run them within the limits above, but cannot read the
-  answers, cannot start a model check, and no request changes anything.
+  answers, cannot start a model check without the key, and no request changes anything.
 - The page does not save reports. To share one, run the CLI with `--format html`.
 - Folders are offered as *Compare against* choices down to four levels.
 - The names, roles and quotes on a page are the data's own and are not translated.

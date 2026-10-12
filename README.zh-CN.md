@@ -48,7 +48,7 @@ pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
 
 按需安装即可：`memcore` 加上任意一个工具就能单独使用。需要模型验证时再装 `pip install -e 'packages/memfalsify[all]'`。
 
-更习惯用浏览器？`pip install -e packages/memlab-ui` 后运行 `memlab-ui --root examples`，就会打开一个覆盖两个工具的本地只读网页（见[网页](#网页)）。
+更习惯用浏览器？`pip install -e packages/memlab-ui` 后运行 `memlab-ui --root examples`，就会打开一个覆盖两个工具的本地只读网页（见[网页](#网页)）。它需要 macOS 或 Linux：与 MCP 服务器一样，在 Windows 上会以退出码 2 结束。
 
 ### MemFalsify：审计一份中文 MEMORY.md
 
@@ -561,9 +561,10 @@ memlab-ui --root /path/to/project      # 然后打开 http://127.0.0.1:8765/（�
 它只绑定 127.0.0.1，拒绝 `Host` 头不是 127.0.0.1 或 localhost 的请求（防 DNS 重绑定）以及其他网站发来的请求
 （`Sec-Fetch-Site`、`Origin`），只响应 GET 和 HEAD，限制每个请求可用的连接、页面、字节数和文件夹数量，
 用与 MCP 服务器相同的基于文件描述符的受限读取把所有路径限制在 `--root` 之内，不写任何文件，除非用
-`--allow-model-verifiers` 启动否则不启用模型验证器，转义所有不可信内容，并发送严格的 Content-Security-Policy：
-没有 JavaScript，也不从其他地方加载任何内容。页面有英文和简体中文两种语言（`?lang=zh`）。页面、选项、安全规则和
-局限见 [docs/ui.zh-CN.md](docs/ui.zh-CN.md)。
+`--allow-model-verifiers` 启动否则不启用模型验证器（启用后也只对它在终端打印的带密钥地址运行模型检查），转义所有不可信内容，并发送严格的 Content-Security-Policy：
+没有 JavaScript，也不从其他地方加载任何内容。页面有英文和简体中文两种语言（`?lang=zh`）。与 MCP 服务器一样，它需要
+POSIX `O_NOFOLLOW` 和 `dir_fd` 支持，因此在 Windows 上会拒绝启动并以退出码 2 结束。页面、选项、安全规则和局限见
+[docs/ui.zh-CN.md](docs/ui.zh-CN.md)。
 
 ## 验证后端：词法、LLM、Jev
 

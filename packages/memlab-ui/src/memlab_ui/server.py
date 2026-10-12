@@ -24,6 +24,7 @@ Safety follows the MCP server (docs/mcp.md):
 """
 from __future__ import annotations
 
+import hmac
 import io
 import secrets
 import sys
@@ -43,7 +44,7 @@ from memcore.reading import read_limits
 
 from . import check, decisions, home
 from .i18n import _, language
-from .pages import CSP, STATIC, language_switch, message_page, notice, page
+from .pages import CSP, STATIC, language_switch, message_page, notice, page, request_key
 from .workspace import MAX_VALUE, Workspace
 
 HOST = "127.0.0.1"
@@ -62,7 +63,7 @@ DEPTH = 64                 # levels below a walk's start
 ENTRIES = 100_000          # directory entries one page may list
 ITEMS = {"claims": 5_000, "passages": 5_000, "comparisons": 2_000_000}  # statements parsed, evidence passages
 # built, claim-passage and old-new statement comparisons: each is counted while it is built
-TRIMMED = ("as_of", "since", "verifier", "lang", "from", "to", "token")  # fields whose spaces mean nothing
+TRIMMED = ("as_of", "since", "verifier", "lang", "from", "to")  # fields whose spaces mean nothing
 HEADERS = (
     ("Content-Type", "text/html; charset=utf-8"),
     ("Content-Security-Policy", CSP + "; frame-ancestors 'none'"),
@@ -120,7 +121,8 @@ class App:
         self.port = port
         self.static = static_files()
         self.pages = threading.BoundedSemaphore(MAX_PAGES)
-        self.token = secrets.token_urlsafe(16)  # model checks need it: only this run's own form carries it
+        # With model verifiers, a random key printed only in the terminal: model checks need it (like Jupyter).
+        self.key = secrets.token_urlsafe(24) if allow_model_verifiers else None
 
     # --- checks before any page runs ----------------------------------------------------------------
 
@@ -162,7 +164,7 @@ class App:
             return self.message(400, "Bad request", str(exc))
         if path.startswith("/static/") or path == "/favicon.ico":
             return self.asset(path)
-        with language("zh" if params.get("lang") == "zh" else "en"):
+        with language("zh" if params.get("lang") == "zh" else "en"), request_key(self.keyed(params)):
             # The switch links to a known page with known fields only, minus any path outside the root.
             kept = {key: value for key, value in params.items() if key in QUERY_KEYS
                     and (key not in PATH_FIELDS or not value or self.ws.inside(value))}
@@ -185,6 +187,15 @@ class App:
             finally:
                 self.pages.release()
         return self.respond(status, html)
+
+    def keyed(self, params: dict[str, str]) -> str | None:
+        """The run's key when the request carried it, compared as bytes in constant time; None otherwise."""
+        given = params.get("key")
+        if self.key is None or given is None:
+            return None
+        if hmac.compare_digest(given.encode("utf-8", "surrogatepass"), self.key.encode("ascii")):
+            return self.key
+        return None
 
     def parse(self, target: str) -> tuple[str, dict[str, str]]:
         try:
@@ -217,7 +228,7 @@ class App:
         elif path == "/check":
             title, active = "Check an agent file", "check"
             status, body = check.render(self.ws, self.ws.inventory(count=False), params, models=self.models,
-                                        token=self.token)
+                                        keyed=self.keyed(params) is not None)
         else:
             title, active = "Team decisions", "decisions"
             status, body, topics = decisions.render(self.ws, self.ws.inventory(count=False), params)
@@ -404,7 +415,12 @@ def serve(
         typer.echo(f"error: cannot listen on {HOST}:{port}; another program may be using it (try --port 0)",
                    err=True)
         raise typer.Exit(2) from None
-    typer.echo(f"Memory Lab is open at http://{HOST}:{server.server_address[1]}/")
+    address = f"http://{HOST}:{server.server_address[1]}/"
+    if server.app.key is not None:  # printed here only: pages never show it to a visitor without it
+        typer.echo(f"Memory Lab is open at {address}?key={server.app.key}")
+        typer.echo("Model checks need this address with its key. Pages opened without it offer quick checks only.")
+    else:
+        typer.echo(f"Memory Lab is open at {address}")
     typer.echo("It reads only the folder given with --root (and files hard-linked into it) and never changes a "
                "file. Press Ctrl+C to stop.")
     try:

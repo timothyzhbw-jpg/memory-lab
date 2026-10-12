@@ -5,7 +5,6 @@ each next to the source that seems to disagree; the rest are folded away. Nothin
 """
 from __future__ import annotations
 
-import hmac
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -23,7 +22,7 @@ from memfalsify.gitstore import check_revision
 
 from .i18n import _
 from .internal import internal_files
-from .pages import (attr, details, error_card, fill, lang_field, location_code, plural, quote, select,
+from .pages import (details, error_card, fill, lang_field, location_code, plural, quote, select,
                     span_details, span_place, text_input, where)
 from .workspace import InputError, Inventory, Workspace
 
@@ -91,8 +90,11 @@ TOO_MANY_FOR_DIFF = ("This file has more than {n} statements, too many to compar
                      "\"Changed since\", or run memfalsify diff.")
 PARTLY_CHECKED = "Only the first {checked} of {n} statements were checked."
 PARTLY_CHECKED_MANY = "Only the first {checked} statements were checked: the file has more than {n}."
-CONFIRM = ("This check uses a model, which sends your text to an outside service and costs money. Press Check to "
-           "run it.")
+NEEDS_KEY = ("Model checks need the address with the key that memlab-ui printed in its terminal when it started. "
+             "Open that address to use them.")
+MAX_AGENT_BYTES = 256 * 1024
+AGENT_TOO_LARGE = ("This agent file is larger than 256 KB, which is more than agent files usually are. Check it "
+                   "with the memfalsify command instead.")
 DOCS = {".md", ".markdown", ".txt", ".rst", ".adoc", ".mdx", ".vtt", ".srt", ".json"}
 LEAD = ("Pick a file and press Check. Each statement in it is compared with your project, and anything that seems "
         "to disagree is shown side by side.")
@@ -128,7 +130,8 @@ def t(message: str, **values: object) -> str:
 
 # --- the form -----------------------------------------------------------------------------------------
 
-def form(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models: bool, token: str = "") -> str:
+def form(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models: bool) -> str:
+    """The check form; ``models``: offer the model verifiers (only to a request that carried the key)."""
     chosen = params.get("file") or ""
     files = [(f.path, f"{f.path} ({_(f.agent) if f.agent == 'Agent memory' else f.agent})") for f in inventory.files]
     if chosen and chosen not in {value for value, _label in files} and ws.inside(chosen):
@@ -166,8 +169,7 @@ def form(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models:
         "</div>",
         f'<details{" open" if extra else ""}><summary>{t("More options")}</summary><div class="fields">'
         f'{"".join(more)}</div></details>',
-        f'<div class="actions"><button class="button" type="submit">{t("Check")}</button></div>{lang_field()}'
-        + (f'<input type="hidden" name="token" value="{attr(token)}">' if models and token else ""),
+        f'<div class="actions"><button class="button" type="submit">{t("Check")}</button></div>{lang_field()}',
         "</form>",
     ])
 
@@ -189,12 +191,14 @@ class Result:
     left_out: list[tuple[str, str]] = field(default_factory=list)
 
 
-def choice_of(params: dict[str, str], models: bool) -> VerifierChoice:
+def choice_of(params: dict[str, str], models: bool, keyed: bool) -> VerifierChoice:
     value = params.get("verifier") or "lexical"
     if value not in VERIFIERS:
         raise InputError(_("Pick how to compare from the list."))
     if value != "lexical" and not models:
         raise Refused(_(SWITCHED_OFF))
+    if value != "lexical" and not keyed:
+        raise Refused(_(NEEDS_KEY))
     return VerifierChoice(value)
 
 
@@ -212,11 +216,14 @@ def _glob(path: str) -> str:
     return re.sub(r"([*?\[])", r"[\1]", path)
 
 
-def run(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models: bool) -> Result:
+def run(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models: bool,
+        keyed: bool = False) -> Result:
     """The check. Memory Lab's own files under the folder (reviews, decision logs, generated reports) are left
     out of the evidence by content and listed with the reason; the page's limits bound everything else."""
-    choice = choice_of(params, models)
+    choice = choice_of(params, models, keyed)
     memory = ws.file(params["file"], "The agent file", instructions=True)
+    if memory.stat().st_size > MAX_AGENT_BYTES:  # agent files are small; this one is not parsed at all
+        raise InputError(_(AGENT_TOO_LARGE))
     evidence = ws.directory(params.get("evidence") or WHOLE, "The folder to compare against")
     reviews = ws.file(params["reviews"], "The reviews file") if params.get("reviews") else None
     reference = as_of_date(params.get("as_of"))
@@ -459,6 +466,8 @@ def _findings(report: AuditReport, tags: dict[str, str] | None = None) -> list[s
 
 def _reason(text: str) -> str:
     """A skip reason in the page's words; reasons the page does not know stay as the library wrote them."""
+    if "over this page's read limit" in text:
+        return t("a transcript or OCR file whose media file is over this page's reading limit")
     for prefix, words in SKIP_REASONS:
         if text.startswith(prefix):
             return t(words)
@@ -571,21 +580,15 @@ def diff_results(report: DiffReport, left_out: list[tuple[str, str]]) -> str:
 
 
 def render(ws: Workspace, inventory: Inventory, params: dict[str, str], *, models: bool,
-           token: str = "") -> tuple[int, str]:
-    """The page body and its status: 200, 400 for a value the page refuses, 403 for a switched-off feature.
-
-    A model check also needs ``token``, this run's secret, which only the page's own form carries: a link or
-    a request from elsewhere shows the filled-in form and a Check button instead of sending text out."""
+           keyed: bool = False) -> tuple[int, str]:
+    """The page body and its status: 200, 400 for a value the page refuses, 403 for a switched-off feature or
+    a model check without the key (``keyed``: this request carried the run's key)."""
     status, below = 200, []
-    model = params.get("verifier", "lexical") not in ("", "lexical")
-    if params.get("file") and model and models and not hmac.compare_digest(params.get("token", ""), token):
-        below.append(f'<div class="card banner" role="status"><span class="dot attention" aria-hidden="true">'
-                     f"</span><span>{t(CONFIRM)}</span></div>")
-    elif params.get("file"):
+    if params.get("file"):
         try:
-            below.append(results(run(ws, inventory, params, models=models)))
+            below.append(results(run(ws, inventory, params, models=models, keyed=keyed)))
         except Refused as exc:
             status, below = 403, [error_card(_("This check is switched off"), str(exc))]
         except InputError as exc:
             status, below = 400, [error_card(_("We couldn't run this check"), str(exc))]
-    return status, "\n".join([header(), form(ws, inventory, params, models=models, token=token)] + below)
+    return status, "\n".join([header(), form(ws, inventory, params, models=models and keyed)] + below)

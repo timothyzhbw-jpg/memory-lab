@@ -550,7 +550,7 @@ def test_model_verifiers_are_refused_without_the_flag(app, monkeypatch, verifier
 @requires_confinement
 def test_the_flag_offers_model_verifiers(root, monkeypatch):
     app = make_app(root, allow_model_verifiers=True)
-    form = body(get(app, "/check"))
+    form = body(get(app, link("/check", key=app.key)))
     assert '<select id="f-verifier" name="verifier"' in form
     assert "Claude (sends text to Anthropic; costs money)" in form
     assert "Model checks are switched on for this session" in text(get(app, "/"))
@@ -567,7 +567,7 @@ def test_the_flag_offers_model_verifiers(root, monkeypatch):
         return Failing()
 
     monkeypatch.setattr(ui_check, "build_verifier", fake)
-    response = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, verifier="llm", token=app.token))
+    response = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, verifier="llm", key=app.key))
     assert built == ["llm"]
     assert response.status == 400 and "The model check failed" in text(response)
     assert SECRET not in body(response)
@@ -906,7 +906,7 @@ def test_sidebar_shows_the_folder_name_with_the_path_as_a_tooltip(app, root):
 # --- round 3 ------------------------------------------------------------------------------------------------
 
 @requires_confinement
-def test_model_checks_need_this_runs_token(root, monkeypatch):
+def test_model_checks_need_the_key_printed_in_the_terminal(root, monkeypatch):
     app = make_app(root, allow_model_verifiers=True)
     built = []
 
@@ -915,18 +915,69 @@ def test_model_checks_need_this_runs_token(root, monkeypatch):
         return LexicalVerifier()
 
     monkeypatch.setattr(ui_check, "build_verifier", fake)
-    for token in (None, "", "guess", app.token[:-1]):
-        params = {"file": MEMORY, "evidence": EVIDENCE, "verifier": "llm", **({"token": token} if token else {})}
+    for key in (None, "", "guess", app.key[:-1], "\u043a\u043b\u044e\u0447", app.key + "\u00e9", "%FF"):
+        params = {"file": MEMORY, "evidence": EVIDENCE, "verifier": "llm", **({"key": key} if key is not None else {})}
         response = get(app, link("/check", **params))
-        assert response.status == 200 and built == []
-        assert "This check uses a model" in text(response) and 'id="results"' not in body(response)
-        assert f'<input type="hidden" name="token" value="{app.token}">' in body(response)
-    get(app, link("/check", file=MEMORY, evidence=EVIDENCE, verifier="llm", token=app.token))
-    assert built == ["llm"]
-    assert make_app(root, allow_model_verifiers=True).token != app.token  # a new run, a new token
-    lexical = get(app, link("/check", file=MEMORY, evidence=EVIDENCE))  # quick checks stay bookmarkable
-    assert 'id="results"' in body(lexical)
-    assert 'name="token"' not in body(get(make_app(root), "/check"))  # no token without model checks
+        assert response.status == 403 and built == [], key  # never a 500, whatever the key's characters
+        assert "need the address with the key" in text(response) and 'id="results"' not in body(response)
+        page = body(response)
+        assert app.key not in page and 'name="key"' not in page and 'name="verifier"' not in page
+    assert get(app, "/check?file=" + urlquote(MEMORY) + "&verifier=llm&key=%FF%FE").status == 403
+    keyed = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, verifier="llm", key=app.key))
+    assert built == ["llm"] and 'id="results"' in body(keyed)
+    page = body(keyed)
+    assert f'<input type="hidden" name="key" value="{app.key}">' in page  # forms keep it ...
+    links = [html.unescape(h) for h in re.findall(r'<a href="(/[^"#]*)', page) if not h.startswith("/static/")]
+    assert links and all(f"key={app.key}" in h for h in links), links  # ... and so do links
+    assert make_app(root, allow_model_verifiers=True).key != app.key  # a new run, a new key
+    lexical = get(app, link("/check", file=MEMORY, evidence=EVIDENCE))  # quick checks need no key
+    assert 'id="results"' in body(lexical) and app.key not in body(lexical)
+    assert make_app(root).key is None and 'name="key"' not in body(get(make_app(root), "/check"))
+
+
+@requires_confinement
+def test_agent_files_over_256_kb_are_not_parsed(app, root, monkeypatch):
+    (root / "huge").mkdir()
+    (root / "huge" / "CLAUDE.md").write_text("- The API answers in 1 second.\n" * 9000, encoding="utf-8")  # 270 KB
+    calls = []
+    monkeypatch.setattr(ui_check, "parse_memory", lambda *a, **k: calls.append(a) or ([], []))
+    refused = get(app, "/check?file=huge/CLAUDE.md")
+    assert refused.status == 400 and "larger than 256 KB" in text(refused) and calls == []
+    monkeypatch.undo()
+    assert re.search(r"huge/CLAUDE\.md Claude Code can't read Check", text(get(app, "/")))
+
+
+@requires_confinement
+def test_passages_running_out_marks_the_page_incomplete(app, root, monkeypatch):
+    folder = root / "two"
+    folder.mkdir()
+    (folder / "a.md").write_text("The public API rate limit is 60 requests per minute.\n", encoding="utf-8")
+    (folder / "b.md").write_text("The public API rate limit is 70 requests per minute.\n", encoding="utf-8")
+    monkeypatch.setattr(ui_server, "ITEMS", {"claims": 5_000, "passages": 1, "comparisons": 2_000_000})
+    shown = text(get(app, link("/check", file="AGENTS.md", evidence="two")))
+    assert "b.md not read: this page's reading budget was used up" in shown
+    assert "This project is large" in shown
+
+
+@requires_confinement
+def test_internal_conflicts_draw_from_the_comparison_budget(app, root, monkeypatch):
+    (root / "conflicts.md").write_text("".join(f"- Service {i} is approved.\n- Service {i} is rejected.\n"
+                                               for i in range(30)), encoding="utf-8")
+    assert "May disagree with another statement" in text(get(app, "/check?file=conflicts.md&evidence=memfalsify"))
+    monkeypatch.setattr(ui_server, "ITEMS", {"claims": 5_000, "passages": 5_000, "comparisons": 5})
+    shown = text(get(app, "/check?file=conflicts.md&evidence=memfalsify"))
+    assert "This project is large" in shown
+
+
+@requires_confinement
+def test_json_reports_are_recognised_from_the_whole_file(app, root):
+    from orgmemory.cli import app as org_app
+    result = runner.invoke(org_app, ["replay", str(EXAMPLES / "orgmemory" / "github-acme-web"), "--format", "json"])
+    assert result.exit_code == 0
+    (root / "replay.json").write_text(result.output, encoding="utf-8")
+    assert (root / "replay.json").stat().st_size > 16 * 1024  # larger than the first bytes the page looks at
+    shown = text(get(app, "/check?file=AGENTS.md"))
+    assert "replay.json report generated by Memory Lab" in shown
 
 
 @requires_confinement
@@ -987,15 +1038,20 @@ def test_changed_since_bounds_the_old_version_too(git_repo, monkeypatch):
     assert get(app, "/check?file=CLAUDE.md&since=HEAD").status == 200
 
 
-def test_help_names_the_hard_link_exception():
+@pytest.mark.parametrize("confined", [True, False])
+def test_help_names_the_hard_link_exception(monkeypatch, confined):
+    monkeypatch.setattr(ui_server, "confinement_supported", lambda: confined)  # --help never builds a server
     result = runner.invoke(ui_server.app, ["--help"], env={"COLUMNS": "200"})
     assert result.exit_code == 0 and "hard-linked" in result.output and "nothing outside it is read" not in result.output
 
 
 # --- starting the server -----------------------------------------------------------------------------------
 
+@pytest.mark.parametrize("confined", [True, False])
 @pytest.mark.parametrize("host", ["0.0.0.0", "::", "localhost", "192.168.1.2", ""])
-def test_other_hosts_are_refused(tmp_path, host):
+def test_other_hosts_are_refused(tmp_path, host, monkeypatch, confined):
+    # The host is refused whatever the platform supports, whichever check runs first.
+    monkeypatch.setattr(ui_server, "confinement_supported", lambda: confined)
     with pytest.raises(ValueError, match="serves only on 127.0.0.1"):
         create_server(tmp_path, 0, host=host)
     result = runner.invoke(ui_server.app, ["--root", str(tmp_path), "--host", host or "x", "--port", "0"])
@@ -1018,8 +1074,11 @@ def test_cli_prints_the_address_and_stops_on_ctrl_c(tmp_path, monkeypatch):
     monkeypatch.setattr(ui_server.Server, "serve_forever", interrupted)
     result = runner.invoke(ui_server.app, ["--root", str(tmp_path), "--port", "0"])
     assert result.exit_code == 0, result.output
-    assert re.search(r"Memory Lab is open at http://127\.0\.0\.1:\d+/", result.output)
-    assert "never changes a file" in result.output
+    assert re.search(r"Memory Lab is open at http://127\.0\.0\.1:\d+/\n", result.output)
+    assert "never changes a file" in result.output and "key=" not in result.output
+    keyed = runner.invoke(ui_server.app, ["--root", str(tmp_path), "--port", "0", "--allow-model-verifiers"])
+    assert keyed.exit_code == 0, keyed.output
+    assert re.search(r"Memory Lab is open at http://127\.0\.0\.1:\d+/\?key=[A-Za-z0-9_-]{32}\n", keyed.output)
 
 
 @requires_confinement

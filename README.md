@@ -49,7 +49,7 @@ pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
 
 Install only what you need: `memcore` plus either tool works on its own.
 
-Prefer a browser? `pip install -e packages/memlab-ui` and `memlab-ui --root examples` open a local, read-only page for both tools (see [*Web page*](#web-page)).
+Prefer a browser? `pip install -e packages/memlab-ui` and `memlab-ui --root examples` open a local, read-only page for both tools (see [*Web page*](#web-page)). It needs macOS or Linux: on Windows it exits with code 2, like the MCP server.
 
 ### MemFalsify: audit a MEMORY.md
 
@@ -567,9 +567,11 @@ memlab-ui --root /path/to/project      # then open http://127.0.0.1:8765/  (--po
 It binds 127.0.0.1 only, rejects requests whose `Host` header is not 127.0.0.1 or localhost (DNS rebinding) and
 requests sent by other websites (`Sec-Fetch-Site`, `Origin`), answers GET and HEAD only, bounds the connections,
 pages, bytes and folders each request may use, confines every path to `--root` with the same descriptor-based reads
-as the MCP server, writes nothing, keeps model verifiers off unless started with `--allow-model-verifiers`, escapes every untrusted value and
+as the MCP server, writes nothing, keeps model verifiers off unless started with `--allow-model-verifiers` (and
+then runs them only for the address with the key it prints in the terminal), escapes every untrusted value and
 sends a strict Content-Security-Policy with no JavaScript and nothing loaded from elsewhere. Pages are in English or
-Simplified Chinese (`?lang=zh`). Pages, options, safety rules and limits: [docs/ui.md](docs/ui.md).
+Simplified Chinese (`?lang=zh`). Like the MCP server, it needs POSIX `O_NOFOLLOW` and `dir_fd` support, so on
+Windows it refuses to start and exits with code 2. Pages, options, safety rules and limits: [docs/ui.md](docs/ui.md).
 
 ## Verifier backends: lexical, LLM, Jev
 

@@ -243,8 +243,12 @@ class Workspace:
         return found
 
     def statements(self, relative: str) -> int | None:
+        """How many statements an agent file has; None when it cannot be read or is over 256 KB."""
         try:
-            claims, _unused = parse_memory(self.file(relative, "The agent file", instructions=True))
+            path = self.file(relative, "The agent file", instructions=True)
+            if path.stat().st_size > 256 * 1024:
+                return None
+            claims, _unused = parse_memory(path)
         except (InputError, ValueError, OSError):
             return None
         return len(claims)
