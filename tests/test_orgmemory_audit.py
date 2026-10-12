@@ -300,7 +300,7 @@ def test_self_approval_does_not_deny_a_second_actors_decision(tmp_path):
                             ev("a", 3, "pm", "approve")], as_of=at(4))
     finding, = report.findings
     assert (finding.kind, finding.severity, finding.event_ids) == ("self_approval", "low", ["r", "a"])
-    assert finding.detail == "pm approved a subject they had also requested"
+    assert finding.detail == "approved by pm, who had also requested the subject"
 
 
 # --- ordering, output and the CLI ---------------------------------------------------------------

@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from memcore import EvidenceError, EvidenceSpan, load_manifest, read_jsonl
-from memcore.display import report_text
+from memcore.display import one_line
 from memcore.jsonutil import loads_at
 from memcore.reading import read_file_text
 
@@ -120,7 +120,7 @@ def validation_summary(data: Dataset) -> list[str]:
     unknown = sorted({e.actor for e in data.events} - data.policy.actors.keys() - authority.granted())
     if unknown:
         lines.append(f"note: actors without any role (their events cannot change state): "
-                     f"{', '.join(report_text(actor) for actor in unknown)}")
+                     f"{', '.join(one_line(actor) for actor in unknown)}")
     early = sum(authority.before_baseline(e.timestamp) for e in data.events)
     if early:
         lines.append(f"note: {early} event(s) before the policy baseline {authority.baseline.isoformat()}, "

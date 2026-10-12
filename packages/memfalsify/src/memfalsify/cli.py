@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable, Iterable
 from datetime import date
 from enum import Enum
@@ -111,6 +112,24 @@ def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "re
         _fail(f"refusing to overwrite a memory file with the {what}")
     output.write_bytes(data)
     typer.echo(f"wrote {terminal_text(str(output))}", err=True)
+
+
+def _stdout_is_terminal() -> bool:
+    try:
+        return sys.stdout.isatty()
+    except (AttributeError, ValueError):  # no stdout, or a closed one
+        return False
+
+
+def _screen_patch(patch: bytes) -> str:
+    """A patch for a person's terminal: control, bidi, zero-width and separator characters shown as ``\\uXXXX``
+    escapes (a hostile revision could otherwise clear the screen or reorder text). Line breaks, a CRLF and tabs
+    stay, so the layout is the patch's own."""
+    def line(raw: str) -> str:
+        body, cr = (raw[:-1], "\r") if raw.endswith("\r") else (raw, "")
+        return "\t".join(terminal_text(part) for part in body.split("\t")) + cr
+
+    return "\n".join(line(raw) for raw in patch.decode("utf-8", errors="replace").split("\n"))
 
 
 def _echo_exact(text: str) -> None:
@@ -284,7 +303,10 @@ def rollback_command(
     follow_links: bool = typer.Option(True, help="Also look in local .md files the memory file links to or "
                                                  "@-imports"),
 ) -> None:
-    """Print (never apply) a patch restoring a claim's text as of a revision, or re-adding a removed claim."""
+    """Print (never apply) a patch restoring a claim's text as of a revision, or re-adding a removed claim.
+
+    The patch goes out byte for byte to a pipe, a redirect or --output. On a terminal, control and bidi
+    characters in it are shown escaped; use --output for a patch to apply."""
     try:
         result = rollback_patch(memory, claim, to, follow_links=follow_links)
     except (ValidationError, ValueError, OSError) as exc:
@@ -292,6 +314,12 @@ def rollback_command(
     if result.patch is not None:
         if output:
             _write(output, result.patch, result.files, "patch")
+        elif _stdout_is_terminal():
+            shown = _screen_patch(result.patch)
+            typer.echo(shown, nl=False)
+            if shown.encode("utf-8") != result.patch:
+                typer.echo("note: the patch holds control, bidi or other invisible characters; they are shown "
+                           "escaped here. Use --output (or a pipe) for the exact patch.", err=True)
         else:
             typer.echo(result.patch, nl=False)  # bytes go out as-is, so line endings survive on Windows
     typer.echo(result.message, err=True)

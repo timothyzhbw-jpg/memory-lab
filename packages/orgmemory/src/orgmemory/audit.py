@@ -241,7 +241,7 @@ class _Auditor:
         own = [event_id for event_id in self.request_ids.get(state.subject, {}).get(approval.actor, [])
                if self.position[event_id] < approval_at]
         if own:
-            self.add("self_approval", "low", f"{approval.actor} approved a subject they had also requested",
+            self.add("self_approval", "low", f"approved by {approval.actor}, who had also requested the subject",
                      [*own, approval.event_id],
                      subject=state.subject, actor=approval.actor)
 
