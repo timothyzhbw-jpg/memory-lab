@@ -1,4 +1,5 @@
 import os
+import io
 import socket
 import shutil
 import subprocess
@@ -17,11 +18,32 @@ requires_confinement = pytest.mark.skipif(
 
 
 @pytest.fixture
+def windows_console(monkeypatch):
+    """Mirror Typer output to cp1252/CRLF streams while retaining CliRunner's actual bytes."""
+    import typer
+
+    raw = (io.BytesIO(), io.BytesIO())
+    streams = [io.TextIOWrapper(buffer, encoding="cp1252", newline="\r\n") for buffer in raw]
+    real_echo = typer.echo
+
+    def echo(message=None, nl=True, err=False, **kwargs):
+        real_echo(message, nl=nl, err=err, file=streams[int(err)], **kwargs)
+        return real_echo(message, nl=nl, err=err, **kwargs)
+
+    monkeypatch.setattr(typer, "echo", echo)
+    yield raw
+    for stream in streams:
+        stream.close()
+
+
+@pytest.fixture
 def make_symlink():
     """Exercise links wherever supported, including Windows with symlink privileges."""
     def create(path, target, *, directory=False):
         try:
-            path.symlink_to(target, target_is_directory=directory)
+            # Windows stores string targets verbatim in the reparse point. Native
+            # separators are needed for relative targets such as ../.git/config.
+            path.symlink_to(Path(target), target_is_directory=directory)
         except OSError as exc:
             if os.name == "nt" and exc.winerror == 1314:
                 pytest.skip("Windows symlinks require developer mode or symlink privileges")

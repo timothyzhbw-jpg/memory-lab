@@ -324,7 +324,7 @@ def test_untrusted_fields_render_as_text(tmp_path, field):
     elif field == "source_uri":
         entry["source_uri"] = PAYLOAD
     elif field == "quote":
-        (root / "note.txt").write_text(PAYLOAD + "\n### HIGH forged\x1b[2J\u202e")
+        (root / "note.txt").write_bytes((PAYLOAD + "\n### HIGH forged\x1b[2J\u202e").encode("utf-8"))
         span = locate_quote(root, "note.txt", PAYLOAD + "\n### HIGH forged\x1b[2J\u202e")
         entry.update(sha256=span.sha256, quote=span.quote, start=span.start, end=span.end)
     (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
@@ -415,8 +415,7 @@ def test_example_changes_match_their_reports(dataset, golden, start, end):
     assert changes_markdown(report).encode("utf-8") == expected
     before = snapshot(EXAMPLES)
     result = runner.invoke(app, ["changes", str(EXAMPLES / "orgmemory" / dataset), "--from", start, "--to", end])
-    # `output` undoes the CRLF a Windows console stream would add; the bytes above are compared exactly.
-    assert result.exit_code == 0 and result.output == expected.decode("utf-8")
+    assert result.exit_code == 0 and result.stdout_bytes == expected
     assert snapshot(EXAMPLES) == before
 
 

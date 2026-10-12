@@ -562,6 +562,11 @@ def to_markdown(result: dict) -> str:
 app = typer.Typer(add_completion=False, help="Measure orgmemory replay, audit and validation against labeled cases.")
 
 
+def _echo_utf8(text: str, *, err: bool = False) -> None:
+    """Binary output keeps UTF-8 and LF even with a cp1252/CRLF console or pipe."""
+    typer.echo(text.encode("utf-8"), nl=False, err=err)
+
+
 @app.command()
 def main(
     case: Optional[list[str]] = typer.Option(None, "--case", help="Run only this case ID (repeatable)"),
@@ -576,23 +581,23 @@ def main(
     try:
         cases = load_cases(cases_dir, case)
     except (ValueError, OSError) as exc:
-        typer.echo(f"error: {_terminal(str(exc))}", err=True)
+        _echo_utf8(f"error: {_terminal(str(exc))}\n", err=True)
         raise typer.Exit(2)
     if check:
         labels, checks = map(sum, zip(*(count_labels(c.expected) for c in cases)))
-        typer.echo(f"{len(cases)} case(s), {labels} labels, {checks} checks: expectations OK")
+        _echo_utf8(f"{len(cases)} case(s), {labels} labels, {checks} checks: expectations OK\n")
         return
     result = evaluate(cases)
     # ASCII JSON: bidi and homoglyphs in subjects, actors and notes cannot reorder a terminal.
     # json.loads restores the original characters.
     data = json.dumps(result, indent=2, ensure_ascii=True, default=str) + "\n"
     if json_out is not None and str(json_out) == "-":
-        typer.echo(data, nl=False)
+        _echo_utf8(data)
     else:
-        typer.echo(to_markdown(result), nl=False)
+        _echo_utf8(to_markdown(result))
         if json_out is not None:
             json_out.write_bytes(data.encode("utf-8"))
-            typer.echo(f"wrote {_one_line(str(json_out))}", err=True)
+            _echo_utf8(f"wrote {_one_line(str(json_out))}\n", err=True)
     if result["totals"]["failed"]:
         raise typer.Exit(1)
 

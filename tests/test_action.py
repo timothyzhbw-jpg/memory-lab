@@ -2,7 +2,7 @@ import importlib.util
 import os
 import re
 import shutil
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -26,6 +26,28 @@ def runner_env(tmp_path):
 
 def outputs(env):
     return dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())
+
+
+@pytest.mark.parametrize("diff", [False, True])
+def test_action_report_paths_are_posix_on_windows(memfalsify_demo, monkeypatch, diff):
+    from memfalsify import DiffReport
+    from memfalsify.audit import audit
+
+    report = audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence")
+    report.memory_file = r".cursor\rules\api.mdc"
+    report.evidence_root = r"C:\checkout\docs"
+    if diff:
+        report = DiffReport(memory_file=report.memory_file, audit=report,
+                            base={"rev": "base", "files": []}, head={"rev": "working tree", "files": []},
+                            summary={}, changes=[], limitations=[])
+    # PureWindowsPath exposes native Windows spelling without needing Windows I/O.
+    monkeypatch.setattr(action, "Path", PureWindowsPath)
+    action._posix_report_paths(report)
+    assert report.memory_file == ".cursor/rules/api.mdc"
+    nested = report.audit if diff else report
+    assert nested.memory_file == ".cursor/rules/api.mdc"
+    assert nested.evidence_root == "C:/checkout/docs"
+    assert "\\\\" not in report.model_dump_json()
 
 
 @pytest.mark.parametrize("strict, code, level", [("true", 1, "::error"), ("false", 0, "::warning")])

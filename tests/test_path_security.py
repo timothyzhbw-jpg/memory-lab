@@ -357,6 +357,7 @@ def test_a_rule_file_symlinked_to_checkout_credentials_is_never_read(credential_
     root = credential_checkout
     (root / ".cursor" / "rules").mkdir(parents=True)
     make_symlink(root / ".cursor/rules/evil.mdc", "../../.git/config")
+    assert (root / ".cursor/rules/evil.mdc").resolve(strict=True) == root / ".git/config"
     claims, files = parse_memory(root / ".cursor/rules/evil.mdc")
     assert claims == [] and files == []
     monkeypatch.chdir(root)

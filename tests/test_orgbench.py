@@ -82,7 +82,7 @@ def test_results_md_holds_the_current_report(measured):
 
 def test_run_script_exit_codes_and_json(tmp_path):
     out = tmp_path / "results.json"
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}  # a Windows pipe defaults to the locale encoding
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}  # the harness itself must guarantee UTF-8/LF
     done = subprocess.run([sys.executable, str(RUN), "--json", str(out)], cwd=REPO, capture_output=True,
                           timeout=300, env=env)
     assert done.returncode == 1, done.stderr.decode("utf-8", "replace")
@@ -97,17 +97,29 @@ def test_run_script_exit_codes_and_json(tmp_path):
     assert json.loads(selected.output)["totals"]["cases"] == 1
 
 
-def test_github_case_is_the_importers_output(tmp_path):
+@pytest.mark.parametrize("subprocess_encoding", [None, "cp1252"])
+def test_github_case_is_the_importers_output(tmp_path, subprocess_encoding):
     """github-acme-api is exactly what `orgmemory github convert` makes of its capture."""
     case = BENCH / "cases" / "github-acme-api"
     for name in ("policy.json", "github.json"):
         shutil.copyfile(case / name, tmp_path / name)
-    run_convert(tmp_path, case / "capture.json")
+    if subprocess_encoding is None:
+        run_convert(tmp_path, case / "capture.json")
+    else:
+        env = {**os.environ, "PYTHONIOENCODING": subprocess_encoding, "PYTHONUTF8": "0",
+               "PYTHONPATH": os.pathsep.join(str(REPO / "packages" / package / "src")
+                                             for package in ("memcore", "orgmemory"))}
+        code = ("import sys; from pathlib import Path; from orgmemory.github_apply import run_convert; "
+                "run_convert(Path(sys.argv[1]), Path(sys.argv[2]))")
+        done = subprocess.run([sys.executable, "-c", code, str(tmp_path), str(case / "capture.json")],
+                              cwd=REPO, capture_output=True, timeout=300, env=env)
+        assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
     made = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file())
     kept = sorted(p.relative_to(case).as_posix() for p in case.rglob("*") if p.is_file()
                   and p.name not in ("capture.json", "expected.json"))
     assert made == kept
-    assert all((tmp_path / name).read_bytes() == (case / name).read_bytes() for name in made)
+    for name in made:
+        assert (tmp_path / name).read_bytes() == (case / name).read_bytes(), name
 
 
 def test_case_data_is_byte_exact_in_git():
@@ -377,7 +389,7 @@ def test_variant_symlink_outside_the_case_is_not_read(tmp_path):
     assert "SECRET-TOKEN" not in message and secret.read_bytes() == b"SECRET-TOKEN\n"
 
 
-def test_untrusted_text_stays_inert_in_markdown_and_json(tmp_path):
+def test_untrusted_text_stays_inert_in_markdown_and_json(tmp_path, windows_console):
     """Subjects, notes and descriptions are data: they cannot change the terminal, HTML or the table."""
     payload = "Evil\x1b[2J\u202e\n| <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED** \\|"
     markup = "\u202e <img src=x onerror=alert(1)> [forged](https://evil.invalid) **FORGED** \\|"
@@ -402,6 +414,7 @@ def test_untrusted_text_stays_inert_in_markdown_and_json(tmp_path):
     rendered = runner.invoke(bench.app, ["--cases-dir", str(tmp_path / "cases")])
     listed = runner.invoke(bench.app, ["--cases-dir", str(tmp_path / "cases"), "--json", "-"])
     assert rendered.exit_code == 1 and listed.exit_code == 1, listed.output
+    assert windows_console[0].getvalue() == rendered.stdout_bytes + listed.stdout_bytes
     parsed = json.loads(listed.output)
     assert any(c["target"] == payload and c["actual"] == "approved" for c in parsed["checks"])
     for text in (report, rendered.output):
@@ -413,6 +426,12 @@ def test_untrusted_text_stays_inert_in_markdown_and_json(tmp_path):
     rows = [line for line in report.splitlines() if line.startswith("| tiny |")]
     assert rows and all(_columns(row) == 6 for row in rows)
     assert all("\x1b" not in line and "\u202e" not in line for line in report.splitlines())
+
+
+def test_console_output_is_utf8_even_for_nonwestern_text(windows_console):
+    for err in (False, True):
+        bench._echo_utf8("北京\n", err=err)
+        assert windows_console[int(err)].getvalue() == "北京\n".encode("utf-8")
 
 
 def test_rejected_label_text_cannot_control_the_terminal(tmp_path):

@@ -96,13 +96,22 @@ def discovered(env: dict[str, str]) -> list[str]:
     return found.distinct
 
 
+def _posix_report_paths(report: AuditReport | DiffReport) -> None:
+    """The CLI receives native Paths; Action artifacts use POSIX path spelling on every runner."""
+    report.memory_file = Path(report.memory_file).as_posix()
+    audit = report.audit if isinstance(report, DiffReport) else report
+    audit.memory_file = Path(audit.memory_file).as_posix()
+    if audit.evidence_root is not None:
+        audit.evidence_root = Path(audit.evidence_root).as_posix()
+
+
 def publish(env: dict[str, str], path: Path, text: str, attention: int) -> None:
     path.write_bytes(text.encode("utf-8"))
     if len(text.encode("utf-8")) > SUMMARY_LIMIT:
         text = text.encode("utf-8")[:SUMMARY_LIMIT].decode("utf-8", "ignore")
         text += "\n\n**Report truncated for the job summary; the full report is in the `report` output file.**\n"
     _append(env, "GITHUB_STEP_SUMMARY", text)
-    _append(env, "GITHUB_OUTPUT", f"report={path}\nattention={attention}\n")
+    _append(env, "GITHUB_OUTPUT", f"report={path.as_posix()}\nattention={attention}\n")
 
 
 def main(env: dict[str, str] | None = None) -> int:
@@ -171,10 +180,14 @@ def main(env: dict[str, str] | None = None) -> int:
         text = json_path.read_text(encoding="utf-8")
         if base:
             diff = DiffReport.model_validate_json(text)
+            _posix_report_paths(diff)
+            json_path.write_bytes((diff.model_dump_json(indent=2) + "\n").encode("utf-8"))
             count, total, what = diff.attention, len(diff.audit.findings), "added or changed memories"
             sections.append(diff_to_markdown(diff))
         else:
             report = AuditReport.model_validate_json(text)
+            _posix_report_paths(report)
+            json_path.write_bytes((report.model_dump_json(indent=2) + "\n").encode("utf-8"))
             count = sum(n for status, n in report.summary.items() if status in ATTENTION)
             total, what = len(report.findings), "memories"
             sections.append(to_markdown(report))

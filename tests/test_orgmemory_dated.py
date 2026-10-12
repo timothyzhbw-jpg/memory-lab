@@ -86,7 +86,7 @@ def outcomes(result):
 # --- backward compatibility -------------------------------------------------------------------------
 
 @pytest.mark.parametrize("case", UNDATED_CLI["cases"], ids=lambda c: c["dataset"] + " " + " ".join(c["args"]))
-def test_undated_cli_bytes_match_main(case):
+def test_undated_cli_bytes_match_main(case, windows_console):
     """Digests captured by running the code without dated roles (revision in the fixture), not the new
     implementation. That revision is the integration branch just before dated-policy: release 0.3's output,
     plus the ``media`` field that sidecar evidence added to every JSON evidence span."""
@@ -94,6 +94,9 @@ def test_undated_cli_bytes_match_main(case):
     result = runner.invoke(app, [args[0], str(EXAMPLES / "orgmemory" / case["dataset"]), *args[1:]])
     assert result.exit_code == case["exit_code"]
     assert hashlib.sha256(result.stdout_bytes).hexdigest() == case["sha256"]
+    # Also exercise the Windows encoder/newline layer on POSIX. Keep hashing raw
+    # bytes; normalizing result.output would hide a change to the golden output.
+    assert windows_console[0].getvalue() == result.stdout_bytes
 
 
 @pytest.mark.parametrize("name, replay_golden, audit_golden", [

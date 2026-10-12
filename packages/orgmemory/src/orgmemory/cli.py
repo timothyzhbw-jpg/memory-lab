@@ -68,8 +68,8 @@ def _fail(message: str) -> None:
 
 
 def _echo_exact(text: str) -> None:
-    """ASCII report bytes. Windows text-mode stdout would otherwise turn LF into CRLF."""
-    typer.echo(text.encode("ascii"), nl=False)
+    """UTF-8 report bytes. Windows text-mode stdout would otherwise turn LF into CRLF."""
+    typer.echo(text.encode("utf-8"), nl=False)
 
 
 def _as_of(value: Optional[str]) -> Optional[datetime]:
@@ -98,7 +98,8 @@ def replay_command(
     if fmt is Format.html:
         _echo_exact(replay_html(result))
     else:
-        typer.echo(to_markdown(result) if fmt is Format.markdown else _json_shield(result.model_dump_json(indent=2)))
+        _echo_exact((to_markdown(result) if fmt is Format.markdown
+                     else _json_shield(result.model_dump_json(indent=2))) + "\n")
 
 
 @app.command("explain")
@@ -108,7 +109,7 @@ def explain_command(dataset: Path = DATASET, subject: str = typer.Argument(...),
     result = replay(_load(dataset), _as_of(as_of))
     if subject not in result.states:
         _fail(f"unknown subject {subject!r}; known: {', '.join(result.states)}")
-    typer.echo(explain(result, subject))
+    _echo_exact(explain(result, subject) + "\n")
 
 
 @app.command("audit")
@@ -129,11 +130,11 @@ def audit_command(
     except ValidationError as exc:
         _fail(str(exc))
     if fmt is Format.json:
-        typer.echo(_json_shield(report.model_dump_json(indent=2) + "\n"), nl=False)
+        _echo_exact(_json_shield(report.model_dump_json(indent=2) + "\n"))
     elif fmt is Format.html:
         _echo_exact(audit_html(report))
     else:
-        typer.echo(audit_markdown(report), nl=False)
+        _echo_exact(audit_markdown(report))
     if strict and report.summary["high"]:
         raise typer.Exit(1)
 
@@ -162,8 +163,8 @@ def changes_command(
         report = changes(data, start_time, end_time)
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
-    typer.echo(changes_markdown(report) if fmt is TextFormat.markdown
-               else _json_shield(report.model_dump_json(indent=2) + "\n"), nl=False)
+    _echo_exact(changes_markdown(report) if fmt is TextFormat.markdown
+                else _json_shield(report.model_dump_json(indent=2) + "\n"))
 
 
 class ExportFormat(str, Enum):
@@ -196,7 +197,7 @@ def export_command(
     if fmt is ExportFormat.csv:
         text = decisions_csv(records)
         if out is None:
-            typer.echo(text, nl=False)
+            _echo_exact(text)
             return
         files, directory = {out.name: text.encode("utf-8")}, out.parent
     elif not records:
@@ -217,8 +218,7 @@ def export_command(
 @app.command("validate")
 def validate_command(dataset: Path = DATASET) -> None:
     """Validate every event, the policy, the policy log and every evidence hash and span."""
-    for line in validation_summary(_load(dataset)):
-        typer.echo(line)
+    _echo_exact("\n".join(validation_summary(_load(dataset))) + "\n")
 
 
 @app.command("append")
