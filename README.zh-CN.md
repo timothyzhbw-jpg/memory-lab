@@ -583,7 +583,7 @@ memfalsify audit MEMORY.md --evidence evidence --verifier openai --provider olla
 
 `--base-url` 和 `--api-key-env` 会覆盖预设。base URL 必须是 `https://`（只有 `localhost`、`127.0.0.1`、`::1` 允许 `http://`），不能带用户名、密码、查询参数或片段。`--api-key-env` 接收的是变量名：没有任何选项接收 key 本身，key 从不输出，服务商返回的错误信息会先遮掉 key 再显示。OpenAI SDK 自己的 `OPENAI_*` 环境变量不会生效，给一个服务商的设置不会被发给另一个。模型没有默认值，因为各服务商的模型名不同，而且会变。
 
-请求以严格 JSON schema（`response_format` 为 `json_schema`）索取判断。端点对此返回 HTTP 400 或 422 时，验证器改为请求 JSON 对象，再不行就请求纯文本；之后沿用可用的格式，并在 stderr 上说明。不是合法判断的回答、空回答和拒答都记为无判断（`unrelated`），绝不会算作支持。这个后端不支持 `--batch`，`dual` 和 `cascade` 仍然是 Claude 配 Jev。key 和服务商的更多说明见 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
+请求只发往 base URL：不跟随重定向，也不使用环境里的代理设置。请求以严格 JSON schema（`response_format` 为 `json_schema`）索取判断。端点返回 HTTP 400 或 422 且错误里点名了格式时，验证器改为请求 JSON 对象，再不行就请求纯文本；之后沿用可用的格式，并在 stderr 上说明；其他错误会让审计结束。只读取正常结束（`finish_reason` 为 `stop`）的回答。被截断或被过滤的回答、不是合法判断的回答、空回答和拒答都记为无判断（`unrelated`），绝不会算作支持。这个后端不支持 `--batch`，`dual` 和 `cascade` 仍然是 Claude 配 Jev。key 和服务商的更多说明见 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
 
 在 Python 里使用：
 

@@ -296,10 +296,12 @@ The inputs reach the run step through `env:` and are checked before anything is 
 `provider`, a `base-url` that is not `https://` (or `http://` to a loopback host) or carries a user name,
 password, query or fragment, or an `api-key-env` that is not a variable name fails the step with exit 2, and
 the message never repeats the URL or name. The key is never printed: provider error messages are logged with
-it redacted, and the OpenAI SDK's own `OPENAI_*` variables are ignored. `provider: ollama` needs an Ollama
+it redacted, and the OpenAI SDK's own `OPENAI_*` variables are ignored, as are the runner's proxy variables;
+redirects are not followed. `provider: ollama` needs an Ollama
 server reachable at `http://localhost:11434` inside the job. The verifier asks for the verdict as a strict
-JSON schema, falls back to a JSON object and then plain text when the endpoint refuses a format, and counts
-an answer that is not a valid verdict as no verdict; the action does not support `--batch` for it.
+JSON schema, falls back to a JSON object and then plain text when the endpoint's error names the format, and
+counts an answer that did not end with `finish_reason` `stop` or is not a valid verdict as no verdict; the
+action does not support `--batch` for it.
 
 - **Data leaves the runner.** Instruction text, and the evidence passages pre-selected for each instruction
   (up to 8, by term overlap), are sent to Anthropic, TypeSafe AI or, with `openai`, the configured

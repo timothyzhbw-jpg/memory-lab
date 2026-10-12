@@ -164,12 +164,19 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
   there is no default. Memory claims and evidence passages are sent to the configured endpoint.
   - The base URL must be `https://`, or `http://` only to `localhost`, `127.0.0.1` or `::1`; a user name,
     password, query or fragment in it is refused, and no message repeats it.
-  - The key is read from the named variable, never taken as an argument, never printed, and redacted from
-    provider error messages. The OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and
-    `OPENAI_CUSTOM_HEADERS` are ignored, so settings meant for one provider never reach another.
+  - The key is read from the named variable, never taken as an argument, and must hold only the characters
+    keys use. It is never printed: errors are built from the provider's status, type, code, param and
+    message, each redacted (also URL-encoded or escaped forms); no error keeps the SDK exception as its cause
+    or context; and a log filter redacts the SDK's and the HTTP stack's records (`OPENAI_LOG=debug`). The
+    OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are
+    ignored, so settings meant for one provider never reach another.
+  - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy and
+    certificate variables from the environment are not used.
   - Requests ask for the verdict as a strict JSON schema (`response_format` `json_schema`). After HTTP 400
-    or 422 the verifier asks for `json_object`, then plain text, keeps the format that worked and says so on
-    stderr. An answer that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
+    or 422 with an error that names the format, the verifier asks for `json_object`, then plain text, keeps
+    the format that worked and says so on stderr; any other error stops the audit at once. The first request
+    settles the format while concurrent ones wait. Only an answer with `finish_reason` `stop` is read; an
+    unfinished one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
     outside the schema), an empty answer and a refusal are no verdict (`unrelated`), never support.
   - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
     requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
