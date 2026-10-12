@@ -4,20 +4,23 @@ Ordinary library/CLI callers keep their existing path semantics. Within
 ``confined_reads``, every open walks from a pinned root descriptor and refuses
 symlinks at the syscall boundary, including files replaced after validation.
 
-Within ``read_limits`` (the web UI sets one per request), whole-file reads stop at a per-file and a
-total byte budget, ``open_text`` refuses a file larger than what is left, and walks stop after a
-number of directories. Outside it nothing is bounded, as before.
+Within ``read_limits`` (the web UI sets one per request), reads are charged in bytes, before any decoding:
+whole-file reads stop at a per-file and a total byte budget, and ``open_text`` streams charge every byte as it
+is read, so a file that grows cannot pass the limits. Walks stop after a number of directories, a depth and a
+number of directory entries, and callers draw named budgets (claims, passages, comparisons) with ``take``.
+Outside ``read_limits`` nothing is bounded and every read returns what it did before.
 """
 from __future__ import annotations
 
 import errno
 import hashlib
+import io
 import os
 import stat
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TextIO
 
@@ -43,26 +46,39 @@ class ReadLimitError(ValueError):
 
 @dataclass
 class ReadLimits:
-    """Bounds set with ``read_limits``. ``truncated`` turns true when a walk stopped at ``directories`` or a
-    read was refused because ``total_bytes`` was used up, so callers can say their view is incomplete."""
+    """Bounds set with ``read_limits``. ``truncated`` turns true when a walk stopped early, a read was refused
+    because ``total_bytes`` was used up, or a named budget ran out; ``exhausted`` says which."""
     file_bytes: int | None = None
     total_bytes: int | None = None
     directories: int | None = None
+    depth: int | None = None
+    entries: int | None = None
+    items: dict[str, int] = field(default_factory=dict)
     bytes_read: int = 0
     directories_walked: int = 0
+    entries_listed: int = 0
+    used: dict[str, int] = field(default_factory=dict)
+    exhausted: set[str] = field(default_factory=set)
     truncated: bool = False
+
+    def stop(self, what: str) -> None:
+        self.truncated = True
+        self.exhausted.add(what)
 
 
 _LIMITS: ContextVar[ReadLimits | None] = ContextVar("memlab_read_limits", default=None)
 
 
 @contextmanager
-def read_limits(file_bytes: int | None = None, total_bytes: int | None = None,
-                directories: int | None = None) -> Iterator[ReadLimits]:
-    """Bound the reads and walks in this execution context: at most ``file_bytes`` from one file, at most
-    ``total_bytes`` from all files together, at most ``directories`` directories over all walks. Media
-    hashing (``file_sha256``) streams and is not counted."""
-    limits = ReadLimits(file_bytes=file_bytes, total_bytes=total_bytes, directories=directories)
+def read_limits(file_bytes: int | None = None, total_bytes: int | None = None, directories: int | None = None,
+                *, depth: int | None = None, entries: int | None = None,
+                items: Mapping[str, int] | None = None) -> Iterator[ReadLimits]:
+    """Bound the reads and walks in this execution context: at most ``file_bytes`` bytes from one file and
+    ``total_bytes`` from all files together, at most ``directories`` directories and ``entries`` directory
+    entries over all walks, at most ``depth`` levels below a walk's start, and the named ``items`` budgets
+    that ``take`` draws from. Media hashing (``file_sha256``) streams and is not counted."""
+    limits = ReadLimits(file_bytes=file_bytes, total_bytes=total_bytes, directories=directories, depth=depth,
+                        entries=entries, items=dict(items or {}))
     token = _LIMITS.set(limits)
     try:
         yield limits
@@ -75,22 +91,55 @@ def current_read_limits() -> ReadLimits | None:
     return _LIMITS.get()
 
 
+def take(kind: str, count: int = 1) -> int:
+    """Draw up to ``count`` units from the named budget ``kind`` and return how many were granted: all of
+    them outside ``read_limits`` or when it sets no such budget. Granting fewer marks the limits truncated."""
+    limits = _LIMITS.get()
+    if limits is None or kind not in limits.items:
+        return count
+    granted = max(0, min(count, limits.items[kind] - limits.used.get(kind, 0)))
+    limits.used[kind] = limits.used.get(kind, 0) + granted
+    if granted < count:
+        limits.stop(kind)
+    return granted
+
+
+def available(kind: str) -> bool:
+    """Whether the named budget ``kind`` has anything left (always True outside ``read_limits``)."""
+    limits = _LIMITS.get()
+    return limits is None or kind not in limits.items or limits.used.get(kind, 0) < limits.items[kind]
+
+
+def charge(size: int) -> None:
+    """Charge ``size`` bytes read some other way (such as a git object) before reading them: ``ReadLimitError``
+    when they exceed the per-file limit or what is left of the total."""
+    limits = _LIMITS.get()
+    if limits is not None:
+        _charge(size, limits.file_bytes, limits)
+        limits.bytes_read += size
+
+
 def _charge(size: int, cap: int | None, limits: ReadLimits | None) -> None:
     """Refuse ``size`` bytes over ``cap`` or over what is left of the total budget."""
     if cap is not None and size > cap:
         raise ReadLimitError(f"larger than {cap} bytes")
     if limits is not None and limits.total_bytes is not None and size > limits.total_bytes - limits.bytes_read:
-        limits.truncated = True
+        limits.stop("bytes")
         raise ReadLimitError("the read budget is used up", budget=True)
 
 
-def _read_all(handle: IO, max_bytes: int | None = None):
-    """The whole file, unless it is larger than ``max_bytes`` or the active limits allow. The size is checked
-    with fstat first, and at most one unit past the bound is read, so a file that grows during the read is
-    refused too, without reading the rest."""
+def _bounds(max_bytes: int | None) -> tuple[ReadLimits | None, int | None]:
+    """The active limits and the per-file cap: the smaller of ``max_bytes`` and the limits' ``file_bytes``."""
     limits = _LIMITS.get()
     caps = [cap for cap in (max_bytes, limits.file_bytes if limits else None) if cap is not None]
-    cap = min(caps) if caps else None
+    return limits, min(caps) if caps else None
+
+
+def _read_all(handle: IO[bytes], max_bytes: int | None = None) -> bytes:
+    """A binary file's bytes, unless it is larger than ``max_bytes`` or the active limits allow. The size is
+    checked with fstat first, and at most one byte past the bound is read, so a file that grows during the read
+    is refused too, without reading the rest."""
+    limits, cap = _bounds(max_bytes)
     if cap is None and (limits is None or limits.total_bytes is None):
         return handle.read()
     _charge(os.fstat(handle.fileno()).st_size, cap, limits)
@@ -103,15 +152,64 @@ def _read_all(handle: IO, max_bytes: int | None = None):
     return data
 
 
+class _Charged(io.RawIOBase):
+    """A binary stream that charges every byte against a per-file cap and the active limits as it is read,
+    never handing out more than one byte past what they allow."""
+
+    def __init__(self, handle: IO[bytes], cap: int | None, limits: ReadLimits) -> None:
+        super().__init__()
+        self.handle, self.cap, self.limits, self.count = handle, cap, limits, 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        allowed = [b for b in (None if self.cap is None else self.cap - self.count,
+                               None if self.limits.total_bytes is None
+                               else self.limits.total_bytes - self.limits.bytes_read) if b is not None]
+        view = memoryview(buffer)
+        if allowed:
+            view = view[:max(0, min(allowed)) + 1]
+        data = self.handle.read(len(view))
+        size = len(data)
+        view[:size] = data
+        self.count += size
+        _charge(self.count, self.cap, None)
+        _charge(size, None, self.limits)
+        self.limits.bytes_read += size
+        return size
+
+
 def _walk_allowed() -> bool:
     """Count one directory against the active limits; False once the directory budget is used up."""
     limits = _LIMITS.get()
     if limits is None or limits.directories is None:
         return True
     if limits.directories_walked >= limits.directories:
-        limits.truncated = True
+        limits.stop("directories")
         return False
     limits.directories_walked += 1
+    return True
+
+
+def _deeper_allowed(level: int) -> bool:
+    """Whether a walk may enter a directory ``level`` levels below its start."""
+    limits = _LIMITS.get()
+    if limits is None or limits.depth is None or level <= limits.depth:
+        return True
+    limits.stop("depth")
+    return False
+
+
+def _entry_allowed() -> bool:
+    """Count one directory entry against the active limits; False once the entry budget is used up."""
+    limits = _LIMITS.get()
+    if limits is None or limits.entries is None:
+        return True
+    if limits.entries_listed >= limits.entries:
+        limits.stop("entries")
+        return False
+    limits.entries_listed += 1
     return True
 
 
@@ -201,8 +299,26 @@ def read_file_bytes(path: Path) -> bytes:
 
 
 def read_file_text(path: Path, encoding: str = "utf-8") -> str:
-    with _open(path, encoding) as handle:
-        return _read_all(handle)
+    if _LIMITS.get() is None:
+        with _open(path, encoding) as handle:
+            return handle.read()
+    # Within limits, charge bytes, not decoded characters; universal newlines as in text mode.
+    with _open(path) as handle:
+        return _read_all(handle).decode(encoding).replace("\r\n", "\n").replace("\r", "\n")
+
+
+def read_head(path: Path, size: int) -> bytes:
+    """At most the first ``size`` bytes of a file, charged against the active limits before they are read
+    (for recognising a file by its content without reading all of it)."""
+    with _open(path) as handle:
+        limits = _LIMITS.get()
+        if limits is not None:
+            size = min(size, os.fstat(handle.fileno()).st_size)
+            _charge(size, None, limits)
+        data = handle.read(size)
+        if limits is not None:
+            limits.bytes_read += len(data)
+        return data
 
 
 def _read_bounded(path: Path, max_bytes: int | None) -> bytes:
@@ -239,28 +355,35 @@ def open_text(path: Path, encoding: str = "utf-8") -> AbstractContextManager[Tex
 
 @contextmanager
 def _open_counted(path: Path, encoding: str):
-    """A text handle for streaming; within ``read_limits`` the file's size is charged when it opens."""
-    with _open(path, encoding) as handle:
-        limits = _LIMITS.get()
-        if limits is not None and (limits.file_bytes is not None or limits.total_bytes is not None):
-            size = os.fstat(handle.fileno()).st_size
-            _charge(size, limits.file_bytes, limits)
-            limits.bytes_read += size
-        yield handle
-
-
-def _walk_directory(path: Path, descriptor: int, onerror):
-    """Yield before descent, keeping the directory pinned while callers prune."""
-    if not _walk_allowed():
+    """A text handle for streaming. Within ``read_limits`` it decodes a binary stream that charges every byte as
+    it is read (after an fstat check), so neither the file's size at open nor its growth can pass the limits."""
+    limits = _LIMITS.get()
+    if limits is None or (limits.file_bytes is None and limits.total_bytes is None):
+        with _open(path, encoding) as handle:
+            yield handle
         return
+    with _open(path) as handle:
+        _charge(os.fstat(handle.fileno()).st_size, limits.file_bytes, limits)
+        with io.TextIOWrapper(io.BufferedReader(_Charged(handle, limits.file_bytes, limits)),
+                              encoding=encoding) as text:
+            yield text
+
+
+def _listing(descriptor: int, onerror) -> tuple[list[str], list[str], set[str]] | None:
+    """One directory's (directories, files, names safe to descend), or None if it cannot be listed. Within
+    ``read_limits`` the listing stops when the entry budget is used up."""
     try:
+        entries = []
         with os.scandir(descriptor) as iterator:
-            entries = list(iterator)
+            for entry in iterator:
+                if not _entry_allowed():
+                    break
+                entries.append(entry)
     except OSError as error:
         if onerror is None:
             raise
         onerror(error)
-        return
+        return None
 
     directories, files, descend = [], [], set()
     for entry in entries:
@@ -283,23 +406,60 @@ def _walk_directory(path: Path, descriptor: int, onerror):
                 descend.add(entry.name)
         else:
             files.append(entry.name)
+    return directories, files, descend
 
+
+_DONE = object()
+
+
+def _walk_directory(path: Path, descriptor: int, onerror):
+    """Yield before descent, keeping each directory pinned while callers prune. The walk is iterative and
+    depth-first in the same order as a recursive one, so a deep tree meets ``read_limits``' depth instead of
+    Python's recursion limit; each open level holds one descriptor, closed when the walk leaves it."""
+    if not _walk_allowed():
+        return
+    listing = _listing(descriptor, onerror)
+    if listing is None:
+        return
+    directories, files, descend = listing
     yield path, directories, files
-    for name in directories:
-        if name not in descend:
-            continue  # Directory symlinks are listed but never opened.
-        try:
-            child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                            dir_fd=descriptor)
-        except OSError as error:
-            if onerror is None:
+    stack = [(path, descriptor, iter(directories), descend, False)]
+    try:
+        while stack:
+            here, fd, names, safe, _owned = stack[-1]
+            name = next(names, _DONE)
+            if name is _DONE:
+                stack.pop()
+                if _owned:
+                    os.close(fd)
+                continue
+            if name not in safe:
+                continue  # Directory symlinks are listed but never opened.
+            if not _deeper_allowed(len(stack)):
+                continue
+            try:
+                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError as error:
+                if onerror is None:
+                    raise
+                onerror(error)
+                continue
+            try:
+                listing = _listing(child, onerror) if _walk_allowed() else None
+            except BaseException:
+                os.close(child)
                 raise
-            onerror(error)
-            continue
-        try:
-            yield from _walk_directory(path / name, child, onerror)
-        finally:
-            os.close(child)
+            if listing is None:
+                os.close(child)
+                continue
+            directories, files, descend = listing
+            stack.append((here / name, child, iter(()), descend, True))
+            yield here / name, directories, files
+            stack[-1] = (here / name, child, iter(directories), descend, True)
+    finally:
+        for _here, fd, _names, _safe, owned in stack:
+            if owned:
+                os.close(fd)
 
 
 def walk_files(path: Path, onerror: Callable[[OSError], None] | None = None
@@ -307,10 +467,13 @@ def walk_files(path: Path, onerror: Callable[[OSError], None] | None = None
     """Walk from a pinned descriptor so directory swaps cannot disclose outside filenames."""
     root = _ROOT.get()
     if root is None:
-        for entry in os.walk(path, onerror=onerror):
+        start = Path(path)
+        for current, dirnames, filenames in os.walk(path, onerror=onerror):
             if not _walk_allowed():
                 return
-            yield entry
+            yield current, dirnames, filenames
+            if dirnames and not _deeper_allowed(len(Path(current).relative_to(start).parts) + 1):
+                dirnames[:] = []
         return
     base, root_fd = root
     resolved = Path(path).resolve()

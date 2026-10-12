@@ -22,7 +22,7 @@ from pathlib import Path, PurePath, PureWindowsPath
 
 from memcore.display import code_span as _code_span, report_text
 from memcore.paths import InputPathError, component_skip_reason, input_path
-from memcore.reading import confinement_root, read_input_text
+from memcore.reading import charge, confinement_root, read_input_text
 from memcore.terminal import diagnostic_line
 
 from .corpus import Skipped
@@ -172,6 +172,7 @@ def read_batch_object(stdout) -> tuple[str, str, bytes] | None:
     size = int(parts[2])
     if size > MAX_GIT_OBJECT:
         raise HistoryError("git cat-file returned an object larger than 32MB")
+    charge(size)  # within read_limits: ReadLimitError before the body is read
     data = stdout.read(size)
     if len(data) != size or stdout.read(1) != b"\n":
         raise HistoryError("git cat-file returned a truncated object")

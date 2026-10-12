@@ -16,6 +16,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from memcore.reading import take
+
 from . import __version__
 from .audit import ATTENTION, AuditReport, Status, audit_claims
 from .corpus import DIFF_HEADER, HISTORY_HEADER
@@ -83,13 +85,18 @@ def compare(base: list[Claim], head: list[Claim]) -> list[Change]:
     added = [c for c in head if c.id not in old_by_id]
     renames = _section_renames([(old_by_id[c.id], c) for c in head if c.id in old_by_id])
     candidates = []
+    budget = True
     for i, old in enumerate(removed):
         sections = {old.section, renames.get((old.path, old.section), old.section)}
         for j, new in enumerate(added):
             if new.path == old.path and new.section in sections:
+                if not (budget := budget and take("comparisons") == 1):
+                    break  # within read_limits only: the remaining pairs are not compared
                 score = similarity(old.text, new.text)
                 if score >= SIMILAR:
                     candidates.append((-score, i, j))
+        if not budget:
+            break
     pairs: dict[int, tuple[int, float]] = {}
     paired_old: set[int] = set()
     for negative, i, j in sorted(candidates):

@@ -1,6 +1,6 @@
 """MemFalsify: evidence-grounded auditing and active falsification of agent memory."""
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 from .audit import (
     ATTENTION,

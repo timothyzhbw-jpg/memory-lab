@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from memcore import EvidenceSpan, MediaRef, SidecarError, load_sidecar, make_span, sha256_bytes, sidecar_format
 from memcore.paths import InputPathError, input_path
-from memcore.reading import ReadLimitError, read_input_bytes, walk_files
+from memcore.reading import ReadLimitError, available, read_input_bytes, take, walk_files
 from memcore.sidecar import LABELS, MEDIA_SUFFIXES
 
 from .text import features, sentence_spans
@@ -61,7 +61,7 @@ def _matches(relative: str, patterns: list[str], directory: bool = False) -> boo
 def _passage(relative: str, digest: str, text: str, start: int, end: int,
              media: MediaRef | None = None) -> Passage | None:
     words, numbers = features(text[start:end])
-    if not words:
+    if not words or not take("passages"):  # take: within read_limits only, a passage budget
         return None
     span = make_span(relative, digest, text, start, end, source_kind="file", media=media)
     return Passage(span=span, words=words, numbers=numbers)
@@ -124,6 +124,9 @@ def scan(root: Path, exclude: Iterable[str] = (),
             if path.suffix.lower() in MEDIA:
                 media[name] = relative
                 local.append(Skipped(path=relative, reason=NO_SIDECAR))
+                continue
+            if not available("passages"):
+                local.append(Skipped(path=relative, reason=BUDGET_SKIPPED))
                 continue
             try:
                 # The limit holds while reading: a larger file is refused after at most MAX_BYTES + 1 bytes.

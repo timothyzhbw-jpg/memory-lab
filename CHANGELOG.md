@@ -16,7 +16,9 @@ Release 0.4 contains:
 
 ## Unreleased
 
-Changes after release 0.4. No version numbers have changed yet; memlab-ui 0.1.0 is new.
+Changes after release 0.4. The packages in the Release 0.4 section (memlab-core 0.3.0, memfalsify 0.4.0,
+orgmemory 0.4.0, memlab-mcp 0.4.0) are already released. Not yet released: memlab-core 0.4.0, memfalsify 0.4.1
+and the new memlab-ui 0.1.0; orgmemory and memlab-mcp keep their versions.
 
 ### Added
 
@@ -25,25 +27,43 @@ Changes after release 0.4. No version numbers have changed yet; memlab-ui 0.1.0 
   agent file" runs the lexical audit (or, when the root is a repository, the diff since a revision) and
   shows each flagged statement next to the quote that seems to disagree; "Team decisions" opens the first
   decision log and shows each topic's status, the deciding quote, a timeline of what counted, audit
-  findings and changes between two dates. It uses only the standard library's `http.server` and has no
-  JavaScript. Every page reads in English or Simplified Chinese (`?lang=zh`, with a switch in the sidebar).
-  Public API: `memlab_ui.create_server` (binds 127.0.0.1 without serving) and `__version__`. Requires
-  memlab-core 0.3, memfalsify 0.4 and orgmemory 0.4. See [docs/ui.md](docs/ui.md).
+  findings and changes between two dates. Memory Lab's own files (review records, decision logs, generated
+  reports and exports) are recognised by content and listed as left out, never quoted as evidence. It uses
+  only the standard library's `http.server` and has no JavaScript. Every page reads in English or Simplified
+  Chinese (`?lang=zh`, with a switch in the sidebar). Public API: `memlab_ui.create_server` (binds 127.0.0.1
+  without serving) and `__version__`. Requires memlab-core 0.4, memfalsify 0.4.1 and orgmemory 0.4. See
+  [docs/ui.md](docs/ui.md).
 
 ### Security
 
 - memlab-ui binds 127.0.0.1 only and checks the `Host` header against DNS rebinding; refuses requests sent by
-  other sites (`Sec-Fetch-Site` other than `same-origin` or `none`, or a foreign `Origin`) before any work;
-  answers GET and HEAD only (405 otherwise, HTTP/0.9 gets a 400 with full headers); serves at most 16
-  connections and computes at most 2 pages at once; needs the request line and headers within 10 s in total;
-  confines every path to `--root` with confined reads; writes nothing; keeps model verifiers off unless
-  `--allow-model-verifiers`; escapes every untrusted value; sends a strict Content-Security-Policy that loads
-  only its own logo and favicon; and answers errors without tracebacks or outside paths.
+  other sites (`Sec-Fetch-Site` other than `same-origin` or `none`, or a foreign `Origin`) before any work; runs a
+  model check only with a random per-run token that only its own form carries; answers GET and HEAD only (405
+  otherwise, HTTP/0.9 gets a 400 with full headers); serves at most 16 connections and computes at most 2 pages
+  at once; needs the request line and headers within 10 s in total; confines every path to `--root` with
+  confined reads; writes nothing; keeps model verifiers off unless `--allow-model-verifiers`; escapes every
+  untrusted value; sends a strict Content-Security-Policy that loads only its own logo and favicon; and
+  answers errors without tracebacks or outside paths. Path and subject values are used exactly as sent.
 - MemFalsify's evidence scan enforces its 2 MB limit while reading: `read_input_bytes()` takes an optional
   `max_bytes` (default unchanged), checks the opened file's size with fstat and reads at most `max_bytes + 1`
-  bytes, so a large or growing file is never held in memory whole. memlab-core's internal `read_limits()`
-  bounds the bytes per file, the bytes in total and the directories walked in one execution context;
-  memlab-ui sets it per page (8 MB, 64 MB, 20,000 folders) and says when a page was cut short.
+  bytes, so a large or growing file is never held in memory whole.
+- memlab-core's internal `read_limits()` bounds one execution context: bytes per file and in total, charged in
+  bytes before decoding and, for `open_text` streams, as each byte is read; directories, directory entries
+  (counted while listing) and depth for every walk; and named budgets that MemFalsify draws from while it
+  builds (`claims` parsed, evidence `passages`, claim-passage and old-new `comparisons`). Git objects are charged
+  before their bytes are read. memlab-ui sets these per page and says when a page was cut short; outside
+  `read_limits` nothing is bounded and every read returns what it did before. The confined walk is iterative,
+  so a deep tree meets the depth limit instead of Python's recursion limit.
+
+### Changed
+
+- memlab-core 0.4.0 adds the internal read-limit API above (`read_limits`, `take`, `available`, `charge`,
+  `read_head`, `ReadLimitError`, `read_input_bytes(max_bytes=...)`); its public `__all__` is unchanged.
+  memfalsify 0.4.1 and memlab-ui use it and require `memlab-core>=0.4,<0.5` (memlab-ui also
+  `memfalsify>=0.4.1,<0.5`). orgmemory and memlab-mcp need nothing new: their pins now admit memlab-core 0.3 or
+  0.4 (`>=0.3,<0.5`), and their versions stay. `tests/test_packaging.py` checks that every package imports only
+  names the lowest memlab-core its pin admits defines (released versions' names are recorded in
+  `tests/memcore_exports.json`).
 
 ### Repository
 
@@ -480,6 +500,10 @@ a symlink out of the root is never read.
 
 ## memlab-core
 
+### 0.4.0 - Unreleased
+
+Changes are collected in the [Unreleased section](#unreleased): the internal read-limit API.
+
 ### 0.3.0 - 2026-10-11
 
 Changes are collected in the [release 0.4 section](#release-04).
@@ -511,6 +535,10 @@ Changes are collected in the [release 0.4 section](#release-04).
   symlinks inside a root. Evidence manifests and append-only JSONL storage.
 
 ## memfalsify
+
+### 0.4.1 - Unreleased
+
+Changes are collected in the [Unreleased section](#unreleased): the 2 MB evidence limit holds while reading, and the scan, the parser and the diff draw from memlab-core's read limits. Requires memlab-core 0.4.
 
 ### 0.4.0 - 2026-10-11
 

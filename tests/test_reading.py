@@ -1,4 +1,5 @@
 """Confined traversal regressions, including the independent merge review cases."""
+import io
 import os
 from contextlib import contextmanager, nullcontext
 
@@ -6,8 +7,9 @@ import pytest
 
 from conftest import requires_confinement
 from memcore import reading
-from memcore.reading import (ReadLimitError, confined_reads, open_text, read_file_bytes, read_input_bytes,
-                             read_limits, walk_files)
+from memcore.jsonl import read_jsonl
+from memcore.reading import (ReadLimitError, confined_reads, open_text, read_file_bytes, read_file_text,
+                             read_input_bytes, read_limits, walk_files)
 from memfalsify.corpus import scan
 
 
@@ -377,3 +379,130 @@ def test_scan_skips_files_over_two_megabytes_while_reading(tmp_path, monkeypatch
     passages, skipped = scan(tmp_path)
     assert {"path": "huge.md", "reason": "larger than 2 MB"} in [s.model_dump() for s in skipped]
     assert set(largest) == {2_000_000} and [p.span.path for p in passages] == ["ok.md"]
+
+
+# --- round 3: bytes, streams, git objects, named budgets and deep trees ---------------------------------------
+
+@requires_confinement
+def test_text_reads_are_charged_in_bytes_not_characters(tmp_path):
+    (tmp_path / "emoji.txt").write_text("\U0001F600\U0001F600\U0001F600", encoding="utf-8")  # 3 characters, 12 bytes
+    with confined_reads(tmp_path), read_limits(file_bytes=10):
+        with pytest.raises(ReadLimitError):
+            read_file_text(tmp_path / "emoji.txt")
+    with confined_reads(tmp_path), read_limits(total_bytes=100) as limits:
+        assert read_file_text(tmp_path / "emoji.txt") == "\U0001F600" * 3
+    assert limits.bytes_read == 12
+
+
+@requires_confinement
+def test_text_reads_within_limits_return_what_they_did_before(tmp_path):
+    (tmp_path / "mixed.txt").write_bytes(b"one\r\ntwo\rthree\nfour")
+    with confined_reads(tmp_path):
+        plain = read_file_text(tmp_path / "mixed.txt")
+        with open_text(tmp_path / "mixed.txt") as handle:
+            lines = list(handle)
+        with read_limits(file_bytes=1000, total_bytes=1000):
+            assert read_file_text(tmp_path / "mixed.txt") == plain
+            with open_text(tmp_path / "mixed.txt") as handle:
+                assert list(handle) == lines
+
+
+@requires_confinement
+def test_streams_are_charged_as_they_are_read_even_if_the_size_lies(tmp_path, monkeypatch):
+    path = tmp_path / "events.jsonl"
+    path.write_text("".join('{"n": %d}\n' % i for i in range(1000)), encoding="utf-8")  # about 9,000 bytes
+    real_fstat = os.fstat
+
+    class Small:  # fstat ran before the file grew to its real size
+        def __init__(self, result):
+            self.result = result
+
+        def __getattr__(self, name):
+            return 8 if name == "st_size" else getattr(self.result, name)
+
+    monkeypatch.setattr(reading.os, "fstat", lambda fd: Small(real_fstat(fd)))
+    with confined_reads(tmp_path), read_limits(total_bytes=1000) as limits:
+        with pytest.raises(ReadLimitError) as refused:
+            list(read_jsonl(path))
+    assert refused.value.budget and limits.truncated and limits.bytes_read <= 1001
+    with confined_reads(tmp_path), read_limits(file_bytes=1000) as limits:
+        with pytest.raises(ReadLimitError):
+            list(read_jsonl(path))
+    monkeypatch.undo()
+    assert len(list(read_jsonl(path))) == 1000  # unbounded outside read_limits
+
+
+def test_git_objects_are_charged_before_their_bytes_are_read():
+    from memfalsify.gitstore import read_batch_object
+
+    stdout = io.BytesIO(b"0123 blob 100\n" + b"x" * 100 + b"\n")
+    with read_limits(total_bytes=50) as limits, pytest.raises(ReadLimitError):
+        read_batch_object(stdout)
+    assert limits.truncated and stdout.tell() == len(b"0123 blob 100\n")
+    stdout.seek(0)
+    with read_limits(total_bytes=500) as limits:
+        assert read_batch_object(stdout)[2] == b"x" * 100
+    assert limits.bytes_read == 100
+
+
+def test_named_budgets_bound_claims_passages_and_comparisons(tmp_path):
+    from memfalsify import parse_memory
+    from memfalsify.audit import shortlist
+
+    (tmp_path / "MEMORY.md").write_text("".join(f"- Service {i} answers within {i} seconds.\n" for i in range(20)),
+                                        encoding="utf-8")
+    with read_limits(items={"claims": 5}) as limits:
+        claims, _ = parse_memory(tmp_path / "MEMORY.md")
+    assert len(claims) == 5 and limits.exhausted == {"claims"}
+    assert len(parse_memory(tmp_path / "MEMORY.md")[0]) == 20
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    for name in ("a.md", "b.md", "c.md"):
+        (evidence / name).write_text("Service one answers within one second. Service two answers fast.\n" * 3,
+                                     encoding="utf-8")
+    with read_limits(items={"passages": 4}) as limits:
+        passages, skipped = scan(evidence)
+    assert len(passages) == 4 and "passages" in limits.exhausted
+    assert {s.reason for s in skipped} == {"not read: the read budget for this request is used up"}
+    everything, _ = scan(evidence)
+    with read_limits(items={"comparisons": 2}) as limits:
+        assert len(shortlist(claims[1], everything, min_coverage=0.0)) <= 2
+    assert "comparisons" in limits.exhausted
+
+
+@requires_confinement
+def test_directory_entries_are_counted_while_listing(tmp_path):
+    for i in range(10):
+        (tmp_path / f"f{i}.md").write_text("x", encoding="utf-8")
+    with confined_reads(tmp_path), read_limits(entries=4) as limits:
+        (_, _, files), = list(walk_files(tmp_path))
+    assert len(files) == 4 and limits.exhausted == {"entries"}
+
+
+def _deep(base, levels):
+    """``levels`` nested directories, made relative to descriptors so no absolute path gets long."""
+    fd = os.open(base, os.O_RDONLY)
+    try:
+        for _ in range(levels):
+            os.mkdir("d", dir_fd=fd)
+            child = os.open("d", os.O_RDONLY, dir_fd=fd)
+            os.close(fd)
+            fd = child
+    finally:
+        os.close(fd)
+
+
+@requires_confinement
+def test_deep_trees_walk_without_recursion_and_stop_at_the_depth_limit(tmp_path, monkeypatch):
+    _deep(tmp_path, 150)
+    import sys
+    old = sys.getrecursionlimit()
+    sys.setrecursionlimit(100)  # a recursive walk would fail long before 150 levels
+    try:
+        with confined_reads(tmp_path):
+            assert len(list(walk_files(tmp_path))) == 151
+            with read_limits(depth=64) as limits:
+                walked = list(walk_files(tmp_path))
+    finally:
+        sys.setrecursionlimit(old)
+    assert len(walked) == 65 and limits.exhausted == {"depth"}

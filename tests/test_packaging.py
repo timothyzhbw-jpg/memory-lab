@@ -1,5 +1,9 @@
 """Package metadata: each version agrees with ``__version__``, and every pin between the packages admits
 the version in this repository, so the five packages install together from one checkout."""
+import ast
+import importlib
+import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -7,6 +11,7 @@ import pytest
 
 tomllib = pytest.importorskip("tomllib")  # Python 3.11+
 from packaging.requirements import Requirement  # noqa: E402  (a pytest dependency)
+from packaging.version import Version  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 # distribution name -> (directory under packages/, import name)
@@ -54,3 +59,67 @@ def test_changelog_has_an_entry_for_each_current_version():
     for name, (_, version) in _projects().items():
         assert name in sections, f"CHANGELOG.md has no '## {name}' section"
         assert f"\n### {version} - " in sections[name], f"CHANGELOG.md has no {name} {version} entry"
+
+
+# The names each memcore module defined in released memlab-core versions (from their tags; see the file).
+MEMCORE_EXPORTS = json.loads((REPO / "tests" / "memcore_exports.json").read_text(encoding="utf-8"))
+
+
+def _memcore_imports(source: Path) -> set[tuple[str, str]]:
+    """Every (module, name) a package imports from memcore with ``from memcore... import name``."""
+    found = set()
+    for path in sorted(source.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.level == 0 and (node.module or "").split(".")[0] == "memcore":
+                found.update((node.module, alias.name) for alias in node.names)
+    return found
+
+
+def _floor(requirement: Requirement) -> Version:
+    floors = [Version(spec.version) for spec in requirement.specifier if spec.operator in (">=", "==", "~=")]
+    assert floors, f"{requirement} has no lower bound"
+    return max(floors)
+
+
+def _missing(directory: str, module: str, requirement: Requirement, current: str) -> list[tuple[str, str]]:
+    """The memcore names the package imports that the lowest memlab-core its pin admits does not define. A name
+    can be a submodule (``from memcore import htmlpage``)."""
+    floor = _floor(requirement)
+    imports = _memcore_imports(REPO / "packages" / directory / "src" / module)
+    if floor == Version(current):
+        def defined(name: str, symbol: str) -> bool:
+            return hasattr(importlib.import_module(name), symbol) or _is_module(f"{name}.{symbol}")
+    else:
+        recorded = [version for version in MEMCORE_EXPORTS if Version(version) == floor]
+        assert recorded, f"record memlab-core {floor}'s module names in tests/memcore_exports.json"
+        names = MEMCORE_EXPORTS[recorded[0]]
+
+        def defined(name: str, symbol: str) -> bool:
+            return symbol in names.get(name, ()) or f"{name}.{symbol}" in names
+    return sorted((name, symbol) for name, symbol in imports if not defined(name, symbol))
+
+
+def _is_module(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+def test_each_package_imports_only_what_its_lowest_memcore_defines():
+    """A pin that admits an older memlab-core than the code needs installs, then fails with ImportError."""
+    projects = _projects()
+    current = projects["memlab-core"][1]
+    for name, (directory, module) in PACKAGES.items():
+        if name == "memlab-core":
+            continue
+        pins = [Requirement(r) for r in projects[name][0].get("dependencies", [])
+                if Requirement(r).name == "memlab-core"]
+        assert len(pins) == 1, name
+        assert not _missing(directory, module, pins[0], current), (name, str(pins[0]))
+
+
+def test_the_import_check_catches_a_pin_that_is_too_low():
+    current = _projects()["memlab-core"][1]
+    missing = _missing("memfalsify", "memfalsify", Requirement("memlab-core>=0.3,<0.5"), current)
+    assert ("memcore.reading", "ReadLimitError") in missing and ("memcore.reading", "take") in missing

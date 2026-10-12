@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from memcore.paths import InputPathError, input_path
-from memcore.reading import confinement_root, read_input_text
+from memcore.reading import confinement_root, read_input_text, take
 
 from .corpus import Skipped
 from .formats import MARKDOWN, MemoryFormat, Value, detect, frontmatter, metadata_of
@@ -154,9 +154,11 @@ def parse_text(text: str, display: str, fmt: MemoryFormat = MARKDOWN) -> tuple[l
             # An index entry ("- [Title](file.md) — hook", "@notes.md") points at claims; it is not one itself.
             links.extend(targets)
             continue
-        claims += [Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1, section=section,
-                         metadata=dict(metadata))
-                   for sentence, _, _ in sentences(raw)]
+        for sentence, _, _ in sentences(raw):
+            if not take("claims"):  # within read_limits only: the rest of the file is not parsed
+                return claims, links
+            claims.append(Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1,
+                                section=section, metadata=dict(metadata)))
     return claims, links
 
 
