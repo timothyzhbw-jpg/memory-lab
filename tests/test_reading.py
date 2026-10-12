@@ -6,7 +6,7 @@ from contextlib import contextmanager, nullcontext
 
 import pytest
 
-from conftest import requires_confinement
+from conftest import requires_confinement, write_text_exact
 from memcore import SidecarError, reading
 from memcore.jsonl import read_jsonl
 from memcore.reading import (ReadLimitError, confined_reads, open_text, read_file_bytes, read_file_text,
@@ -63,8 +63,8 @@ def test_scan_fails_closed_on_uncached_entry_type(tmp_path, wrap_scandir_entries
     root = tmp_path.resolve()
     docs = root / "docs"
     docs.mkdir()
-    (docs / "counter.md").write_text("The rate limit is five requests per minute.\n")
-    (root / "safe.md").write_text("The rate limit is one hundred requests per minute.\n")
+    write_text_exact(docs / "counter.md", "The rate limit is five requests per minute.\n")
+    write_text_exact(root / "safe.md", "The rate limit is one hundred requests per minute.\n")
     wrap_scandir_entries(UnknownTypeEntry)
     docs.chmod(0o400)  # Listing allowed, but metadata lookups need search permission.
     try:
@@ -85,7 +85,7 @@ def test_confined_classification_error_is_reported_and_entry_retained(
     """Injected errors also cover hosts/users that bypass chmod restrictions."""
     root = tmp_path.resolve()
     (root / "docs").mkdir()
-    (root / "safe.md").write_text("Accessible evidence.\n")
+    write_text_exact(root / "safe.md", "Accessible evidence.\n")
     failure = PermissionError("cannot classify docs")
 
     class FailedEntry(UnknownTypeEntry):
@@ -165,8 +165,8 @@ def test_confined_traversal_error_calls_onerror(tmp_path, monkeypatch, operation
 def test_confined_exclusion_prunes_before_open(tmp_path, monkeypatch, pattern):
     root = tmp_path.resolve()
     (root / "docs" / "nested").mkdir(parents=True)
-    (root / "docs" / "nested" / "api.md").write_text("This is counterevidence.\n")
-    (root / "safe.md").write_text("This is accessible evidence.\n")
+    write_text_exact(root / "docs" / "nested" / "api.md", "This is counterevidence.\n")
+    write_text_exact(root / "safe.md", "This is accessible evidence.\n")
     (root / "alias").symlink_to("docs", target_is_directory=True)
     original = os.open
 
@@ -186,7 +186,7 @@ def test_confined_exclusion_prunes_before_open(tmp_path, monkeypatch, pattern):
 def test_links_and_special_files(tmp_path, confined):
     root = tmp_path.resolve()
     (root / "docs").mkdir()
-    (root / "docs" / "api.md").write_text("The rate limit is five requests per minute.\n")
+    write_text_exact(root / "docs" / "api.md", "The rate limit is five requests per minute.\n")
     (root / "alias").symlink_to("docs", target_is_directory=True)
     (root / "outside").symlink_to(root.parent, target_is_directory=True)
     (root / "broken.md").symlink_to("absent.md")
@@ -228,9 +228,9 @@ def test_confined_walk_lists_directory_links_without_descending(tmp_path, monkey
 def test_confined_walk_keeps_descriptors_pinned_across_yields(tmp_path):
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "docs").mkdir(parents=True)
-    (root / "docs" / "inside.md").write_text("Inside evidence.\n")
+    write_text_exact(root / "docs" / "inside.md", "Inside evidence.\n")
     (outside / "docs").mkdir(parents=True)
-    (outside / "docs" / "private-filename.md").write_text("Outside evidence.\n")
+    write_text_exact(outside / "docs" / "private-filename.md", "Outside evidence.\n")
     root, outside = root.resolve(), outside.resolve()
     with confined_reads(root):
         walker = walk_files(root)
@@ -248,7 +248,7 @@ def test_confined_walk_rejects_directory_swap_before_descent(tmp_path, monkeypat
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "docs").mkdir(parents=True)
     outside.mkdir()
-    (outside / "private-filename.md").write_text("Outside evidence.\n")
+    write_text_exact(outside / "private-filename.md", "Outside evidence.\n")
     original = os.open
     called, errors = [], []
 
@@ -333,8 +333,8 @@ def test_a_file_that_grows_during_the_read_is_refused_after_limit_plus_one(tmp_p
 def test_read_limits_bound_files_total_bytes_and_directories(tmp_path):
     for name in ("a", "b", "c"):
         (tmp_path / name).mkdir()
-        (tmp_path / name / "notes.md").write_text("The rate limit is 60 per minute.\n" * 3, encoding="utf-8")
-    (tmp_path / "big.md").write_text("word " * 200, encoding="utf-8")
+        write_text_exact(tmp_path / name / "notes.md", "The rate limit is 60 per minute.\n" * 3)
+    write_text_exact(tmp_path / "big.md", "word " * 200)
     with confined_reads(tmp_path), read_limits(file_bytes=500) as limits:
         with pytest.raises(ReadLimitError):
             read_file_bytes(tmp_path / "big.md")
@@ -368,7 +368,7 @@ def test_walk_limits_apply_without_confinement_too(tmp_path):
 
 def test_scan_skips_files_over_two_megabytes_while_reading(tmp_path, monkeypatch):
     (tmp_path / "huge.md").write_bytes(b"The limit is 60.\n" * 130_000)
-    (tmp_path / "ok.md").write_text("The limit is 60.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "ok.md", "The limit is 60.\n")
     largest = []
     original = reading._read_all
 
@@ -386,7 +386,7 @@ def test_scan_skips_files_over_two_megabytes_while_reading(tmp_path, monkeypatch
 
 @requires_confinement
 def test_text_reads_are_charged_in_bytes_not_characters(tmp_path):
-    (tmp_path / "emoji.txt").write_text("\U0001F600\U0001F600\U0001F600", encoding="utf-8")  # 3 characters, 12 bytes
+    write_text_exact(tmp_path / "emoji.txt", "\U0001F600\U0001F600\U0001F600")  # 3 characters, 12 bytes
     with confined_reads(tmp_path), read_limits(file_bytes=10):
         with pytest.raises(ReadLimitError):
             read_file_text(tmp_path / "emoji.txt")
@@ -411,7 +411,7 @@ def test_text_reads_within_limits_return_what_they_did_before(tmp_path):
 @requires_confinement
 def test_streams_are_charged_as_they_are_read_even_if_the_size_lies(tmp_path, monkeypatch):
     path = tmp_path / "events.jsonl"
-    path.write_text("".join('{"n": %d}\n' % i for i in range(1000)), encoding="utf-8")  # about 9,000 bytes
+    write_text_exact(path, "".join('{"n": %d}\n' % i for i in range(1000)))  # about 9,000 bytes
     real_fstat = os.fstat
 
     class Small:  # fstat ran before the file grew to its real size
@@ -450,8 +450,7 @@ def test_named_budgets_bound_claims_passages_and_comparisons(tmp_path):
     from memfalsify import parse_memory
     from memfalsify.audit import shortlist
 
-    (tmp_path / "MEMORY.md").write_text("".join(f"- Service {i} answers within {i} seconds.\n" for i in range(20)),
-                                        encoding="utf-8")
+    write_text_exact(tmp_path / "MEMORY.md", "".join(f"- Service {i} answers within {i} seconds.\n" for i in range(20)))
     with read_limits(items={"claims": 5}) as limits:
         claims, _ = parse_memory(tmp_path / "MEMORY.md")
     assert len(claims) == 5 and limits.exhausted == {"claims"}
@@ -459,8 +458,7 @@ def test_named_budgets_bound_claims_passages_and_comparisons(tmp_path):
     evidence = tmp_path / "evidence"
     evidence.mkdir()
     for name in ("a.md", "b.md", "c.md"):
-        (evidence / name).write_text("Service one answers within one second. Service two answers fast.\n" * 3,
-                                     encoding="utf-8")
+        write_text_exact(evidence / name, "Service one answers within one second. Service two answers fast.\n" * 3)
     with read_limits(items={"passages": 4}) as limits:
         passages, skipped = scan(evidence)
     assert len(passages) == 4 and "passages" in limits.exhausted
@@ -474,7 +472,7 @@ def test_named_budgets_bound_claims_passages_and_comparisons(tmp_path):
 @requires_confinement
 def test_directory_entries_are_counted_while_listing(tmp_path):
     for i in range(10):
-        (tmp_path / f"f{i}.md").write_text("x", encoding="utf-8")
+        write_text_exact(tmp_path / f"f{i}.md", "x")
     with confined_reads(tmp_path), read_limits(entries=4) as limits:
         (_, _, files), = list(walk_files(tmp_path))
     assert len(files) == 4 and limits.exhausted == {"entries"}
@@ -524,7 +522,7 @@ class _LyingSize:
 @requires_confinement
 def test_refused_reads_are_charged_and_mark_the_view_incomplete(tmp_path, monkeypatch):
     path = tmp_path / "grows.jsonl"
-    path.write_text("".join('{"n": %d}\n' % i for i in range(200)), encoding="utf-8")
+    write_text_exact(path, "".join('{"n": %d}\n' % i for i in range(200)))
     real_fstat = os.fstat
     monkeypatch.setattr(reading.os, "fstat", lambda fd: _LyingSize(real_fstat(fd), 8))
     with confined_reads(tmp_path), read_limits(file_bytes=100) as limits:
@@ -570,7 +568,7 @@ def test_the_pinned_handle_fallback_enforces_and_charges_the_limits(tmp_path, mo
 
 def test_walk_entries_are_counted_without_confinement_too(tmp_path):
     for i in range(6):
-        (tmp_path / f"f{i}.md").write_text("x", encoding="utf-8")
+        write_text_exact(tmp_path / f"f{i}.md", "x")
     (tmp_path / "sub").mkdir()
     with read_limits(entries=4) as limits:
         _, dirs, files = list(walk_files(tmp_path))[0]
@@ -588,7 +586,7 @@ def test_media_hashing_obeys_the_page_limits(tmp_path):
     digest = hashlib.sha256(media).hexdigest()
     sidecar = (f"WEBVTT\n\nNOTE source_sha256: {digest}\n\n00:00.000 --> 00:02.000\n"
                "The public API rate limit is 60 requests per minute.\n")
-    (evidence / "clip.mp4.vtt").write_text(sidecar, encoding="utf-8")
+    write_text_exact(evidence / "clip.mp4.vtt", sidecar)
     assert load_sidecar(evidence, "clip.mp4.vtt", sidecar).media_sha256 == digest  # unlimited outside a page
     with confined_reads(tmp_path), read_limits(file_bytes=1000) as limits:
         with pytest.raises(SidecarError, match="over this page's read limit"):
