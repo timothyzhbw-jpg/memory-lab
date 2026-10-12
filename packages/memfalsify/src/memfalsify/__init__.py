@@ -56,6 +56,9 @@ from .memory import (
     parse_memory,
     parse_text,
 )
+from .openai_compat import (
+    OpenAICompatVerifier,
+)
 from .report import (
     to_markdown,
 )
@@ -98,6 +101,7 @@ __all__ = [
     "LLMVerifier",
     "LexicalVerifier",
     "MemoryFormat",
+    "OpenAICompatVerifier",
     "Proposal",
     "Relation",
     "RemovedClaim",

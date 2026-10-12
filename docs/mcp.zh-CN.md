@@ -35,7 +35,7 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 
 无效的工具调用返回 MCP 工具错误，连接仍可继续使用。参数结构校验错误只列字段名，不回显被拒绝的值；错误会隐藏根目录外的路径参数、后端诊断和堆栈。模型验证器失败时返回通用错误，提示检查 SDK、凭据和后端服务。
 
-默认验证器是 `lexical`，完全离线。`llm`、`jev`、`dual`、`cascade` 会把记忆和证据文本发到外部 API，并且产生费用。除非启动时加了 `--allow-model-verifiers`，服务器会拒绝它们。加上这个旗标后，`memfalsify_audit` 和 `memfalsify_diff` 会被标成会访问本机以外的服务。`memfalsify_diff` 上的模型验证器使用命令行的默认模型名和段落上限（每条记忆最多 8 段，覆盖率 0.2）。没有 `--llm-model`、`--jev-model`、`--accept-at`、`--max-judged`、`--min-coverage` 这些参数。
+默认验证器是 `lexical`，完全离线。`llm`、`jev`、`dual`、`cascade`、`openai` 会把记忆和证据文本发到外部 API，并且产生费用。除非启动时加了 `--allow-model-verifiers`，服务器会拒绝它们。`openai` 还需要在服务器启动时配置端点（见下文“运行”）；工具没有服务商、base URL、模型、key 或响应格式参数，客户端无法把文本发到别处，`verifier` 的说明会写出配置的模型和主机。加上这个旗标后，`memfalsify_audit` 和 `memfalsify_diff` 会被标成会访问本机以外的服务。`memfalsify_diff` 上的模型验证器使用命令行的默认模型名和段落上限（每条记忆最多 8 段，覆盖率 0.2）。没有 `--llm-model`、`--jev-model`、`--accept-at`、`--max-judged`、`--min-coverage` 这些参数。
 
 `base`、`head` 和 `to` 必须非空，不能以 `-` 开头，也不能包含控制字符。每个修订版本都会先解析成一个提交。记忆文件必须位于一个 git 工作区中，且该仓库的顶层目录、git 目录、公共目录（链接工作区指向主仓库的那个）和对象库都解析到 `--root` 之内，对象库里不能有 `objects/info/alternates`，也不能有符号链接。否则这三个 git 工具会拒绝该文件。`GIT_DIR` 以及其他指向仓库位置的变量会被忽略。git 自己的诊断信息不会返回，因为它可能点名根目录之外的路径。结果里的提交说明和作者名不可信。这三个工具会跟随本地 `.md` 链接，和命令行的默认行为一致。它们没有 `follow_links` 开关，也没有 `--output`、`--strict` 或 `--stale-days`。diff 审计使用 180 天的过期窗口。
 
@@ -103,6 +103,25 @@ memlab-mcp --root /absolute/path/to/data --allow-model-verifiers
 ```
 
 模型验证器从环境变量读取 `ANTHROPIC_API_KEY` 和 `TYPESAFE_API_KEY`。见 [local-setup.zh-CN.md](local-setup.zh-CN.md)。不要把 key 提交进仓库，也不要贴进聊天。
+
+`openai` 验证器（任何兼容 OpenAI 的 Chat Completions API）只由服务器启动参数配置，工具调用无法更改：
+
+```bash
+memlab-mcp --root /absolute/path/to/data --allow-model-verifiers \
+  --openai-provider ollama --openai-model <model>                       # 本地 Ollama 服务，不需要 key
+memlab-mcp --root /absolute/path/to/data --allow-model-verifiers \
+  --openai-provider grok --openai-model <model>                         # 读取 XAI_API_KEY
+```
+
+| 参数 | 含义 |
+|---|---|
+| `--openai-model` | 服务商使用的模型名。启用 `openai` 时必填，没有默认值 |
+| `--openai-provider` | 预设的 base URL 和 key 变量：`openai`（默认，`OPENAI_API_KEY`）、`grok`（`XAI_API_KEY`）、`deepseek`（`DEEPSEEK_API_KEY`）、`gemini`（`GEMINI_API_KEY`）或 `ollama`（`http://localhost:11434/v1`，不需要 key） |
+| `--openai-base-url` | 其他 base URL：`https://`，只有 `localhost`、`127.0.0.1`、`::1` 允许 `http://`；不能带用户名、密码、查询参数或片段 |
+| `--openai-api-key-env` | 存放 key 的环境变量名，覆盖服务商的默认变量。绝不是 key 本身 |
+| `--openai-response-format` | `json_schema`、`json_object` 或 `text`；`deepseek` 默认 `json_object`，其他情况（包括任何 `--openai-base-url`）默认 `json_schema` |
+
+服务器启动时检查这些参数，值不合法就以退出码 2 退出，并且不回显 URL 或变量名。没有 `--openai-model` 时，`verifier: "openai"` 的调用会以“未配置”为由被拒绝。key 变量必须在服务器进程的环境里：注册服务器时用 `-e`（Claude Code）或 `--env`（Codex）传入，或者从已设置该变量的 shell 启动客户端。每次调用的记忆和证据文本都会发到这个端点；预设、响应格式以及 key 如何不出现在输出里，见[本地开发说明](local-setup.zh-CN.md)。
 
 ## 注册到 Claude Code
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Set up a local development environment: .venv, the packages (editable, including memlab-mcp and memlab-ui), and the test suite.
-# Usage: ./scripts/setup-local.sh [--minimal]   (--minimal skips the optional Claude / Jev verifier SDKs)
+# Usage: ./scripts/setup-local.sh [--minimal]   (--minimal skips the optional Claude / Jev / OpenAI verifier SDKs)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,5 +25,7 @@ Try it in a browser, read-only:          memlab-ui --root examples   (then open 
 Model verifiers read their keys from the environment (never commit them):
   export ANTHROPIC_API_KEY=...     # memfalsify --verifier llm / dual / cascade
   export TYPESAFE_API_KEY=...      # memfalsify --verifier jev / dual / cascade
+  export OPENAI_API_KEY=...        # memfalsify --verifier openai (or XAI_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY
+                                   # with --provider grok / deepseek / gemini; --provider ollama needs none)
 See docs/local-setup.md for running the benchmark and continuing with Claude Code or Codex.
 NEXT

@@ -174,7 +174,12 @@ The CLI leaves `--strict` off and, without `--evidence`, has nothing to contradi
 | `evidence` | `.` | Evidence directory, relative to the workspace. |
 | `exclude` | none | Globs to leave out of the evidence, one per line (see Exclusions); with `memory: auto`, also out of discovery. |
 | `strict` | `"true"` | Fail when any instruction is challenged, conflicted, disputed or has possible counterevidence. |
-| `verifier` | `lexical` | `lexical`, `llm`, `jev`, `dual` or `cascade` (see Model verifiers). |
+| `verifier` | `lexical` | `lexical`, `llm`, `jev`, `dual`, `cascade` or `openai` (see Model verifiers). |
+| `openai-model` | none | `verifier: openai`: the model, as the provider names it. Required with that verifier; there is no default. |
+| `provider` | `openai` | `verifier: openai`: preset base URL and key variable: `openai`, `grok`, `deepseek`, `gemini` or `ollama`. |
+| `base-url` | the provider's | `verifier: openai`: another OpenAI-compatible base URL; `https://`, or `http://` only for `localhost`, `127.0.0.1` or `::1`. |
+| `api-key-env` | the provider's | `verifier: openai`: name of the environment variable that holds the key. Never the key itself. |
+| `openai-response-format` | the provider's | `verifier: openai`: `json_schema`, `json_object` or `text`; `json_object` for `deepseek`, `json_schema` otherwise (and for any `base-url`). |
 | `diff-base` | none | Revision to diff against, for example `${{ github.event.pull_request.base.sha }}`. When set, only claims added or changed since then are audited and can fail the step (see above). Needs that commit in the checkout. |
 | `as-of` | today | Reference date `YYYY-MM-DD` for the staleness check. |
 | `python-version` | `3.12` | Python for an isolated install under `$RUNNER_TEMP`. The job's own Python and `PATH` are not changed. |
@@ -197,9 +202,10 @@ an unquoted backslash escapes the next character, even on Windows.
 - With `strict: "false"`, the action always reports and emits a warning annotation when `attention` is above
   zero.
 - Errors fail the step with exit 2 whatever `strict` says: a missing evidence directory, an invalid `as-of`,
-  an unknown verifier, a model verifier without credentials, unreadable evidence, exclusion patterns that
-  leave zero indexed passages while there are claims to audit, or a `diff-base` that is not a commit in the
-  checkout.
+  an unknown verifier, a model verifier without credentials, an `openai` verifier without `openai-model` or
+  with an unknown `provider`, a refused `base-url` or an `api-key-env` that is not a variable name, unreadable
+  evidence, exclusion patterns that leave zero indexed passages while there are claims to audit, or a
+  `diff-base` that is not a commit in the checkout.
 
 A zero `attention` count means no contradiction was flagged. It does not guarantee that memory files exist
 or that their claims have support. Missing memory files still produce a notice and success; workflows that
@@ -261,9 +267,11 @@ files inside the evidence root, each is evidence for the other, even if one link
 | `jev` | TypeSafe AI's Jev judgment model | `TYPESAFE_API_KEY` |
 | `dual` | both; disagreements become DISPUTED | both |
 | `cascade` | Jev first, unsure answers escalated to Claude | both |
+| `openai` | any OpenAI-compatible Chat Completions API (`openai-model`, `provider`, `base-url`) | the `provider`'s variable (`OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`) or the one `api-key-env` names |
 
-The action installs the matching extra (`[llm]`, `[jev]` or `[all]`). Store keys as repository or organization
-secrets and pass them on the step. Never commit a key to the repository.
+The action installs the matching extra (`[llm]`, `[jev]`, `[openai]`, or Claude and Jev for `dual` and
+`cascade`). Store keys as repository or organization secrets and pass them on the step. Never commit a key to
+the repository.
 
 ```yaml
       - uses: timothyzhbw-jpg/memory-lab@<sha>
@@ -273,8 +281,37 @@ secrets and pass them on the step. Never commit a key to the repository.
           verifier: jev
 ```
 
+`verifier: openai` and its inputs came after release 0.4: the `v0.4.0` commit does not have them, so pin a
+later commit to use them. Name the model and, for a provider other than OpenAI, the preset. The key reaches the
+step as an environment variable; `api-key-env` names a different variable when yours is not the provider's
+default:
+
+```yaml
+      - uses: timothyzhbw-jpg/memory-lab@<sha>
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        with:
+          verifier: openai
+          provider: deepseek
+          openai-model: <model>
+```
+
+The inputs reach the run step through `env:` and are checked before anything is audited: an unknown
+`provider`, a `base-url` that is not `https://` (or `http://` to a loopback host) or carries a user name,
+password, query or fragment, an `api-key-env` that is not a variable name, or an unknown
+`openai-response-format` fails the step with exit 2, and the message never repeats the URL or name. The key
+is never printed: a provider error is logged as its status, plain-token type, code and param and a fixed hint,
+never the provider's message, and the key is redacted from the model's rationale. The OpenAI SDK's own
+`OPENAI_*` variables and the runner's proxy variables are ignored, and redirects are not followed;
+certificates are verified as the SDK ships it. `provider: ollama` needs an Ollama server reachable at
+`http://localhost:11434` inside the job. The verifier asks in `openai-response-format` (a strict JSON schema by
+default) and never retries in another format: if the endpoint rejects it (HTTP 400 or 422), set
+`openai-response-format: json_object` (or `text`). An answer that did not end with `finish_reason` `stop` or is
+not a valid verdict counts as no verdict; the action does not support `--batch` for it.
+
 - **Data leaves the runner.** Instruction text, and the evidence passages pre-selected for each instruction
-  (up to 8, by term overlap), are sent to Anthropic or TypeSafe AI. Use `exclude` to keep sensitive
+  (up to 8, by term overlap), are sent to Anthropic, TypeSafe AI or, with `openai`, the configured
+  endpoint. Use `exclude` to keep sensitive
   directories out, or stay with `lexical` where repository content must not leave your infrastructure.
 - **Forks get no secrets.** On `pull_request` from a fork, model verifiers fail with exit 2. Run them on `push`
   and same-repository pull requests, for example with
@@ -295,7 +332,8 @@ The action runs inside your job, so what it installs matters as much as its own 
   commit with a `# vX.Y.Z` comment, and so does this repository's CI. Pin the action itself to a commit too.
 - **Python dependencies come from a lock file.** The install step picks one file from
   [`action/requirements/`](../action/requirements) by `verifier`: `lexical.txt` (pydantic, typer),
-  `llm.txt` (adds `anthropic`), `jev.txt` (adds `typesafe-sdk`), and `all.txt` for `dual` and `cascade`. Each
+  `llm.txt` (adds `anthropic`), `jev.txt` (adds `typesafe-sdk`), `openai.txt` (adds `openai`), and `all.txt`
+  (`anthropic` and `typesafe-sdk`) for `dual` and `cascade`. Each
   pins every package, including transitive ones, to an exact version with the SHA-256 of every release file,
   and each includes `setuptools`, the build backend of the action's own packages. The step runs
   `pip install --require-hashes --only-binary :all: -r <file>`: pip refuses a package that is unpinned,

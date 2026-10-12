@@ -372,6 +372,39 @@ def test_cli_model_verifier_uses_cli_preselection(cases, tmp_path, monkeypatch):
     assert saved["metrics"]["confusion"]["contradicted"]["unsupported"] == 3
 
 
+def test_cli_openai_verifier_takes_the_endpoint_options(cases, tmp_path, monkeypatch):
+    from memfalsify import openai_compat
+
+    calls, built = [], []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        message = SimpleNamespace(content='{"relation": "unrelated", "rationale": "-"}', refusal=None)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=message)], usage=None)
+
+    real = openai_compat.OpenAICompatVerifier
+
+    def make(model, provider, base_url, api_key_env, **kwargs):
+        built.append((model, provider, base_url, api_key_env))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return real(model, provider, base_url, api_key_env, client=client, **kwargs)
+
+    monkeypatch.setattr(openai_compat, "OpenAICompatVerifier", make)
+    out = tmp_path / "openai.json"
+    result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--verifier", "openai", "--provider", "ollama",
+                                       "--openai-model", "llama-local", "--base-url", "http://127.0.0.1:8080/v1",
+                                       "--json", str(out)])
+    assert result.exit_code == 0, result.output
+    assert built == [("llama-local", "ollama", "http://127.0.0.1:8080/v1", None)]
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert saved["verifier"] == "openai:llama-local@127.0.0.1:8080"
+    assert saved["settings"] == {"min_coverage": 0.2, "max_judged": 8, "verifier": "openai", "provider": "ollama",
+                                 "response_format": "json_schema"}
+    assert saved["cost"]["judge_calls"] == len(calls) > 0
+    result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--verifier", "openai"])
+    assert result.exit_code == 2 and "needs --openai-model" in result.output
+
+
 def test_cli_verifier_errors_exit_2(cases, monkeypatch):
     def broken(*args):
         raise VerifierError("jev: set TYPESAFE_API_KEY")

@@ -18,7 +18,8 @@ Release 0.4 contains:
 
 Changes after release 0.4. The packages in the Release 0.4 section (memlab-core 0.3.0, memfalsify 0.4.0,
 orgmemory 0.4.0, memlab-mcp 0.4.0) are already released. Not yet released: memlab-core 0.4.0, memfalsify 0.4.1,
-orgmemory 0.4.1, memlab-mcp 0.4.1 and the new memlab-ui 0.1.0.
+orgmemory 0.4.1, memlab-mcp 0.4.1 and the new memlab-ui 0.1.0. The OpenAI-compatible verifier below is part
+of memfalsify 0.4.1 and memlab-mcp 0.4.1 too.
 
 memlab-ui's resource limits are best-effort robustness against a project's own content, not a security
 boundary: they keep a very large or unusual project from tying up the page, and the page says when they cut
@@ -70,14 +71,75 @@ it short.
   `read_head`, `ReadLimitError`, `read_input_bytes(max_bytes=...)`); its public `__all__` is unchanged.
   memfalsify 0.4.1 and memlab-ui use it. memfalsify 0.4.1, orgmemory 0.4.1 and memlab-mcp 0.4.1 require
   `memlab-core>=0.4,<0.5`: their dependency metadata changed, so their released 0.4.0 versions could not be
-  reused. memlab-ui requires `memfalsify>=0.4.1,<0.5` and `orgmemory>=0.4.1,<0.5`. `tests/test_packaging.py`
-  checks that every package imports only names the lowest memlab-core its pin admits defines (released
-  versions' names are in `tests/memcore_exports.json`) and that a package whose dependencies differ from a
-  released version's (`tests/released_metadata.json`, from the v0.4.0 tag) has a new version. The packaging
-  tests run on Python 3.10 too, with `tomli`, which CI and `scripts/setup-local.sh` install there.
+  reused. memlab-ui requires `memfalsify>=0.4.1,<0.5` and `orgmemory>=0.4.1,<0.5`; memlab-mcp requires
+  `memfalsify>=0.4.1,<0.5`, the first memfalsify with the `openai` verifier it imports.
+  `tests/test_packaging.py` checks that every package imports only names that the lowest version its pins
+  admit of each package here defines (released versions' names are in `tests/released_exports.json`) and
+  that a package whose dependencies differ from a released version's (`tests/released_metadata.json`, from
+  the v0.4.0 tag) has a new version. The packaging tests run on Python 3.10 too, with `tomli`, which CI and
+  `scripts/setup-local.sh` install there.
+
+### memfalsify
+
+#### Added
+
+- `--verifier openai` on `audit` and `diff` (`memfalsify.OpenAICompatVerifier`, new extra `[openai]`, also in
+  `[all]`): one verifier for any OpenAI-compatible Chat Completions API. `--provider` presets the base URL,
+  the key's environment variable and the response format for `openai` (default), `grok` (xAI), `deepseek`,
+  `gemini` (Google's OpenAI-compatible endpoint) and `ollama` (`http://localhost:11434/v1`, no key);
+  `--base-url`, `--api-key-env` and `--openai-response-format` override them. `--openai-model` is required:
+  model names differ between providers, so there is no default. Memory claims and evidence passages are sent
+  to the configured endpoint.
+  - The base URL must be `https://`, or `http://` only to `localhost`, `127.0.0.1` or `::1`; a user name,
+    password, query or fragment in it is refused, and no message repeats it.
+  - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy variables
+    are not used. Certificates are verified as the OpenAI SDK and httpx2 ship it (the platform's trust store;
+    on Linux, OpenSSL honours `SSL_CERT_FILE` and `SSL_CERT_DIR`).
+  - The key is read from the named variable, never taken as an argument, and must be at least 16 characters,
+    all of them characters keys use. The threat model is everything the provider or the model controls, and
+    the promise is that the literal key and its once-encoded forms (percent, `\u`/`\x`/`\/` escapes, HTML
+    references) never appear in output. A provider error is shown as its HTTP status, its type, code and param
+    when each is a plain token of at most 40 characters sharing no 8 characters with the key
+    (case-insensitively), and a fixed hint for the status, never the provider's message. The model's
+    rationale, the only free text kept, has the key redacted, each run of key characters that shows 8 or more
+    characters of the key once decoded elided (`[…]`), and is withheld if it still shows the key once decoded.
+    Token counts above 10,000,000 per request count as missing. finish_reason and other envelope fields are
+    never echoed; no error keeps the SDK exception as its cause or context; and the SDK's and the HTTP stack's
+    log records (`OPENAI_LOG=debug`) are redacted as they are made, a message, exception or stack that still
+    shows the key once decoded being withheld. A provider that encodes the key it received more deeply is out
+    of scope (it holds the key already). Other code in the same Python process is trusted. The OpenAI SDK's
+    `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are ignored, so
+    settings meant for one provider never reach another.
+  - `--openai-response-format` is `json_schema` (strict structured output), `json_object` or `text`: by default
+    `json_object` for `deepseek` (DeepSeek documents no `json_schema`) and `json_schema` for the other providers
+    and for any explicit `--base-url`, DeepSeek's included. Nothing is retried in another format; an HTTP 400
+    or 422 says which simpler format to try. Only an answer with `finish_reason` `stop` is read; an unfinished
+    one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation outside the
+    schema), an empty answer, a malformed response and a refusal are no verdict (`unrelated`), never support.
+  - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
+    requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
+    `cascade` still pair Claude with Jev.
+  - The pre-commit hooks (`memfalsify-pre-commit diff` and `audit`) take the same options.
+
+### memlab-mcp
+
+#### Added
+
+- `memfalsify_audit` and `memfalsify_diff` accept `verifier: "openai"`, refused unless the server runs with
+  `--allow-model-verifiers`. Its endpoint comes only from server flags (`--openai-model`,
+  `--openai-provider`, `--openai-base-url`, `--openai-api-key-env`, `--openai-response-format`), checked at
+  startup; no tool argument names a provider, URL, model, key variable or response format, so a client cannot
+  send text elsewhere. Without `--openai-model` the verifier is refused as not configured.
 
 ### Repository
 
+#### Added
+
+- GitHub Action: `verifier: openai`, with the inputs `openai-model`, `provider`, `base-url`, `api-key-env`
+  and `openai-response-format` (passed through `env:` and checked before the audit), and a hash-pinned lock
+  set `action/requirements/openai.txt`. `all.txt` (dual and cascade) still holds only the Claude and Jev SDKs.
+- MemFalsify benchmark: `run.py --verifier openai` with the same options (the response format is recorded in
+  the JSON settings), and a documented local Ollama run. No model results are recorded.
 - `scripts/setup-local.sh`, both CI install lines and `docs/local-setup*.md` include `-e packages/memlab-ui`.
 
 ## Release 0.4

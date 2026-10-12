@@ -51,7 +51,11 @@ options* holds:
 - *Treat today as*: the reference date for old dates in the file (`--as-of`).
 - *Reviews file*: a `reviews.jsonl` of human-confirmed reviews. Its paths must point into the folder you compare
   against.
-- *How to compare*: only with `--allow-model-verifiers`.
+- *How to compare*: only with `--allow-model-verifiers`. The `openai` verifier (OpenAI or any
+  OpenAI-compatible endpoint) is not offered here yet: it needs a model name and a provider or base URL, and
+  the page has no inputs for them. Run it with `memfalsify audit --verifier openai --openai-model ...` or
+  through memlab-mcp's `--openai-*` options; see *OpenAI-compatible providers* in
+  [local-setup.md](local-setup.md).
 
 Memory Lab's own files are never evidence. They are recognised by their content, not their name: review records
 (lines with a `memory_id`, `relation`, `quote` and `reviewer`), decision logs (events, evidence manifests,
@@ -150,7 +154,8 @@ The page follows the [MCP server's](mcp.md) rules, adapted to a browser:
   is read. A git clone cannot contain hard links, and making one needs write access to the folder, so serve only
   folders you control.
 - **Model verifiers off.** The default is the offline lexical verifier. A request for `llm`, `jev`, `dual` or
-  `cascade` gets 403 unless the server was started with `--allow-model-verifiers`.
+  `cascade` gets 403 unless the server was started with `--allow-model-verifiers`. A request for `openai` gets
+  400 on every server: the page does not offer it.
 - **Untrusted text stays text.** Memory, evidence, file names, reviews, event logs, policy names and source URIs
   go through `memcore.htmlpage`: escaped, with control, bidi and other invisible characters shown as `U+XXXX`. Only
   `http` and `https` sources become links. The language switch links only to the page's own routes and known

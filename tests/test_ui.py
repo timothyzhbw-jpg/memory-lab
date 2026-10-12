@@ -574,6 +574,18 @@ def test_the_flag_offers_model_verifiers(root, monkeypatch):
 
 
 @requires_confinement
+def test_the_openai_verifier_is_not_offered(root, monkeypatch):
+    """It needs a model and a provider or base URL, which the page has no inputs for (docs/ui.md)."""
+    assert "openai" in ui_check.VerifierChoice.__members__ and "openai" not in ui_check.VERIFIERS
+    monkeypatch.setattr(ui_check, "build_verifier", lambda *args, **kwargs: pytest.fail("a verifier was built"))
+    for app in (make_app(root), make_app(root, allow_model_verifiers=True)):
+        key = {"key": app.key} if app.key else {}
+        assert 'value="openai"' not in body(get(app, link("/check", **key)))
+        response = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, verifier="openai", **key))
+        assert response.status == 400 and "Pick how to compare from the list." in text(response)
+
+
+@requires_confinement
 def test_unexpected_errors_show_no_traceback(app, monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError(f"boom {SECRET} /etc/passwd")

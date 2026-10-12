@@ -63,16 +63,16 @@ def test_changelog_has_an_entry_for_each_current_version():
         assert f"\n### {version} - " in sections[name], f"CHANGELOG.md has no {name} {version} entry"
 
 
-# The names each memcore module defined in released memlab-core versions (from their tags; see the file).
-MEMCORE_EXPORTS = json.loads((REPO / "tests" / "memcore_exports.json").read_text(encoding="utf-8"))
+# The names each module defined in released versions of the packages here (from their tags; see _source).
+RELEASED_EXPORTS = json.loads((REPO / "tests" / "released_exports.json").read_text(encoding="utf-8"))
 
 
-def _memcore_imports(source: Path) -> set[tuple[str, str]]:
-    """Every (module, name) a package imports from memcore with ``from memcore... import name``."""
+def _imports(source: Path, top: str) -> set[tuple[str, str]]:
+    """Every (module, name) a package imports from ``top`` with ``from top... import name``."""
     found = set()
     for path in sorted(source.rglob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.ImportFrom) and node.level == 0 and (node.module or "").split(".")[0] == "memcore":
+            if isinstance(node, ast.ImportFrom) and node.level == 0 and (node.module or "").split(".")[0] == top:
                 found.update((node.module, alias.name) for alias in node.names)
     return found
 
@@ -84,17 +84,18 @@ def _floor(requirement: Requirement) -> Version:
 
 
 def _missing(directory: str, module: str, requirement: Requirement, current: str) -> list[tuple[str, str]]:
-    """The memcore names the package imports that the lowest memlab-core its pin admits does not define. A name
-    can be a submodule (``from memcore import htmlpage``)."""
+    """The names the package imports from the package ``requirement`` names that the lowest version its pin
+    admits does not define. A name can be a submodule (``from memcore import htmlpage``)."""
     floor = _floor(requirement)
-    imports = _memcore_imports(REPO / "packages" / directory / "src" / module)
+    imports = _imports(REPO / "packages" / directory / "src" / module, PACKAGES[requirement.name][1])
     if floor == Version(current):
         def defined(name: str, symbol: str) -> bool:
             return hasattr(importlib.import_module(name), symbol) or _is_module(f"{name}.{symbol}")
     else:
-        recorded = [version for version in MEMCORE_EXPORTS if Version(version) == floor]
-        assert recorded, f"record memlab-core {floor}'s module names in tests/memcore_exports.json"
-        names = MEMCORE_EXPORTS[recorded[0]]
+        released = RELEASED_EXPORTS.get(requirement.name, {})
+        recorded = [version for version in released if Version(version) == floor]
+        assert recorded, f"record {requirement.name} {floor}'s module names in tests/released_exports.json"
+        names = released[recorded[0]]  # module -> the top-level names in its source
 
         def defined(name: str, symbol: str) -> bool:
             return symbol in names.get(name, ()) or f"{name}.{symbol}" in names
@@ -108,23 +109,26 @@ def _is_module(name: str) -> bool:
         return False
 
 
-def test_each_package_imports_only_what_its_lowest_memcore_defines():
-    """A pin that admits an older memlab-core than the code needs installs, then fails with ImportError."""
+def test_each_package_imports_only_what_its_lowest_dependencies_define():
+    """A pin that admits an older version of another package here than the code needs installs, then fails
+    with ImportError."""
     projects = _projects()
-    current = projects["memlab-core"][1]
     for name, (directory, module) in PACKAGES.items():
-        if name == "memlab-core":
-            continue
-        pins = [Requirement(r) for r in projects[name][0].get("dependencies", [])
-                if Requirement(r).name == "memlab-core"]
-        assert len(pins) == 1, name
-        assert not _missing(directory, module, pins[0], current), (name, str(pins[0]))
+        pins = [Requirement(r) for r in projects[name][0].get("dependencies", [])]
+        if name != "memlab-core":
+            assert [pin.name for pin in pins].count("memlab-core") == 1, name
+        for pin in pins:
+            if pin.name in projects:
+                assert not _missing(directory, module, pin, projects[pin.name][1]), (name, str(pin))
 
 
 def test_the_import_check_catches_a_pin_that_is_too_low():
-    current = _projects()["memlab-core"][1]
-    missing = _missing("memfalsify", "memfalsify", Requirement("memlab-core>=0.3,<0.5"), current)
+    projects = _projects()
+    missing = _missing("memfalsify", "memfalsify", Requirement("memlab-core>=0.3,<0.5"),
+                       projects["memlab-core"][1])
     assert ("memcore.reading", "ReadLimitError") in missing and ("memcore.reading", "take") in missing
+    missing = _missing("memlab-mcp", "memlab_mcp", Requirement("memfalsify>=0.4,<0.5"), projects["memfalsify"][1])
+    assert ("memfalsify", "openai_compat") in missing  # the openai verifier is new in memfalsify 0.4.1
 
 
 # The dependency metadata of released versions, from their tag (see the file's _source).

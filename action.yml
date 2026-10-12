@@ -35,10 +35,42 @@ inputs:
   verifier:
     description: >-
       lexical (offline, default), llm (Claude; needs ANTHROPIC_API_KEY), jev (TypeSafe Jev; needs
-      TYPESAFE_API_KEY), dual or cascade (both keys). Model verifiers send memory text and evidence
-      passages to the provider.
+      TYPESAFE_API_KEY), dual or cascade (both keys), or openai (an OpenAI-compatible Chat Completions
+      API; see openai-model, provider, base-url and api-key-env). Model verifiers send memory text and
+      evidence passages to the provider.
     required: false
     default: lexical
+  openai-model:
+    description: >-
+      Model for verifier openai, as the provider names it. Required with that verifier; there is no
+      default, because model names differ between providers.
+    required: false
+    default: ""
+  provider:
+    description: >-
+      Verifier openai: preset base URL and key variable. openai (OPENAI_API_KEY), grok (XAI_API_KEY),
+      deepseek (DEEPSEEK_API_KEY), gemini (GEMINI_API_KEY) or ollama (http://localhost:11434/v1, no key;
+      the job must run an Ollama server). Empty means openai.
+    required: false
+    default: ""
+  base-url:
+    description: >-
+      Verifier openai: base URL of an OpenAI-compatible API, overriding the provider's. https, or http
+      only for localhost, 127.0.0.1 or ::1. Empty keeps the provider's.
+    required: false
+    default: ""
+  api-key-env:
+    description: >-
+      Verifier openai: name of the environment variable that holds the API key, overriding the
+      provider's. Set that variable from a secret with env: on this step. Never the key itself.
+    required: false
+    default: ""
+  openai-response-format:
+    description: >-
+      Verifier openai: json_schema (strict structured output), json_object or text. Empty means the
+      provider's default: json_object for deepseek, json_schema otherwise (and for any base-url).
+    required: false
+    default: ""
   diff-base:
     description: >-
       Base revision for a diff-only check, for example github.event.pull_request.base.sha. When set, only
@@ -84,9 +116,9 @@ runs:
         set -euo pipefail
         # One hash-pinned lock file per dependency set (action/requirements/*.txt; see docs/github-action.md).
         case "$MEMFALSIFY_VERIFIER" in
-          lexical|llm|jev) lock="$MEMFALSIFY_VERIFIER" ;;
+          lexical|llm|jev|openai) lock="$MEMFALSIFY_VERIFIER" ;;
           dual|cascade) lock="all" ;;
-          *) echo "::error title=MemFalsify::the verifier input must be lexical, llm, jev, dual or cascade"; exit 2 ;;
+          *) echo "::error title=MemFalsify::the verifier input must be lexical, llm, jev, dual, cascade or openai"; exit 2 ;;
         esac
         # Build from a copy: pip writes build/ and *.egg-info into the source tree, which is the
         # audited workspace when the action runs from the checkout (uses: ./).
@@ -117,6 +149,11 @@ runs:
         MEMFALSIFY_EXCLUDE: ${{ inputs.exclude }}
         MEMFALSIFY_STRICT: ${{ inputs.strict }}
         MEMFALSIFY_VERIFIER: ${{ inputs.verifier }}
+        MEMFALSIFY_OPENAI_MODEL: ${{ inputs.openai-model }}
+        MEMFALSIFY_PROVIDER: ${{ inputs.provider }}
+        MEMFALSIFY_BASE_URL: ${{ inputs.base-url }}
+        MEMFALSIFY_API_KEY_ENV: ${{ inputs.api-key-env }}
+        MEMFALSIFY_OPENAI_RESPONSE_FORMAT: ${{ inputs.openai-response-format }}
         MEMFALSIFY_AS_OF: ${{ inputs.as-of }}
         MEMFALSIFY_DIFF_BASE: ${{ inputs.diff-base }}
       run: '"$MEMFALSIFY_PYTHON" -I -X utf8 "$GITHUB_ACTION_PATH/action/memfalsify_action.py"'

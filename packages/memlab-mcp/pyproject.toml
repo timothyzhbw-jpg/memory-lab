@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = [
     "memlab-core>=0.4,<0.5",
-    "memfalsify>=0.4,<0.5",
+    "memfalsify>=0.4.1,<0.5",
     "orgmemory>=0.4,<0.5",
     "mcp>=2.2,<3",
     "pydantic>=2.12",

@@ -1,0 +1,3 @@
+# The [openai] extra of memfalsify (OpenAI-compatible Chat Completions APIs), on top of the lexical set.
+-r lexical.in
+openai>=3.0

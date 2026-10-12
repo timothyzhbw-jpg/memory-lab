@@ -46,7 +46,10 @@ memlab-ui --root examples
   公共目录和对象库都必须位于根文件夹之内。
 - “把今天当作”：判断文件中旧日期的基准日期（`--as-of`）。
 - “审阅文件”：记录了人工确认的 `reviews.jsonl`。其中的路径必须指向对照范围内的文件。
-- “对照方式”：只有加上 `--allow-model-verifiers` 时才出现。
+- “对照方式”：只有加上 `--allow-model-verifiers` 时才出现。本网页暂不提供 `openai` 验证器（OpenAI 或任何兼容
+  OpenAI 的端点）：它需要模型名称以及服务商或 base URL，而网页没有填写这些的地方。请用
+  `memfalsify audit --verifier openai --openai-model ...`，或通过 memlab-mcp 的 `--openai-*` 选项运行；见
+  [local-setup.zh-CN.md](local-setup.zh-CN.md) 中的“兼容 OpenAI 的服务商”。
 
 Memory Lab 自己的文件从不作为证据。它们按内容而不是文件名识别：审阅记录（含 `memory_id`、`relation`、`quote`
 和 `reviewer` 的行）、决策日志（事件、证据清单、`policy.json`、角色变更、导入器设置和同步状态），以及 MemFalsify
@@ -122,7 +125,7 @@ UTC 的一整天，即下一个午夜之前的所有事件。
   所以从同一文件系统其他位置硬链接进根文件夹的文件会被读取。git 克隆不会包含硬链接，创建硬链接需要对该文件夹有
   写权限，所以只对你自己控制的文件夹运行本网页。
 - **默认关闭模型验证器。** 默认使用离线的词法验证器。除非用 `--allow-model-verifiers` 启动，否则请求 `llm`、
-  `jev`、`dual` 或 `cascade` 都返回 403。
+  `jev`、`dual` 或 `cascade` 都返回 403。请求 `openai` 在任何服务器上都返回 400：本网页不提供它。
 - **不可信文本始终是文本。** 记忆、证据、文件名、审阅、事件日志、策略名称和来源 URI 都经过 `memcore.htmlpage`：
   转义处理，控制字符、双向文本字符和其他不可见字符显示为 `U+XXXX`。只有 `http` 和 `https` 来源会成为链接。语言
   切换链接只指向本页面自己的路由和已知字段。文档是 7 位 ASCII。

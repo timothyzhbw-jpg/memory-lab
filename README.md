@@ -179,7 +179,7 @@ Both hooks read memory from the index, including one level of linked `.md` files
 memfalsify diff CLAUDE.md --base HEAD --staged --evidence . --strict
 ```
 
-A commit that stages only a linked `.md` file does not run the hook. Stage the `CLAUDE.md`, `AGENTS.md` or `MEMORY.md` that links it. The default verifier is lexical and offline. For `llm`, `jev`, `dual` or `cascade`, add the SDK in `additional_dependencies` (for example `anthropic>=1.13` or `typesafe-sdk`) and pass `--verifier` in `args`. The hook install already includes MemFalsify from this repository.
+A commit that stages only a linked `.md` file does not run the hook. Stage the `CLAUDE.md`, `AGENTS.md` or `MEMORY.md` that links it. The default verifier is lexical and offline. For `llm`, `jev`, `dual`, `cascade` or `openai`, add the SDK in `additional_dependencies` (for example `anthropic>=1.13`, `typesafe-sdk` or `openai>=3.0`) and pass `--verifier` in `args` (with `openai`, also `--openai-model` and the provider). The hook install already includes MemFalsify from this repository.
 
 ### Organizational Memory: replay decisions
 
@@ -544,7 +544,7 @@ Checks, updates, the `config.toml` form, Windows and other details: [docs/instal
 
 ## MCP server
 
-`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent ten tools: `memfalsify_claims`, `memfalsify_audit`, `memfalsify_diff`, `memfalsify_history`, `memfalsify_rollback`, `orgmemory_validate`, `orgmemory_replay`, `orgmemory_explain`, `orgmemory_audit` and `orgmemory_changes`. `memfalsify_diff` compares a memory file in git between a base revision and a head (default: the working tree) and audits only the claims that were added or changed. `memfalsify_history` reports the commits that introduced and last changed each claim, plus removals. `memfalsify_rollback` returns a patch for one claim and never applies it. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`. The three git tools also refuse a repository whose work tree, git directory, common directory or object store lies outside that root. Model verifiers stay off unless the server is started with `--allow-model-verifiers`, which enables them for `memfalsify_audit` and `memfalsify_diff`. Five read-only resources return the same text by URI: `memlab://memory/<path>/claims` (JSON) and `/audit` (Markdown, always the lexical verifier), and `memlab://dataset/<path>/state`, `/audit` and `/explain/<subject>` (Markdown). Three prompts, `audit_memory`, `review_memory_changes` and `explain_status`, walk an agent through the skills' report-first workflows. They quote their arguments as data and never tell the agent to write a file. Tools, resources, prompts, arguments and client registration: [docs/mcp.md](docs/mcp.md).
+`memlab-mcp` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server that gives a local agent ten tools: `memfalsify_claims`, `memfalsify_audit`, `memfalsify_diff`, `memfalsify_history`, `memfalsify_rollback`, `orgmemory_validate`, `orgmemory_replay`, `orgmemory_explain`, `orgmemory_audit` and `orgmemory_changes`. `memfalsify_diff` compares a memory file in git between a base revision and a head (default: the working tree) and audits only the claims that were added or changed. `memfalsify_history` reports the commits that introduced and last changed each claim, plus removals. `memfalsify_rollback` returns a patch for one claim and never applies it. Install it with `pip install -e packages/memlab-mcp` (`./scripts/setup-local.sh` already does). Every path is confined to `--root`. The three git tools also refuse a repository whose work tree, git directory, common directory or object store lies outside that root. Model verifiers stay off unless the server is started with `--allow-model-verifiers`, which enables them for `memfalsify_audit` and `memfalsify_diff`. The `openai` verifier's endpoint and model are set only by the server's `--openai-*` flags, never by a tool argument. Five read-only resources return the same text by URI: `memlab://memory/<path>/claims` (JSON) and `/audit` (Markdown, always the lexical verifier), and `memlab://dataset/<path>/state`, `/audit` and `/explain/<subject>` (Markdown). Three prompts, `audit_memory`, `review_memory_changes` and `explain_status`, walk an agent through the skills' report-first workflows. They quote their arguments as data and never tell the agent to write a file. Tools, resources, prompts, arguments and client registration: [docs/mcp.md](docs/mcp.md).
 
 ## Web page
 
@@ -573,9 +573,9 @@ sends a strict Content-Security-Policy with no JavaScript and nothing loaded fro
 Simplified Chinese (`?lang=zh`). Like the MCP server, it needs POSIX `O_NOFOLLOW` and `dir_fd` support, so on
 Windows it refuses to start and exits with code 2. Pages, options, safety rules and limits: [docs/ui.md](docs/ui.md).
 
-## Verifier backends: lexical, LLM, Jev
+## Verifier backends: lexical, LLM, Jev, OpenAI-compatible
 
-A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Three backends ship; `dual` and `cascade` combine the two model backends:
+A verifier judges one memory against one evidence passage as `supports`, `contradicts` or `unrelated`, with a rationale. Four backends ship; `dual` and `cascade` combine Claude and Jev:
 
 | `--verifier` | Who judges | Needs | Trade-off |
 |---|---|---|---|
@@ -584,6 +584,7 @@ A verifier judges one memory against one evidence passage as `supports`, `contra
 | `jev` | [Jev](https://docs.typesafe.ai), TypeSafe AI's decision-only judgment model, picks one of the three relations and returns a probability for each (`--jev-model`, default `jev-latest`) | `pip install 'memfalsify[jev]'` and `TYPESAFE_API_KEY` | A small fraction of an LLM judge's cost, with a calibrated confidence; no written explanation, and **sends memory and evidence text to the TypeSafe API** |
 | `dual` | `llm` and `jev`, independently | Both | Agreement passes through; disagreement becomes `disputed`, and the report shows both opinions |
 | `cascade` | `jev` first; Claude only when Jev's confidence is below `--accept-at` (default 0.8) | Both | Close to Jev's cost when Jev is usually sure; the report shows Jev's unsure opinion next to Claude's verdict. No cross-check on answers Jev is confident about |
+| `openai` | A model behind any OpenAI-compatible Chat Completions API reads the passage and explains its verdict: OpenAI, xAI Grok, DeepSeek, Google Gemini or a local Ollama server (`--provider`), or another endpoint (`--base-url`). `--openai-model` is required | `pip install 'memfalsify[openai]'` and the provider's key in its variable (`--api-key-env` names another); none for Ollama | The same prompt and verdict schema as `llm` on the model you choose; **sends memory and evidence text to the configured endpoint**, which with Ollama stays on your machine |
 
 ```bash
 memfalsify audit MEMORY.md --evidence evidence --verifier dual
@@ -603,7 +604,26 @@ Claude's prices per token, including cache writes, cache reads and batches, are 
 
 The LLM verifier asks for structured output, so every verdict fits the schema, and its instructions treat memory and evidence as quoted data. On models that support it, it opts in to the server-side refusal fallback; a refused request is recorded as no verdict (`unrelated`, with the stop reason in the rationale). `dual` is the stricter choice: every judgment is checked twice. `cascade` follows the "accept when confident, escalate when unsure" pattern and is much cheaper, but it trusts Jev's confident answers alone, so tune `--accept-at` on memories you have already reviewed before relying on it.
 
-For both model backends, an API failure, a missing SDK or missing credentials stops the audit with exit code 2 and an error message rather than producing a partial report.
+For every model backend, an API failure, a missing SDK or missing credentials stops the audit with exit code 2 and an error message rather than producing a partial report.
+
+**OpenAI-compatible providers.** `--verifier openai` speaks the Chat Completions API, so one backend covers every provider that offers it:
+
+```bash
+memfalsify audit MEMORY.md --evidence evidence --verifier openai --openai-model <model>                     # OPENAI_API_KEY
+memfalsify audit MEMORY.md --evidence evidence --verifier openai --provider ollama --openai-model <model>    # local, no key
+```
+
+| `--provider` | Base URL | Key variable | Response format |
+|---|---|---|---|
+| `openai` (default) | `https://api.openai.com/v1` | `OPENAI_API_KEY` | `json_schema` |
+| `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` | `json_schema` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | `json_object` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` ([Google's OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai)) | `GEMINI_API_KEY` | `json_schema` |
+| `ollama` | `http://localhost:11434/v1` | none | `json_schema` |
+
+`--base-url` and `--api-key-env` override a preset. The base URL must be `https://` (plain `http://` only for `localhost`, `127.0.0.1` or `::1`) and may not carry a user name, password, query or fragment. `--api-key-env` takes the variable's name: no option takes the key itself. A provider error is shown as its HTTP status, its type, code and param when each is a plain token, and a fixed hint; the provider's own message is never printed, and the key is redacted from the model's rationale. The OpenAI SDK's own `OPENAI_*` variables are ignored, so nothing configured for one provider reaches another. There is no default model, because model names differ between providers and change.
+
+Requests go only to the base URL: redirects are not followed and environment proxy settings are not used; certificates are verified as the OpenAI SDK ships it (the platform's trust store). `--openai-response-format` chooses `json_schema` (strict structured output), `json_object` or `text`, with the defaults in the table (`json_schema` for any `--base-url`). An endpoint that does not support the format answers HTTP 400 or 422; the audit stops, and the error suggests the next simpler format. Nothing is retried in another format. Only an answer that ended normally (`finish_reason` `stop`) is read. A cut-off or filtered answer, one that is not a valid verdict, an empty answer and a refusal are recorded as no verdict (`unrelated`), never as support. `--batch` is not available for this backend, and `dual` and `cascade` still pair Claude with Jev. Keys and providers in more detail: [docs/local-setup.md](docs/local-setup.md#openai-compatible-providers---verifier-openai).
 
 From Python:
 
@@ -616,7 +636,7 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
                min_coverage=0.2, max_judged=8, max_concurrency=4)
 ```
 
-`LLMVerifier(batch=True)` uses the Message Batches API. Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a verifier, so other models plug in the same way. Optionally, `judge_many(pairs, max_concurrency)` receives all of an audit's (claim, passage) pairs at once and returns the judgments in the same order, and `usage()` returns `VerifierStats` for the report. Model judgments stay candidates: they never replace the human review step.
+`LLMVerifier(batch=True)` uses the Message Batches API. `OpenAICompatVerifier("<model>", provider="ollama")` is the OpenAI-compatible backend (`base_url` and `api_key_env` override the preset). Any object with a `name` and a `judge(claim, passage) -> Judgment` method is a verifier, so other models plug in the same way. Optionally, `judge_many(pairs, max_concurrency)` receives all of an audit's (claim, passage) pairs at once and returns the judgments in the same order, and `usage()` returns `VerifierStats` for the report. Model judgments stay candidates: they never replace the human review step.
 
 ## Benchmark and GitHub Action
 
@@ -663,7 +683,7 @@ only SHA-pinned actions and installs its Python dependencies from hash-pinned lo
 
 - A hash proves a quote exists in particular bytes. It does not prove the source is authentic or that the quote means what someone says it means.
 - Lexical and model candidates are leads, not findings. Only `reviews.jsonl` settles a memory.
-- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, and `dual` and `cascade` send them to both. Use them only on material you are allowed to send there. With `--batch`, Anthropic keeps the batch's requests and results for up to 29 days, visible to anyone with access to that workspace; delete the batch through the API if that is too long.
+- `--verifier llm` sends memory claims and evidence passages to the Anthropic API, `jev` sends them to the TypeSafe API, `dual` and `cascade` send them to both, and `openai` sends them to the endpoint you configure (a local Ollama server keeps them on your machine). Use them only on material you are allowed to send there. With `--batch`, Anthropic keeps the batch's requests and results for up to 29 days, visible to anyone with access to that workspace; delete the batch through the API if that is too long.
 - `orgmemory audit` findings and `orgmemory changes` restate the log and the policy; they are leads for a person, not verdicts. The log cannot record that a risk was resolved, so an approved subject keeps a `risk_after_approval` finding for every risk raised before the approval. A self-approval or an ignored attempt can be legitimate: the policy decides who may act.
 - An exported ADR restates the replayed log. Its Context lists recorded requests and risks, not anyone's reasoning, and a record does not update itself: export again after the log changes.
 - Actor IDs, `policy.json` and `policy-log.jsonl` are trusted input. There is no identity authentication or signed provenance yet. Role changes recorded in `policy-log.jsonl` are effective-dated, but editing `policy.json` (including `permissions`, which are not dated) or rewriting the policy log still changes every replay ([benchmark finding](benchmarks/orgmemory/RESULTS.md)).

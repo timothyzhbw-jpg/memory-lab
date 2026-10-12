@@ -241,6 +241,40 @@ def test_hook_usage_error_carries_no_rich_styling_in_ci(tmp_path, monkeypatch, m
     assert "\x1b" not in log
 
 
+@needs_git
+def test_hook_takes_the_openai_verifier_options(repo, monkeypatch):
+    from types import SimpleNamespace
+
+    from memfalsify import openai_compat
+
+    repo.commit("base", {"CLAUDE.md": "- The cache uses Redis.\n",
+                         "evidence/db.md": "The main database runs PostgreSQL 16.\n"})
+    repo.write({"CLAUDE.md": "- The cache uses Redis.\n- The main database runs PostgreSQL 15.\n"})
+    repo.git("add", "--", "CLAUDE.md")
+    built = []
+
+    def create(**kwargs):
+        message = SimpleNamespace(content='{"relation": "contradicts", "rationale": "16, not 15"}', refusal=None)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=message)], usage=None)
+
+    real = openai_compat.OpenAICompatVerifier
+
+    def make(model, provider, base_url, api_key_env, **kwargs):
+        built.append((model, provider, base_url, api_key_env))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return real(model, provider, base_url, api_key_env, client=client, **kwargs)
+
+    monkeypatch.setattr(openai_compat, "OpenAICompatVerifier", make)
+    monkeypatch.chdir(repo.root)
+    result = runner.invoke(app, ["diff", "CLAUDE.md", "--evidence", "evidence", "--as-of", "2026-10-10",
+                                 "--verifier", "openai", "--openai-model", "llama-local", "--provider", "ollama"])
+    assert result.exit_code == 1, result.output
+    assert built == [("llama-local", "ollama", None, None)]
+    assert "openai:llama-local@localhost:11434" in result.stdout
+    missing = runner.invoke(app, ["diff", "CLAUDE.md", "--evidence", "evidence", "--verifier", "openai"])
+    assert missing.exit_code == 2 and "needs --openai-model" in missing.output
+
+
 def test_hook_diff_fails_only_for_attention_and_audit_checks_old_claims(repo, monkeypatch):
     repo.commit("base", {"CLAUDE.md": "- The main database runs PostgreSQL 15.\n",
                          "MEMORY.md": "- The cache uses Redis.\n",

@@ -26,9 +26,10 @@ from memcore.cli import SafeTyperGroup
 from memcore.display import json_shield
 from memcore.terminal import diagnostic_line
 
-from . import __version__, jev, llm
+from . import __version__, jev, llm, openai_compat
 from .audit import ATTENTION
-from .cli import Format, VerifierChoice, build_verifier, preselection
+from .cli import (API_KEY_ENV, BASE_URL, OPENAI_MODEL, OPENAI_RESPONSE_FORMAT, PROVIDER, Format, VerifierChoice,
+                  build_verifier, openai_settings, preselection)
 from .cli import MAX_JUDGED as DEFAULT_MAX_JUDGED
 from .gitstore import CONTROL, HistoryError, list_staged_paths, printable, repository_toplevel
 from .history import audit_staged, diff_to_markdown, memory_diff
@@ -142,7 +143,8 @@ def _attention(summary: dict[str, int]) -> int:
 def _execute(mode: str, filenames: list[str] | None, *, evidence: Path | None, exclude: list[str] | None,
              reviews: Path | None, fmt: Format, as_of: str | None, stale_days: int, follow_links: bool,
              strict: bool, verifier: VerifierChoice, llm_model: str, jev_model: str, accept_at: float,
-             max_judged: int, min_coverage: float | None) -> None:
+             max_judged: int, min_coverage: float | None,
+             openai: openai_compat.OpenAISettings | None = None) -> None:
     _configure_stdio()
     try:
         reference = date.fromisoformat(as_of) if as_of else None
@@ -157,7 +159,7 @@ def _execute(mode: str, filenames: list[str] | None, *, evidence: Path | None, e
         typer.echo("no staged CLAUDE.md, AGENTS.md or MEMORY.md to check", err=True)
         return
     try:
-        built = build_verifier(verifier, llm_model, jev_model, accept_at)
+        built = build_verifier(verifier, llm_model, jev_model, accept_at, openai=openai)
         common = dict(follow_links=follow_links, evidence_root=evidence_root, reviews=reviews, verifier=built,
                       as_of=reference, stale_days=stale_days, exclude=exclude or (),
                       **preselection(verifier, min_coverage, max_judged))
@@ -235,7 +237,8 @@ def _option_strict() -> typer.Option:
 
 def _option_verifier() -> typer.Option:
     return typer.Option(VerifierChoice.lexical, "--verifier",
-                        help="lexical (offline, default), llm, jev, dual or cascade")
+                        help="lexical (offline, default), llm, jev, dual, cascade or openai (an "
+                             "OpenAI-compatible Chat Completions API: see --provider)")
 
 
 def _option_llm() -> typer.Option:
@@ -276,6 +279,11 @@ def diff_command(
     llm_model: str = _option_llm(),
     jev_model: str = _option_jev(),
     accept_at: float = _option_accept(),
+    openai_model: Optional[str] = OPENAI_MODEL,
+    provider: openai_compat.Provider = PROVIDER,
+    base_url: Optional[str] = BASE_URL,
+    api_key_env: Optional[str] = API_KEY_ENV,
+    openai_response_format: Optional[openai_compat.ResponseFormat] = OPENAI_RESPONSE_FORMAT,
     max_judged: int = _option_max(),
     min_coverage: Optional[float] = _option_coverage(),
 ) -> None:
@@ -283,7 +291,8 @@ def diff_command(
     _execute("diff", filenames, evidence=evidence, exclude=exclude, reviews=reviews, fmt=fmt, as_of=as_of,
              stale_days=stale_days, follow_links=follow_links, strict=strict, verifier=verifier,
              llm_model=llm_model, jev_model=jev_model, accept_at=accept_at, max_judged=max_judged,
-             min_coverage=min_coverage)
+             min_coverage=min_coverage,
+             openai=openai_settings(openai_model, provider, base_url, api_key_env, openai_response_format))
 
 
 @app.command("audit")
@@ -301,6 +310,11 @@ def audit_command(
     llm_model: str = _option_llm(),
     jev_model: str = _option_jev(),
     accept_at: float = _option_accept(),
+    openai_model: Optional[str] = OPENAI_MODEL,
+    provider: openai_compat.Provider = PROVIDER,
+    base_url: Optional[str] = BASE_URL,
+    api_key_env: Optional[str] = API_KEY_ENV,
+    openai_response_format: Optional[openai_compat.ResponseFormat] = OPENAI_RESPONSE_FORMAT,
     max_judged: int = _option_max(),
     min_coverage: Optional[float] = _option_coverage(),
 ) -> None:
@@ -308,7 +322,8 @@ def audit_command(
     _execute("audit", filenames, evidence=evidence, exclude=exclude, reviews=reviews, fmt=fmt, as_of=as_of,
              stale_days=stale_days, follow_links=follow_links, strict=strict, verifier=verifier,
              llm_model=llm_model, jev_model=jev_model, accept_at=accept_at, max_judged=max_judged,
-             min_coverage=min_coverage)
+             min_coverage=min_coverage,
+             openai=openai_settings(openai_model, provider, base_url, api_key_env, openai_response_format))
 
 
 def _plain_output() -> None:
