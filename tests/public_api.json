@@ -51,6 +51,7 @@
     "LLMVerifier",
     "LexicalVerifier",
     "MemoryFormat",
+    "OpenAICompatVerifier",
     "Proposal",
     "Relation",
     "RemovedClaim",

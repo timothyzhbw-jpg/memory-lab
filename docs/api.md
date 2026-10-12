@@ -85,8 +85,8 @@ malformed inputs raise `ValueError` (including Pydantic validation errors); file
 
 Custom verifiers implement `Verifier`: `name: str` and
 `judge(claim: str, passage: str) -> Judgment`. Package import does not import `anthropic` or
-`typesafe_sdk`. Constructing `LLMVerifier`/`JevVerifier` requires `[llm]`/`[jev]` extras and
-credentials or an injected client. `DualVerifier(LLMVerifier(), JevVerifier())` keeps disagreements;
+`typesafe_sdk` or `openai`. Constructing `LLMVerifier`/`JevVerifier`/`OpenAICompatVerifier` requires the
+`[llm]`/`[jev]`/`[openai]` extra and credentials or an injected client. `DualVerifier(LLMVerifier(), JevVerifier())` keeps disagreements;
 `CascadeVerifier(JevVerifier(), LLMVerifier(), accept_at=0.8)` escalates low confidence.
 For model audits, explicitly set `min_coverage=0.2, max_judged=8` to match CLI preselection.
 Construction/judgment failures raise `VerifierError`.
@@ -279,6 +279,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.LLMVerifier` | Construct with model, optional client, effort="low", fallbacks=None, and keyword-only batch=False (Message Batches API), progress and sleep; imports anthropic only at construction. Caches its prompt prefix; judge_many and usage() serve audits. |
 | `memfalsify.LexicalVerifier` | Offline verifier; related=0.6 and support=0.75 coverage thresholds. |
 | `memfalsify.MemoryFormat` | Frozen agent instruction format: name (for example cursor-rule), the agent that reads it, and the frontmatter fields kept as claim metadata. |
+| `memfalsify.OpenAICompatVerifier` | Construct with model (required), provider="openai" (preset base URL and key variable: openai, grok, deepseek, gemini, ollama), base_url and api_key_env overrides (the variable's name, never the key), optional client, and keyword-only progress; imports openai only at construction and reads the key from the named environment variable. Asks for a JSON verdict (json_schema, then json_object, then plain text when the endpoint refuses a format); an unusable answer is no verdict (unrelated). usage() reports requests and tokens. |
 | `memfalsify.Proposal` | Suggested action and reason; replacement is always None. |
 | `memfalsify.Relation` | Literal type: supports, contradicts, unrelated, disputed. |
 | `memfalsify.RemovedClaim` | Removed claim version and the commit that removed it. |

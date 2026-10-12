@@ -18,7 +18,8 @@ Changelog = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.m
 [project.optional-dependencies]
 llm = ["anthropic>=1.13"]
 jev = ["typesafe-sdk>=0.7"]
-all = ["memfalsify[llm,jev]"]
+openai = ["openai>=3.0"]
+all = ["memfalsify[llm,jev,openai]"]
 
 [project.scripts]
 memfalsify = "memfalsify.cli:main"
