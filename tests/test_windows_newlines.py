@@ -3,6 +3,8 @@ import builtins
 import io
 import os
 import pathlib
+import tempfile
+from pathlib import Path
 
 import typer
 from typer.testing import CliRunner
@@ -33,6 +35,8 @@ def test_simulated_text_writes_get_crlf_and_exact_writes_stay_lf(tmp_path):
         descriptor = os.open(tmp_path / "fd.txt", os.O_WRONLY | os.O_CREAT | getattr(os, "O_BINARY", 0))
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:  # windows-guard: allow
             handle.write("c\n")
+        with tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False, encoding="utf-8") as named:
+            named.write("d\n")
         write_text_exact(tmp_path / "exact.md", "a\nb\n")
         (tmp_path / "newline.md").write_text("a\nb\n", encoding="utf-8", newline="")
         with open(tmp_path / "binary.md", "wb") as handle:
@@ -40,6 +44,7 @@ def test_simulated_text_writes_get_crlf_and_exact_writes_stay_lf(tmp_path):
         assert (tmp_path / "fixture.md").read_bytes() == b"a\r\nb\r\n"
         assert (tmp_path / "log.jsonl").read_bytes() == b"{}\r\n"
         assert (tmp_path / "fd.txt").read_bytes() == b"c\r\n"
+        assert Path(named.name).read_bytes() == b"d\r\n"
         for name in ("exact.md", "newline.md", "binary.md"):
             assert (tmp_path / name).read_bytes() == b"a\nb\n", name
         assert (tmp_path / "fixture.md").read_text(encoding="utf-8") == "a\nb\n"  # reading is universal

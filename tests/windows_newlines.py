@@ -6,14 +6,15 @@ fixes that when it builds the stream, from a constant compiled into its ``io`` m
 default, which writes exactly the bytes Windows writes:
 
 * ``open()``, ``io.open()`` and ``Path.open()`` (so also ``Path.write_text()``, ``os.fdopen()`` and
-  ``tempfile``) in a text mode that only writes: "w", "a" or "x";
+  ``tempfile.NamedTemporaryFile``/``TemporaryFile``) in a text mode that only writes: "w", "a" or "x";
 * the stdout and stderr of ``CliRunner`` (Typer's and click's), which are such streams.
   ``result.stdout_bytes`` then holds what a Windows run holds; ``result.output`` drops the CR again, as it
   does on Windows.
 
 Unchanged, as on Windows under pytest: ``sys.stdout``, ``sys.stderr`` and ``capsys`` (pytest's capture
 writes with ``newline=""`` on every OS). Out of scope: child processes, text modes that also read ("w+",
-"r+"), and encodings (the ``windows_console`` fixture covers a cp1252 console).
+"r+"), any ``io.TextIOWrapper`` built directly (``tempfile.SpooledTemporaryFile`` builds its own, so it still
+writes LF here), and encodings (the ``windows_console`` fixture covers a cp1252 console).
 """
 from __future__ import annotations
 
