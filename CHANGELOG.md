@@ -5,19 +5,54 @@ All notable changes to the packages in this repository, newest first. The format
 they are 0.x, a minor version may change behavior. Pins between the packages admit one minor version of
 each dependency, for example `memlab-core>=0.2,<0.3`.
 
-Release 0.3 contains:
+Release 0.4 contains:
 
 | Directory | Distribution | Version | Previous release |
 |---|---|---|---|
-| `packages/memcore` | `memlab-core` | 0.2.0 | 0.1.0 |
-| `packages/memfalsify` | `memfalsify` | 0.3.0 | 0.1.0 |
-| `packages/orgmemory` | `orgmemory` | 0.3.0 | 0.1.0 |
-| `packages/memlab-mcp` | `memlab-mcp` | 0.3.0 | none (added after 0.1) |
+| `packages/memcore` | `memlab-core` | 0.3.0 | 0.2.0 |
+| `packages/memfalsify` | `memfalsify` | 0.4.0 | 0.3.0 |
+| `packages/orgmemory` | `orgmemory` | 0.4.0 | 0.3.0 |
+| `packages/memlab-mcp` | `memlab-mcp` | 0.4.0 | 0.3.0 |
 
 ## Unreleased
 
-Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0, memlab-mcp 0.4.0 and the
-new memlab-ui 0.1.0. The release date is not yet set; all changes since release 0.3 are collected here.
+Changes after release 0.4. No version numbers have changed yet; memlab-ui 0.1.0 is new.
+
+### Added
+
+- `memlab-ui` (`packages/memlab-ui`): a local, read-only web page for trying Memory Lab without the command
+  line, started as `memlab-ui --root DIR [--port N]`. Home lists the agent files under the root; "Check an
+  agent file" runs the lexical audit (or, when the root is a repository, the diff since a revision) and
+  shows each flagged statement next to the quote that seems to disagree; "Team decisions" opens the first
+  decision log and shows each topic's status, the deciding quote, a timeline of what counted, audit
+  findings and changes between two dates. It uses only the standard library's `http.server` and has no
+  JavaScript. Every page reads in English or Simplified Chinese (`?lang=zh`, with a switch in the sidebar).
+  Public API: `memlab_ui.create_server` (binds 127.0.0.1 without serving) and `__version__`. Requires
+  memlab-core 0.3, memfalsify 0.4 and orgmemory 0.4. See [docs/ui.md](docs/ui.md).
+
+### Security
+
+- memlab-ui binds 127.0.0.1 only and checks the `Host` header against DNS rebinding; refuses requests sent by
+  other sites (`Sec-Fetch-Site` other than `same-origin` or `none`, or a foreign `Origin`) before any work;
+  answers GET and HEAD only (405 otherwise, HTTP/0.9 gets a 400 with full headers); serves at most 16
+  connections and computes at most 2 pages at once; needs the request line and headers within 10 s in total;
+  confines every path to `--root` with confined reads; writes nothing; keeps model verifiers off unless
+  `--allow-model-verifiers`; escapes every untrusted value; sends a strict Content-Security-Policy that loads
+  only its own logo and favicon; and answers errors without tracebacks or outside paths.
+- MemFalsify's evidence scan enforces its 2 MB limit while reading: `read_input_bytes()` takes an optional
+  `max_bytes` (default unchanged), checks the opened file's size with fstat and reads at most `max_bytes + 1`
+  bytes, so a large or growing file is never held in memory whole. memlab-core's internal `read_limits()`
+  bounds the bytes per file, the bytes in total and the directories walked in one execution context;
+  memlab-ui sets it per page (8 MB, 64 MB, 20,000 folders) and says when a page was cut short.
+
+### Repository
+
+- `scripts/setup-local.sh`, both CI install lines and `docs/local-setup*.md` include `-e packages/memlab-ui`.
+
+## Release 0.4
+
+Release 0.4 contains memlab-core 0.3.0, memfalsify 0.4.0, orgmemory 0.4.0 and memlab-mcp
+0.4.0. It was tagged `v0.4.0` on 2026-10-11; all changes since release 0.3 are collected here.
 
 Multimodal evidence through transcript and OCR sidecars (roadmap v0.4; see
 [docs/multimodal.md](docs/multimodal.md)) and HTML reports use the new memlab-core API,
@@ -85,16 +120,6 @@ including `memcore.htmlpage`. The dependent packages' pins move to memlab-core 0
 
 ### Added
 
-- `memlab-ui` (`packages/memlab-ui`): a local, read-only web page for trying Memory Lab without the command
-  line, started as `memlab-ui --root DIR [--port N]`. Home lists the agent files under the root; "Check an
-  agent file" runs the lexical audit (or, when the root is a repository, the diff since a revision) and
-  shows each flagged statement next to the quote that seems to disagree; "Team decisions" shows each
-  topic's status, the deciding quote, a timeline of what counted, audit findings and changes between two
-  dates. It uses only the standard library's `http.server`, binds 127.0.0.1, checks the `Host` header
-  against DNS rebinding, answers GET and HEAD only, confines every path to `--root` with confined reads,
-  writes nothing, keeps model verifiers off unless `--allow-model-verifiers`, escapes every untrusted value
-  and sends a strict Content-Security-Policy that loads only its own logo and favicon. Every page reads in
-  English or Simplified Chinese (`?lang=zh`, with a switch in the sidebar). See [docs/ui.md](docs/ui.md).
 - Explicit package-root Python APIs for `memcore`, `memfalsify`, `orgmemory`, and `memlab_mcp`,
   including evidence reading, memory audits and Git history, organizational replay and GitHub ingestion,
   and MCP server construction. Existing module import paths remain available.
@@ -431,19 +456,10 @@ a symlink out of the root is never read.
 - The orgmemory tools read an optional `policy-log.jsonl`, refusing one that is a symlink leaving the server
   root. `orgmemory_validate` prints the same lines as `orgmemory validate`.
 
-### memlab-ui
-
-#### Added
-
-- First version, 0.1.0: see the release section's Added list and [docs/ui.md](docs/ui.md). Public API:
-  `memlab_ui.create_server` (binds 127.0.0.1 without serving) and `__version__`. Requires memlab-core 0.3,
-  memfalsify 0.4 and orgmemory 0.4.
-
 ### Repository
 
 #### Added
 
-- `scripts/setup-local.sh` and the CI install lines include `-e packages/memlab-ui`.
 - GitHub Action: `memory: auto` audits every instruction file `memfalsify discover` finds in the
   workspace (or, with `diff-base`, diffs each one). The `exclude` globs also leave instruction files out
   of discovery.
@@ -464,9 +480,9 @@ a symlink out of the root is never read.
 
 ## memlab-core
 
-### 0.3.0 - Pending release 0.4
+### 0.3.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.2.0 - 2026-10-11
 
@@ -496,9 +512,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memfalsify
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -587,9 +603,9 @@ verification) and v0.3 (memory kept in git) ship in it. There is no memfalsify 0
 
 ## orgmemory
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -631,9 +647,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memlab-mcp
 
-### 0.4.0 - Pending release 0.4
+### 0.4.0 - 2026-10-11
 
-Changes are collected in the [release 0.4 section](#unreleased); the release date is not yet set.
+Changes are collected in the [release 0.4 section](#release-04).
 
 ### 0.3.0 - 2026-10-11
 
@@ -678,10 +694,9 @@ Changes are collected in the [release 0.4 section](#unreleased); the release dat
 
 ## memlab-ui
 
-### 0.1.0 - Pending release 0.4
+### 0.1.0 - Unreleased
 
-First version. Changes are collected in the [release 0.4 section](#unreleased); the release date is not
-yet set.
+First version, not yet released. Changes are collected in the [Unreleased section](#unreleased).
 
 ## Repository
 
