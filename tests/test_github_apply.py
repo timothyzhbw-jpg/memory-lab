@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from conftest import snapshot
+from conftest import snapshot, write_text_exact
 from github_fakes import FakeClock, FakeTransport, build_capture, ev, issue, item, reply, review, routes_from_capture
 from memcore import read_jsonl
 from orgmemory import github_apply, github_fetch
@@ -47,7 +47,7 @@ def dataset(parent, name):
 
 def capture_file(root, capture):
     path = root / 'input.json'
-    path.write_text(json.dumps(capture,ensure_ascii=True))
+    write_text_exact(path, json.dumps(capture,ensure_ascii=True))
     return path
 
 
@@ -196,11 +196,11 @@ def test_states_do_not_depend_on_sync_history(tmp_path):
 def test_policy_json_never_read(tmp_path,monkeypatch):
     roots = [dataset(tmp_path,str(n)) for n in range(3)]
     (roots[0]/'policy.json').unlink()
-    (roots[1]/'policy.json').write_text('invalid JSON')
+    write_text_exact(roots[1]/'policy.json', 'invalid JSON')
     cap = recording(1)
     actors = {u['login']:['product_manager'] for i in cap['items']
               for u in [i['issue']['user']] if u}
-    (roots[2]/'policy.json').write_text(json.dumps({'actors':actors,'permissions':{}}))
+    write_text_exact(roots[2]/'policy.json', json.dumps({'actors':actors,'permissions':{}}))
     policies = [(root/'policy.json').read_bytes() if (root/'policy.json').exists() else None for root in roots]
     real_open = Path.open
     def guarded(path,*args,**kwargs):
@@ -230,13 +230,13 @@ def test_fails_closed(github_dataset,kind,tmp_path,monkeypatch):
         path.parent.mkdir(parents=True)
         path.write_bytes(b'conflict')
     elif kind == 'malformed_events':
-        (github_dataset/'events.jsonl').write_text('{not json}\n')
+        write_text_exact(github_dataset/'events.jsonl', '{not json}\n')
     elif kind == 'duplicate':
         path = github_dataset/'events.jsonl'
         with path.open('ab') as handle:
             handle.write(path.read_bytes().splitlines(keepends=True)[0])
     elif kind == 'bad_log':
-        (github_dataset/'github-sync.jsonl').write_text('{"repo_id":"1001"}\n')
+        write_text_exact(github_dataset/'github-sync.jsonl', '{"repo_id":"1001"}\n')
     elif kind == 'symlink':
         outside = tmp_path/'outside'
         outside.mkdir()
@@ -325,7 +325,7 @@ def test_crash_between_evidence_and_events_recovers(github_dataset,monkeypatch):
 def test_drift_reported_never_rewritten(github_dataset):
     converted(github_dataset,1)
     before = relative_snapshot(github_dataset,log=False)
-    (github_dataset/'github.json').write_text('{"labels":{"approved":"reject","risk":"raise_risk"}}')
+    write_text_exact(github_dataset/'github.json', '{"labels":{"approved":"reject","risk":"raise_risk"}}')
     summary,_ = sync(github_dataset,recording(1),full=True)
     # Bot approve and reject both become comment, so only the human action drifts.
     assert summary.plan.drift == ['gh:acme/web#1/event/107']
@@ -353,7 +353,7 @@ def test_lock_and_dry_run(github_dataset):
     before = snapshot(github_dataset)
     summary = converted(github_dataset,1,dry_run=True)
     assert summary.events_appended == 53 and snapshot(github_dataset) == before
-    (github_dataset/'.github-sync.lock').write_text('held')
+    write_text_exact(github_dataset/'.github-sync.lock', 'held')
     before = snapshot(github_dataset)
     result = RUNNER.invoke(app,['github','convert',str(github_dataset),str(FIXTURES/'capture-1.json')])
     assert result.exit_code == 2 and 'another sync is running' in result.output

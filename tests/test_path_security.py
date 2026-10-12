@@ -16,7 +16,7 @@ from memfalsify.corpus import scan
 from memfalsify.history import memory_diff
 from memcore import append_jsonl
 from memcore.paths import InputPathError, input_path
-from conftest import requires_confinement
+from conftest import requires_confinement, write_text_exact
 from orgmemory.github_apply import lock
 
 
@@ -31,12 +31,12 @@ requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is no
 @pytest.fixture
 def credential_checkout(git_repo, make_symlink):
     root = git_repo.root
-    with (root / ".git/config").open("a", encoding="utf-8") as handle:
+    with (root / ".git/config").open("a", encoding="utf-8", newline="") as handle:
         handle.write(f"\n[http]\n\textraheader = AUTHORIZATION: basic {TOKEN}\n")
     make_symlink(root / "AGENTS.md", ".git/config")
     (root / "notes").mkdir()
     make_symlink(root / "notes/harmless.md", "../.git/config")
-    (root / "MEMORY.md").write_text("extraheader AUTHORIZATION basic.\n", encoding="utf-8")
+    write_text_exact(root / "MEMORY.md", "extraheader AUTHORIZATION basic.\n")
     return root
 
 
@@ -141,10 +141,10 @@ BLOCKED = [".git/config", ".secret.md", "node_modules/secret.md", "__pycache__/s
 def test_memory_links_and_evidence_share_target_policy(tmp_path, make_symlink, target):
     secret = tmp_path / target
     secret.parent.mkdir(parents=True, exist_ok=True)
-    secret.write_text(f"Secret credentials contain {TOKEN}.\n", encoding="utf-8")
+    write_text_exact(secret, f"Secret credentials contain {TOKEN}.\n")
     make_symlink(tmp_path / "alias.md", target)
     memory = tmp_path / "MEMORY.md"
-    memory.write_text(f"- [direct]({target})\n- [alias](alias.md)\n", encoding="utf-8")
+    write_text_exact(memory, f"- [direct]({target})\n- [alias](alias.md)\n")
     skipped = []
     claims, files = parse_memory(memory, skipped=skipped)
     assert claims == [] and files == [memory]
@@ -163,11 +163,11 @@ def test_memory_links_and_evidence_share_target_policy(tmp_path, make_symlink, t
 @pytest.mark.parametrize("directory", [".hidden", "node_modules", "__pycache__", "venv"])
 def test_walked_path_cannot_hide_behind_safe_target(tmp_path, make_symlink, directory):
     (tmp_path / directory).mkdir()
-    (tmp_path / "safe.md").write_text("Safe content is readable.\n", encoding="utf-8")
+    write_text_exact(tmp_path / "safe.md", "Safe content is readable.\n")
     alias = tmp_path / directory / "alias.md"
     make_symlink(alias, "../safe.md")
     memory = tmp_path / "MEMORY.md"
-    memory.write_text(f"- [hidden alias]({directory}/alias.md)\n", encoding="utf-8")
+    write_text_exact(memory, f"- [hidden alias]({directory}/alias.md)\n")
     report = audit(memory, tmp_path)
     assert report.findings == []
     assert any(s.path == f"{directory}/alias.md" and "walked path" in s.reason for s in report.skipped_evidence)
@@ -178,7 +178,7 @@ def test_walked_path_cannot_hide_behind_safe_target(tmp_path, make_symlink, dire
 
 def test_hidden_memory_filename_is_skipped(tmp_path):
     path = tmp_path / ".MEMORY.md"
-    path.write_text(f"Credentials contain {TOKEN}.\n", encoding="utf-8")
+    write_text_exact(path, f"Credentials contain {TOKEN}.\n")
     report = audit(path)
     assert report.files_read == [] and report.findings == []
     assert report.skipped_evidence[0].path == ".MEMORY.md"
@@ -194,7 +194,7 @@ def test_action_checks_workspace_memory_targets(tmp_path, monkeypatch, capsys, m
     target = {"outside": tmp_path / "outside.md", "hidden": workspace / ".private/secret.md",
               "skipped": workspace / "venv/secret.md", "safe": workspace / "notes/safe.md"}[kind]
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(f"Credentials contain {TOKEN}.\n", encoding="utf-8")
+    write_text_exact(target, f"Credentials contain {TOKEN}.\n")
     make_symlink(workspace / "AGENTS.md", target)
     monkeypatch.chdir(workspace)
     env = {"GITHUB_WORKSPACE": str(workspace), "RUNNER_TEMP": str(runner), "MEMFALSIFY_MEMORY": "AGENTS.md",
@@ -213,14 +213,14 @@ def test_review_evidence_cannot_bypass_target_policy(tmp_path, make_symlink):
     (tmp_path / ".private").mkdir()
     secret = tmp_path / ".private/secret.md"
     quote = f"Credentials contain {TOKEN}."
-    secret.write_text(quote, encoding="utf-8")
+    write_text_exact(secret, quote)
     make_symlink(tmp_path / "alias.md", secret)
     memory = tmp_path / "MEMORY.md"
-    memory.write_text("Credentials contain a token.\n", encoding="utf-8")
+    write_text_exact(memory, "Credentials contain a token.\n")
     claims, _ = parse_memory(memory)
     reviews = tmp_path / "reviews.jsonl"
-    reviews.write_text(json.dumps({"memory_id": claims[0].id, "relation": "supports", "path": "alias.md",
-                                   "quote": quote, "reviewer": "reviewer"}) + "\n", encoding="utf-8")
+    write_text_exact(reviews, json.dumps({"memory_id": claims[0].id, "relation": "supports", "path": "alias.md",
+                                          "quote": quote, "reviewer": "reviewer"}) + "\n")
     report = audit(memory, tmp_path, reviews)
     assert report.findings[0].evidence == []
     assert any(s.path == "alias.md" and "review evidence skipped: hidden" in s.reason
@@ -232,7 +232,7 @@ def test_review_evidence_cannot_bypass_target_policy(tmp_path, make_symlink):
 def test_diff_worktree_link_cannot_quote_checkout_credentials(git_repo, make_symlink):
     root = git_repo.root
     base = git_repo.commit("base", {"MEMORY.md": "- [details](alias.md)\n"})
-    with (root / ".git/config").open("a", encoding="utf-8") as handle:
+    with (root / ".git/config").open("a", encoding="utf-8", newline="") as handle:
         handle.write(f"\n[http]\n\textraheader = AUTHORIZATION: basic {TOKEN}\n")
     make_symlink(root / "alias.md", ".git/config")
     report = memory_diff(root / "MEMORY.md", base, evidence_root=root)
@@ -305,7 +305,7 @@ def test_action_diff_cannot_publish_memory_symlink_target(git_repo, tmp_path, mo
     base = git_repo.commit("base", {"AGENTS.md": "- Safe content is readable.\n"})
     (git_repo.root / "AGENTS.md").unlink()
     make_symlink(git_repo.root / "AGENTS.md", ".git/config")
-    with (git_repo.root / ".git/config").open("a", encoding="utf-8") as handle:
+    with (git_repo.root / ".git/config").open("a", encoding="utf-8", newline="") as handle:
         handle.write(f"\n[http]\n\textraheader = AUTHORIZATION: basic {TOKEN}\n")
     runner = tmp_path / "runner"
     runner.mkdir()

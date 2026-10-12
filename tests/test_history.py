@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from conftest import GitRepo as Repo, snapshot
+from conftest import GitRepo as Repo, snapshot, write_text_exact
 from memfalsify import gitstore
 from memfalsify.audit import audit
 from memfalsify.cli import app
@@ -366,7 +366,8 @@ def test_crlf_rev_parse_still_opens_the_repository(repo, tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     shim = bindir / "git"
-    shim.write_text(
+    write_text_exact(
+        shim,
         f"#!{sys.executable}\n"
         "import os, subprocess, sys\n"
         f"real = {real!r}\n"
@@ -376,8 +377,7 @@ def test_crlf_rev_parse_still_opens_the_repository(repo, tmp_path, monkeypatch):
         "    sys.stderr.buffer.write(proc.stderr)\n"
         "    sys.stdout.buffer.write(proc.stdout.replace(b'\\n', b'\\r\\n'))\n"
         "    raise SystemExit(proc.returncode)\n"
-        "os.execv(real, [real, *args])\n",
-        encoding="utf-8")
+        "os.execv(real, [real, *args])\n")
     shim.chmod(0o755)
     monkeypatch.setenv("PATH", str(bindir) + os.pathsep + os.environ["PATH"])
     memory = repo.root / "docs" / "MEMORY.md"

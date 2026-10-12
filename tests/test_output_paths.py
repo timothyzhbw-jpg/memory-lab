@@ -19,6 +19,7 @@ from html.parser import HTMLParser
 import pytest
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 import memfalsify.cli as memfalsify_cli
 from memcore import htmlpage
 from memfalsify.cli import app as memfalsify_app
@@ -49,17 +50,17 @@ def dataset(root, *, actor="pm", subject="Feature A", sales="sales", unknown=Non
     (root / "sources").mkdir()
     (root / "sources" / "main.txt").write_bytes(text.encode("utf-8"))  # exact bytes: the hash covers them
     start = len("Notes\n")
-    (root / "evidence.jsonl").write_text(json.dumps({
+    write_text_exact(root / "evidence.jsonl", json.dumps({
         "id": "e1", "path": "sources/main.txt", "sha256": sha256(text.encode("utf-8")).hexdigest(), "quote": quote,
         "start": start, "end": start + len(quote), "source_uri": "synthetic://email/1", "source_kind": "email",
-        "captured_at": "2026-10-05T09:00:00Z"}) + "\n", encoding="utf-8")
+        "captured_at": "2026-10-05T09:00:00Z"}) + "\n")
     actors = {actor: ["product_manager"], sales: ["account_manager"]}
-    (root / "policy.json").write_text(json.dumps({
+    write_text_exact(root / "policy.json", json.dumps({
         "actors": actors,
         "permissions": {"request": ["product_manager", "account_manager"], "comment": ["product_manager"],
                         "approve": ["product_manager"], "reject": ["product_manager"],
                         "revoke": ["product_manager"], "reconsider": ["product_manager"],
-                        "raise_risk": ["product_manager"], "dependency": ["product_manager"]}}), encoding="utf-8")
+                        "raise_risk": ["product_manager"], "dependency": ["product_manager"]}}))
 
     def event(id, hour, who, action):
         return {"id": id, "timestamp": f"2026-10-05T{hour:02d}:00:00Z", "actor": who, "action": action,
@@ -68,7 +69,7 @@ def dataset(root, *, actor="pm", subject="Feature A", sales="sales", unknown=Non
     events = [event("r1", 9, actor, "request"), event("a1", 10, actor, "approve")]
     if unknown is not None:
         events.append(event("u1", 11, unknown, "approve"))
-    (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    write_text_exact(root / "events.jsonl", "".join(json.dumps(e) + "\n" for e in events))
     return root
 
 
@@ -152,11 +153,11 @@ def test_html_quote_of_one_line_is_unchanged():
 def test_html_audit_report_has_no_command_line_from_a_multi_line_cue(tmp_path):
     evidence = tmp_path / "evidence"
     evidence.mkdir()
-    (evidence / "call.srt").write_text(
+    write_text_exact(
+        evidence / "call.srt",
         "1\n00:00:02,000 --> 00:00:06,500\nCustomer: Your retry budget is 3 attempts per request, right?\n"
-        + FORGED + "\n\n2\n00:00:06,500 --> 00:00:08,000\nSupport: Yes, 3 attempts per request.\n", encoding="utf-8")
-    (tmp_path / "MEMORY.md").write_text("# Memory\n\n- The retry budget is 3 attempts per request.\n",
-                                        encoding="utf-8")
+        + FORGED + "\n\n2\n00:00:06,500 --> 00:00:08,000\nSupport: Yes, 3 attempts per request.\n")
+    write_text_exact(tmp_path / "MEMORY.md", "# Memory\n\n- The retry budget is 3 attempts per request.\n")
     result = cli(memfalsify_app, "audit", tmp_path / "MEMORY.md", "--evidence", evidence, "--format", "html",
                  "--as-of", "2026-10-10")
     assert result.exit_code in (0, 1), result.output

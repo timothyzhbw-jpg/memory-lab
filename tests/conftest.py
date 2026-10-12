@@ -65,6 +65,12 @@ def snapshot(root: Path) -> dict:
     return {p: p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
 
 
+def write_text_exact(path: Path, text: str) -> None:
+    """Write ``text`` as UTF-8 bytes. Path.write_text would add a CR before every LF on Windows, which changes
+    evidence hashes, quote offsets and golden files (tests/test_windows_guard.py)."""
+    path.write_bytes(text.encode("utf-8"))
+
+
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     def refuse(*args, **kwargs):

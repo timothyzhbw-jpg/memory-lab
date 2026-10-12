@@ -12,6 +12,7 @@ import pytest
 from markdown_it import MarkdownIt
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 from memfalsify.audit import Issue, Proposal, audit
 from memfalsify.cli import app as mem_app
 from memfalsify.history import DiffReport, HistoryReport, diff_to_markdown, history_to_markdown
@@ -63,16 +64,16 @@ def terminal_inert(text):
 @pytest.fixture
 def memory_case(tmp_path):
     memory = tmp_path / "MEMORY.md"
-    memory.write_text("- " + CONTROL_TEXT + "\n", encoding="utf-8")
+    write_text_exact(memory, "- " + CONTROL_TEXT + "\n")
     evidence = tmp_path / "evidence"
     evidence.mkdir()
     quote = "The cache uses Redis in production."
     filename = FILENAME if os.name != "nt" else "evidence.md"
-    (evidence / filename).write_text(quote, encoding="utf-8")
+    write_text_exact(evidence / filename, quote)
     claims, _ = parse_memory(memory)
     reviews = tmp_path / "reviews.jsonl"
-    reviews.write_text(json.dumps({"memory_id": claims[0].id, "relation": "supports", "path": filename,
-                                  "quote": quote, "reviewer": REVIEWER, "note": NOTE}) + "\n", encoding="utf-8")
+    write_text_exact(reviews, json.dumps({"memory_id": claims[0].id, "relation": "supports", "path": filename,
+                                         "quote": quote, "reviewer": REVIEWER, "note": NOTE}) + "\n")
     return memory, evidence, reviews
 
 

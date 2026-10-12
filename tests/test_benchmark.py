@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 from memfalsify import llm
 from memfalsify.llm import Verdict
 from memfalsify.verify import CascadeVerifier, DualVerifier, Judgment, LexicalVerifier, VerifierError
@@ -70,12 +71,11 @@ def label_records(labels=LABELS):
 def write_case(root: Path, records=None, as_of="2026-10-10") -> Path:
     for name, text in EVIDENCE.items():
         (root / "evidence" / name).parent.mkdir(parents=True, exist_ok=True)
-        (root / "evidence" / name).write_text(text, encoding="utf-8")
-    (root / "MEMORY.md").write_text(MEMORY, encoding="utf-8")
-    (root / "case.json").write_text(json.dumps({"as_of": as_of, "description": "tiny synthetic case"}),
-                                    encoding="utf-8")
+        write_text_exact(root / "evidence" / name, text)
+    write_text_exact(root / "MEMORY.md", MEMORY)
+    write_text_exact(root / "case.json", json.dumps({"as_of": as_of, "description": "tiny synthetic case"}))
     lines = [r if isinstance(r, str) else json.dumps(r) for r in (records or label_records())]
-    (root / "labels.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text_exact(root / "labels.jsonl", "\n".join(lines) + "\n")
     return root
 
 
@@ -155,7 +155,7 @@ def test_validation_of_case_files_and_selection(tmp_path):
         bench.load_cases(tmp_path / "cases", ["nope"])
     shutil.rmtree(tmp_path / "cases" / "empty")
     write_case(tmp_path / "cases" / "dated")
-    (tmp_path / "cases" / "dated" / "case.json").write_text('{"as_of": "2026-13-01", "description": "x", "x": 1}')
+    write_text_exact(tmp_path / "cases" / "dated" / "case.json", '{"as_of": "2026-13-01", "description": "x", "x": 1}')
     with pytest.raises(bench.BenchmarkError) as caught:
         bench.load_cases(tmp_path / "cases")
     assert "case dated:\n  - case.json: " in str(caught.value)
@@ -164,26 +164,25 @@ def test_validation_of_case_files_and_selection(tmp_path):
 
 def test_duplicate_keys_in_case_and_labels_exit_2(cases):
     root = cases / "tiny"
-    (root / "case.json").write_text(
-        '{\n  "as_of": "2026-10-10",\n  "description": "a",\n  "description": "b"\n}\n', encoding="utf-8")
+    write_text_exact(
+        root / "case.json", '{\n  "as_of": "2026-10-10",\n  "description": "a",\n  "description": "b"\n}\n')
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
     assert result.exit_code == 2, result.output
     assert "case.json:4: invalid JSON: duplicate key" in result.output
 
-    (root / "case.json").write_text(
-        '{\n  "as_of": "2026-10-10",\n  "description": {"text": "a", "text": "b"}\n}\n', encoding="utf-8")
+    write_text_exact(
+        root / "case.json", '{\n  "as_of": "2026-10-10",\n  "description": {"text": "a", "text": "b"}\n}\n')
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
     assert result.exit_code == 2, result.output
     assert "case.json:3: invalid JSON: duplicate key" in result.output
 
-    (root / "case.json").write_text(json.dumps({"as_of": "2026-10-10", "description": "tiny synthetic case"}),
-                                    encoding="utf-8")
-    (root / "labels.jsonl").write_text('{"text": "a", "text": "b"}\n', encoding="utf-8")
+    write_text_exact(root / "case.json", json.dumps({"as_of": "2026-10-10", "description": "tiny synthetic case"}))
+    write_text_exact(root / "labels.jsonl", '{"text": "a", "text": "b"}\n')
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
     assert result.exit_code == 2, result.output
     assert "labels.jsonl:1: invalid JSON: duplicate key" in result.output
 
-    (root / "labels.jsonl").write_text('{"text": "a", "note": {"x": 1, "x": 2}}\n', encoding="utf-8")
+    write_text_exact(root / "labels.jsonl", '{"text": "a", "note": {"x": 1, "x": 2}}\n')
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--check"])
     assert result.exit_code == 2, result.output
     assert "labels.jsonl:1: invalid JSON: duplicate key" in result.output
@@ -344,7 +343,7 @@ def test_cli_check_selection_and_errors(cases):
     write_case(cases / "other")
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--case", "other", "--verifier", "jev", "--check"])
     assert result.exit_code == 0 and result.output == "1 case(s), 8 labeled claims: labels OK\n"
-    (cases / "other" / "labels.jsonl").write_text("", encoding="utf-8")
+    write_text_exact(cases / "other" / "labels.jsonl", "")
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--case", "tiny"])
     assert result.exit_code == 0 and "- Cases: 1 (tiny) · claims: 8" in result.output
     result = runner.invoke(bench.app, ["--cases-dir", str(cases)])

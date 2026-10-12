@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from conftest import write_text_exact
 from memcore import EvidenceError, load_json, locate_quote, read_jsonl, sha256_bytes
 from memcore.evidence import ManifestEntry, verify_entry
 from memfalsify.audit import audit
@@ -322,7 +323,7 @@ def test_load_json_rejects_deep_nesting_and_bad_utf8(tmp_path):
     with pytest.raises(ValueError, match="not UTF-8"):
         load_json(b"\xff")
     path = tmp_path / "rows.jsonl"
-    path.write_text(deep + "\n", encoding="utf-8")
+    write_text_exact(path, deep + "\n")
     with pytest.raises(ValueError, match="too deeply nested") as caught:
         list(read_jsonl(path))
     assert f"{path}:1:" in str(caught.value)
@@ -342,14 +343,14 @@ def test_deep_events_policy_and_append_exit_2(org_demo):
     events = org_demo / "events.jsonl"
     before = events.read_bytes()
     deep = "[" * DEPTH + "]" * DEPTH
-    events.write_text(deep + "\n", encoding="utf-8")
+    write_text_exact(events, deep + "\n")
     _assert_cli(RUNNER.invoke(orgmemory_app, ["validate", str(org_demo)]), "too deeply nested")
     events.write_bytes(before)
-    (org_demo / "policy.json").write_text(deep, encoding="utf-8")
+    write_text_exact(org_demo / "policy.json", deep)
     _assert_cli(RUNNER.invoke(orgmemory_app, ["validate", str(org_demo)]), "too deeply nested")
     events.write_bytes(before)
-    (org_demo / "policy.json").write_text(
-        (EXAMPLES / "orgmemory" / "feature-a" / "policy.json").read_text(encoding="utf-8"), encoding="utf-8")
+    write_text_exact(
+        org_demo / "policy.json", (EXAMPLES / "orgmemory" / "feature-a" / "policy.json").read_text(encoding="utf-8"))
     result = RUNNER.invoke(orgmemory_app, ["append", str(org_demo), "--event", deep])
     _assert_cli(result, "too deeply nested")
     assert events.read_bytes() == before
@@ -359,7 +360,7 @@ def test_deep_github_capture_exits_2(tmp_path):
     dataset = tmp_path / "dataset"
     dataset.mkdir()
     capture = tmp_path / "capture.json"
-    capture.write_text("[" * DEPTH + "]" * DEPTH, encoding="utf-8")
+    write_text_exact(capture, "[" * DEPTH + "]" * DEPTH)
     result = RUNNER.invoke(orgmemory_app, ["github", "convert", str(dataset), str(capture), "--dry-run"])
     assert result.exit_code == 2, result.output
     assert "Traceback" not in result.output
@@ -384,7 +385,7 @@ def test_comment_id_list_is_a_valueerror(tmp_path):
     dataset = tmp_path / "dataset"
     dataset.mkdir()
     path = tmp_path / "capture.json"
-    path.write_text(json.dumps(capture), encoding="utf-8")
+    write_text_exact(path, json.dumps(capture))
     result = RUNNER.invoke(orgmemory_app, ["github", "convert", str(dataset), str(path), "--dry-run"])
     assert result.exit_code == 2, result.output
     assert "Traceback" not in result.output and "TypeError" not in result.output
@@ -441,8 +442,8 @@ def test_git_log_date_is_strict_and_text_is_printable():
 
 def test_null_in_a_link_is_skipped_and_locate_quote_refuses_it(tmp_path):
     memory = tmp_path / "MEMORY.md"
-    memory.write_text("- See [notes](bad\x00name.md) for the details.\n"
-                      "- Priya owns the payments integration.\n", encoding="utf-8")
+    write_text_exact(memory, "- See [notes](bad\x00name.md) for the details.\n"
+                             "- Priya owns the payments integration.\n")
     claims, _ = parse_memory(memory)
     assert any(claim.text == "Priya owns the payments integration." for claim in claims)
     with pytest.raises(EvidenceError, match="null"):
@@ -499,14 +500,14 @@ def test_cli_error_is_one_line_without_controls(tmp_path):
     except OSError:
         pytest.skip("platform rejects control characters in directory names")
     (root / "events.jsonl").write_bytes(b"\xff\n")
-    (root / "policy.json").write_text("{}", encoding="utf-8")
-    (root / "evidence.jsonl").write_text("", encoding="utf-8")
+    write_text_exact(root / "policy.json", "{}")
+    write_text_exact(root / "evidence.jsonl", "")
     _assert_cli(RUNNER.invoke(orgmemory_app, ["validate", str(root)]), "not UTF-8")
 
 
 def test_audit_stdout_and_written_output_escape_controls(tmp_path):
     memory = tmp_path / "MEMORY.md"
-    memory.write_text("- The cache uses \x1b[31mRedis\u202e for sessions.\n", encoding="utf-8")
+    write_text_exact(memory, "- The cache uses \x1b[31mRedis\u202e for sessions.\n")
     library = audit_markdown(audit(memory))
     assert "\x1b" not in library and "\u202e" not in library
     assert "u001b" in library and "u202e" in library
@@ -525,7 +526,7 @@ def test_audit_stdout_and_written_output_escape_controls(tmp_path):
 
 def test_claims_json_shields_bidi_and_round_trips(tmp_path):
     memory = tmp_path / "MEMORY.md"
-    memory.write_text("- The cache uses \u202eRedis for sessions.\n", encoding="utf-8")
+    write_text_exact(memory, "- The cache uses \u202eRedis for sessions.\n")
     result = RUNNER.invoke(memfalsify_app, ["claims", str(memory)])
     assert result.exit_code == 0, result.output
     assert "\u202e" not in result.output
@@ -534,8 +535,7 @@ def test_claims_json_shields_bidi_and_round_trips(tmp_path):
 
 def test_replay_markdown_strips_terminal_controls(org_demo):
     path = org_demo / "events.jsonl"
-    path.write_text(path.read_text(encoding="utf-8").replace("Bulk export", "Bulk \\u001b\\u202eexport", 1),
-                    encoding="utf-8")
+    write_text_exact(path, path.read_text(encoding="utf-8").replace("Bulk export", "Bulk \\u001b\\u202eexport", 1))
     rendered = to_markdown(replay(Dataset.load(org_demo)))
     assert "\x1b" not in rendered and "\u202e" not in rendered
     assert "rejected" in rendered

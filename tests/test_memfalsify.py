@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from conftest import EXAMPLES, snapshot
+from conftest import EXAMPLES, snapshot, write_text_exact
 from memcore import EvidenceError
 from memfalsify.audit import audit
 from memfalsify.cli import app
@@ -29,15 +29,16 @@ def by_text(report):
 # --- parsing -----------------------------------------------------------------
 
 def test_parse_follows_links_and_skips_structure(tmp_path):
-    (tmp_path / "MEMORY.md").write_text(
+    write_text_exact(
+        tmp_path / "MEMORY.md",
         "---\nname: x\n---\n# Heading is not a claim\n"
         "- The cache uses Redis.\n"
         "```\nprint('code is not a claim')\n```\n"
         "- [Infra](infra.md) — index lines point at claims\n"
-        "- [Escape](../outside.md) — never followed\n", encoding="utf-8")
-    (tmp_path / "infra.md").write_text("---\ndescription: d\n---\nThe queue runs on Kafka.\n"
-                                       "- The cache uses Redis.\n", encoding="utf-8")
-    (tmp_path.parent / "outside.md").write_text("Outside secrets are here.\n", encoding="utf-8")
+        "- [Escape](../outside.md) — never followed\n")
+    write_text_exact(tmp_path / "infra.md", "---\ndescription: d\n---\nThe queue runs on Kafka.\n"
+                                            "- The cache uses Redis.\n")
+    write_text_exact(tmp_path.parent / "outside.md", "Outside secrets are here.\n")
     claims, files = parse_memory(tmp_path / "MEMORY.md")
     texts = {c.text: c for c in claims}
     assert set(texts) == {"The cache uses Redis.", "The queue runs on Kafka."}
@@ -108,7 +109,7 @@ def test_memory_files_are_excluded_from_evidence(memfalsify_demo):
 def test_exclude_drops_whole_directories_silently(memfalsify_demo, pattern):
     deep = memfalsify_demo / "evidence" / "docs" / "v1" / "old"
     deep.mkdir(parents=True)
-    (deep / "api.md").write_text("The public API rate limit is 5 requests per minute.\n", encoding="utf-8")
+    write_text_exact(deep / "api.md", "The public API rate limit is 5 requests per minute.\n")
     cited = lambda report: {e.span.path for f in report.findings for e in f.evidence}
     assert "docs/v1/old/api.md" in cited(audit(memfalsify_demo / "MEMORY.md", memfalsify_demo / "evidence",
                                                as_of=AS_OF))
@@ -140,7 +141,7 @@ def test_media_is_reported_not_read(memfalsify_demo):
 
 
 def test_evidence_symlink_escape_is_skipped(memfalsify_demo, tmp_path):
-    (tmp_path / "secret.md").write_text("The public API rate limit is 5 requests per minute.", encoding="utf-8")
+    write_text_exact(tmp_path / "secret.md", "The public API rate limit is 5 requests per minute.")
     (memfalsify_demo / "evidence" / "leak.md").symlink_to(tmp_path / "secret.md")
     report = run_demo(memfalsify_demo)
     assert any(s.path == "leak.md" and "escapes" in s.reason for s in report.skipped_evidence)
@@ -217,23 +218,23 @@ def test_unreadable_evidence_directory_fails_closed(memfalsify_demo, monkeypatch
 
 def test_review_with_unknown_memory_fails(memfalsify_demo):
     reviews = memfalsify_demo / "reviews.jsonl"
-    reviews.write_text(json.dumps({"memory_id": "m-00000000", "relation": "supports", "path": "docs/api.md",
-                                   "quote": "The public API", "reviewer": "r"}) + "\n", encoding="utf-8")
+    write_text_exact(reviews, json.dumps({"memory_id": "m-00000000", "relation": "supports", "path": "docs/api.md",
+                                          "quote": "The public API", "reviewer": "r"}) + "\n")
     with pytest.raises(EvidenceError, match="unknown memory_id"):
         run_demo(memfalsify_demo)
 
 
 def test_review_quote_must_be_verbatim(memfalsify_demo):
     reviews = memfalsify_demo / "reviews.jsonl"
-    reviews.write_text(json.dumps({"memory_id": claim_id("Priya owns the payments integration."),
-                                   "relation": "supports", "path": "docs/api.md",
-                                   "quote": "Priya owns payments.", "reviewer": "r"}) + "\n", encoding="utf-8")
+    write_text_exact(reviews, json.dumps({"memory_id": claim_id("Priya owns the payments integration."),
+                                          "relation": "supports", "path": "docs/api.md",
+                                          "quote": "Priya owns payments.", "reviewer": "r"}) + "\n")
     with pytest.raises(EvidenceError, match="not found verbatim"):
         run_demo(memfalsify_demo)
 
 
 def test_confirmed_both_ways_is_conflicted(memfalsify_demo):
-    with (memfalsify_demo / "reviews.jsonl").open("a", encoding="utf-8") as handle:
+    with (memfalsify_demo / "reviews.jsonl").open("a", encoding="utf-8", newline="") as handle:
         handle.write(json.dumps({"memory_id": claim_id("Feature A (bulk export) is approved for the November release."),
                                  "relation": "supports", "path": "docs/api.md", "quote": "The public API",
                                  "reviewer": "careless"}) + "\n")
@@ -316,7 +317,7 @@ def test_cli_strict_exit_code(memfalsify_demo):
 
 
 def test_cli_bad_reviews_exit_2(memfalsify_demo):
-    (memfalsify_demo / "reviews.jsonl").write_text("{not json}\n", encoding="utf-8")
+    write_text_exact(memfalsify_demo / "reviews.jsonl", "{not json}\n")
     result = runner.invoke(app, cli_args(memfalsify_demo))
     assert result.exit_code == 2 and "invalid JSON" in result.output
 

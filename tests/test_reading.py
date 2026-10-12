@@ -4,7 +4,7 @@ from contextlib import nullcontext
 
 import pytest
 
-from conftest import requires_confinement
+from conftest import requires_confinement, write_text_exact
 from memcore.reading import confined_reads, walk_files
 from memfalsify.corpus import scan
 
@@ -58,8 +58,8 @@ def test_scan_fails_closed_on_uncached_entry_type(tmp_path, wrap_scandir_entries
     root = tmp_path.resolve()
     docs = root / "docs"
     docs.mkdir()
-    (docs / "counter.md").write_text("The rate limit is five requests per minute.\n")
-    (root / "safe.md").write_text("The rate limit is one hundred requests per minute.\n")
+    write_text_exact(docs / "counter.md", "The rate limit is five requests per minute.\n")
+    write_text_exact(root / "safe.md", "The rate limit is one hundred requests per minute.\n")
     wrap_scandir_entries(UnknownTypeEntry)
     docs.chmod(0o400)  # Listing allowed, but metadata lookups need search permission.
     try:
@@ -80,7 +80,7 @@ def test_confined_classification_error_is_reported_and_entry_retained(
     """Injected errors also cover hosts/users that bypass chmod restrictions."""
     root = tmp_path.resolve()
     (root / "docs").mkdir()
-    (root / "safe.md").write_text("Accessible evidence.\n")
+    write_text_exact(root / "safe.md", "Accessible evidence.\n")
     failure = PermissionError("cannot classify docs")
 
     class FailedEntry(UnknownTypeEntry):
@@ -160,8 +160,8 @@ def test_confined_traversal_error_calls_onerror(tmp_path, monkeypatch, operation
 def test_confined_exclusion_prunes_before_open(tmp_path, monkeypatch, pattern):
     root = tmp_path.resolve()
     (root / "docs" / "nested").mkdir(parents=True)
-    (root / "docs" / "nested" / "api.md").write_text("This is counterevidence.\n")
-    (root / "safe.md").write_text("This is accessible evidence.\n")
+    write_text_exact(root / "docs" / "nested" / "api.md", "This is counterevidence.\n")
+    write_text_exact(root / "safe.md", "This is accessible evidence.\n")
     (root / "alias").symlink_to("docs", target_is_directory=True)
     original = os.open
 
@@ -181,7 +181,7 @@ def test_confined_exclusion_prunes_before_open(tmp_path, monkeypatch, pattern):
 def test_links_and_special_files(tmp_path, confined):
     root = tmp_path.resolve()
     (root / "docs").mkdir()
-    (root / "docs" / "api.md").write_text("The rate limit is five requests per minute.\n")
+    write_text_exact(root / "docs" / "api.md", "The rate limit is five requests per minute.\n")
     (root / "alias").symlink_to("docs", target_is_directory=True)
     (root / "outside").symlink_to(root.parent, target_is_directory=True)
     (root / "broken.md").symlink_to("absent.md")
@@ -223,9 +223,9 @@ def test_confined_walk_lists_directory_links_without_descending(tmp_path, monkey
 def test_confined_walk_keeps_descriptors_pinned_across_yields(tmp_path):
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "docs").mkdir(parents=True)
-    (root / "docs" / "inside.md").write_text("Inside evidence.\n")
+    write_text_exact(root / "docs" / "inside.md", "Inside evidence.\n")
     (outside / "docs").mkdir(parents=True)
-    (outside / "docs" / "private-filename.md").write_text("Outside evidence.\n")
+    write_text_exact(outside / "docs" / "private-filename.md", "Outside evidence.\n")
     root, outside = root.resolve(), outside.resolve()
     with confined_reads(root):
         walker = walk_files(root)
@@ -243,7 +243,7 @@ def test_confined_walk_rejects_directory_swap_before_descent(tmp_path, monkeypat
     root, outside = tmp_path / "root", tmp_path / "outside"
     (root / "docs").mkdir(parents=True)
     outside.mkdir()
-    (outside / "private-filename.md").write_text("Outside evidence.\n")
+    write_text_exact(outside / "private-filename.md", "Outside evidence.\n")
     original = os.open
     called, errors = [], []
 
