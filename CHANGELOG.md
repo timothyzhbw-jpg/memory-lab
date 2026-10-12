@@ -142,11 +142,11 @@ it short.
 - MemFalsify benchmark: `run.py --verifier openai` with the same options (the response format is recorded in
   the JSON settings), and a documented local Ollama run. No model results are recorded.
 - `scripts/setup-local.sh`, both CI install lines and `docs/local-setup*.md` include `-e packages/memlab-ui`.
-- Windows checks that run on any OS: `tests/test_windows_guard.py` flags text-mode writes without
-  `newline=""`, tests that build the MCP or UI server without the confinement marker, and f-strings only
-  Python 3.12 parses; `pytest --simulate-windows-newlines` writes CRLF like Windows text mode, and a Linux CI
-  job runs the suite with it. Test fixtures are written as exact bytes (`write_text_exact`,
-  `scripts/exact_writes.py`). AGENTS.md has the Windows rules.
+- Windows checks that run on any OS: `tests/test_windows_guard.py` requires `newline=""` on text-mode
+  writes, the confinement marker on tests that build the MCP or UI server, and f-string syntax that Python 3.10
+  parses; `pytest --simulate-windows-newlines` writes CRLF like Windows text mode, and a Linux CI job runs the
+  suite with it. Test fixtures are written as exact bytes (`write_text_exact`, `scripts/exact_writes.py`).
+  AGENTS.md has the Windows rules.
 
 ## Release 0.4
 
