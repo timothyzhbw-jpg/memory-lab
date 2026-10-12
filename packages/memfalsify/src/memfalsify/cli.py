@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable, Iterable
 from datetime import date
 from enum import Enum
@@ -14,6 +13,7 @@ from pydantic import ValidationError
 
 from memcore.cli import SafeTyperGroup
 from memcore.display import report_text
+from memcore.display import json_shield as _json_shield
 
 from . import jev, llm
 from .audit import ATTENTION, audit
@@ -87,13 +87,6 @@ def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_
             "max_judged": None if lexical else max_judged}
 
 
-# C1, bidi, zero-width and line separators. json.dumps already escapes C0. Replacing the raw
-# character with a \\uXXXX escape keeps json.loads able to restore it and a terminal unable to act on it.
-_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
-
-def _json_shield(text: str) -> str:
-    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
 def concurrency(choice: VerifierChoice, max_concurrency: int) -> int:
     """Model verifiers wait on the network, so they run requests in parallel; lexical judging stays serial."""
     return 1 if choice is VerifierChoice.lexical else max_concurrency

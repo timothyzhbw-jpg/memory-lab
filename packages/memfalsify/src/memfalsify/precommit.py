@@ -22,7 +22,7 @@ import typer
 from pydantic import ValidationError
 
 from memcore.cli import SafeTyperGroup
-from memcore.display import report_text
+from memcore.display import json_shield, report_text
 
 from . import __version__, jev, llm
 from .audit import ATTENTION
@@ -183,7 +183,7 @@ def _execute(mode: str, filenames: list[str] | None, *, evidence: Path | None, e
     if fmt is Format.json:
         payload = {"tool": "memfalsify", "version": __version__, "hook": mode, "attention": attention,
                    "reports": dumped}
-        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", nl=False)
+        typer.echo(json_shield(json.dumps(payload, indent=2, ensure_ascii=False)) + "\n", nl=False)
     if strict and attention:
         raise typer.Exit(1)
 

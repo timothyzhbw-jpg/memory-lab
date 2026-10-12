@@ -3,7 +3,6 @@ files only outside the dataset; every other command only appends."""
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -17,6 +16,7 @@ from memcore.jsonutil import loads_at
 
 from memcore.cli import SafeTyperGroup
 from memcore.display import report_text
+from memcore.display import json_shield as _json_shield
 
 from .audit import DEFAULT_STALE_DAYS, audit
 from .authority import POLICY_LOG
@@ -55,14 +55,6 @@ class TextFormat(str, Enum):
     json = "json"
 
 
-_JSON_UNSAFE = re.compile("[\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]")
-
-
-def _json_shield(text: str) -> str:
-    """Replace raw C1, bidi and line-separator characters with JSON ``\\uXXXX`` escapes."""
-    return _JSON_UNSAFE.sub(lambda match: "\\u%04x" % ord(match.group()), text)
-
-
 def _fail(message: str) -> None:
     typer.echo(f"error: {report_text(message)}", err=True)
     raise typer.Exit(2)
@@ -73,8 +65,8 @@ def _echo_exact(text: str) -> None:
     typer.echo(text.encode("utf-8"), nl=False)
 
 
-def _as_of(value: Optional[str]) -> Optional[datetime]:
-    return TypeAdapter(AwareDatetime).validate_python(value) if value else None
+def _as_of(value: Optional[str], flag: str = "--as-of") -> Optional[datetime]:
+    return _moment(value, flag) if value is not None else None
 
 
 def _load(dataset: Path) -> Dataset:
@@ -144,7 +136,7 @@ def _moment(value: str, flag: str) -> datetime:
     try:
         return TypeAdapter(AwareDatetime).validate_python(value)
     except ValidationError:
-        _fail(f"{flag} must be an ISO 8601 time with a timezone, like 2026-10-07T23:59:59Z")
+        _fail(f"{flag} must be an ISO 8601 time with a timezone; expected a datetime like 2026-10-07T23:59:59Z")
 
 
 @app.command("changes")
@@ -372,7 +364,7 @@ def github_sync(
         transport = github_fetch.PersistentTransport()
         try:
             client = github_fetch.Client(transport, token, max_wait=max_wait, progress=github_fetch.FetchProgress())
-            summary = run_sync(dataset, repo, client, full=full, since=_as_of(since), issues=issue or [],
+            summary = run_sync(dataset, repo, client, full=full, since=_as_of(since, "--since"), issues=issue or [],
                                save_capture=save_capture, dry_run=dry_run)
         finally:
             # Plain Transport fakes need not implement resource management.

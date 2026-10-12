@@ -10,8 +10,10 @@ import re
 import unicodedata
 from html import escape
 
-# Control, format (bidi, zero-width) and line/paragraph separator characters.
-UNSAFE_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
+# Control, format (bidi, zero-width) and line/paragraph separator characters, plus code points this
+# interpreter's Unicode database does not know: an older Python (3.10 ships Unicode 13) sees newer format
+# characters such as U+0890 as unassigned, and those must not pass through either.
+UNSAFE_CATEGORIES = ("Cc", "Cf", "Zl", "Zp", "Cn")
 _LINE_CLASSES = frozenset(UNSAFE_CATEGORIES)
 _ASCII_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _MARKUP = re.compile(r"[\\`*_{}\[\]#|~&<>]")
@@ -40,6 +42,17 @@ def one_line(text: str) -> str:
         return text
     return "".join(c if unicodedata.category(c) not in _LINE_CLASSES
                    else f"\\u{ord(c):04x}" if ord(c) <= 0xFFFF else f"\\U{ord(c):08x}" for c in text)
+
+
+def json_shield(text: str) -> str:
+    """Make serialized JSON/JSONL inert while preserving its values and layout.
+
+    JSON serializers already escape C0 characters inside strings. Preserve JSON whitespace
+    between tokens, and escape every remaining unsafe category with valid JSON escapes,
+    including surrogate pairs for supplementary format characters.
+    """
+    return "".join(c if c in "\t\r\n" or unicodedata.category(c) not in _LINE_CLASSES
+                   else json.dumps(c, ensure_ascii=True)[1:-1] for c in text)
 
 
 def markdown_text(text: str, *, preserve_inert_underscores: bool = False) -> str:

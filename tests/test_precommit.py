@@ -334,8 +334,9 @@ def test_hook_markdown_keeps_untrusted_text_inert_and_json_escapes_controls(repo
         assert "u001b" in result.stdout and "u202e" in result.stdout and "sessions" in result.stdout
     payload = runner.invoke(app, ["audit", *common, "--format", "json"])
     assert payload.exit_code in (0, 1), payload.output
-    assert rlo in payload.stdout and esc not in payload.stdout and cr not in payload.stdout
-    assert "\\u001b" in payload.stdout
+    # JSON on a terminal escapes format characters too; the parsed data keeps them (checked below).
+    assert rlo not in payload.stdout and esc not in payload.stdout and cr not in payload.stdout
+    assert "\\u001b" in payload.stdout and "\\u202e" in payload.stdout
     data = json.loads(payload.stdout)
     quotes = [e["span"]["quote"] for report in data["reports"] for finding in report["findings"]
               for e in finding["evidence"]]
