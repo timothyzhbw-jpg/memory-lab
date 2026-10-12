@@ -23,37 +23,36 @@ Changes after release 0.4 (`v0.4.0`), not yet released. The package versions are
 #### Added
 
 - `--verifier openai` on `audit` and `diff` (`memfalsify.OpenAICompatVerifier`, new extra `[openai]`, also in
-  `[all]`): one verifier for any OpenAI-compatible Chat Completions API. `--provider` presets the base URL
-  and the key's environment variable for `openai` (default), `grok` (xAI), `deepseek`, `gemini` (Google's
-  OpenAI-compatible endpoint) and `ollama` (`http://localhost:11434/v1`, no key); `--base-url` and
-  `--api-key-env` override them. `--openai-model` is required: model names differ between providers, so
-  there is no default. Memory claims and evidence passages are sent to the configured endpoint.
+  `[all]`): one verifier for any OpenAI-compatible Chat Completions API. `--provider` presets the base URL,
+  the key's environment variable and the response format for `openai` (default), `grok` (xAI), `deepseek`,
+  `gemini` (Google's OpenAI-compatible endpoint) and `ollama` (`http://localhost:11434/v1`, no key);
+  `--base-url`, `--api-key-env` and `--openai-response-format` override them. `--openai-model` is required:
+  model names differ between providers, so there is no default. Memory claims and evidence passages are sent
+  to the configured endpoint.
   - The base URL must be `https://`, or `http://` only to `localhost`, `127.0.0.1` or `::1`; a user name,
     password, query or fragment in it is refused, and no message repeats it.
-  - The key is read from the named variable, never taken as an argument, and must hold only the characters
-    keys use. It is never printed: errors are built from the provider's status, type, code, param and
-    message, and any of them that contains the key in any encoding (percent-escaped in either case,
-    `\u`-escaped, partly escaped) is withheld whole; no error keeps the SDK exception as its cause or
-    context; and the SDK's and the HTTP stack's log records (`OPENAI_LOG=debug`) are sanitized when they are
-    made, messages, exceptions and stacks alike, including loggers created later. The OpenAI SDK's
-    `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are ignored, so
-    settings meant for one provider never reach another.
   - Requests go only to the base URL: redirects are not followed (a 3xx stops the audit) and proxy variables
-    are not used. Certificates are checked against the system trust store, never `SSL_CERT_FILE` or
-    `SSL_CERT_DIR`: through the OS on macOS and Windows, and on Linux against OpenSSL's built-in CA
-    locations (or the usual bundle files).
-  - Requests ask for the verdict as a strict JSON schema (`response_format` `json_schema`). After HTTP 400
-    or 422 with an error about the format (its param, else a format code, else its message, never a model
-    that happens to be named that way), the verifier asks for `json_object`, then plain text, keeps
-    the format that worked and says so on stderr; any other error stops the audit at once. The first request
-    settles the format while concurrent ones wait. Only an answer with `finish_reason` `stop` is read; an
-    unfinished one, one that is not a valid verdict (invalid JSON, a repeated or unknown key, a relation
-    outside the schema), an empty answer, a malformed response and a refusal are no verdict (`unrelated`), never
-    support.
+    are not used. Certificates are verified as the OpenAI SDK and httpx2 ship it (the platform's trust store;
+    on Linux, OpenSSL honours `SSL_CERT_FILE` and `SSL_CERT_DIR`).
+  - The key is read from the named variable, never taken as an argument, and must hold only the characters
+    keys use. The threat model is everything the provider or the model controls: a provider error is shown as
+    its HTTP status, its type, code and param when each is a plain token, and a fixed hint for the status,
+    never the provider's message; the model's rationale, the only free text kept, has the key redacted (as is,
+    percent-encoded or JSON-escaped); finish_reason and other envelope fields are never echoed; no error keeps
+    the SDK exception as its cause or context; and the SDK's and the HTTP stack's log records
+    (`OPENAI_LOG=debug`) are redacted as they are made. Other code in the same Python process is trusted. The
+    OpenAI SDK's `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and `OPENAI_CUSTOM_HEADERS` are
+    ignored, so settings meant for one provider never reach another.
+  - `--openai-response-format` is `json_schema` (strict structured output), `json_object` or `text`: by default
+    `json_object` for `deepseek` (DeepSeek documents no `json_schema`) and `json_schema` for the other providers
+    and any `--base-url`. Nothing is retried in another format; an HTTP 400 or 422 says which simpler format to
+    try. Only an answer with `finish_reason` `stop` is read; an unfinished one, one that is not a valid verdict
+    (invalid JSON, a repeated or unknown key, a relation outside the schema), an empty answer, a malformed
+    response and a refusal are no verdict (`unrelated`), never support.
   - API errors exit 2 like the other backends. `--max-concurrency` applies; the report's API usage line has
     requests and tokens, with no cache counters. `--batch` is not supported with it (exit 2), and `dual` and
     `cascade` still pair Claude with Jev.
-  - The pre-commit hooks (`memfalsify-pre-commit diff` and `audit`) take the same four options.
+  - The pre-commit hooks (`memfalsify-pre-commit diff` and `audit`) take the same options.
 
 ### memlab-mcp
 
@@ -61,19 +60,19 @@ Changes after release 0.4 (`v0.4.0`), not yet released. The package versions are
 
 - `memfalsify_audit` and `memfalsify_diff` accept `verifier: "openai"`, refused unless the server runs with
   `--allow-model-verifiers`. Its endpoint comes only from server flags (`--openai-model`,
-  `--openai-provider`, `--openai-base-url`, `--openai-api-key-env`), checked at startup; no tool argument
-  names a provider, URL, model or key variable, so a client cannot send text elsewhere. Without
-  `--openai-model` the verifier is refused as not configured.
+  `--openai-provider`, `--openai-base-url`, `--openai-api-key-env`, `--openai-response-format`), checked at
+  startup; no tool argument names a provider, URL, model, key variable or response format, so a client cannot
+  send text elsewhere. Without `--openai-model` the verifier is refused as not configured.
 
 ### Repository
 
 #### Added
 
-- GitHub Action: `verifier: openai`, with the inputs `openai-model`, `provider`, `base-url` and
-  `api-key-env` (passed through `env:` and checked before the audit), and a hash-pinned lock set
-  `action/requirements/openai.txt`. `all.txt` (dual and cascade) still holds only the Claude and Jev SDKs.
-- MemFalsify benchmark: `run.py --verifier openai` with the same options, and a documented local Ollama run.
-  No model results are recorded.
+- GitHub Action: `verifier: openai`, with the inputs `openai-model`, `provider`, `base-url`, `api-key-env`
+  and `openai-response-format` (passed through `env:` and checked before the audit), and a hash-pinned lock
+  set `action/requirements/openai.txt`. `all.txt` (dual and cascade) still holds only the Claude and Jev SDKs.
+- MemFalsify benchmark: `run.py --verifier openai` with the same options (the response format is recorded in
+  the JSON settings), and a documented local Ollama run. No model results are recorded.
 
 ## Release 0.4
 

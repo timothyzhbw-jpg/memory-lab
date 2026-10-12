@@ -47,6 +47,7 @@ Pass credentials through the environment (for example `export TYPESAFE_API_KEY=.
 | `--openai-model` | none (required with `openai`) | `openai`: the model, as the provider names it |
 | `--provider` | `openai` | `openai`: preset base URL and key variable: `openai`, `grok`, `deepseek`, `gemini`, `ollama` |
 | `--base-url`, `--api-key-env` | the provider's | `openai`: another OpenAI-compatible base URL (https, or http only for localhost, 127.0.0.1 or ::1), and the name of the variable holding its key |
+| `--openai-response-format` | the provider's | `openai`: `json_schema`, `json_object` or `text` (`json_object` for `deepseek`, `json_schema` otherwise); recorded in the JSON `settings` |
 | `--case ID` | all cases | Run only these cases (repeatable) |
 | `--json OUT` | none | Also write every number and every per-claim prediction as JSON |
 | `--min-coverage`, `--max-judged` | as in `memfalsify audit` | Passage pre-selection: 0.5 and unbounded for `lexical`, 0.2 and 8 for the model verifiers |
@@ -68,8 +69,8 @@ python benchmarks/memfalsify/run.py --verifier openai --provider ollama --openai
 ```
 
 `--base-url http://127.0.0.1:<port>/v1` points at another local OpenAI-compatible server instead. The request
-asks for the verdict as a strict JSON schema; a server that rejects that format is asked for a JSON object, then
-for plain text, and the switch is printed on stderr. An answer that is not a valid verdict counts as no
+asks for the verdict as a strict JSON schema; for a server that rejects that format (HTTP 400 or 422), rerun with
+`--openai-response-format json_object` or `text`. An answer that is not a valid verdict counts as no
 verdict (`unrelated`), so a model that ignores the format scores as one that finds nothing. Results depend on the
 model, its quantization and the Ollama version: record those next to any numbers you publish. No Ollama results
 are recorded in [RESULTS.md](RESULTS.md) yet.

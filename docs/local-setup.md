@@ -42,15 +42,16 @@ Never commit a key or paste it into a chat. If a key has been shown anywhere it 
 
 ### OpenAI-compatible providers (`--verifier openai`)
 
-One verifier speaks the OpenAI Chat Completions API, so it works with OpenAI and with any provider that offers an OpenAI-compatible endpoint. `--openai-model` is required: there is no default, because model names differ between providers and change over time. `--provider` fills in the base URL and the key's variable:
+One verifier speaks the OpenAI Chat Completions API, so it works with OpenAI and with any provider that offers an OpenAI-compatible endpoint. `--openai-model` is required: there is no default, because model names differ between providers and change over time. `--provider` fills in the base URL, the key's variable and the response format:
 
-| `--provider` | Base URL | Key variable |
-|---|---|---|
-| `openai` (default) | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| `grok` (xAI) | `https://api.x.ai/v1` | `XAI_API_KEY` |
-| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` ([Google's OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai)) | `GEMINI_API_KEY` |
-| `ollama` | `http://localhost:11434/v1` | none |
+| `--provider` | Base URL | Key variable | `--openai-response-format` default |
+|---|---|---|---|
+| `openai` (default) | `https://api.openai.com/v1` | `OPENAI_API_KEY` | `json_schema` |
+| `grok` (xAI) | `https://api.x.ai/v1` | `XAI_API_KEY` | `json_schema` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | `json_object` ([DeepSeek documents `text` and `json_object` only](https://api-docs.deepseek.com/api/create-chat-completion)) |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` ([Google's OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai)) | `GEMINI_API_KEY` | `json_schema` |
+| `ollama` | `http://localhost:11434/v1` | none | `json_schema` |
+| any, with `--base-url` | the URL you give | the provider's, or `--api-key-env` | `json_schema` |
 
 ```bash
 export XAI_API_KEY=...
@@ -66,10 +67,13 @@ memfalsify audit MEMORY.md --evidence docs --verifier openai --base-url https://
 ```
 
 - `--base-url` and `--api-key-env` override the preset. The base URL must be `https://`; plain `http://` is accepted only for `localhost`, `127.0.0.1` and `::1`, and a URL with a user name, password, query or fragment is refused.
-- `--api-key-env` takes the variable's *name*. There is no option for the key itself, so it never appears in your shell history or process list. The key may hold only the characters keys use (letters, digits and `. _ ~ + / = -`). It is never printed: an error is reported from the provider's status, error type, code, parameter and message, and any of them that contains the key, also percent-, `\u`- or otherwise escaped, is withheld whole. With `OPENAI_LOG=debug`, SDK and HTTP log messages, exceptions and stacks that contain it are withheld too.
-- Only these options configure the endpoint. The OpenAI SDK's own variables (`OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`, `OPENAI_CUSTOM_HEADERS`) are not used, so settings meant for one provider never reach another. Environment proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`) are not used either: requests go straight to the base URL, a local server's included. Certificates are checked against the system's trust store, never against `SSL_CERT_FILE` or `SSL_CERT_DIR`: on macOS and Windows through the operating system, on Linux and other OpenSSL platforms against the CA locations built into OpenSSL, or else the first usual bundle file (such as `/etc/ssl/certs/ca-certificates.crt`); with none, every https certificate fails. A redirect is not followed; the audit stops with exit 2.
+- `--api-key-env` takes the variable's *name*. There is no option for the key itself, so it never appears in your shell history or process list. The key may hold only the characters keys use (letters, digits and `. _ ~ + / = -`).
+- Only these options configure the endpoint. The OpenAI SDK's own variables (`OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`, `OPENAI_CUSTOM_HEADERS`) are not used, so settings meant for one provider never reach another. Environment proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`) are not used either: requests go straight to the base URL, a local server's included. A redirect is not followed; the audit stops with exit 2.
+- Certificates are verified as the OpenAI SDK and httpx2 ship it, through the platform's trust store (`truststore`): the operating system's store on macOS and Windows, OpenSSL's on Linux, where OpenSSL honours `SSL_CERT_FILE` and `SSL_CERT_DIR` (your own configuration, which Nix and many containers rely on). A plain `http://` local server involves no certificates.
 - Memory claims and evidence passages are sent to the configured endpoint (except with a local server). Use a provider only for material you may send there.
-- The verifier asks for the verdict as a strict JSON schema (`response_format` `json_schema`). If the endpoint answers HTTP 400 or 422 with an error about the format (its parameter is `response_format`; or, when it names no parameter and no specific code, its message is about `response_format`, `json_schema` or `json_object`, not a model that happens to be named that way), it asks for a JSON object (`json_object`), then for plain text, keeps the format that worked, and prints the switch on stderr. Any other error, such as an unknown model, stops the audit at once. The first request settles the format while the others wait, whatever `--max-concurrency` is. Only an answer that ended normally (`finish_reason` `stop`) is read: a cut-off (`length`), filtered or otherwise unfinished answer, a malformed response, and one that is not a valid verdict count as no verdict (`unrelated`), never as support.
+- `--openai-response-format` sets what the model is asked to answer in: `json_schema` (strict structured output with the verdict schema), `json_object` (any JSON object) or `text` (no `response_format`; the instructions still ask for the same JSON object). The default comes from the table above. Nothing is retried in another format: an endpoint that does not support the format answers HTTP 400 or 422, the audit stops with exit 2, and the error suggests the next simpler format (`json_object`, then `text`).
+- Only an answer that ended normally (`finish_reason` `stop`) is read: a cut-off (`length`), filtered or otherwise unfinished answer, a malformed response, and one that is not a valid JSON verdict count as no verdict (`unrelated`), never as support.
+- What the key is kept out of: everything the provider or the model controls. A provider error is shown as its HTTP status, the error's type, code and param when each is a plain token, and a fixed hint (for example "the key in OPENAI_API_KEY was refused"); the provider's own message is never printed. The model's rationale is the only free text in a report: the key in it, as is, percent-encoded or JSON-escaped, is replaced by `[redacted]`. With `OPENAI_LOG=debug`, the same redaction applies to the SDK's and the HTTP libraries' log messages, exceptions and stacks. Other code running in the same Python process is trusted: it can read the environment anyway, and a library that writes the key into log records itself, or replaces the logging record factory, is outside what MemFalsify defends.
 - `--batch` is not supported with this verifier (exit 2). `dual` and `cascade` still pair Claude with Jev.
 
 ## 3. What a model audit costs
@@ -82,11 +86,11 @@ A model request judges one memory against one evidence sentence. The number of r
 | `jev` | the same number to Jev |
 | `dual` | that number to each backend |
 | `cascade` | that number to Jev, plus one Claude request for each Jev answer below `--accept-at` |
-| `openai` | memories × `--max-judged` to the configured endpoint, plus one retry per format the endpoint refuses (at most two, once per run) |
+| `openai` | memories × `--max-judged` to the configured endpoint |
 
 Fewer are sent when a memory shares terms with fewer sentences (`--min-coverage`), and `diff` judges only added and changed memories. With `--batch`, a request Claude refuses is sent once more directly with the refusal fallback, on models that have one.
 
-Each report says what was used: one "API usage" line per backend (`verifier_stats` in JSON) with the requests, how many went through a batch, input and output tokens, and for Claude the tokens written to and read from the prompt cache. For `openai`, input tokens are the provider's `prompt_tokens` (any provider-side cache is included) and the cache counters are empty. Retries the SDK makes after rate-limit or server errors are not counted, nor are requests an endpoint refused. To turn tokens into money, use the current prices on the [Anthropic pricing page](https://platform.claude.com/docs/en/about-claude/pricing); Jev is billed by TypeSafe AI. This repository does not quote prices, because they change.
+Each report says what was used: one "API usage" line per backend (`verifier_stats` in JSON) with the requests, how many went through a batch, input and output tokens, and for Claude the tokens written to and read from the prompt cache. For `openai`, input tokens are the provider's `prompt_tokens` (any provider-side cache is included) and the cache counters are empty. Retries the SDK makes after rate-limit or server errors are not counted, nor are requests that ended in an error. To turn tokens into money, use the current prices on the [Anthropic pricing page](https://platform.claude.com/docs/en/about-claude/pricing); Jev is billed by TypeSafe AI. This repository does not quote prices, because they change.
 
 - `--batch` bills the Claude requests at 50% of standard prices, but a batch can take up to 24 hours (most end within an hour).
 - Prompt caching only helps when a cached prefix reaches the model's minimum cacheable length. MemFalsify's instructions are a few hundred tokens, so for short memories the cache counters stay at 0 and nothing changes.

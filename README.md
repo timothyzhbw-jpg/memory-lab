@@ -584,17 +584,17 @@ memfalsify audit MEMORY.md --evidence evidence --verifier openai --openai-model 
 memfalsify audit MEMORY.md --evidence evidence --verifier openai --provider ollama --openai-model <model>    # local, no key
 ```
 
-| `--provider` | Base URL | Key variable |
-|---|---|---|
-| `openai` (default) | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` |
-| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` ([Google's OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai)) | `GEMINI_API_KEY` |
-| `ollama` | `http://localhost:11434/v1` | none |
+| `--provider` | Base URL | Key variable | Response format |
+|---|---|---|---|
+| `openai` (default) | `https://api.openai.com/v1` | `OPENAI_API_KEY` | `json_schema` |
+| `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` | `json_schema` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | `json_object` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` ([Google's OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai)) | `GEMINI_API_KEY` | `json_schema` |
+| `ollama` | `http://localhost:11434/v1` | none | `json_schema` |
 
-`--base-url` and `--api-key-env` override a preset. The base URL must be `https://` (plain `http://` only for `localhost`, `127.0.0.1` or `::1`) and may not carry a user name, password, query or fragment. `--api-key-env` takes the variable's name: no option takes the key itself, the key is never printed, and provider error messages are shown with it redacted. The OpenAI SDK's own `OPENAI_*` variables are ignored, so nothing configured for one provider reaches another. There is no default model, because model names differ between providers and change.
+`--base-url` and `--api-key-env` override a preset. The base URL must be `https://` (plain `http://` only for `localhost`, `127.0.0.1` or `::1`) and may not carry a user name, password, query or fragment. `--api-key-env` takes the variable's name: no option takes the key itself. A provider error is shown as its HTTP status, its type, code and param when each is a plain token, and a fixed hint; the provider's own message is never printed, and the key is redacted from the model's rationale. The OpenAI SDK's own `OPENAI_*` variables are ignored, so nothing configured for one provider reaches another. There is no default model, because model names differ between providers and change.
 
-Requests go only to the base URL: redirects are not followed and environment proxy settings are not used. The request asks for the verdict as a strict JSON schema (`response_format` `json_schema`). If the endpoint answers HTTP 400 or 422 with an error that names the format, the verifier asks for a JSON object, then for plain text, keeps the format that worked and says so on stderr; any other error stops the audit. Only an answer that ended normally (`finish_reason` `stop`) is read. A cut-off or filtered answer, one that is not a valid verdict, an empty answer and a refusal are recorded as no verdict (`unrelated`), never as support. `--batch` is not available for this backend, and `dual` and `cascade` still pair Claude with Jev. Keys and providers in more detail: [docs/local-setup.md](docs/local-setup.md#openai-compatible-providers---verifier-openai).
+Requests go only to the base URL: redirects are not followed and environment proxy settings are not used; certificates are verified as the OpenAI SDK ships it (the platform's trust store). `--openai-response-format` chooses `json_schema` (strict structured output), `json_object` or `text`, with the defaults in the table (`json_schema` for any `--base-url`). An endpoint that does not support the format answers HTTP 400 or 422; the audit stops, and the error suggests the next simpler format. Nothing is retried in another format. Only an answer that ended normally (`finish_reason` `stop`) is read. A cut-off or filtered answer, one that is not a valid verdict, an empty answer and a refusal are recorded as no verdict (`unrelated`), never as support. `--batch` is not available for this backend, and `dual` and `cascade` still pair Claude with Jev. Keys and providers in more detail: [docs/local-setup.md](docs/local-setup.md#openai-compatible-providers---verifier-openai).
 
 From Python:
 

@@ -580,17 +580,17 @@ memfalsify audit MEMORY.md --evidence evidence --verifier openai --openai-model 
 memfalsify audit MEMORY.md --evidence evidence --verifier openai --provider ollama --openai-model <model>    # 本地，不需要 key
 ```
 
-| `--provider` | Base URL | Key 变量 |
-|---|---|---|
-| `openai`（默认） | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` |
-| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/`（[Google 的 OpenAI 兼容端点](https://ai.google.dev/gemini-api/docs/openai)） | `GEMINI_API_KEY` |
-| `ollama` | `http://localhost:11434/v1` | 无 |
+| `--provider` | Base URL | Key 变量 | 响应格式 |
+|---|---|---|---|
+| `openai`（默认） | `https://api.openai.com/v1` | `OPENAI_API_KEY` | `json_schema` |
+| `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` | `json_schema` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | `json_object` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/`（[Google 的 OpenAI 兼容端点](https://ai.google.dev/gemini-api/docs/openai)） | `GEMINI_API_KEY` | `json_schema` |
+| `ollama` | `http://localhost:11434/v1` | 无 | `json_schema` |
 
-`--base-url` 和 `--api-key-env` 会覆盖预设。base URL 必须是 `https://`（只有 `localhost`、`127.0.0.1`、`::1` 允许 `http://`），不能带用户名、密码、查询参数或片段。`--api-key-env` 接收的是变量名：没有任何选项接收 key 本身，key 从不输出，服务商返回的错误信息会先遮掉 key 再显示。OpenAI SDK 自己的 `OPENAI_*` 环境变量不会生效，给一个服务商的设置不会被发给另一个。模型没有默认值，因为各服务商的模型名不同，而且会变。
+`--base-url` 和 `--api-key-env` 会覆盖预设。base URL 必须是 `https://`（只有 `localhost`、`127.0.0.1`、`::1` 允许 `http://`），不能带用户名、密码、查询参数或片段。`--api-key-env` 接收的是变量名：没有任何选项接收 key 本身。服务商的错误只显示 HTTP 状态码、错误的 type、code 和 param（各自必须是简单的标记）以及一条固定提示；服务商自己的消息从不输出，模型理由里的 key 会被遮掉。OpenAI SDK 自己的 `OPENAI_*` 环境变量不会生效，给一个服务商的设置不会被发给另一个。模型没有默认值，因为各服务商的模型名不同，而且会变。
 
-请求只发往 base URL：不跟随重定向，也不使用环境里的代理设置。请求以严格 JSON schema（`response_format` 为 `json_schema`）索取判断。端点返回 HTTP 400 或 422 且错误里点名了格式时，验证器改为请求 JSON 对象，再不行就请求纯文本；之后沿用可用的格式，并在 stderr 上说明；其他错误会让审计结束。只读取正常结束（`finish_reason` 为 `stop`）的回答。被截断或被过滤的回答、不是合法判断的回答、空回答和拒答都记为无判断（`unrelated`），绝不会算作支持。这个后端不支持 `--batch`，`dual` 和 `cascade` 仍然是 Claude 配 Jev。key 和服务商的更多说明见 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
+请求只发往 base URL：不跟随重定向，也不使用环境里的代理设置；证书按 OpenAI SDK 自带的方式校验（平台的信任库）。`--openai-response-format` 可选 `json_schema`（严格结构化输出）、`json_object` 或 `text`，默认值见上表（用 `--base-url` 时为 `json_schema`）。端点不支持该格式时会返回 HTTP 400 或 422，审计结束，错误信息会建议更简单的格式；不会自动换格式重试。只读取正常结束（`finish_reason` 为 `stop`）的回答。被截断或被过滤的回答、不是合法判断的回答、空回答和拒答都记为无判断（`unrelated`），绝不会算作支持。这个后端不支持 `--batch`，`dual` 和 `cascade` 仍然是 Claude 配 Jev。key 和服务商的更多说明见 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
 
 在 Python 里使用：
 

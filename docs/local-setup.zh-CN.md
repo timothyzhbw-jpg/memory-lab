@@ -42,15 +42,16 @@ export ANTHROPIC_API_KEY=...
 
 ### 兼容 OpenAI 的服务商（`--verifier openai`）
 
-这个验证器使用 OpenAI Chat Completions API，所以 OpenAI 和所有提供 OpenAI 兼容端点的服务商都能用。`--openai-model` 必填：模型名称因服务商而异，也会变化，所以没有默认值。`--provider` 预设 base URL 和存放 key 的环境变量：
+这个验证器使用 OpenAI Chat Completions API，所以 OpenAI 和所有提供 OpenAI 兼容端点的服务商都能用。`--openai-model` 必填：模型名称因服务商而异，也会变化，所以没有默认值。`--provider` 预设 base URL、存放 key 的环境变量和响应格式：
 
-| `--provider` | Base URL | Key 变量 |
-|---|---|---|
-| `openai`（默认） | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| `grok`（xAI） | `https://api.x.ai/v1` | `XAI_API_KEY` |
-| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/`（[Google 的 OpenAI 兼容端点](https://ai.google.dev/gemini-api/docs/openai)） | `GEMINI_API_KEY` |
-| `ollama` | `http://localhost:11434/v1` | 无 |
+| `--provider` | Base URL | Key 变量 | `--openai-response-format` 默认值 |
+|---|---|---|---|
+| `openai`（默认） | `https://api.openai.com/v1` | `OPENAI_API_KEY` | `json_schema` |
+| `grok`（xAI） | `https://api.x.ai/v1` | `XAI_API_KEY` | `json_schema` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | `json_object`（[DeepSeek 只支持 `text` 和 `json_object`](https://api-docs.deepseek.com/api/create-chat-completion)） |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/`（[Google 的 OpenAI 兼容端点](https://ai.google.dev/gemini-api/docs/openai)） | `GEMINI_API_KEY` | `json_schema` |
+| `ollama` | `http://localhost:11434/v1` | 无 | `json_schema` |
+| 任意服务商加 `--base-url` | 你给的 URL | 服务商的变量，或 `--api-key-env` | `json_schema` |
 
 ```bash
 export XAI_API_KEY=...
@@ -66,10 +67,13 @@ memfalsify audit MEMORY.md --evidence docs --verifier openai --base-url https://
 ```
 
 - `--base-url` 和 `--api-key-env` 会覆盖预设。base URL 必须是 `https://`；只有 `localhost`、`127.0.0.1` 和 `::1` 允许明文 `http://`；带用户名、密码、查询参数或片段的 URL 会被拒绝。
-- `--api-key-env` 接收的是变量**名**。没有直接传 key 的选项，所以 key 不会出现在 shell 历史或进程列表里。key 只能包含真实 key 使用的字符（字母、数字和 `. _ ~ + / = -`）。key 从不输出：错误信息由服务商返回的状态码、错误类型、代码、参数和消息拼成，其中任何一项含有 key（包括百分号编码、`\u` 转义或其他转义形式）都会整项隐去。设置 `OPENAI_LOG=debug` 时，SDK 和 HTTP 日志里含有 key 的消息、异常和调用栈同样会被隐去。
-- 端点只由这些选项决定。OpenAI SDK 自己的环境变量（`OPENAI_BASE_URL`、`OPENAI_ORG_ID`、`OPENAI_PROJECT_ID`、`OPENAI_CUSTOM_HEADERS`）不会生效，给一个服务商的设置不会被发给另一个。环境里的代理变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）同样不生效：请求直接发到 base URL，本地服务也一样。证书按系统的信任库校验，从不使用 `SSL_CERT_FILE` 或 `SSL_CERT_DIR`：macOS 和 Windows 上由操作系统校验；Linux 和其他使用 OpenSSL 的平台上，使用编译进 OpenSSL 的 CA 位置，没有的话使用第一个常见的证书包文件（例如 `/etc/ssl/certs/ca-certificates.crt`）；都没有时，所有 https 证书都会校验失败。重定向不会被跟随，审计以退出码 2 结束。
+- `--api-key-env` 接收的是变量**名**。没有直接传 key 的选项，所以 key 不会出现在 shell 历史或进程列表里。key 只能包含真实 key 使用的字符（字母、数字和 `. _ ~ + / = -`）。
+- 端点只由这些选项决定。OpenAI SDK 自己的环境变量（`OPENAI_BASE_URL`、`OPENAI_ORG_ID`、`OPENAI_PROJECT_ID`、`OPENAI_CUSTOM_HEADERS`）不会生效，给一个服务商的设置不会被发给另一个。环境里的代理变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）同样不生效：请求直接发到 base URL，本地服务也一样。重定向不会被跟随，审计以退出码 2 结束。
+- 证书按 OpenAI SDK 和 httpx2 自带的方式校验，即平台的信任库（`truststore`）：macOS 和 Windows 上是操作系统的信任库，Linux 上是 OpenSSL 的，OpenSSL 会读取 `SSL_CERT_FILE` 和 `SSL_CERT_DIR`（这是你自己的配置，Nix 和很多容器都依赖它）。明文 `http://` 的本地服务不涉及证书。
 - 记忆和证据片段会发送到配置的端点（本地服务除外）。只对允许发往该服务商的材料使用它。
-- 验证器以严格 JSON schema（`response_format` 为 `json_schema`）请求判断。端点返回 HTTP 400 或 422，且错误针对的是格式（错误参数为 `response_format`；或者错误没有参数、也没有具体代码时，消息说的是 `response_format`、`json_schema` 或 `json_object`，而不是恰好这样命名的模型）时，改为请求 JSON 对象（`json_object`），再不行就请求纯文本；之后沿用可用的格式，并在 stderr 上说明。其他错误（例如模型不存在）会让审计立即结束。第一个请求确定格式时，其他请求等待，不论 `--max-concurrency` 是多少。只读取正常结束（`finish_reason` 为 `stop`）的回答：被截断（`length`）、被过滤或其他未正常结束的回答、格式不对的响应，以及不是合法判断的回答，一律记为无判断（`unrelated`），绝不会算作支持。
+- `--openai-response-format` 决定让模型以什么格式回答：`json_schema`（用判断的 schema 做严格结构化输出）、`json_object`（任意 JSON 对象）或 `text`（不发 `response_format`，提示里仍然要求同样的 JSON 对象）。默认值见上表。不会自动换格式重试：端点不支持该格式时会返回 HTTP 400 或 422，审计以退出码 2 结束，错误信息会建议更简单的格式（先 `json_object`，再 `text`）。
+- 只读取正常结束（`finish_reason` 为 `stop`）的回答：被截断（`length`）、被过滤或其他未正常结束的回答、格式不对的响应，以及不是合法 JSON 判断的回答，一律记为无判断（`unrelated`），绝不会算作支持。
+- key 要避开的是服务商或模型能控制的一切内容。服务商的错误只显示 HTTP 状态码、错误的 type、code 和 param（各自必须是简单的标记），以及一条固定提示（例如“OPENAI_API_KEY 里的 key 被拒绝”的英文提示）；服务商自己的消息从不输出。模型的理由是报告里唯一的自由文本：其中的 key（原样、百分号编码或 JSON 转义的形式）会被替换为 `[redacted]`。设置 `OPENAI_LOG=debug` 时，SDK 和 HTTP 库的日志消息、异常和调用栈也按同样方式遮掉。同一个 Python 进程里运行的其他代码被视为可信：它本来就能读取环境变量；自己把 key 写进日志、或替换日志记录工厂的库，不在 MemFalsify 防御的范围内。
 - 这个验证器不支持 `--batch`（退出码 2）。`dual` 和 `cascade` 仍然是 Claude 配 Jev。
 
 ## 3. 模型审计的成本
@@ -82,11 +86,11 @@ memfalsify audit MEMORY.md --evidence docs --verifier openai --base-url https://
 | `jev` | 同样的数量，发给 Jev |
 | `dual` | 两个后端各发这么多 |
 | `cascade` | 这么多发给 Jev，再加上 Jev 置信度低于 `--accept-at` 的每个答案各一个 Claude 请求 |
-| `openai` | 记忆条数 × `--max-judged`，发给配置的端点；端点每拒绝一种格式再多一次重试（每次运行最多两次） |
+| `openai` | 记忆条数 × `--max-judged`，发给配置的端点 |
 
 记忆与证据句子的共同词语较少时（`--min-coverage`），实际请求会更少；`diff` 只判断新增和修改的记忆。使用 `--batch` 时，在支持拒答回退的模型上，被 Claude 拒答的请求会带着回退再直接发送一次。
 
-每份报告都会写明实际用量：每个后端一行“API usage”（JSON 中的 `verifier_stats`），包括请求数、其中经批处理发送的数量、输入和输出 token 数，以及 Claude 写入和读取提示缓存的 token 数。`openai` 的输入 token 数是服务商报告的 `prompt_tokens`（含服务商自己的缓存部分），缓存计数为空。SDK 在遇到限流或服务端错误后自动重试的请求不计入，被端点拒绝的请求也不计入。要换算成费用，请使用 [Anthropic 定价页](https://platform.claude.com/docs/en/about-claude/pricing)上的最新价格；Jev 由 TypeSafe AI 计费。本仓库不写具体价格，因为价格会变。
+每份报告都会写明实际用量：每个后端一行“API usage”（JSON 中的 `verifier_stats`），包括请求数、其中经批处理发送的数量、输入和输出 token 数，以及 Claude 写入和读取提示缓存的 token 数。`openai` 的输入 token 数是服务商报告的 `prompt_tokens`（含服务商自己的缓存部分），缓存计数为空。SDK 在遇到限流或服务端错误后自动重试的请求不计入，以错误结束的请求也不计入。要换算成费用，请使用 [Anthropic 定价页](https://platform.claude.com/docs/en/about-claude/pricing)上的最新价格；Jev 由 TypeSafe AI 计费。本仓库不写具体价格，因为价格会变。
 
 - `--batch` 让 Claude 请求按标准价格的 50% 计费，但一个批次最长可能要 24 小时（多数在一小时内完成）。
 - 只有缓存前缀达到模型的最低可缓存长度时，提示缓存才有用。MemFalsify 的系统提示只有几百个 token，所以记忆较短时缓存计数一直是 0，费用不变。
