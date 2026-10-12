@@ -28,8 +28,8 @@ from memcore.terminal import diagnostic_line
 
 from . import __version__, jev, llm, openai_compat
 from .audit import ATTENTION
-from .cli import (API_KEY_ENV, BASE_URL, OPENAI_MODEL, PROVIDER, Format, VerifierChoice, build_verifier,
-                  preselection)
+from .cli import (API_KEY_ENV, BASE_URL, OPENAI_MODEL, OPENAI_RESPONSE_FORMAT, PROVIDER, Format, VerifierChoice,
+                  build_verifier, openai_settings, preselection)
 from .cli import MAX_JUDGED as DEFAULT_MAX_JUDGED
 from .gitstore import CONTROL, HistoryError, list_staged_paths, printable, repository_toplevel
 from .history import audit_staged, diff_to_markdown, memory_diff
@@ -283,6 +283,7 @@ def diff_command(
     provider: openai_compat.Provider = PROVIDER,
     base_url: Optional[str] = BASE_URL,
     api_key_env: Optional[str] = API_KEY_ENV,
+    openai_response_format: Optional[openai_compat.ResponseFormat] = OPENAI_RESPONSE_FORMAT,
     max_judged: int = _option_max(),
     min_coverage: Optional[float] = _option_coverage(),
 ) -> None:
@@ -291,7 +292,7 @@ def diff_command(
              stale_days=stale_days, follow_links=follow_links, strict=strict, verifier=verifier,
              llm_model=llm_model, jev_model=jev_model, accept_at=accept_at, max_judged=max_judged,
              min_coverage=min_coverage,
-             openai=openai_compat.OpenAISettings(openai_model, provider.value, base_url, api_key_env))
+             openai=openai_settings(openai_model, provider, base_url, api_key_env, openai_response_format))
 
 
 @app.command("audit")
@@ -313,6 +314,7 @@ def audit_command(
     provider: openai_compat.Provider = PROVIDER,
     base_url: Optional[str] = BASE_URL,
     api_key_env: Optional[str] = API_KEY_ENV,
+    openai_response_format: Optional[openai_compat.ResponseFormat] = OPENAI_RESPONSE_FORMAT,
     max_judged: int = _option_max(),
     min_coverage: Optional[float] = _option_coverage(),
 ) -> None:
@@ -321,7 +323,7 @@ def audit_command(
              stale_days=stale_days, follow_links=follow_links, strict=strict, verifier=verifier,
              llm_model=llm_model, jev_model=jev_model, accept_at=accept_at, max_judged=max_judged,
              min_coverage=min_coverage,
-             openai=openai_compat.OpenAISettings(openai_model, provider.value, base_url, api_key_env))
+             openai=openai_settings(openai_model, provider, base_url, api_key_env, openai_response_format))
 
 
 def _plain_output() -> None:

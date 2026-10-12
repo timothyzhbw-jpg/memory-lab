@@ -347,30 +347,34 @@ def _annotations(title: str, open_world: bool = False) -> ToolAnnotations:
 
 
 def openai_settings(model: Optional[str] = None, provider: Optional[str] = None, base_url: Optional[str] = None,
-                    api_key_env: Optional[str] = None) -> Optional[openai_compat.OpenAISettings]:
+                    api_key_env: Optional[str] = None,
+                    response_format: Optional[str] = None) -> Optional[openai_compat.OpenAISettings]:
     """The ``openai`` verifier's configuration, or None when none of it is given. Raises ``ValueError`` for a
-    missing model, an unknown provider, or a refused base URL or key variable name; the messages never repeat
-    a URL or name, which could hold a secret."""
-    if model is None and provider is None and base_url is None and api_key_env is None:
+    missing model, an unknown provider or response format, or a refused base URL or key variable name; the
+    messages never repeat a URL or name, which could hold a secret."""
+    if model is None and provider is None and base_url is None and api_key_env is None and response_format is None:
         return None
     if not model:
-        raise ValueError("--openai-provider, --openai-base-url and --openai-api-key-env need --openai-model")
+        raise ValueError("--openai-provider, --openai-base-url, --openai-api-key-env and --openai-response-format "
+                         "need --openai-model")
     settings = openai_compat.OpenAISettings(openai_compat.check_model(model), provider or "openai", base_url,
-                                            api_key_env)
+                                            api_key_env, response_format)
     settings.endpoint()
     return settings
 
 
 def create_server(root: Path | str = ".", allow_model_verifiers: bool = False, openai_model: Optional[str] = None,
                   openai_provider: Optional[str] = None, openai_base_url: Optional[str] = None,
-                  openai_api_key_env: Optional[str] = None) -> MCPServer:
+                  openai_api_key_env: Optional[str] = None,
+                  openai_response_format: Optional[str] = None) -> MCPServer:
     """Build the server. ``allow_model_verifiers`` enables verifiers that call external, paid APIs.
 
-    The ``openai_*`` arguments configure the ``openai`` verifier (model, provider preset, base URL and the name of
-    the key's environment variable). They are fixed here, by whoever starts the server, and are never tool
-    arguments, so a client cannot send memory and evidence text elsewhere."""
+    The ``openai_*`` arguments configure the ``openai`` verifier (model, provider preset, base URL, the name of
+    the key's environment variable and the response format). They are fixed here, by whoever starts the server,
+    and are never tool arguments, so a client cannot send memory and evidence text elsewhere."""
     # The openai configuration is checked first: a bad value is reported as such on every platform.
-    openai = openai_settings(openai_model, openai_provider, openai_base_url, openai_api_key_env)
+    openai = openai_settings(openai_model, openai_provider, openai_base_url, openai_api_key_env,
+                             openai_response_format)
     configured = f"{openai.model} at {openai.endpoint().host}" if openai else None
     ws = Workspace(Path(root))
     if not confinement_supported():
@@ -878,12 +882,18 @@ def serve(
         None, "--openai-api-key-env", metavar="NAME",
         help="openai verifier: name of the environment variable holding the key, overriding the provider's "
              "(never the key itself)"),
+    openai_response_format: Optional[openai_compat.ResponseFormat] = typer.Option(
+        None, "--openai-response-format",
+        help="openai verifier: json_schema, json_object or text (default: json_object for --openai-provider "
+             "deepseek, json_schema otherwise)"),
 ) -> None:
     """Run the MCP server on stdin/stdout."""
     endpoint = dict(openai_model=openai_model, openai_provider=openai_provider.value if openai_provider else None,
-                    openai_base_url=openai_base_url, openai_api_key_env=openai_api_key_env)
+                    openai_base_url=openai_base_url, openai_api_key_env=openai_api_key_env,
+                    openai_response_format=openai_response_format.value if openai_response_format else None)
     try:
-        openai_settings(openai_model, endpoint["openai_provider"], openai_base_url, openai_api_key_env)
+        openai_settings(openai_model, endpoint["openai_provider"], openai_base_url, openai_api_key_env,
+                        endpoint["openai_response_format"])
     except ValueError as exc:  # the messages never repeat a URL or key name, which could hold a secret
         typer.echo(f"error: openai verifier: {exc}", err=True)
         raise typer.Exit(2) from None

@@ -621,7 +621,8 @@ SETTINGS = openai_compat.OpenAISettings("served-model", "grok", "https://gateway
 ENDPOINT_ARGUMENTS = {"base_url": "https://attacker.example.test/v1", "model": "attacker-model",
                       "provider": "ollama", "api_key_env": "OTHER_KEY",
                       "openai_base_url": "https://attacker.example.test", "openai_model": "attacker-model",
-                      "openai_provider": "ollama", "openai_api_key_env": "OTHER_KEY"}
+                      "openai_provider": "ollama", "openai_api_key_env": "OTHER_KEY", "response_format": "text",
+                      "openai_response_format": "text"}
 
 
 def tool_listing(server):
@@ -718,8 +719,28 @@ def test_openai_missing_key_is_a_generic_tool_error(root, monkeypatch):
     assert "model verifier failed" in message and "GATEWAY_KEY" not in message
 
 
+@requires_confinement
+def test_the_response_format_is_a_server_setting(root, monkeypatch):
+    built = []
+
+    class Offline(LexicalVerifier):
+        name = "stand-in"
+
+    monkeypatch.setattr(memlab_server, "build_verifier",
+                        lambda choice, llm_model, jev_model, accept_at=0.8, openai=None: built.append(openai) or
+                        Offline())
+    server = create_server(root, allow_model_verifiers=True, **GATEWAY, openai_response_format="json_object")
+    listed = tool_listing(server)["memfalsify_audit"]
+    assert not {"response_format", "openai_response_format"} & set(listed.input_schema["properties"])
+    ok(call(server, "memfalsify_audit", memory_file=MEMORY, evidence_dir=EVIDENCE, verifier="openai",
+            response_format="text", openai_response_format="text"))
+    assert [settings.response_format for settings in built] == ["json_object"]
+
+
 @pytest.mark.parametrize("settings, problem", [
     ({"openai_provider": "grok"}, "need --openai-model"),
+    ({"openai_response_format": "text"}, "need --openai-model"),
+    ({"openai_model": "m", "openai_response_format": "json"}, "the response format must be one of"),
     ({"openai_model": "m", "openai_provider": "azure"}, "unknown provider"),
     ({"openai_model": "m", "openai_base_url": "http://gateway.example.test/v1"}, "must use https"),
     ({"openai_model": "m", "openai_api_key_env": "sk-not-a-name"}, "never the key itself"),

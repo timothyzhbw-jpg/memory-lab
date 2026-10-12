@@ -398,7 +398,8 @@ def test_cli_openai_verifier_takes_the_endpoint_options(cases, tmp_path, monkeyp
     assert built == [("llama-local", "ollama", "http://127.0.0.1:8080/v1", None)]
     saved = json.loads(out.read_text(encoding="utf-8"))
     assert saved["verifier"] == "openai:llama-local@127.0.0.1:8080"
-    assert saved["settings"] == {"min_coverage": 0.2, "max_judged": 8, "verifier": "openai", "provider": "ollama"}
+    assert saved["settings"] == {"min_coverage": 0.2, "max_judged": 8, "verifier": "openai", "provider": "ollama",
+                                 "response_format": "json_schema"}
     assert saved["cost"]["judge_calls"] == len(calls) > 0
     result = runner.invoke(bench.app, ["--cases-dir", str(cases), "--verifier", "openai"])
     assert result.exit_code == 2 and "needs --openai-model" in result.output

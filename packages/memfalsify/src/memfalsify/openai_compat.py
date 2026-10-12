@@ -1,55 +1,57 @@
 """OpenAI-compatible verifier: a model behind any Chat Completions API reads the passage and explains its judgment.
 
 One backend serves OpenAI and every provider with an OpenAI-compatible endpoint. ``PRESETS`` fills in the base
-URL and the name of the key's environment variable for OpenAI, xAI Grok, DeepSeek, Google Gemini and a local
-Ollama server; an explicit base URL or key variable overrides the preset. There is no default model, because
-model names differ between providers and change over time.
+URL, the name of the key's environment variable and the response format for OpenAI, xAI Grok, DeepSeek, Google
+Gemini and a local Ollama server; an explicit base URL, key variable or response format overrides the preset.
+There is no default model, because model names differ between providers and change over time.
 
 Install with ``pip install 'memfalsify[openai]'``. Memory claims and evidence passages are sent to the
 configured endpoint.
+
+Threat model: the key must stay out of everything the provider or the model controls (error bodies, the answer,
+response headers in the SDK's debug log), and out of reports and diagnostics. Other code running in the same
+Python process is trusted: it can read the environment, and a library that puts the key into log records or
+replaces the logging record factory is out of scope.
 
 Transport and secrets:
 
 - The base URL must use https; plain http is accepted only for localhost, 127.0.0.1 and ::1. A base URL with a
   user name, password, query or fragment is refused, and error messages never repeat it.
-- Requests go only there: the HTTP client follows no redirect (a 3xx is an error), ignores proxy settings from
-  the environment (``HTTP_PROXY``, ``HTTPS_PROXY``, ``ALL_PROXY``, ...) and verifies certificates with
-  ``tls_context``, which never reads ``SSL_CERT_FILE`` or ``SSL_CERT_DIR``.
+- Requests go only there: the HTTP client follows no redirect (a 3xx is an error) and ignores proxy settings
+  from the environment (``trust_env=False``). Certificates are verified the way the SDK and httpx2 ship it:
+  through the platform's trust store (``truststore``); on Linux, OpenSSL honours ``SSL_CERT_FILE`` and
+  ``SSL_CERT_DIR``, which are the user's own configuration.
 - The key is read from the environment variable the caller names, never taken as an argument, and must consist
-  of the characters keys use (``KEY_CHARS``). It is never shown: error messages are built from the fields of the
-  provider's error (status, type, code, param, message), and a field that holds the key in any encoding
-  (``holds_secret``: percent-escaped in either case, backslash-escaped, HTML references, or a mix) is withheld
-  whole; no ``VerifierError`` keeps the SDK's exception as its cause or context; and the log records of the SDK
-  and the HTTP stack (``OPENAI_LOG=debug``) are sanitized as they are made (``guard_logs``).
+  of the characters keys use (``KEY_CHARS``). The provider's free text is never shown: an error is reported as
+  its HTTP status, the error's type, code and param when each is a plain token (``TOKEN``), and a fixed hint
+  for the status. The model's rationale is the only free text kept; the key in it (as is, percent-encoded or
+  JSON-escaped) is redacted. No ``VerifierError`` keeps the SDK's exception as its cause or context, and the
+  log records of the SDK and the HTTP stack (``OPENAI_LOG=debug``) are redacted as they are made
+  (``guard_logs``).
 - Only the arguments configure the client. The SDK would otherwise read ``OPENAI_BASE_URL``,
   ``OPENAI_ORG_ID``, ``OPENAI_PROJECT_ID`` and ``OPENAI_CUSTOM_HEADERS`` from the environment and send what they
   hold to whatever endpoint is configured; ``isolated_headers`` removes those headers from every request.
 
-Structured output: a request asks for a JSON verdict with ``response_format`` ``json_schema`` (strict). An
-endpoint that answers HTTP 400 or 422 with an error about the format (``names_format``: by its param, else by a
-code naming the format, else by its message, never by a model that happens to be named that way) is asked again
-with ``json_object``, then with no ``response_format`` at all; the instructions ask for the same JSON object
-every time. Any other error ends the audit at once. The first request settles the format while concurrent ones
-wait, so each refused format costs one extra request per run. Only an answer that ended normally
-(``finish_reason`` ``stop``) is read. An answer that did not, a malformed response, one that is not a JSON
-verdict (invalid JSON, a repeated or unknown key, a relation outside the schema), an empty answer and a refusal
-are all recorded as no verdict (``unrelated``, with the reason in the rationale), never as support.
+Structured output: requests ask for the verdict in the configured ``response_format`` (``FORMATS``): a strict
+JSON schema, any JSON object, or nothing (the instructions ask for the same JSON object every time). There is no
+automatic fallback: an endpoint that rejects the format answers HTTP 400 or 422, and the error suggests a
+simpler format. Only an answer that ended normally (``finish_reason`` ``stop``) is read. An answer that did not,
+a malformed response, one that is not a JSON verdict (invalid JSON, a repeated or unknown key, a relation
+outside the schema), an empty answer and a refusal are all recorded as no verdict (``unrelated``, with a fixed
+reason as the rationale), never as support.
 """
 from __future__ import annotations
 
-import html
 import logging
 import os
 import re
-import ssl
-import sys
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote, urlsplit
 
 from pydantic import ConfigDict
 
@@ -61,7 +63,7 @@ from .verify import RELATION_CRITERIA, Judgment, UsageMeter, VerifierError, Veri
 
 
 class Provider(str, Enum):
-    """Presets for the base URL and the key's environment variable."""
+    """Presets for the base URL, the key's environment variable and the response format."""
     openai = "openai"
     grok = "grok"
     deepseek = "deepseek"
@@ -69,16 +71,29 @@ class Provider(str, Enum):
     ollama = "ollama"
 
 
+class ResponseFormat(str, Enum):
+    """What a request asks the model to answer in: a strict JSON schema, any JSON object, or plain text."""
+    json_schema = "json_schema"
+    json_object = "json_object"
+    text = "text"
+
+
+FORMATS = tuple(f.value for f in ResponseFormat)
+
+
 @dataclass(frozen=True)
 class Preset:
     base_url: str
     api_key_env: str | None  # None: the endpoint needs no key
+    response_format: str = ResponseFormat.json_schema.value
 
 
 PRESETS: dict[Provider, Preset] = {
     Provider.openai: Preset("https://api.openai.com/v1", "OPENAI_API_KEY"),
     Provider.grok: Preset("https://api.x.ai/v1", "XAI_API_KEY"),
-    Provider.deepseek: Preset("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+    # DeepSeek documents response_format type "text" or "json_object" only:
+    # https://api-docs.deepseek.com/api/create-chat-completion (and https://api-docs.deepseek.com/guides/json_mode)
+    Provider.deepseek: Preset("https://api.deepseek.com", "DEEPSEEK_API_KEY", ResponseFormat.json_object.value),
     # https://ai.google.dev/gemini-api/docs/openai
     Provider.gemini: Preset("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY"),
     Provider.ollama: Preset("http://localhost:11434/v1", None),
@@ -89,37 +104,21 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 NO_KEY = "unused"
 # Headers the SDK fills from OPENAI_ORG_ID and OPENAI_PROJECT_ID.
 SDK_ENV_HEADERS = ("OpenAI-Organization", "OpenAI-Project")
-# Error text is searched for runs of this many characters of the key.
-REDACT_RUN = 8
 REDACTED = "[redacted]"
 # The characters real API keys use (OpenAI, xAI, DeepSeek, Gemini, base64 and JWT tokens). A key with others
-# (a backslash or a quote, which a JSON or Python repr would escape) is refused, so redaction can find it.
+# (a backslash or a quote, which a JSON or Python repr would escape) is refused.
 KEY_CHARS = re.compile(r"[A-Za-z0-9._~+/=-]+")
+# An error's type, code or param is shown only when it is a plain token like this; the message never is.
+TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 # Retries the SDK makes after a connection error, 408, 409, 429 or 5xx (its default).
 MAX_RETRIES = 2
 # The only finish_reason whose answer is used: the normal end of an answer for OpenAI, DeepSeek ("the model hit
 # a natural stop point", https://api-docs.deepseek.com/api/create-chat-completion), xAI (the examples in
 # https://docs.x.ai/developers/rest-api-reference/inference/chat-completions) and Ollama (openai/openai.go
 # passes its done_reason, "stop" at a natural end). Google's OpenAI-compatibility page shows no response, so
-# Gemini is assumed to follow OpenAI. length, content_filter, tool_calls, insufficient_system_resource, any
-# other value and none at all are no verdict, even when the text parses.
+# Gemini is assumed to follow OpenAI. Any other value, and none at all, is no verdict, even when the text parses.
 FINISHED = "stop"
-# A 400 or 422 refuses the format, not the request, when its error names the format: by ``param``
-# (response_format or response_format.<field>) when there is one; else by a ``code`` naming the format (a code
-# naming anything else, such as model_not_found, settles it the other way; generic codes say nothing); else by
-# the message, where the words must stand alone, not inside a quoted model name such as 'json_schema-test'.
-_FORMAT_ERROR = re.compile(r"response_format|json_schema|json_object", re.IGNORECASE)
-_FORMAT_WORD = re.compile(r"(?<![\w-])(?:response_format|json_schema|json_object)(?![\w-])", re.IGNORECASE)
-_QUOTED_MODEL = re.compile(r"\bmodels?\s*:?\s*(?:'[^']*'|\"[^\"]*\"|`[^`]*`)", re.IGNORECASE)
-_GENERIC_CODE = re.compile(r"(?:invalid|bad|unsupported)_(?:request|parameter|params?|value|argument)s?(?:_error)?"
-                           r"|\d+", re.IGNORECASE)
-# What replaces provider text, or a log record's text, that contains the key in any encoding.
-WITHHELD = "the provider's message was withheld because it contained the API key"
-LOG_WITHHELD = "[log text withheld because it contained the API key]"
-_ESCAPE = re.compile(r"\\(?:u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8})|x([0-9A-Fa-f]{2})|([^\w\s]))")
-# Where OpenSSL builds look for CA certificates when the compiled-in defaults hold none (truststore's list).
-CA_FILES = ("/etc/ssl/cert.pem", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", "/etc/pki/tls/cert.pem",
-            "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/ca-bundle.pem")
+WITHHELD_RATIONALE = "the rationale was withheld because it contained the API key"
 
 
 @dataclass(frozen=True)
@@ -129,10 +128,16 @@ class Endpoint:
     base_url: str
     api_key_env: str | None
     preset_key: bool = True  # api_key_env is the provider's default rather than a name the caller passed
+    preset_url: bool = True  # base_url is the provider's default rather than one the caller passed
 
     @property
     def host(self) -> str:
         return urlsplit(self.base_url).netloc
+
+    @property
+    def response_format(self) -> str:
+        """The default format: the preset's for the preset's URL, the strict JSON schema for any other URL."""
+        return PRESETS[self.provider].response_format if self.preset_url else ResponseFormat.json_schema.value
 
 
 @dataclass(frozen=True)
@@ -142,9 +147,13 @@ class OpenAISettings:
     provider: str = Provider.openai.value
     base_url: str | None = None
     api_key_env: str | None = None
+    response_format: str | None = None
 
     def endpoint(self) -> Endpoint:
-        """The resolved endpoint; ``ValueError`` for an unknown provider, a refused base URL or key name."""
+        """The resolved endpoint; ``ValueError`` for an unknown provider, a refused base URL or key name, or an
+        unknown response format."""
+        if self.response_format is not None:
+            check_response_format(self.response_format)
         return resolve_endpoint(self.provider, self.base_url, self.api_key_env)
 
 
@@ -189,6 +198,12 @@ def check_model(model: str | None) -> str:
     return model
 
 
+def check_response_format(value: str) -> str:
+    if value not in FORMATS:
+        raise ValueError("the response format must be one of: " + ", ".join(FORMATS))
+    return value
+
+
 def resolve_endpoint(provider: str = Provider.openai.value, base_url: str | None = None,
                      api_key_env: str | None = None) -> Endpoint:
     """The provider's preset, with ``base_url`` and ``api_key_env`` overriding it when given."""
@@ -198,113 +213,54 @@ def resolve_endpoint(provider: str = Provider.openai.value, base_url: str | None
         raise ValueError("unknown provider; choose one of: " + ", ".join(p.value for p in Provider)) from None
     preset = PRESETS[chosen]
     url = check_base_url(preset.base_url if base_url is None else base_url)
-    if api_key_env is None:
-        return Endpoint(chosen, url, preset.api_key_env)
-    return Endpoint(chosen, url, check_key_env(api_key_env), preset_key=False)
+    key_env = preset.api_key_env if api_key_env is None else check_key_env(api_key_env)
+    return Endpoint(chosen, url, key_env, preset_key=api_key_env is None, preset_url=base_url is None)
 
 
 def secret_forms(secret: str) -> list[str]:
-    """How a key can appear in provider text: as is, URL-encoded (``+``, ``/`` and ``=`` as ``%2B``, ``%2F`` and
-    ``%3D``), and JSON-escaped with ``\\/``. Keys hold only ``KEY_CHARS``, so a JSON or Python string repr
-    cannot escape them any other way."""
-    forms = [secret, quote(secret, safe=""), secret.replace("/", "\\/")]
+    """The key as is, percent-encoded once (``%2B``, ``%2F``, ``%3D``, in either case) and JSON-escaped once
+    (``\\/``). Keys hold only ``KEY_CHARS``, so a JSON string or Python repr cannot escape them otherwise."""
+    encoded = quote(secret, safe="")
+    forms = [secret, encoded, re.sub(r"%[0-9A-F]{2}", lambda m: m.group(0).lower(), encoded),
+             secret.replace("/", "\\/")]
     return list(dict.fromkeys(form for form in forms if form))
 
 
 def redact(text: str, *secrets: str | None) -> str:
-    """``text`` with each secret (in each of its ``secret_forms``), and every run of ``REDACT_RUN`` or more
-    consecutive characters of one of those forms, replaced by ``[redacted]``.
-
-    The run rule covers an error body that quotes part of a key, or the key cut at a line end. Whole forms of
-    every secret go first, longest first, so a key that shares a run with another is still replaced whole.
-    Encodings other than ``secret_forms`` are ``holds_secret``'s business."""
+    """``text`` with each secret, in each of its ``secret_forms``, replaced by ``[redacted]``; longest first."""
     forms = sorted({form for secret in secrets if secret for form in secret_forms(secret)}, key=len, reverse=True)
     for form in forms:
         text = text.replace(form, REDACTED)
-    pieces = {form[i:i + REDACT_RUN] for form in forms for i in range(len(form) - REDACT_RUN + 1)}
-    if not pieces:
-        return text
-    hidden = [False] * len(text)
-    for i in range(len(text) - REDACT_RUN + 1):
-        if text[i:i + REDACT_RUN] in pieces:
-            hidden[i:i + REDACT_RUN] = [True] * REDACT_RUN
-    out, i = [], 0
-    while i < len(text):
-        if hidden[i]:
-            while i < len(text) and hidden[i]:
-                i += 1
-            out.append(REDACTED)
-        else:
-            out.append(text[i])
-            i += 1
-    return "".join(out)
+    return text
 
 
-def _unescape(text: str) -> str:
-    """Backslash escapes undone: ``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX`` and an escaped punctuation character
-    such as ``\\/``."""
-    def one(match: re.Match[str]) -> str:
-        code = match.group(1) or match.group(2) or match.group(3)
-        if code is None:
-            return match.group(4)
-        value = int(code, 16)
-        return chr(value) if value <= 0x10FFFF else match.group(0)
-
-    return _ESCAPE.sub(one, text)
-
-
-def decodings(text: str, rounds: int = 4) -> list[str]:
-    """``text``, and what it reads as once the encodings a provider may apply to quoted text are undone, again
-    and again: percent-escapes (``%2f`` or ``%2F``), backslash escapes (``\\u0073``, ``\\/``) and HTML character
-    references. Each round undoes all three, so a key escaped in parts, or twice, comes out whole."""
-    forms = [text]
-    for _ in range(rounds):
-        decoded = html.unescape(_unescape(unquote(forms[-1], errors="replace")))
-        if decoded == forms[-1]:
-            break
-        forms.append(decoded)
-    return forms
-
-
-def holds_secret(text: str, *secrets: str | None) -> bool:
-    """Whether ``text``, in any of its ``decodings``, contains a secret or a run of ``REDACT_RUN`` of its
-    characters."""
-    runs = set()
-    for secret in secrets:
-        if secret:
-            runs |= ({secret} if len(secret) < REDACT_RUN else
-                     {secret[i:i + REDACT_RUN] for i in range(len(secret) - REDACT_RUN + 1)})
-    if not runs:
-        return False
-    return any(run in form for form in decodings(text) for run in runs)
-
-
-def sanitize_record(record: logging.LogRecord, secrets: list[str]) -> None:
-    """Withhold every part of ``record`` that holds a secret: the message (with its arguments), the exception
-    and the stack. An exception is rendered to ``exc_text`` and ``exc_info`` dropped either way, so no handler
-    formats the live exception, whose attributes (an SDK error's body) the text does not show."""
+def redact_record(record: logging.LogRecord, secrets: list[str]) -> None:
+    """Redact every secret from ``record``: the message (with its arguments), the exception and the stack. An
+    exception is rendered to ``exc_text`` and ``exc_info`` dropped, so no handler formats the live exception,
+    whose attributes (an SDK error's body) the rendered text does not show."""
     if not secrets:
         return
     try:
         message = record.getMessage()
-    except Exception:  # a malformed record: judge what it would print at best
+    except Exception:  # a malformed record: redact what it would print at best
         message = f"{record.msg} {record.args}"
-    if holds_secret(message, *secrets):
-        record.msg, record.args = LOG_WITHHELD, None
+    cleaned = redact(message, *secrets)
+    if cleaned != message:
+        record.msg, record.args = cleaned, None
     if record.exc_info:
         try:
-            text = logging.Formatter().formatException(record.exc_info)
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
         except Exception:
-            text = "[exception could not be rendered]"
-        record.exc_text, record.exc_info = text, None
-    if record.exc_text and holds_secret(record.exc_text, *secrets):
-        record.exc_text = LOG_WITHHELD
-    if record.stack_info and holds_secret(record.stack_info, *secrets):
-        record.stack_info = LOG_WITHHELD
+            record.exc_text = "[exception could not be rendered]"
+        record.exc_info = None
+    if record.exc_text:
+        record.exc_text = redact(record.exc_text, *secrets)
+    if record.stack_info:
+        record.stack_info = redact(record.stack_info, *secrets)
 
 
 class _KeyFilter(logging.Filter):
-    """Registered keys, and their withholding from log records of the SDK and its HTTP stack.
+    """The registered keys, and their redaction from log records of the SDK and its HTTP stack.
 
     With ``OPENAI_LOG=debug`` the SDK logs, among other things, a response's ``x-request-id`` header as the
     endpoint sent it; an endpoint that echoes the key there would put it in the log."""
@@ -324,75 +280,54 @@ class _KeyFilter(logging.Filter):
             return list(self._secrets)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        sanitize_record(record, self.secrets())
+        redact_record(record, self.secrets())
         return True
 
 
 _LOG_FILTER = _KeyFilter()
 # Loggers of the SDK and the HTTP libraries under it (httpx2 and httpcore2 in openai 3.x).
 LOGGER_ROOTS = ("openai", "httpx", "httpx2", "httpcore", "httpcore2")
+# The record factory this module installed last; recognised by identity, never by an attribute a wrapper copies.
+_FACTORY: Callable[..., logging.LogRecord] | None = None
 
 
-def _guarded_factory(previous: Callable[..., logging.LogRecord]) -> Callable[..., logging.LogRecord]:
-    def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
-        record = previous(*args, **kwargs)
-        if str(record.name).split(".", 1)[0] in LOGGER_ROOTS:
-            sanitize_record(record, _LOG_FILTER.secrets())
-        return record
-
-    factory._memfalsify_guard = True  # type: ignore[attr-defined]
-    return factory
+def _installed(factory: Callable[..., Any] | None) -> bool:
+    """Whether ``factory`` is our record factory, or wraps it (``functools.wraps`` sets ``__wrapped__``)."""
+    seen = set()
+    while factory is not None and id(factory) not in seen:
+        if factory is _FACTORY:
+            return True
+        seen.add(id(factory))
+        factory = getattr(factory, "__wrapped__", None)
+    return False
 
 
 def guard_logs(secret: str | None) -> None:
-    """Withhold ``secret`` from the log records of the SDK and the HTTP stack, for the rest of the process.
+    """Redact ``secret`` from the log records of the SDK and the HTTP stack, for the rest of the process.
 
-    Two layers: the log record factory (chained to whatever factory was set before) sanitizes every new record
-    of a logger under ``LOGGER_ROOTS`` as it is made, which covers loggers created at any time, even during a
-    request; and a filter on those loggers sanitizes records made some other way when they are handled. A
-    filter only sees its own logger's records, so it goes on each existing logger of those names. Every
-    request calls this again, which re-installs the factory if someone replaced it."""
+    Two layers: the log record factory (chained to whatever factory was set before) redacts every new record of
+    a logger under ``LOGGER_ROOTS`` as it is made, which covers loggers created at any time; and a filter on
+    those loggers redacts records made some other way when they are handled. Every request calls this again,
+    which re-installs the factory when it is no longer in the chain."""
+    global _FACTORY
     if secret:
         _LOG_FILTER.add(secret)
     current = logging.getLogRecordFactory()
-    if not getattr(current, "_memfalsify_guard", False):
-        logging.setLogRecordFactory(_guarded_factory(current))
+    if not _installed(current):
+        def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+            record = current(*args, **kwargs)
+            if str(record.name).split(".", 1)[0] in LOGGER_ROOTS:
+                redact_record(record, _LOG_FILTER.secrets())
+            return record
+
+        _FACTORY = factory
+        logging.setLogRecordFactory(factory)
     names = list(logging.Logger.manager.loggerDict)
     for name in [*LOGGER_ROOTS, *names]:
         if name.split(".", 1)[0] in LOGGER_ROOTS:
             logger = logging.getLogger(name)
             if _LOG_FILTER not in logger.filters:
                 logger.addFilter(_LOG_FILTER)
-
-
-def _holds_hashed_certs(directory: str) -> bool:
-    """Whether ``directory`` holds certificates under OpenSSL's hashed names (``1a2b3c4d.0``)."""
-    try:
-        return any(re.fullmatch(r"[0-9a-fA-F]{8}\.[0-9]", name) for name in os.listdir(directory))
-    except OSError:
-        return False
-
-
-def tls_context() -> ssl.SSLContext:
-    """The TLS context for https endpoints, independent of the environment.
-
-    On macOS and Windows, ``truststore`` verifies through the system's own trust store, which no environment
-    variable changes. On Linux and other OpenSSL platforms, truststore and Python's default context both load
-    CA certificates through OpenSSL's default paths, which ``SSL_CERT_FILE`` and ``SSL_CERT_DIR`` override; this
-    context loads the locations compiled into OpenSSL instead (or the first usual bundle in ``CA_FILES``), never
-    those variables. With no CA certificates found, every https certificate fails verification."""
-    if sys.platform in ("darwin", "win32"):
-        import truststore
-
-        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    paths = ssl.get_default_verify_paths()  # openssl_cafile and openssl_capath are the compiled-in locations
-    cafile = paths.openssl_cafile if paths.openssl_cafile and os.path.isfile(paths.openssl_cafile) else None
-    capath = paths.openssl_capath if paths.openssl_capath and _holds_hashed_certs(paths.openssl_capath) else None
-    if cafile is None and capath is None:
-        cafile = next((candidate for candidate in CA_FILES if os.path.isfile(candidate)), None)
-    if cafile is None and capath is None:
-        return ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # verifies against nothing: https fails closed
-    return ssl.create_default_context(cafile=cafile, capath=capath)
 
 
 def isolated_headers(api_key: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
@@ -413,10 +348,6 @@ def isolated_headers(api_key: str, environ: Mapping[str, str] | None = None) -> 
     headers["Authorization"] = f"Bearer {api_key}"
     return headers
 
-
-FORMATS = ("json_schema", "json_object", "text")
-_FORMAT_NAMES = {"json_schema": "response_format json_schema", "json_object": "response_format json_object",
-                 "text": "no response_format (plain-text JSON)"}
 
 # Verdict's JSON schema in the form strict structured outputs accept: every property required, no others.
 SCHEMA: dict[str, Any] = {
@@ -447,10 +378,10 @@ def prompt(claim: str, passage: str) -> list[dict[str, str]]:
 
 def request_format(mode: str) -> dict[str, Any]:
     """Keyword arguments that ask for ``mode``: a strict JSON schema, any JSON object, or nothing (plain text)."""
-    if mode == "json_schema":
+    if mode == ResponseFormat.json_schema.value:
         return {"response_format": {"type": "json_schema",
                                     "json_schema": {"name": "verdict", "strict": True, "schema": SCHEMA}}}
-    if mode == "json_object":
+    if mode == ResponseFormat.json_object.value:
         return {"response_format": {"type": "json_object"}}
     return {}
 
@@ -486,30 +417,11 @@ def _usage(usage: Any) -> Any:
                            output_tokens=_count(_get(usage, "completion_tokens")))
 
 
-def _scalar(value: Any) -> str | None:
-    """A string, number or boolean from an error body as text; None for anything else (no repr of a body)."""
-    if isinstance(value, str):
-        return value or None
-    if isinstance(value, (bool, int, float)):
-        return str(value)
-    return None
-
-
-def names_format(param: str | None, code: str | None, message: str | None) -> bool:
-    """Whether an error's param, code or message names the response format (see ``_FORMAT_WORD``)."""
-    if param is not None:
-        return param == "response_format" or param.startswith("response_format.")
-    if code is not None and not _GENERIC_CODE.fullmatch(code):
-        return bool(_FORMAT_ERROR.search(code))
-    return bool(message and _FORMAT_WORD.search(_QUOTED_MODEL.sub(" ", message)))
-
-
-@dataclass(frozen=True)
-class Failure:
-    """A request that did not produce a response, described without the exception that reported it."""
-    message: str
-    detail: str = ""
-    format_refused: bool = False
+def _token(value: Any) -> str | None:
+    """An error field as a plain token (``TOKEN``), or None: anything else is dropped, never shown."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        value = str(value)
+    return value if isinstance(value, str) and TOKEN.fullmatch(value) else None
 
 
 class OpenAICompatVerifier:
@@ -517,14 +429,15 @@ class OpenAICompatVerifier:
 
     def __init__(self, model: str, provider: str = Provider.openai.value, base_url: str | None = None,
                  api_key_env: str | None = None, client: Any = None, *,
-                 progress: Callable[[str], None] | None = None) -> None:
-        """``provider`` picks the preset base URL and key variable (``PRESETS``); ``base_url`` and
-        ``api_key_env`` (the variable's name, never the key) override it. ``progress`` receives a line
-        whenever the endpoint refuses a response format and the verifier falls back to the next one."""
+                 response_format: str | None = None) -> None:
+        """``provider`` picks the preset base URL, key variable and response format (``PRESETS``); ``base_url``,
+        ``api_key_env`` (the variable's name, never the key) and ``response_format`` override it. A custom
+        ``base_url`` defaults to the strict JSON schema."""
         problem = None
         try:
             self.model = check_model(model)
             self.endpoint = resolve_endpoint(provider, base_url, api_key_env)
+            self.response_format = check_response_format(response_format or self.endpoint.response_format)
         except ValueError as exc:
             problem = str(exc)
         if problem is not None:
@@ -546,108 +459,77 @@ class OpenAICompatVerifier:
             client = self._client()
         self.client = client
         self.meter = UsageMeter(self.name)
-        self._format = 0  # index into FORMATS: the first one the endpoint has not refused
-        self._settled = False  # a request has succeeded with FORMATS[self._format]
-        self._negotiating = threading.Lock()
-        self._progress = progress or (lambda message: None)
 
     def _client(self) -> Any:
         """The SDK client: our own HTTP client, which follows no redirect (a 307 or 308 would resend the claim,
-        the evidence and the key to wherever the endpoint points), ignores proxy settings from the environment
-        (``trust_env=False``) and verifies certificates with ``tls_context``, so requests go only to the
-        configured base URL."""
+        the evidence and the key to wherever the endpoint points) and ignores proxy settings from the
+        environment (``trust_env=False``), so requests go only to the configured base URL. Certificate
+        verification is the SDK's default."""
         openai = self._sdk
         key = self._secret or NO_KEY
         failure = None
         try:
-            http = openai.DefaultHttpxClient(follow_redirects=False, trust_env=False, verify=tls_context())
+            http = openai.DefaultHttpxClient(follow_redirects=False, trust_env=False)
             return openai.OpenAI(api_key=key, base_url=self.endpoint.base_url,
                                  default_headers=isolated_headers(key), http_client=http, max_retries=MAX_RETRIES)
-        except openai.OpenAIError as exc:  # the SDK's own configuration errors: fixed texts, no response body
-            failure = f"{self.name}: {self._field(str(exc), 500)}"
+        except openai.OpenAIError as exc:
+            failure = f"{self.name}: the OpenAI SDK could not be set up ({type(exc).__name__})"
         raise VerifierError(failure)
 
     def usage(self) -> list[VerifierStats]:
         return [self.meter.snapshot()]
 
-    @property
-    def response_format(self) -> str:
-        """The format requests currently ask for (see ``FORMATS``)."""
-        return FORMATS[self._format]
-
     def judge(self, claim: str, passage: str) -> Judgment:
-        messages = prompt(claim, passage)
-        if not self._settled:
-            # The first request settles the format; concurrent judgments wait for it, so each refused format
-            # costs one extra request per run, however many requests are in flight.
-            with self._negotiating:
-                if not self._settled:
-                    return self._negotiate(messages)
-        response, failure = self._send(messages, FORMATS[self._format])
-        if failure is not None:
-            raise VerifierError(failure.message)
-        return self._judgment(response)
-
-    def _negotiate(self, messages: list[dict[str, str]]) -> Judgment:
-        """Ask in the current format, falling back to the next one while the endpoint refuses the format."""
-        while True:
-            mode = FORMATS[self._format]
-            response, failure = self._send(messages, mode)
-            if failure is None:
-                self._settled = True
-                return self._judgment(response)
-            if not failure.format_refused or self._format + 1 == len(FORMATS):
-                raise VerifierError(failure.message)
-            self._format += 1
-            self._progress(self._shown(
-                f"{self.name}: the endpoint refused {_FORMAT_NAMES[mode]} ({failure.detail}); asking with "
-                f"{_FORMAT_NAMES[FORMATS[self._format]]} from now on"))
-
-    def _send(self, messages: list[dict[str, str]], mode: str) -> tuple[Any, Failure | None]:
-        """One request. A failure is described inside the ``except`` block and raised by the caller after it,
-        so no ``VerifierError`` carries the SDK's exception (and the body it may quote) as cause or context."""
-        guard_logs(None)  # loggers created since the last request
+        guard_logs(None)  # loggers created since the last request, and a replaced record factory
         failure = None
         try:
-            response = self.client.chat.completions.create(model=self.model, messages=messages,
-                                                           **request_format(mode))
+            response = self.client.chat.completions.create(model=self.model, messages=prompt(claim, passage),
+                                                           **request_format(self.response_format))
         except self._api_error as exc:
-            failure = self._failure(exc, mode)
+            # Described inside the except block and raised after it, so the VerifierError carries the SDK's
+            # exception (and the body it holds) neither as its cause nor as its context.
+            failure = f"{self.name}: {self._failure(exc)}"
         if failure is not None:
-            return None, failure
+            raise VerifierError(failure)
         self.meter.record(_usage(getattr(response, "usage", None)))
-        return response, None
+        return self._judgment(response)
 
-    def _failure(self, exc: Exception, mode: str) -> Failure:
-        """What went wrong, built from the error's fields (status, type, code, param, message), each redacted;
-        never from ``str()`` or ``repr()`` of a response body."""
+    def _failure(self, exc: Exception) -> str:
+        """What went wrong, from the error's status and its type, code and param when they are plain tokens,
+        with a fixed hint for the status. The provider's message is never shown."""
         status = getattr(exc, "status_code", None)
         if not isinstance(status, int):
-            return Failure(f"{self.name}: {self._without_response(exc)}")
+            return self._without_response(exc)
         if 300 <= status < 400:
-            return Failure(f"{self.name}: HTTP {status}: the endpoint answered with a redirect, which is not "
-                           "followed; check the base URL")
+            return f"HTTP {status}: the endpoint answered with a redirect, which is not followed; check the base URL"
         body = getattr(exc, "body", None)
-        fields: dict[str, str] = {}
-        message = None
-        if isinstance(body, Mapping):
-            for name in ("type", "code", "param"):
-                value = _scalar(body.get(name))
-                if value is not None:
-                    fields[name] = value
-            message = _scalar(body.get("message")) or _scalar(body.get("detail"))
-        else:
-            message = _scalar(body)
-        text = f"HTTP {status}"
-        if fields:
-            text += " (" + ", ".join(f"{name} {self._field(value, 100)}" for name, value in fields.items()) + ")"
-        if message:
-            text += ": " + self._field(message, 500)
-        # Only an error that names the format means "ask in another format"; any other 400 (an unknown model,
-        # a context that is too long) is reported at once.
-        refused = mode != "text" and status in (400, 422) and names_format(fields.get("param"), fields.get("code"),
-                                                                            message)
-        return Failure(f"{self.name}: {text}", detail=text, format_refused=refused)
+        fields = {name: _token(body.get(name)) for name in ("type", "code", "param")} if isinstance(body, Mapping) \
+            else {}
+        shown = ", ".join(f"{name} {value}" for name, value in fields.items() if value is not None)
+        return f"HTTP {status}" + (f" ({shown})" if shown else "") + f": {self._hint(status)}"
+
+    def _hint(self, status: int) -> str:
+        if status in (401, 403):
+            name = self.endpoint.api_key_env
+            if name is None:
+                return "the endpoint refused the request, which carries no key; name one with --api-key-env"
+            where = name if self.endpoint.preset_key else "the environment variable you named"
+            return f"the key in {where} was refused"
+        if status == 404:
+            return "the model or the endpoint was not found; check --openai-model and --base-url"
+        if status == 429:
+            return "rate limited or out of quota"
+        if status in (400, 422):
+            hint = "the endpoint rejected the request"
+            if self.response_format == ResponseFormat.json_schema.value:
+                hint += (". If this endpoint does not support JSON schema output, try --openai-response-format "
+                         "json_object (or text).")
+            elif self.response_format == ResponseFormat.json_object.value:
+                hint += ". If this endpoint does not support JSON object output, try --openai-response-format text."
+            return hint
+        if status >= 500:
+            return "the provider had an error; try again"
+        return "the provider returned an error"
 
     def _without_response(self, exc: Exception) -> str:
         """A failure without an HTTP status: the SDK's fixed description of its kind, never its message."""
@@ -660,51 +542,50 @@ class OpenAICompatVerifier:
             return "the response does not have the shape of a chat completion"
         return f"the request failed ({type(exc).__name__})"
 
-    def _field(self, value: str, limit: int) -> str:
-        """Provider text for a diagnostic: withheld whole if it holds the key in any encoding, else cut to
-        ``limit`` characters and made one inert line."""
-        if holds_secret(value, self._secret):
-            return WITHHELD
-        return self._shown(value[:limit] + ("..." if len(value) > limit else ""))
-
     def _judgment(self, response: Any) -> Judgment:
-        """A verdict from a well-formed, normally finished completion; no verdict for anything else.
+        """A verdict from a well-formed, normally finished completion; no verdict, with a fixed reason, for
+        anything else. Nothing from the envelope (finish_reason, refusal, ...) is echoed.
 
         The SDK does not validate responses, so a malformed envelope (choices that are not a list, a choice
         without a message, content or finish_reason of the wrong type) arrives as it was sent; it counts as no
         verdict, like a completion without choices or with an empty answer."""
         malformed = "the response is not a well-formed chat completion"
         if isinstance(response, (str, bytes, int, float, list)):
-            return self._no_verdict(None, malformed)
+            return self._no_verdict(malformed)
         choices = _get(response, "choices")
         if choices is None or (isinstance(choices, list) and not choices):
-            return self._no_verdict(None, "the response has no answer")
+            return self._no_verdict("the response has no answer")
         if not isinstance(choices, list):
-            return self._no_verdict(None, malformed)
+            return self._no_verdict(malformed)
         choice = choices[0]
         message = _get(choice, "message")
         finish = _get(choice, "finish_reason")
         if isinstance(choice, (str, bytes, int, float, list)) or isinstance(message, (str, bytes, int, float, list)):
-            return self._no_verdict(None, malformed)
+            return self._no_verdict(malformed)
         refusal, content = _get(message, "refusal"), _get(message, "content")
         if not all(value is None or isinstance(value, str) for value in (finish, refusal, content)):
-            return self._no_verdict(None, malformed)
+            return self._no_verdict(malformed)
         if refusal:
-            return self._no_verdict(finish, "the model refused")
+            return self._no_verdict("the model refused")
         if finish != FINISHED:
-            return self._no_verdict(finish, "the answer did not end normally (only finish_reason stop is used)")
+            return self._no_verdict("the answer did not finish normally")
         if not content or not content.strip():
-            return self._no_verdict(finish, "the answer is empty")
+            return self._no_verdict("the answer is empty")
         verdict = parse_verdict(content)
         if verdict is None:
-            return self._no_verdict(finish, "the answer is not a JSON verdict")
-        return Judgment(relation=verdict.relation, verifier=self.name,
-                        rationale=self._shown(WITHHELD if holds_secret(verdict.rationale, self._secret)
-                                              else verdict.rationale))
+            return self._no_verdict("the answer is not a JSON verdict")
+        return Judgment(relation=verdict.relation, rationale=self._rationale(verdict.rationale), verifier=self.name)
 
-    def _no_verdict(self, finish: Any, why: str) -> Judgment:
-        return Judgment(relation="unrelated", verifier=self.name,
-                        rationale=self._shown(f"no verdict (finish_reason: {finish}; {why})"))
+    def _rationale(self, text: str) -> str:
+        """The model's rationale, the only free text kept: the key redacted (``secret_forms``), and withheld
+        whole if it is still there; then one inert line."""
+        cleaned = redact(text, self._secret)
+        if self._secret and self._secret in cleaned:
+            cleaned = WITHHELD_RATIONALE
+        return printable(cleaned)
+
+    def _no_verdict(self, why: str) -> Judgment:
+        return Judgment(relation="unrelated", verifier=self.name, rationale=f"no verdict ({why})")
 
     def _key(self, required: bool) -> str | None:
         """The key from the named environment variable; None when the endpoint takes none."""
@@ -723,7 +604,3 @@ class OpenAICompatVerifier:
             raise VerifierError(f"{self.name}: the API key holds characters API keys do not use; only letters, "
                                 "digits and . _ ~ + / = - are accepted")
         return key
-
-    def _shown(self, text: object) -> str:
-        """Provider errors and model text on one line, without terminal or bidi controls, and without the key."""
-        return printable(redact(str(text), self._secret))

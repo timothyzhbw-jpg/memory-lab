@@ -393,6 +393,10 @@ def main(
     api_key_env: Optional[str] = typer.Option(None, "--api-key-env", metavar="NAME",
                                               help="--verifier openai: name of the environment variable holding "
                                                    "the API key (never the key itself)"),
+    openai_response_format: Optional[openai_compat.ResponseFormat] = typer.Option(
+        None, "--openai-response-format",
+        help="--verifier openai: json_schema, json_object or text (default: json_object for deepseek, json_schema "
+             "otherwise)"),
     accept_at: float = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence"),
     case: Optional[list[str]] = typer.Option(None, "--case", help="Run only this case ID (repeatable)"),
     json_out: Optional[Path] = typer.Option(None, "--json", dir_okay=False,
@@ -412,7 +416,8 @@ def main(
             return
         if verifier is VerifierChoice.openai:
             judge = build_verifier(verifier, llm_model, jev_model, accept_at, openai=openai_compat.OpenAISettings(
-                openai_model, provider.value, base_url, api_key_env))
+                openai_model, provider.value, base_url, api_key_env,
+                openai_response_format.value if openai_response_format else None))
         else:
             judge = build_verifier(verifier, llm_model, jev_model, accept_at)
         result = evaluate(cases, judge, **preselection(verifier, min_coverage, max_judged))
@@ -424,6 +429,7 @@ def main(
         result["settings"]["accept_at"] = accept_at
     if verifier is VerifierChoice.openai:  # the model and host are part of result["verifier"]
         result["settings"]["provider"] = provider.value
+        result["settings"]["response_format"] = judge.response_format
     typer.echo(to_markdown(result), nl=False)
     if json_out:
         json_out.write_bytes((json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))

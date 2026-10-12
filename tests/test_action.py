@@ -542,12 +542,14 @@ def test_lock_script_covers_every_lock_set():
 
 # --- verifier openai -----------------------------------------------------------------------------------------
 
-OPENAI_ENV = ("MEMFALSIFY_OPENAI_MODEL", "MEMFALSIFY_PROVIDER", "MEMFALSIFY_BASE_URL", "MEMFALSIFY_API_KEY_ENV")
+OPENAI_ENV = ("MEMFALSIFY_OPENAI_MODEL", "MEMFALSIFY_PROVIDER", "MEMFALSIFY_BASE_URL", "MEMFALSIFY_API_KEY_ENV",
+              "MEMFALSIFY_OPENAI_RESPONSE_FORMAT")
 
 
 def test_action_passes_openai_inputs_through_env():
     text = (ROOT / "action.yml").read_text(encoding="utf-8")
-    for name, variable in zip(("openai-model", "provider", "base-url", "api-key-env"), OPENAI_ENV):
+    for name, variable in zip(("openai-model", "provider", "base-url", "api-key-env", "openai-response-format"),
+                              OPENAI_ENV):
         assert f"\n  {name}:\n" in text and f"{variable}: ${{{{ inputs.{name} }}}}" in text
 
 
@@ -556,6 +558,7 @@ def test_action_openai_options_reach_the_cli_as_single_arguments():
            "MEMFALSIFY_BASE_URL": "https://gateway.example.test/v1", "MEMFALSIFY_API_KEY_ENV": "GATEWAY_KEY"}
     assert action.options(env)[-4:] == ["--openai-model=grok-model", "--provider=grok",
                                         "--base-url=https://gateway.example.test/v1", "--api-key-env=GATEWAY_KEY"]
+    assert action.options({**env, "MEMFALSIFY_OPENAI_RESPONSE_FORMAT": "text"})[-1] == "--openai-response-format=text"
     assert action.options({**env, "MEMFALSIFY_BASE_URL": "", "MEMFALSIFY_PROVIDER": ""})[-2:] == \
         ["--openai-model=grok-model", "--api-key-env=GATEWAY_KEY"]
     assert not any(o.startswith(("--openai", "--provider", "--base-url", "--api-key"))
@@ -568,6 +571,8 @@ def test_action_openai_options_reach_the_cli_as_single_arguments():
     ({"MEMFALSIFY_BASE_URL": "http://gateway.example.test/v1"}, "must use https"),
     ({"MEMFALSIFY_BASE_URL": "https://gateway.example.test/v1?key=sk-SECRET"}, "user name, password, query"),
     ({"MEMFALSIFY_API_KEY_ENV": "sk-SECRET-pasted-key"}, "never the key itself"),
+    ({"MEMFALSIFY_OPENAI_RESPONSE_FORMAT": "json"},
+     "the openai-response-format input must be one of json_schema, json_object, text"),
 ])
 def test_action_openai_inputs_are_validated(tmp_path, monkeypatch, runner_env, capsys, override, message):
     monkeypatch.chdir(shutil.copytree(EXAMPLES / "memfalsify", tmp_path / "demo"))
@@ -585,8 +590,8 @@ def test_action_warns_about_openai_inputs_without_the_openai_verifier(tmp_path, 
     env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md", "MEMFALSIFY_EVIDENCE": "evidence",
            "MEMFALSIFY_STRICT": "false", "MEMFALSIFY_OPENAI_MODEL": "m"}
     assert action.main(env) == 0
-    assert ("::warning title=MemFalsify::the openai-model, provider, base-url and api-key-env inputs apply only to "
-            "verifier openai; ignoring them") in capsys.readouterr().out
+    assert ("::warning title=MemFalsify::the openai-model, provider, base-url, api-key-env and "
+            "openai-response-format inputs apply only to verifier openai; ignoring them") in capsys.readouterr().out
 
 
 def test_action_runs_the_openai_verifier(tmp_path, monkeypatch, runner_env, capsys):
@@ -636,7 +641,8 @@ def test_action_openai_api_failure_exits_2_without_the_key(tmp_path, monkeypatch
            "MEMFALSIFY_API_KEY_ENV": "TEAM_OPENAI_KEY"}
     assert action.main(env) == 2
     log = capsys.readouterr().out
-    assert ("MemFalsify CLI: error: openai:gpt-model@api.openai.com: HTTP 401: the provider's message was withheld because it contained the API key") in log
+    assert ("MemFalsify CLI: error: openai:gpt-model@api.openai.com: HTTP 401: the key in the environment variable "
+            "you named was refused") in log
     assert "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2)" in log
     summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
     for text in (log, summary):

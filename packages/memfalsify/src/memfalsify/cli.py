@@ -63,8 +63,8 @@ def build_verifier(choice: VerifierChoice, llm_model: str, jev_model: str, accep
                    batch: bool = False, progress: Callable[[str], None] | None = None,
                    openai: openai_compat.OpenAISettings | None = None) -> Verifier:
     """Model backends import their heavy dependencies only when constructed. ``batch`` sends the Claude
-    requests through the Message Batches API; ``progress`` receives its status lines (and the OpenAI-compatible
-    verifier's response-format fallbacks). ``openai`` configures ``--verifier openai``."""
+    requests through the Message Batches API; ``progress`` receives its status lines. ``openai`` configures
+    ``--verifier openai``."""
     if batch and choice is VerifierChoice.openai:
         raise ValueError("--batch is not supported with --verifier openai in this version: its requests are "
                          "sent directly, --max-concurrency at a time")
@@ -83,7 +83,7 @@ def build_verifier(choice: VerifierChoice, llm_model: str, jev_model: str, accep
     if choice is VerifierChoice.openai:
         settings = openai or openai_compat.OpenAISettings()
         return openai_compat.OpenAICompatVerifier(settings.model or "", settings.provider, settings.base_url,
-                                                  settings.api_key_env, progress=progress)
+                                                  settings.api_key_env, response_format=settings.response_format)
     if choice is VerifierChoice.cascade:
         return CascadeVerifier(jev.JevVerifier(jev_model), claude(), accept_at)
     return DualVerifier(claude(), jev.JevVerifier(jev_model))
@@ -102,6 +102,14 @@ def preselection(choice: VerifierChoice, min_coverage: float | None = None, max_
 def concurrency(choice: VerifierChoice, max_concurrency: int) -> int:
     """Model verifiers wait on the network, so they run requests in parallel; lexical judging stays serial."""
     return 1 if choice is VerifierChoice.lexical else max_concurrency
+
+
+def openai_settings(model: Optional[str], provider: openai_compat.Provider, base_url: Optional[str],
+                    api_key_env: Optional[str],
+                    response_format: Optional[openai_compat.ResponseFormat]) -> openai_compat.OpenAISettings:
+    """The ``--verifier openai`` options as settings (shared with the pre-commit hooks)."""
+    return openai_compat.OpenAISettings(model, provider.value, base_url, api_key_env,
+                                        response_format.value if response_format else None)
 
 
 def _progress(message: str) -> None:
@@ -194,6 +202,11 @@ API_KEY_ENV = typer.Option(
     None, "--api-key-env", metavar="NAME",
     help="--verifier openai: name of the environment variable that holds the API key, overriding the provider's "
          "(never the key itself)")
+OPENAI_RESPONSE_FORMAT = typer.Option(
+    None, "--openai-response-format",
+    help="--verifier openai: what to ask the model to answer in: json_schema (strict structured output), "
+         "json_object or text (the instructions still ask for JSON). Default: json_object for --provider deepseek, "
+         "json_schema for the other providers and for any --base-url")
 ACCEPT_AT = typer.Option(0.8, min=0.0, max=1.0, help="--verifier cascade: accept Jev at this confidence, else ask the LLM")
 MAX_JUDGED_OPTION = typer.Option(MAX_JUDGED, min=1, help="Model verifiers: passages judged per memory (bounds API calls)")
 MAX_CONCURRENCY = typer.Option(
@@ -227,6 +240,7 @@ def audit_command(
     provider: openai_compat.Provider = PROVIDER,
     base_url: Optional[str] = BASE_URL,
     api_key_env: Optional[str] = API_KEY_ENV,
+    openai_response_format: Optional[openai_compat.ResponseFormat] = OPENAI_RESPONSE_FORMAT,
     accept_at: float = ACCEPT_AT,
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
@@ -237,7 +251,8 @@ def audit_command(
     try:
         reference = date.fromisoformat(as_of) if as_of else None
         judge = build_verifier(verifier, llm_model, jev_model, accept_at, batch=batch, progress=_progress,
-                               openai=openai_compat.OpenAISettings(openai_model, provider.value, base_url, api_key_env))
+                               openai=openai_settings(openai_model, provider, base_url, api_key_env,
+                                                      openai_response_format))
         report = audit(memory, evidence, reviews, verifier=judge, as_of=reference, stale_days=stale_days,
                        follow_links=follow_links, exclude=exclude or (),
                        max_concurrency=concurrency(verifier, max_concurrency),
@@ -284,6 +299,7 @@ def diff_command(
     provider: openai_compat.Provider = PROVIDER,
     base_url: Optional[str] = BASE_URL,
     api_key_env: Optional[str] = API_KEY_ENV,
+    openai_response_format: Optional[openai_compat.ResponseFormat] = OPENAI_RESPONSE_FORMAT,
     accept_at: float = ACCEPT_AT,
     max_judged: int = MAX_JUDGED_OPTION,
     min_coverage: Optional[float] = MIN_COVERAGE,
@@ -297,7 +313,8 @@ def diff_command(
     try:
         reference = date.fromisoformat(as_of) if as_of else None
         judge = build_verifier(verifier, llm_model, jev_model, accept_at, batch=batch, progress=_progress,
-                               openai=openai_compat.OpenAISettings(openai_model, provider.value, base_url, api_key_env))
+                               openai=openai_settings(openai_model, provider, base_url, api_key_env,
+                                                      openai_response_format))
         report = memory_diff(memory, base, head, follow_links=follow_links, evidence_root=evidence, reviews=reviews,
                              verifier=judge, as_of=reference, stale_days=stale_days, exclude=exclude or (),
                              max_concurrency=concurrency(verifier, max_concurrency), staged=staged,

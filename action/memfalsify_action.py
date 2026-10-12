@@ -28,7 +28,7 @@ from memfalsify import DiffReport, HistoryError, diff_to_markdown, resolve_commi
 from memfalsify import to_markdown
 from memfalsify.discover import discover
 from memfalsify.gitstore import code_span
-from memfalsify.openai_compat import Provider, check_base_url, check_key_env
+from memfalsify.openai_compat import FORMATS, Provider, check_base_url, check_key_env
 
 ERROR = 2
 SUMMARY_LIMIT = 1_000_000  # GitHub rejects step summaries over 1 MiB.
@@ -36,7 +36,8 @@ COLOUR_VARIABLES = ("FORCE_COLOR", "PY_COLORS")  # either one makes Typer force 
 AUTO = "auto"  # memory input: audit every instruction file `memfalsify discover` finds in the workspace
 # Inputs of the openai verifier: environment variable -> CLI option.
 OPENAI_OPTIONS = {"MEMFALSIFY_OPENAI_MODEL": "--openai-model", "MEMFALSIFY_PROVIDER": "--provider",
-                  "MEMFALSIFY_BASE_URL": "--base-url", "MEMFALSIFY_API_KEY_ENV": "--api-key-env"}
+                  "MEMFALSIFY_BASE_URL": "--base-url", "MEMFALSIFY_API_KEY_ENV": "--api-key-env",
+                  "MEMFALSIFY_OPENAI_RESPONSE_FORMAT": "--openai-response-format"}
 
 
 @contextmanager
@@ -123,8 +124,8 @@ def openai_problem(env: dict[str, str]) -> str | None:
     the log."""
     if (env.get("MEMFALSIFY_VERIFIER") or "").strip() != "openai":
         if any(env.get(variable, "").strip() for variable in OPENAI_OPTIONS):
-            annotate("warning", "the openai-model, provider, base-url and api-key-env inputs apply only to "
-                                "verifier openai; ignoring them")
+            annotate("warning", "the openai-model, provider, base-url, api-key-env and openai-response-format "
+                                "inputs apply only to verifier openai; ignoring them")
         return None
     if not env.get("MEMFALSIFY_OPENAI_MODEL", "").strip():
         return ("verifier openai needs the openai-model input: model names differ between providers, so there "
@@ -132,6 +133,9 @@ def openai_problem(env: dict[str, str]) -> str | None:
     provider = env.get("MEMFALSIFY_PROVIDER", "").strip()
     if provider and provider not in {p.value for p in Provider}:
         return "the provider input must be one of " + ", ".join(p.value for p in Provider)
+    response_format = env.get("MEMFALSIFY_OPENAI_RESPONSE_FORMAT", "").strip()
+    if response_format and response_format not in FORMATS:
+        return "the openai-response-format input must be one of " + ", ".join(FORMATS)
     try:
         if base_url := env.get("MEMFALSIFY_BASE_URL", "").strip():
             check_base_url(base_url)

@@ -65,6 +65,12 @@ inputs:
       provider's. Set that variable from a secret with env: on this step. Never the key itself.
     required: false
     default: ""
+  openai-response-format:
+    description: >-
+      Verifier openai: json_schema (strict structured output), json_object or text. Empty means the
+      provider's default: json_object for deepseek, json_schema otherwise (and for any base-url).
+    required: false
+    default: ""
   diff-base:
     description: >-
       Base revision for a diff-only check, for example github.event.pull_request.base.sha. When set, only
@@ -147,6 +153,7 @@ runs:
         MEMFALSIFY_PROVIDER: ${{ inputs.provider }}
         MEMFALSIFY_BASE_URL: ${{ inputs.base-url }}
         MEMFALSIFY_API_KEY_ENV: ${{ inputs.api-key-env }}
+        MEMFALSIFY_OPENAI_RESPONSE_FORMAT: ${{ inputs.openai-response-format }}
         MEMFALSIFY_AS_OF: ${{ inputs.as-of }}
         MEMFALSIFY_DIFF_BASE: ${{ inputs.diff-base }}
       run: '"$MEMFALSIFY_PYTHON" -I -X utf8 "$GITHUB_ACTION_PATH/action/memfalsify_action.py"'
