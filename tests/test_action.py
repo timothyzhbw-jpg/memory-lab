@@ -78,6 +78,43 @@ def test_action_failure_keeps_a_hostile_memory_name_inert(tmp_path, monkeypatch,
     assert "\n[x](evil)" not in summary
 
 
+def test_action_keeps_cli_error_text_out_of_the_job_summary(tmp_path, monkeypatch, capsys, runner_env):
+    """CLI errors are terminal text: control characters are escaped, Markdown and Windows paths stay as typed.
+    The Action must therefore send them to the step log only. The job summary and the report file are Markdown."""
+    import typer
+    from memfalsify import cli
+
+    hostile = (r"C:\Users\ada\MEMORY.md " + "\x1b[2J\u2028<img src=x> **bold** [link](https://evil.invalid)"
+               "\n## Verdict\n::error::forged")
+
+    def failing_cli(args, **kwargs):
+        try:
+            cli._fail(hostile)
+        except typer.Exit as exc:
+            raise SystemExit(exc.exit_code)
+
+    monkeypatch.setattr(action, "app", failing_cli)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "MEMORY.md").write_text("- The cache uses Redis.\n", encoding="utf-8")
+    env = {**runner_env, "MEMFALSIFY_MEMORY": "MEMORY.md"}
+    assert action.main(env) == 2
+
+    summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
+    report = Path(outputs(env)["report"]).read_text(encoding="utf-8")
+    assert summary == report
+    for leaked in ("img", "bold", "evil", "Verdict", "forged", "Users", "\x1b", "\u2028", "MemFalsify CLI"):
+        assert leaked not in summary
+    assert "- Memory: `MEMORY.md`" in summary and "**Audit failed** with exit code 2" in summary
+
+    log = capsys.readouterr().out.splitlines()
+    assert len([line for line in log if line.startswith("MemFalsify CLI: ")]) == 1
+    cli_line = next(line for line in log if line.startswith("MemFalsify CLI: "))
+    assert cli_line == (r"MemFalsify CLI: error: C:\Users\ada\MEMORY.md " + r"\u001b[2J\u2028<img src=x> **bold** "
+                        r"[link](https://evil.invalid)\u000a## Verdict\u000a%3A%3Aerror%3A%3Aforged")
+    assert [line for line in log if line.startswith("::")] == [
+        "::error title=MemFalsify::memfalsify could not audit MEMORY.md (exit code 2); see the step log"]
+
+
 def test_action_without_memory_files_notices_and_succeeds(tmp_path, monkeypatch, capsys, runner_env):
     monkeypatch.chdir(tmp_path)
     assert action.main(runner_env) == 0

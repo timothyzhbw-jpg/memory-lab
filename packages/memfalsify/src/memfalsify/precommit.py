@@ -22,7 +22,8 @@ import typer
 from pydantic import ValidationError
 
 from memcore.cli import SafeTyperGroup
-from memcore.display import json_shield, report_text
+from memcore.display import json_shield
+from memcore.display import one_line as terminal_text
 
 from . import __version__, jev, llm
 from .audit import ATTENTION
@@ -53,7 +54,7 @@ def _configure_stdio() -> None:
 
 
 def _fail(message: str) -> None:
-    typer.echo(f"error: {report_text(message)}", err=True)
+    typer.echo(f"error: {terminal_text(message)}", err=True)
     raise typer.Exit(2)
 
 

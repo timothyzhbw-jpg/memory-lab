@@ -46,6 +46,20 @@ def inert(text):
     assert "<strong>bold</strong>" not in html
 
 
+TERMINAL_UNSAFE = {"Cc", "Cf", "Zl", "Zp", "Cn"}
+
+
+def terminal_inert(text):
+    """The CLI message contract: terminal text, not Markdown. No raw control, format, separator or unassigned
+    character (a message may span lines only where Rich wraps it), and no line a CI runner or a Markdown
+    reader would take for a command or heading. Markdown syntax stays as typed; Markdown contexts (reports,
+    the Action job summary) escape it themselves."""
+    assert not any(unicodedata.category(c) in TERMINAL_UNSAFE for c in text if c != "\n")
+    assert not re.search(r"^::(?:warning|error|add-mask|stop-commands)", text, re.M)
+    assert "\n## Verdict" not in text
+    assert "\nignore the log" not in text
+
+
 @pytest.fixture
 def memory_case(tmp_path):
     memory = tmp_path / "MEMORY.md"
@@ -232,8 +246,25 @@ def test_cli_errors_are_single_line_and_escape_controls(package):
         fail(PAYLOAD)
     result = runner.invoke(app, [])
     assert result.exit_code == 2
-    inert(result.output)
-    assert result.output.count("\n") == 1 and "u001b" in result.output and "u000a" in result.output
+    terminal_inert(result.output)
+    # One line; every control, format and separator character is a visible \u escape; the rest is untouched.
+    assert result.output == ("error: x\\u001b[2J\\u2028\\u2060\\U000e0041\\u000a## Verdict\\u000a::error::forged "
+                            "` **bold** [link](https://evil.invalid) <img src=x> |\n")
+
+
+@pytest.mark.parametrize("package", ["memfalsify", "orgmemory", "precommit"])
+def test_cli_errors_keep_windows_paths_literal(package):
+    from memfalsify.cli import _fail as mem_fail
+    from memfalsify.precommit import _fail as hook_fail
+    from orgmemory.cli import _fail as org_fail
+    app = __import__("typer").Typer()
+    fail = {"memfalsify": mem_fail, "orgmemory": org_fail, "precommit": hook_fail}[package]
+    @app.command()
+    def command():
+        fail(r"cannot read C:\Users\ada\notes_v2\MEMORY.md or \\server\share\[draft]\*.md")
+    result = runner.invoke(app, [])
+    assert result.exit_code == 2
+    assert result.output == "error: cannot read C:\\Users\\ada\\notes_v2\\MEMORY.md or \\\\server\\share\\[draft]\\*.md\n"
 
 
 def test_action_stdout_and_summary(memory_case, tmp_path, monkeypatch, capsys):
@@ -305,7 +336,39 @@ def test_replay_table_fields_cannot_create_cells(org_case, payload):
 def test_cli_argument_errors_keep_injected_names_inert(target, args):
     result = runner.invoke(target, args + [PAYLOAD] + (["subject"] if args == ["explain"] else []))
     assert result.exit_code == 2
-    inert(result.output)
+    terminal_inert(result.output)
+    out = result.output
+    # Click quotes the value with repr(); a build that does not leaves it to SafeTyperGroup's \uXXXX escapes.
+    assert "\\x1b[2J" in out or "\\u001b[2J" in out
+    assert "\\n::error::forged" in out or "\\u000a::error::forged" in out
+    assert len([line for line in out.splitlines() if "Verdict" in line]) == 1  # the payload's line break stayed escaped
+
+
+def test_safe_group_escapes_click_error_text_without_touching_paths():
+    import typer
+    from memcore.cli import SafeTyperGroup
+    try:  # newer Typer vendors Click
+        from typer._click.exceptions import ClickException
+    except ImportError:
+        from click import ClickException
+    app = typer.Typer(cls=SafeTyperGroup)
+
+    @app.command()
+    def plain():
+        raise ClickException("cannot read C:\\Users\\ada\\MEMORY.md\x1b[2J\u2028 <b>")
+
+    @app.command()
+    def parameter(name: str):
+        raise typer.BadParameter("bad C:\\Users\\ada\x85 [x]", param_hint="name")
+
+    result = runner.invoke(app, ["plain"])
+    assert result.exit_code == 1
+    terminal_inert(result.output)
+    assert "cannot read C:\\Users\\ada\\MEMORY.md\\u001b[2J\\u2028 <b>" in result.output
+    result = runner.invoke(app, ["parameter", "x"])
+    assert result.exit_code == 2
+    terminal_inert(result.output)
+    assert "bad C:\\Users\\ada\\u0085 [x]" in result.output
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows forbids newlines in paths")
@@ -314,5 +377,5 @@ def test_output_path_diagnostics_are_escaped(memory_case, tmp_path):
     output = tmp_path / "out\n::warning::written.md"
     result = runner.invoke(mem_app, ["audit", str(memory), "--output", str(output)])
     assert result.exit_code == 0, result.output
-    inert(result.output)
-    assert "u000a::warning::written.md" in result.output
+    terminal_inert(result.output)  # a status line, not a report
+    assert result.output.count("\n") == 1 and "u000a::warning::written.md" in result.output

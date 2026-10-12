@@ -695,8 +695,10 @@ def test_explain_quotes_escape_cue_lines_and_terminal_controls(org_media):
     quote = "Hello\x1b[2J\u202e there\nline two"
     hostile = add(org_media, "--quote", quote, "--locator", "t=180,181", id="bad\n\x1bid")
     assert hostile.exit_code == 0, hostile.output
+    # A terminal status line, not Markdown: control characters are \uXXXX escapes with a single backslash, and
+    # the locator's '#' is not escaped.
     assert hostile.output.count("\n") == 1 and "\x1b" not in hostile.output
-    assert "registered bad\\\\u000a\\\\u001bid at media/clip.mp4\\#t=180,181" in hostile.output
+    assert hostile.output.startswith("registered bad\\u000a\\u001bid at media/clip.mp4#t=180,181 (transcript ")
     missing = add(org_media, "--quote", "no such words", "--locator", "t=1,2\n\x1b", id="nope")
     assert missing.exit_code == 2 and missing.output.count("\n") == 1 and "\x1b" not in missing.output
     assert "not found verbatim" in missing.output
