@@ -34,6 +34,12 @@ inputs:
       diff-base) names a path that exists nowhere in the evidence.
     required: false
     default: "true"
+  references:
+    description: >-
+      Report paths a memory names that exist nowhere in the evidence (missing_reference). Set to "false" to
+      turn this off. Not used with diff-base.
+    required: false
+    default: "true"
   verifier:
     description: >-
       lexical (offline, default), llm (Claude; needs ANTHROPIC_API_KEY), jev (TypeSafe Jev; needs
@@ -151,6 +157,7 @@ runs:
         MEMFALSIFY_EVIDENCE: ${{ inputs.evidence }}
         MEMFALSIFY_EXCLUDE: ${{ inputs.exclude }}
         MEMFALSIFY_STRICT: ${{ inputs.strict }}
+        MEMFALSIFY_REFERENCES: ${{ inputs.references }}
         MEMFALSIFY_VERIFIER: ${{ inputs.verifier }}
         MEMFALSIFY_OPENAI_MODEL: ${{ inputs.openai-model }}
         MEMFALSIFY_PROVIDER: ${{ inputs.provider }}

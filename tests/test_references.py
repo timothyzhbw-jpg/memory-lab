@@ -89,6 +89,8 @@ def test_an_existing_path_is_not_flagged(tmp_path):
     ("- Read `src/gone.py` and `src/lost.py` for details.\n", ["src/gone.py", "src/lost.py"]),
     ("- Read `src/gone.py` and `src/gone.py` again for details.\n", ["src/gone.py"]),
     ("| Parser | `src/gone.py` |\n", ["src/gone.py"]),
+    ("- `src/gone.py`\n", ["src/gone.py"]),
+    ("Read `src/gone.py`.\n", ["src/gone.py"]),
     ("- Read ``src/gone.py`` for the details.\n", ["src/gone.py"]),
 ])
 def test_where_a_path_can_be_written(tmp_path, memory, expected):
@@ -146,6 +148,8 @@ def test_a_sentence_that_starts_with_a_path_keeps_it(tmp_path):
     ("- Try `src/ExampleWidget.tsx` and see what happens here.\n", "src/local.py"),
     ("- Try `src/PROVIDER_NAME.py` and see what happens here.\n", "src/local.py"),
     ("- Move the old text to `docs/0.MINOR.x.md` at each release.\n", "docs/local.md"),
+    ("- Try `src/your/path/thing.py` and see what happens here.\n", "src/local.py"),
+    ("- Run `go test ./src/myservice/` and see what happens here.\n", "src/local.py"),
     ("- Run `pytest tests/path/to/test.py` and read the output.\n", "tests/local.py"),
     ("- Try `src/<name>.py` and see what happens here.\n", "src/local.py"),
     ("- Try `src/{name}.py` and see what happens here.\n", "src/local.py"),
@@ -823,6 +827,24 @@ def test_the_action_counts_a_missing_path_and_says_so(tmp_path, monkeypatch, cap
     out = capsys.readouterr().out
     assert f"{level} title=MemFalsify::1 memory needs attention" in out
     assert "a path that exists nowhere" in out
+
+
+def test_the_action_can_turn_the_check_off(tmp_path, monkeypatch, capsys):
+    work = tmp_path / "work"
+    tree(work, "src/here.py")
+    write_text_exact(work / "AGENTS.md", MISSING_LINE)
+    monkeypatch.chdir(work)
+    env = {**_action_env(tmp_path), "MEMFALSIFY_MEMORY": "AGENTS.md", "MEMFALSIFY_EVIDENCE": ".",
+           "MEMFALSIFY_AS_OF": "2026-11-04", "MEMFALSIFY_STRICT": "true", "MEMFALSIFY_REFERENCES": "false"}
+    assert _load_action().main(env) == 0
+    assert "missing_reference" not in Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
+    assert _load_action().main({**env, "MEMFALSIFY_REFERENCES": "maybe"}) == 2
+    assert "the references input must be true or false" in capsys.readouterr().out
+
+
+def test_the_action_passes_the_input_through_env():
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert "\n  references:\n" in text and "MEMFALSIFY_REFERENCES: ${{ inputs.references }}" in text
 
 
 @requires_confinement

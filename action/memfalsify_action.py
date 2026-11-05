@@ -193,6 +193,10 @@ def main(env: dict[str, str] | None = None) -> int:
     if strict not in ("true", "false"):
         annotate("error", "the strict input must be true or false")
         return ERROR
+    references = env.get("MEMFALSIFY_REFERENCES", "true").strip().lower()
+    if references not in ("true", "false"):
+        annotate("error", "the references input must be true or false")
+        return ERROR
     if problem := openai_problem(env):
         annotate("error", problem)
         return ERROR
@@ -239,6 +243,8 @@ def main(env: dict[str, str] | None = None) -> int:
         json_path = out_dir / f"report-{index}.json"
         json_path.unlink(missing_ok=True)
         args = [*command, "--no-follow-links", "--format=json", f"--output={json_path}", *options(env)]
+        if references == "false" and not base:  # `memfalsify diff` does not look paths up
+            args.append("--no-references")
         code = run_cli(args + (["--strict"] if strict == "true" else []) + ["--", memory])
         if code not in ((0, 1) if strict == "true" else (0,)) or not json_path.is_file():
             annotate("error", f"memfalsify could not audit {memory} (exit code {code}); see the step log")

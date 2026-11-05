@@ -72,8 +72,8 @@ _VERSION_SEGMENT = re.compile(r"v\d+", re.IGNORECASE)  # api/v1/eval
 _PATH_TO = re.compile(r"(?:^|/)path/to(?:/|$)", re.IGNORECASE)  # test/path/to/test.ts
 # A segment that stands for something, not a name: nodes/YourService/, test_action_EventNameHere.py, snake_case.py
 _PLACEHOLDER_ANYWHERE = re.compile(
-    r"^(?:foo|bar|baz|qux|quux|xxx+|yyy+|zzz+|nnn+|n+|x+|placeholder|snake_case|camelcase|pascalcase|kebab-case)$",
-    re.IGNORECASE)
+    r"^(?:foo|bar|baz|qux|quux|xxx+|yyy+|zzz+|nnn+|n+|x+|placeholder|snake_case|camelcase|pascalcase|kebab-case|"
+    r"your|my|some|here|myservice|mycomponent|myplugin|myfile|myfeature|mytool|myrepo|mylib)$", re.IGNORECASE)
 _PLACEHOLDER_LAST = re.compile(r"^(?:example|examples|sample|dummy|name|names|filename|file|files|thing|whatever|"
                                r"something|mymodule|mypackage|myproject|myapp|yourname)$", re.IGNORECASE)
 _PLACEHOLDER_PART = re.compile(
