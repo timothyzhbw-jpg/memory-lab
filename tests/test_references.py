@@ -145,6 +145,7 @@ def test_a_sentence_that_starts_with_a_path_keeps_it(tmp_path):
     ("- Try `src/my-thing.py` and see what happens here.\n", "src/local.py"),
     ("- Try `src/ExampleWidget.tsx` and see what happens here.\n", "src/local.py"),
     ("- Try `src/PROVIDER_NAME.py` and see what happens here.\n", "src/local.py"),
+    ("- Move the old text to `docs/0.MINOR.x.md` at each release.\n", "docs/local.md"),
     ("- Run `pytest tests/path/to/test.py` and read the output.\n", "tests/local.py"),
     ("- Try `src/<name>.py` and see what happens here.\n", "src/local.py"),
     ("- Try `src/{name}.py` and see what happens here.\n", "src/local.py"),
@@ -339,6 +340,19 @@ def test_cjk_around_and_inside_the_backticks(tmp_path):
     assert flagged(tmp_path, "- 说明在`docs/说明.md`里面，请先阅读。\n") == []
     assert flagged(tmp_path, "- 说明在`docs/缺失.md`里面，请先阅读。\n") == ["docs/缺失.md"]
     assert flagged(tmp_path, "- 说明在`docs/缺失.md。`里面，请先阅读。\n") == ["docs/缺失.md"]
+
+
+@pytest.mark.parametrize("memory", [
+    "- `src/old.py` 已删除，请不要再用。\n",
+    "- 新建 `src/brand_new.py` 来放解析器。\n",
+    "- 导出的文件放进 `docs/adr` 这样的目录。\n",
+    "- 另一个仓库里的 `src/other.py` 也是这样。\n",
+    "- 请使用 `src/gone` 分支来修复。\n",
+    "- 调用 `src/users/list` 接口就够了。\n",
+])
+def test_chinese_lines_can_say_what_a_path_is_too(tmp_path, memory):
+    tree(tmp_path, "src/here.py", "docs/here.md")
+    assert flagged(tmp_path, memory) == []
 
 
 def test_unicode_composition_does_not_make_a_file_missing(tmp_path):

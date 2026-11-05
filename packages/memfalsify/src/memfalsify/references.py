@@ -82,25 +82,30 @@ _PLACEHOLDER_PART = re.compile(
     r"|[-_](?:example|here|foo|bar|baz)$"  # file_here, name-example
     r"|(?:Here|Example|Foo)(?:Name)?$"  # EventNameHere, HereName
     r"|^Here[A-Z]"
-    r"|N{3,}|X{3,}|(?:^|[-_.])[xX]{2,}(?:$|[-_.])"  # 0001-NNN, ADR-XXX, test_xx
-    r"|(?:^|[-_])(?:NAME|FILE|PATH|MODULE|COMPONENT|SERVICE|PROVIDER|PACKAGE|FEATURE|PLUGIN|DIR|TYPE|ID)(?:$|[-_])")
+    r"|N{3,}|X{3,}|(?:^|[-_.])[xX]{2,}(?:$|[-_.])")  # 0001-NNN, ADR-XXX, test_xx
+_PLACEHOLDER_WORD = re.compile(r"(?:^|[-_.])(?:NAME|FILE|PATH|MODULE|COMPONENT|SERVICE|PROVIDER|PACKAGE|FEATURE|PLUGIN|"
+                               r"DIR|TYPE|ID|VERSION|MAJOR|MINOR|PATCH)(?:$|[-_.])")  # PLUGIN_NAME, 0.MINOR.x.md
 # Words on the line, outside code spans, that change what a path means there.
 _LINE_WORDS = {
     "remote": re.compile(r"\b(?:actions?|repos?|repository|repositories|github|gitlab|forks?|clones?|upstream|"
-                         r"organi[sz]ations?|orgs?|owner|workflows?|marketplace)\b", re.IGNORECASE),
-    "branch": re.compile(r"\b(?:branch|branches|branching|checkout|rebase|cherry-pick|tags?|prs?)\b", re.IGNORECASE),
-    "web": re.compile(r"\b(?:endpoints?|routes?|urls?|uris?|https?|apis?|webhooks?|requests?)\b", re.IGNORECASE),
+                         r"organi[sz]ations?|orgs?|owner|workflows?|marketplace)\b|仓库|上游|派生", re.IGNORECASE),
+    "branch": re.compile(r"\b(?:branch|branches|branching|checkout|rebase|cherry-pick|tags?|prs?)\b|分支",
+                         re.IGNORECASE),
+    "web": re.compile(r"\b(?:endpoints?|routes?|urls?|uris?|https?|apis?|webhooks?|requests?)\b|接口|路由|端点|请求",
+                      re.IGNORECASE),
     # "in the Turborepo source repository", "inside that installed package"; not "in the repo" or "in this repository"
     "elsewhere": re.compile(r"\b(?:in|from|of|inside|within)\s+(?:(?:the|its|their)\s+(?!same\b)[\w-]+\s+|"
                             r"(?:that|another|an?)\s+)(?:[\w-]+\s+){0,2}?"
-                            r"(?:repo|repository|package|project|fork|checkout|clone|submodule)\b(?!\s+root)",
-                            re.IGNORECASE),
+                            r"(?:repo|repository|package|project|fork|checkout|clone|submodule)\b(?!\s+root)"
+                            r"|(?:另一个|其他|其它|别的|外部|第三方|上游)的?(?:仓库|项目|包)", re.IGNORECASE),
     "gone": re.compile(r"\b(?:removed|deleted|renamed|deprecated|no longer|formerly|previously|used to be|was moved|"
-                       r"moved from|moved to|migrated from|replaced by|does not exist|doesn't exist)\b", re.IGNORECASE),
+                       r"moved from|moved to|migrated from|replaced by|does not exist|doesn't exist)\b"
+                       r"|已?被?(?:删除|移除)|已?(?:改名|重命名)|不再|已?(?:废弃|弃用)|已?迁移|搬到|不存在", re.IGNORECASE),
     "made": re.compile(r"\b(?:create|creates|creating|generates?|generating|new file|will be|will live|would be|"
                        r"write to|writes|written to|save to|saves to|saved to|scaffolds?|outputs?|produces?|move to|"
                        r"ignored|gitignored|untracked|not committed|if (?:it )?exists?|if present|when present|if any|"
-                       r"optional(?:ly)?|e\.g|for example|such as)\b", re.IGNORECASE),
+                       r"optional(?:ly)?|e\.g|for example|such as)\b"
+                       r"|创建|新建|生成|写入|写到|输出|保存到|如果存在|若存在|如有|可选|例如|比如|诸如|这样的", re.IGNORECASE),
 }
 _POSSESSIVE = re.compile(r"\w['’]s\s*$")  # Prettier's `src/main/core.js`
 _OTHER_REPO_AFTER = re.compile(r"^[\s*_)]*(?:in|from|at)\s+(?:the\s+)?[\w.-]+/[\w.-]+")  # `a/b` in oven-sh/WebKit
@@ -177,7 +182,7 @@ def references_in(raw: str, start: int = 0, end: int | None = None) -> list[Refe
 
 def _placeholder(segment: str, last: bool) -> bool:
     stem = (segment.partition(".")[0] or segment).removeprefix("test_")  # test_foo.py says no more than foo.py
-    if _PLACEHOLDER_ANYWHERE.match(stem) or _PLACEHOLDER_PART.search(stem):
+    if _PLACEHOLDER_ANYWHERE.match(stem) or _PLACEHOLDER_PART.search(stem) or _PLACEHOLDER_WORD.search(segment):
         return True
     return last and _PLACEHOLDER_LAST.match(stem) is not None
 
