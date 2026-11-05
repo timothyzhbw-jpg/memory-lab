@@ -9,7 +9,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from memcore.paths import InputPathError, input_path
 from memcore.reading import confinement_root, read_input_text, take
@@ -35,6 +35,9 @@ class Claim(BaseModel):
     section: str | None = None
     also_at: list[str] = []
     metadata: dict[str, Value] = {}  # the frontmatter fields of the claim's file that its format documents
+    # (the raw line, then where in it this claim's markup starts and ends). The text above has its markup removed, and
+    # ``references`` needs the code spans. Private, so reports, IDs and the JSON shape do not change.
+    _raw: tuple[str, int, int] | None = PrivateAttr(default=None)
 
     @property
     def location(self) -> str:
@@ -154,11 +157,15 @@ def parse_text(text: str, display: str, fmt: MemoryFormat = MARKDOWN) -> tuple[l
             # An index entry ("- [Title](file.md) — hook", "@notes.md") points at claims; it is not one itself.
             links.extend(targets)
             continue
-        for sentence, _, _ in sentences(raw):
+        found = sentences(raw)
+        for at, (sentence, _, _) in enumerate(found):
             if not take("claims"):  # within read_limits only: the rest of the file is not parsed
                 return claims, links
-            claims.append(Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1,
-                                section=section, metadata=dict(metadata)))
+            claim = Claim(id=claim_id(sentence), text=sentence, path=display, line=index + 1,
+                          section=section, metadata=dict(metadata))
+            # Each claim owns the line up to the next claim's start, so what a short sentence names is not lost.
+            claim._raw = (raw, found[at][1] if at else 0, found[at + 1][1] if at + 1 < len(found) else len(raw))
+            claims.append(claim)
     return claims, links
 
 

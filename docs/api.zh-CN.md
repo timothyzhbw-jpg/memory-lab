@@ -266,7 +266,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.GitError` | HistoryError 子类，带经过清理的 summary 与底层诊断消息。 |
 | `memfalsify.HistoryError` | Git 历史操作无效或不可用时的 ValueError。 |
 | `memfalsify.HistoryReport` | 当前及已删除记忆的来源、已扫描提交和扫描局限。 |
-| `memfalsify.Issue` | 措辞、时间、冲突或重复问题，包含类型与详情。 |
+| `memfalsify.Issue` | 措辞、时间、冲突、重复或路径缺失问题，包含类型与详情。 |
 | `memfalsify.JevVerifier` | 构造参数为 model、可选 SDK client、threshold=0.5；仅构造时导入 typesafe_sdk。usage() 报告请求数和 token 数。 |
 | `memfalsify.Judgment` | 关系、理由、验证器名称、可选置信度及嵌套意见。 |
 | `memfalsify.LLMVerifier` | 构造参数为 model、可选 client、effort="low"、fallbacks=None，以及仅限关键字的 batch=False（Message Batches API）、progress 和 sleep；仅构造时导入 anthropic。缓存提示前缀；judge_many 和 usage() 供审计使用。 |
@@ -285,9 +285,9 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.VerifierError` | SDK、凭据不可用或模型判断失败时的 RuntimeError。 |
 | `memfalsify.VerifierStats` | 单个模型后端的 API 用量：请求数、批量请求数、输入和输出 token，以及提示缓存的写入和读取（不支持缓存时为 None）。 |
 | `memfalsify.__version__` | 已安装发行包的版本字符串。 |
-| `memfalsify.audit` | 解析记忆并用可选的证据与人工审核记录进行审计；不修改记忆。max_concurrency 限制同时进行的验证器调用数（默认 1）。 |
+| `memfalsify.audit` | 解析记忆并用可选的证据与人工审核记录进行审计；不修改记忆。max_concurrency 限制同时进行的验证器调用数（默认 1）。记忆文件位于 evidence_root 之内时，check_references（默认 True）会加上 missing_reference 问题。 |
 | `memfalsify.audit_claims` | 审计已解析的记忆；only= 限定输出，但审核与冲突检查仍使用全部记忆。memory_paths 不作为证据。 |
-| `memfalsify.audit_directory` | 审计一个目录里 discover 找到的每个指令文件和顶层的 MEMORY.md，对照 evidence_root（默认就是这个目录），按路径排序；一个都没有时返回 files 为空的 AuditSet。多个文件里相同的记忆只报告一次。不修改记忆。 |
+| `memfalsify.audit_directory` | 审计一个目录里 discover 找到的每个指令文件和顶层的 MEMORY.md，对照 evidence_root（默认就是这个目录），按路径排序；一个都没有时返回 files 为空的 AuditSet。多个文件里相同的记忆只报告一次。check_references 见 audit。不修改记忆。 |
 | `memfalsify.audit_staged` | 用工作区里的证据审计 git 暂存区（index）中记忆文件的每条记忆（链接的 .md 文件也从暂存区读取）；不修改记忆。 |
 | `memfalsify.claim_id` | 返回规范化文本的记忆 ID。 |
 | `memfalsify.compare` | 按 ID、章节及词语相似度确定性比较两组 Claim。 |
@@ -305,9 +305,9 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.to_markdown` | 把 AuditReport 渲染为 Markdown；scrub=True 时还会去掉引用的记忆和证据文本中的终端控制符和双向文本控制符。 |
 
 ```python
-audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
+audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, check_references: bool=True) -> AuditReport
 audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
-audit_directory(directory: Path=Path('.'), evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, progress: Callable[[str], None] | None=None) -> AuditSet
+audit_directory(directory: Path=Path('.'), evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, progress: Callable[[str], None] | None=None, check_references: bool=True) -> AuditSet
 audit_staged(memory_file: Path, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]

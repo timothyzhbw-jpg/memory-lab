@@ -70,6 +70,32 @@ Several files share one report, in path order: totals, a table of the files, the
 
 Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, no evidence unless you pass `--evidence`, and only the skips of the evidence scan, so a review file or decision log inside `--evidence` reads as evidence there.
 
+## Paths that exist nowhere
+
+Besides comparing words, `audit` looks up the paths a memory names. An agent file that points to `src/old/module.py` when that file is gone sends the agent the wrong way, and that can be checked exactly and offline. The claim then gets one more issue:
+
+```text
+- missing_reference: 'src/old/module.py' is named here, but nothing under the evidence root matches it
+```
+
+The check runs with `memfalsify audit` and no file named, and with `memfalsify audit FILE --evidence DIR` when the file sits under `DIR`. With no evidence root it does not run, and the report says nothing about paths. `memfalsify diff` and the pre-commit hooks do not run it.
+
+How to read it:
+
+- The claim keeps its status. Missing evidence and a missing path are different things, so the status table does not count this issue. A line on stderr gives the count.
+- `--strict` exits 1 on it, and the GitHub Action counts it in `attention`: a claim that sends an agent to a file that is not there needs attention. `--no-references` turns the check off.
+- Read the line before you change it. The path may have moved (search for its last part), or the mention may have gone stale. `Proposed actions` only suggests; your files stay as they are.
+
+A path counts as named when it is in inline code, is the target of a link, or is a word in an inline command that has an extension or a trailing slash. It is reported only if all of this holds:
+
+- It has at least two segments, and its first segment is a directory at the root or next to the file that names it. A path relative to something the check cannot see stays silent, and so does a stale path whose top directory is gone too.
+- It matches nothing under the root, read as a path from any directory there and with any extension. Short paths in a monorepo and import paths pass. So do files the evidence scan skips (binary, over 2 MB, hidden like `.github/`) and files `--exclude` leaves out.
+- Git does not ignore it, so build output stays silent. Git is asked with `git check-ignore --no-index`, with hooks and the file system monitor off. If git is missing or fails, a short list of names (`build`, `dist`, `target` and others) stands in.
+- Nothing on its way is a link to a directory or an empty directory (a submodule that was not fetched), and it stays inside the root. A path that leaves the root is not judged, and no file outside is opened: the check only compares names from a listing.
+- It does not read as something else: a placeholder (`nodes/YourService/`, `src/foo.py`, `docs/NNN-title.md`), a remote name (`actions/checkout`), a MIME type, a branch name, or an API route. Its line does not say it is gone, yet to be made or someone else's (`Prettier's src/main/core.js`).
+
+So a missing path is a strong sign, not proof: a file another tool writes under an unignored name still gets flagged. Fenced code blocks, plain words outside inline code and lines that hold only `.md` links are not read for paths.
+
 ## Use git history as evidence
 
 Commit messages often record what was decided and why. Starting from the demo directory, this turns them into evidence files:

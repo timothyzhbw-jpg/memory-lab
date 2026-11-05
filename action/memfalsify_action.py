@@ -21,7 +21,7 @@ from pathlib import Path
 
 from memcore.display import one_line, report_text
 from memcore.paths import InputPathError, input_path
-from memfalsify import ATTENTION, AuditReport
+from memfalsify import AuditReport
 from memfalsify.cli import app
 from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
 from memfalsify import DiffReport, HistoryError, diff_to_markdown, resolve_commit
@@ -29,6 +29,7 @@ from memfalsify import to_markdown
 from memfalsify.discover import discover
 from memfalsify.gitstore import code_span
 from memfalsify.openai_compat import FORMATS, Provider, check_base_url, check_key_env
+from memfalsify.report import attention_count
 
 ERROR = 2
 SUMMARY_LIMIT = 1_000_000  # GitHub rejects step summaries over 1 MiB.
@@ -256,7 +257,7 @@ def main(env: dict[str, str] | None = None) -> int:
             report = AuditReport.model_validate_json(text)
             _posix_report_paths(report)
             json_path.write_bytes((report.model_dump_json(indent=2) + "\n").encode("utf-8"))
-            count = sum(n for status, n in report.summary.items() if status in ATTENTION)
+            count = attention_count(report)
             total, what = len(report.findings), "memories"
             sections.append(to_markdown(report))
         attention += count
@@ -268,7 +269,7 @@ def main(env: dict[str, str] | None = None) -> int:
     if attention:
         annotate("error" if 1 in codes else "warning",
                  f"{attention} {'memory needs' if attention == 1 else 'memories need'} attention (challenged, "
-                 "conflicted, disputed or possible counterevidence); see the job summary")
+                 "conflicted, disputed, possible counterevidence or a path that exists nowhere); see the job summary")
     return 1 if 1 in codes else 0
 
 

@@ -29,7 +29,9 @@ inputs:
     required: false
     default: ""
   strict:
-    description: Fail when any memory is challenged, conflicted, disputed or has possible counterevidence.
+    description: >-
+      Fail when any memory is challenged, conflicted, disputed, has possible counterevidence or (without
+      diff-base) names a path that exists nowhere in the evidence.
     required: false
     default: "true"
   verifier:
@@ -95,7 +97,8 @@ outputs:
   attention:
     description: >-
       Number of memories (with diff-base, of added or changed memories) that are challenged, conflicted,
-      disputed or have possible counterevidence.
+      disputed or have possible counterevidence, plus, without diff-base, those naming a path that exists
+      nowhere in the evidence.
     value: ${{ steps.audit.outputs.attention }}
 
 runs:

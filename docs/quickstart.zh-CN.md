@@ -70,6 +70,32 @@ memfalsify audit
 
 指定文件，比如 `memfalsify audit CLAUDE.md`，和以前一样：只审计这个文件，除非传 `--evidence`，否则没有证据；并且只按证据扫描本身的规则跳过文件，所以 `--evidence` 里的审核文件或决策日志在这种用法下会被当作证据。
 
+## 哪里都找不到的路径
+
+除了比较文字，`audit` 还会查记忆里写到的路径。智能体文件指向 `src/old/module.py`，而那个文件已经没了，智能体就会走错路；这件事可以离线、准确地查出来。这条记忆会多一个问题：
+
+```text
+- missing_reference: 'src/old/module.py' is named here, but nothing under the evidence root matches it
+```
+
+不指定文件运行 `memfalsify audit` 时会做这项检查；`memfalsify audit FILE --evidence DIR` 且文件在 `DIR` 之内时也会。没有证据根目录就不检查，报告里也不提路径。`memfalsify diff` 和 pre-commit 钩子不做这项检查。
+
+怎么读：
+
+- 这条记忆的状态不变。缺证据和缺路径是两回事，所以状态表不计入这个问题，stderr 上会有一行写明数量。
+- `--strict` 遇到它会退出 1，GitHub Action 也把它算进 `attention`：把智能体指向一个不存在的文件，这条记忆就需要有人看。`--no-references` 可以关掉这项检查。
+- 改之前先读那一行。路径可能只是搬了家（用它的最后一段搜一下），也可能这句话本身过时了。`Proposed actions` 只是建议，你的文件不会被改动。
+
+写在行内代码里、作为链接目标，或者是行内命令里带扩展名或结尾斜杠的词，都算写到了路径。只有下面这些都成立才会报告：
+
+- 至少两段，而且第一段是根目录或写到它的文件旁边的一个目录。相对于检查看不到的位置的路径不报告，连顶层目录都没了的过时路径也不报告。
+- 根目录下找不到与它匹配的东西：从任何目录读都算，扩展名不限。monorepo 里的短路径和 import 路径都能通过。证据扫描跳过的文件（二进制、超过 2 MB、像 `.github/` 这样的隐藏目录）和被 `--exclude` 排除的文件也算存在。
+- git 没有忽略它，所以构建产物不会被报告。这里用 `git check-ignore --no-index` 询问 git，并关掉钩子和文件系统监视器。没有 git 或 git 出错时，改用一小份名字列表（`build`、`dist`、`target` 等）。
+- 路上没有指向目录的符号链接，也没有空目录（没拉取的子模块），并且路径留在根目录之内。离开根目录的路径不做判断，也不会打开外面的任何文件：这项检查只比较目录列表里的名字。
+- 它读起来不是别的东西：占位符（`nodes/YourService/`、`src/foo.py`、`docs/NNN-title.md`）、远程名称（`actions/checkout`）、MIME 类型、分支名或 API 路由。所在的行也没有说它已经不在、将要生成，或者属于别的项目（`Prettier's src/main/core.js`）。
+
+所以缺路径是一个强信号，但不是证明：别的工具生成、又没被 git 忽略的文件仍会被标出来。代码块、行内代码之外的普通文字，以及只有 `.md` 链接的行，不会被读取路径。
+
 ## 把 git 历史当作证据
 
 提交说明常常记着决定了什么、为什么。从示例目录开始，下面的命令把它们变成证据文件：

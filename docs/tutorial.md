@@ -139,7 +139,7 @@ Audit again with that file. The rate-limit claim moves to `CHALLENGED`, confirme
 )
 ```
 
-The next block exits 1 on purpose. `--strict` returns 1 when any claim is challenged, conflicted, disputed or has possible counterevidence. A confirmed contradiction is one of those. The report is still written. Exit 2 is reserved for errors, and this run is not an error.
+The next block exits 1 on purpose. `--strict` returns 1 when any claim is challenged, conflicted, disputed, has possible counterevidence or names a path that exists nowhere under the evidence. A confirmed contradiction is one of those. The report is still written. Exit 2 is reserved for errors, and this run is not an error.
 
 ```bash
 # exit 1
