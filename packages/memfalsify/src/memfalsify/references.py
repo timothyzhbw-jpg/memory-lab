@@ -10,13 +10,15 @@ A path counts as missing only if all of this holds, because a wrong report sends
   does not say the path is gone, yet to be made or someone else's;
 - its first segment is a directory at the root or next to the file that names it, so names relative to something
   unknown are left alone;
-- it is not a suffix of anything under the root, with any extension, so a monorepo's short paths and import paths
-  pass, and no file the evidence scan skips (binary, over 2 MB, hidden) reads as missing;
+- it is not a suffix of anything the walk sees under the root, with any extension, so a monorepo's short paths and
+  import paths pass, and no file the evidence scan skips (binary, over 2 MB, hidden) reads as missing;
 - nothing on its way is a link to a directory, an empty directory (a submodule not checked out) or a directory the
   walk does not enter, since what lies below those cannot be known;
 - git does not ignore it, so generated output passes. Git reads only its ignore files here (``--no-index``), with
   hooks and the file system monitor off and a time limit, so nothing from the repository runs. If git is absent or
   fails, a few well-known names of generated directories stand in for it.
+
+A sparse checkout leaves tracked files off the disk, so nothing is called missing in one.
 """
 from __future__ import annotations
 
@@ -25,11 +27,13 @@ import posixpath
 import re
 import shutil
 import subprocess
+import time
 import unicodedata
 from bisect import bisect_left
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cached_property
+from itertools import dropwhile
 from pathlib import Path
 
 from memcore.display import one_line
@@ -70,6 +74,7 @@ _NOT_A_PATH = re.compile(r"[\s<>{}$%*?\[\]()|&;=!'\"^#,:~+\\`]")
 _VERSIONED = re.compile(r"@[\w.^~-]*$")  # actions/checkout@v4, lodash/fp@4
 _DIGITS = re.compile(r"\d+")
 _VERSION_SEGMENT = re.compile(r"v\d+", re.IGNORECASE)  # api/v1/eval
+_EXTENSION = re.compile(r"\.[^\W\d]\w*$")  # not gemini-1.5-pro, gpt-4.1 or 3.11
 _PATH_TO = re.compile(r"(?:^|/)path/to(?:/|$)", re.IGNORECASE)  # test/path/to/test.ts
 # A source directory and a name that every project has: docs use src/app.py as an example of a path.
 _GENERIC_NAME = re.compile(r"^(?:app|main|index|utils?|helpers?|tests?|module|script|config)\.", re.IGNORECASE)
@@ -105,15 +110,30 @@ _LINE_WORDS = {
     "gone": re.compile(r"\b(?:removed|deleted|renamed|deprecated|no longer|formerly|previously|used to be|was moved|"
                        r"moved from|moved to|migrated from|replaced by|does not exist|doesn't exist)\b"
                        r"|已?被?(?:删除|移除)|已?(?:改名|重命名)|不再|已?(?:废弃|弃用)|已?迁移|搬到|不存在", re.IGNORECASE),
-    "made": re.compile(r"\b(?:create|creates|creating|generates?|generated|generating|new file|will be|will live|would be|"
-                       r"write to|writes|written to|save to|saves to|saved to|scaffolds?|outputs?|produces?|move to|"
-                       r"ignored|gitignored|untracked|not committed|if (?:it )?exists?|if present|when present|if any|"
-                       r"optional(?:ly)?|e\.g|for example|such as)\b"
-                       r"|创建|新建|生成|写入|写到|输出|保存到|如果存在|若存在|如有|可选|例如|比如|诸如|这样的", re.IGNORECASE),
+    "made": re.compile(r"\b(?:(?:re-?)?creat(?:e|es|ed|ing)|(?:re-?)?generat(?:e|es|ed|ing)|new file|will be|will live|"
+                       r"would be|write to|writes|written to|save to|saves to|saved to|scaffolds?|outputs?|produces?|"
+                       r"move to|ignored|gitignored|untracked|not committed|if (?:it )?exists?|if present|when present|"
+                       r"if any|optional(?:ly)?|e\.g|for example|such as|"
+                       # "Do not add `src/shim.py`": the path is not meant to exist. Bounded: a line can be hostile.
+                       r"(?:never|not|don['’]t|avoid)\b[\s:*_,]{0,8}(?:\w{1,30}\s{1,8}){0,2}?"
+                       r"(?:(?:re-?)?(?:add|adding|introduce|introducing)|commit|committing|restore|restoring)|"
+                       r"there (?:must|should) not be|there (?:must|should) be no|(?:must|should) not exist)\b"
+                       r"|创建|新建|重建|生成|写入|写到|输出|保存到|如果存在|若存在|如有|可选|例如|比如|诸如|这样的"
+                       r"|(?:不要|不能|不得|不可|别|禁止|切勿|勿|避免)(?:再|重新)?(?:添加|新增|增加|加入|引入|提交|恢复)"
+                       r"|不应该?(?:存在|有)",
+                       re.IGNORECASE),
 }
 _POSSESSIVE = re.compile(r"\w['’]s\s*$")  # Prettier's `src/main/core.js`
 _OTHER_REPO_AFTER = re.compile(r"^[\s*_)]*(?:in|from|at)\s+(?:the\s+)?[\w.-]+/[\w.-]+")  # `a/b` in oven-sh/WebKit
 _NEAR = 80  # characters around a path that can say whose it is
+# An inline command says what it makes: those paths need not exist yet.
+_SHELL_JOINS = frozenset({"&&", "||", "|", "&", ";"})
+_REDIRECT = re.compile(r"\d*>>?|&>>?|>\|")
+_MAKES_EVERY_ARGUMENT = frozenset({"mkdir", "touch", "tee"})
+_MAKES_LAST_ARGUMENT = frozenset({"mv", "cp", "ln"})
+_OUTPUT_FLAGS = frozenset({"-o", "--output", "--out", "--outfile", "--out-file", "--output-file", "--outdir", "--out-dir",
+                           "--output-dir", "--output-path", "--target-dir"})
+_PROBE = "memfalsify-probe"  # a name git can always answer about
 
 
 def _said(raw: str) -> frozenset[str]:
@@ -130,11 +150,12 @@ class Reference:
     directory: bool  # it ended in a slash
     said: frozenset[str] = frozenset()  # see ``_said``
     foreign: bool = False  # the words next to it give it to someone else
+    whole: str | None = None  # a word of a code span: the span read as one path, which may name a file with a space
 
     @property
     def bare(self) -> bool:
         """Neither an extension nor a trailing slash says this is a path."""
-        return not self.directory and "." not in self.path.rpartition("/")[2].strip(".")
+        return not self.directory and _EXTENSION.search(self.path.rpartition("/")[2].strip(".")) is None
 
 
 def _key(name: str) -> str:
@@ -143,8 +164,8 @@ def _key(name: str) -> str:
     return name.lower() if name.isascii() else unicodedata.normalize("NFC", name).casefold()
 
 
-def parse_reference(text: str, said: frozenset[str] = frozenset(), foreign: bool = False) -> Reference | None:
-    """``text`` as a relative path, or None if it does not read as one."""
+def _clean(text: str) -> tuple[str, str] | None:
+    """``text`` without a position, as written and with forward slashes; None if it cannot be a relative path."""
     if len(text) > MAX_PATH:
         return None
     written = _POSITION.sub("", text.strip()).rstrip(".,;:。，；：、")
@@ -157,18 +178,66 @@ def parse_reference(text: str, said: frozenset[str] = frozenset(), foreign: bool
         if "/" in written or not re.search(r"\.\w+$|\\$", written):
             return None
         candidate = written.replace("\\", "/")
+    # Backing up through a name: that name may be a link, and then ``normpath`` would lead somewhere else.
+    if ".." in dropwhile(lambda part: part in (".", ".."), candidate.split("/")):
+        return None
+    return written, candidate
+
+
+def parse_reference(text: str, said: frozenset[str] = frozenset(), foreign: bool = False,
+                    whole: str | None = None) -> Reference | None:
+    """``text`` as a relative path, or None if it does not read as one."""
+    cleaned = _clean(text)
+    if cleaned is None:
+        return None
+    written, candidate = cleaned
     if _NOT_A_PATH.search(candidate) or _VERSIONED.search(candidate):
         return None
     path = posixpath.normpath(candidate)
-    return None if path in (".", "..") else Reference(written, path, candidate.endswith("/"), said, foreign)
+    return None if path in (".", "..") else Reference(written, path, candidate.endswith("/"), said, foreign, whole)
 
 
-@lru_cache(maxsize=16)
+def _whole_span(span: str) -> str | None:
+    """A code span of several words read as one path, since a file name can hold a space. It is only ever compared
+    with names from the walk, so any character will do; None if it cannot be a path."""
+    cleaned = _clean(span)
+    return None if cleaned is None or "/" not in cleaned[1] else posixpath.normpath(cleaned[1])
+
+
+def _made_by_simple_command(words: list[str]) -> set[str]:
+    made = {after for word, after in zip(words, words[1:]) if word in _OUTPUT_FLAGS or _REDIRECT.fullmatch(word)}
+    at = 0
+    while at < len(words) and (words[at] == "sudo" or "=" in words[at]):  # FLAG=1 sudo mkdir x
+        at += 1
+    at += words[at:at + 1] == ["git"]
+    tool = words[at] if at < len(words) else ""
+    arguments = [word for word in words[at + 1:] if not word.startswith("-")]
+    if tool in _MAKES_EVERY_ARGUMENT:
+        made.update(arguments)
+    elif tool in _MAKES_LAST_ARGUMENT:
+        made.update(arguments[-1:])
+    return made
+
+
+def _made_by_command(words: list[str]) -> set[str]:
+    """The words of an inline command that name what it makes: ``mkdir -p a/b/``, ``git mv a b``, ``make > a/b.txt``,
+    ``--output a/b.md``. Without the semicolon that may end one."""
+    made: set[str] = set()
+    simple: list[str] = []
+    for word in words:
+        if word not in _SHELL_JOINS:
+            simple.append(word.rstrip(";"))
+        if word in _SHELL_JOINS or word.endswith(";"):
+            made |= _made_by_simple_command(simple)
+            simple = []
+    return made | _made_by_simple_command(simple)
+
+
 def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
     """Every path a raw line writes in inline code or as a link target, in order, and the offset each starts at.
     Inside a code span of several words (a command), only words that say they are paths count: an extension or a
-    trailing slash. The whole line at once, since a sentence can end inside a command, and once per line, since a
-    hostile line can hold very many paths."""
+    trailing slash, and not what the command makes. The whole line at once, since a sentence can end inside a
+    command."""
     said = _said(raw)
 
     def foreign(match: re.Match) -> bool:
@@ -179,7 +248,11 @@ def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
     for match in _CODE_SPAN.finditer(raw):
         words = match.group(2).split()
         whose = foreign(match)
-        parsed = [parse_reference(word, said, whose) for word in words]
+        if len(words) == 1:
+            parsed = [parse_reference(words[0], said, whose)]
+        else:
+            whole, made = _whole_span(match.group(2)), _made_by_command(words)
+            parsed = [parse_reference(word, said, whose, whole) for word in words if word.rstrip(";") not in made]
         found += [(match.start(), ref) for ref in parsed if ref is not None and (len(words) == 1 or not ref.bare)]
     for match in _LINK_TARGET.finditer(raw):
         if ref := parse_reference(match.group(1).split("#")[0], said, foreign(match)):
@@ -188,11 +261,18 @@ def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
     return [at for at, _ in found], [ref for _, ref in found]
 
 
-def references_in(raw: str, start: int = 0, end: int | None = None) -> list[Reference]:
-    """The paths that start in ``raw[start:end]``, each once, in order."""
-    offsets, references = _line_references(raw)
+def references_in(raw: str, start: int = 0, end: int | None = None,
+                  lines: dict[str, tuple[list[int], list[Reference]]] | None = None) -> list[Reference]:
+    """The paths that start in ``raw[start:end]``, each once, in order. ``lines`` holds the lines read so far: a hostile
+    line can hold very many paths and be asked about for each of them, in as many copies as the file likes."""
+    parsed = None if lines is None else lines.get(raw)
+    if parsed is None:
+        parsed = _line_references(raw)
+        if lines is not None:
+            lines[raw] = parsed
+    offsets, references = parsed
     high = len(offsets) if end is None else bisect_left(offsets, end)
-    return list({ref.written: ref for ref in references[bisect_left(offsets, start):high]}.values())
+    return list({(ref.written, ref.whole): ref for ref in references[bisect_left(offsets, start):high]}.values())
 
 
 def _placeholder(segment: str, last: bool) -> bool:
@@ -210,7 +290,7 @@ def noise(ref: Reference) -> str | None:
         return "one segment"
     if "..." in ref.path:
         return "ellipsis"  # src/..., chart/templates/...yaml
-    if any(part in NOT_ENTERED for part in parts):
+    if any(part.lower() in NOT_ENTERED for part in parts):  # src/.CACHE/a.py opens src/.cache/a.py on macOS
         return "not entered"
     if all(_DIGITS.fullmatch(part) for part in named):
         return "numbers"
@@ -224,6 +304,8 @@ def noise(ref: Reference) -> str | None:
     if len(named) == 2 and named[0] in SOURCE_DIRS and _GENERIC_NAME.match(named[1]):
         return "placeholder"
     if ref.bare:
+        if "." in named[-1].strip("."):
+            return "version in the name"  # models/gemini-1.5-pro, python/3.11
         if len(named) == 2 and (named[0] not in SOURCE_DIRS or "remote" in ref.said):
             return "two bare segments"
         if "branch" in ref.said:
@@ -239,13 +321,26 @@ def noise(ref: Reference) -> str | None:
     return None
 
 
+def _backwards(directory: str) -> str:
+    """A directory written back to front: a sorted list of these answers "which end with this?" by bisection."""
+    return ("/" + directory)[::-1]
+
+
+def _any_ends_with(backwards: list[str], head: str) -> bool:
+    """Whether a directory in this sorted list of ``_backwards`` is ``head``, or ends with it on a segment boundary."""
+    wanted = _backwards(head)
+    at = bisect_left(backwards, wanted)
+    return at < len(backwards) and backwards[at].startswith(wanted)
+
+
 @dataclass
 class Tree:
     """What a walk of the root found, kept only for the names the references ask about."""
     wanted: set[str]
     places: dict[str, set[str]] = field(default_factory=dict)  # wanted key -> directories holding it, as keys
     folders: dict[str, set[str]] = field(default_factory=dict)  # exact directory name -> directories holding it
-    opaque: set[str] = field(default_factory=set)  # keys of directories whose contents cannot be known
+    opaque: set[str] = field(default_factory=set)  # directories whose contents cannot be known, as keys
+    _places_backwards: dict[str, list[str]] = field(default_factory=dict)  # built when first asked, after the walk
 
     def note(self, directory: str, name: str) -> None:
         key = _key(name)
@@ -269,7 +364,9 @@ class Tree:
 
     def _has_suffix(self, path: str) -> bool:
         head, _, name = _key(path).rpartition("/")
-        return any(place == head or place.endswith("/" + head) for place in self.places.get(name, ()))
+        if name not in self._places_backwards:
+            self._places_backwards[name] = sorted(map(_backwards, self.places.get(name, ())))
+        return _any_ends_with(self._places_backwards[name], head)
 
     def answers(self, path: str) -> bool:
         """Whether ``path`` is the end of something in the tree, on a segment boundary, with any extension. A script's
@@ -281,8 +378,21 @@ class Tree:
                 return any(self._has_suffix(path[:-len(suffix)] + other) for other in SCRIPT_FAMILY)
         return False
 
-    def unknowable(self, path: str) -> bool:
-        return any(_key(part) in self.opaque for part in path.split("/"))
+    @cached_property
+    def _opaque_backwards(self) -> list[str]:
+        return sorted(map(_backwards, self.opaque))
+
+    def unknowable(self, path: str, anchors: Iterable[str]) -> bool:
+        """Whether ``path`` runs through a directory whose contents cannot be known: read from one of ``anchors``, or,
+        as a monorepo's short path, from anywhere when two or more of its segments lead there. One segment alone says
+        little: an empty ``test/fake/src`` has nothing to do with ``src/gone.py``."""
+        if not self.opaque:
+            return False
+        parts = _key(path).split("/")
+        ways = ["/".join(parts[:count]) for count in range(1, len(parts) + 1)]
+        if any((f"{_key(anchor)}/{way}" if anchor else way) in self.opaque for anchor in anchors for way in ways):
+            return True
+        return any(_any_ends_with(self._opaque_backwards, way) for way in ways[1:])
 
 
 def _wanted_names(path: str) -> set[str]:
@@ -305,14 +415,14 @@ def walk_tree(root: Path, wanted: set[str]) -> Tree | None:
         relative = str(directory)[len(start):].strip(os.sep).replace(os.sep, "/")
         here = _key(relative)
         if relative and not dirnames and not filenames:
-            tree.opaque.add(_key(relative.rpartition("/")[2]))  # git keeps no empty directory: a submodule not fetched
+            tree.opaque.add(here)  # git keeps no empty directory: a submodule not fetched
         keep = []
         for name in dirnames:
             tree.note_folder(here, name)
             if name in NOT_ENTERED:
                 continue
             if os.path.islink(os.path.join(str(directory), name)):
-                tree.opaque.add(_key(name))
+                tree.opaque.add(f"{here}/{_key(name)}" if here else _key(name))
                 continue
             keep.append(name)
         dirnames[:] = keep
@@ -334,27 +444,60 @@ def _trusted_git(root: Path) -> str | None:
         return None
 
 
+def _git_without_hooks(exe: str, root: Path, *args: str) -> list[str]:
+    # Not GIT_OPTIONS: check-ignore refuses --literal-pathspecs.
+    return [exe, "-C", str(root), "-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}", *args]
+
+
 def git_ignored(root: Path, paths: Iterable[str]) -> set[str] | None:
     """Which of ``paths`` (relative to ``root``) git ignores, or None if git cannot say.
 
     ``--no-index`` keeps git from reading the index, which is what could start ``core.fsmonitor``, and from fetching
     anything into a partial clone. No hook belongs to this command. A time limit covers an ignore file that is a
-    FIFO. Inside confined reads (the MCP server), git would read files the confinement cannot see, so it is not asked."""
+    FIFO. Inside confined reads (the MCP server), git would read files the confinement cannot see, so it is not asked.
+
+    A leading ``./`` keeps a directory named ``:(icase)pkg`` from reading as pathspec magic. Git stops at a path it
+    refuses (one below a link to a file), and ``--verbose --non-matching`` shows which that was, since every path gets
+    an answer: nothing can be ignored there, so the rest are asked again without it. The first name is one git can
+    always answer about, so no answer at all means git itself failed. The time limit covers all the asking."""
     exe = None if confinement_root() is not None else _trusted_git(root)
     if exe is None:
         return None
-    # Not GIT_OPTIONS: check-ignore refuses --literal-pathspecs. parse_reference lets no pathspec magic through.
-    args = [exe, "-C", str(root), "-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}",
-            "check-ignore", "--no-index", "--stdin", "-z"]
-    question = "".join(path + "\0" for path in dict.fromkeys(paths)).encode("utf-8", "surrogateescape")
+    args = _git_without_hooks(exe, root, "check-ignore", "--no-index", "--stdin", "-z", "--verbose", "--non-matching")
+    names = list(dict.fromkeys(paths))
+    ignored: set[str] = set()
+    deadline = time.monotonic() + GIT_SECONDS
+    while True:
+        question = "".join(f"./{name}\0" for name in (_PROBE, *names)).encode("utf-8", "surrogateescape")
+        try:
+            done = subprocess.run(args, input=question, capture_output=True, env={**_env(), "GIT_NO_LAZY_FETCH": "1"},
+                                  timeout=max(deadline - time.monotonic(), 0.001), check=False)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return None
+        fields = done.stdout.split(b"\0")
+        # Four fields each: source, line number, pattern, path. A pattern that starts with ! says not ignored.
+        answers = list(zip(fields[2::4], fields[3::4]))
+        ignored |= {path[2:].decode("utf-8", "surrogateescape") for pattern, path in answers
+                    if pattern and not pattern.startswith(b"!")}
+        if done.returncode not in (0, 1) and not answers:
+            return None
+        names = names[len(answers):]  # the probe stands in for the one git refused, if it did
+        if done.returncode in (0, 1) or not names:
+            return ignored
+
+
+def sparse_checkout(root: Path) -> bool:
+    """Whether git says tracked files may be left out of this working tree. Asked and hardened as in ``git_ignored``;
+    if git cannot say, the answer is no."""
+    exe = None if confinement_root() is not None else _trusted_git(root)
+    if exe is None:
+        return False
     try:
-        done = subprocess.run(args, input=question, capture_output=True, env={**_env(), "GIT_NO_LAZY_FETCH": "1"},
-                              timeout=GIT_SECONDS, check=False)
+        done = subprocess.run(_git_without_hooks(exe, root, "config", "--type=bool", "--get", "core.sparseCheckout"),
+                              capture_output=True, env=_env(), timeout=GIT_SECONDS, check=False)
     except (OSError, subprocess.SubprocessError, ValueError):
-        return None
-    if done.returncode not in (0, 1):
-        return None
-    return {item.decode("utf-8", "surrogateescape") for item in done.stdout.split(b"\0") if item}
+        return False
+    return done.returncode == 0 and done.stdout.strip() == b"true"
 
 
 @dataclass(frozen=True)
@@ -364,20 +507,28 @@ class _Question:
     ref: Reference
     path: str
     anchors: tuple[str, ...]
+    whole: str | None  # from the root: the code span it is a word of, read as one path
+
+    def still_open(self, tree: Tree) -> bool:
+        """Whether the walk leaves this path unexplained. The whole span goes first: a word means nothing if the span
+        names something, or may name something below a directory that cannot be known."""
+        return not any(tree.answers(way) or tree.unknowable(way, self.anchors)
+                       for way in (self.whole, self.path) if way is not None
+                       ) and any(tree.holds_folder(anchor, self.path.split("/")[0]) for anchor in self.anchors)
 
 
-def _anchors(claim: Claim, prefix: str) -> tuple[str, ...]:
-    """The root, the directory of the memory file and the directory of the file that states ``claim``; POSIX paths
-    relative to the root, "" for the root. ``prefix`` is the directory ``claim.path`` is relative to."""
-    own = posixpath.normpath(posixpath.join(prefix or ".", posixpath.dirname(claim.path) or "."))
+def _anchors(path: str, prefix: str) -> tuple[str, ...]:
+    """The root, the directory of the memory file and the directory of the file that states a claim, at ``path``; POSIX
+    paths relative to the root, "" for the root. ``prefix`` is the directory ``path`` is relative to."""
+    own = posixpath.normpath(posixpath.join(prefix or ".", posixpath.dirname(path) or "."))
     return tuple(dict.fromkeys(("", prefix, "" if own == "." else own)))
 
 
-def _from_root(ref: Reference, anchors: tuple[str, ...]) -> str | None:
-    """Where ``ref`` leads, relative to the root; None if it leaves the root. Only ``..`` depends on the anchor."""
-    if not ref.path.startswith("../"):
-        return ref.path
-    joined = posixpath.normpath(posixpath.join(anchors[-1], ref.path))
+def _from_root(path: str, anchors: tuple[str, ...]) -> str | None:
+    """Where ``path`` leads, relative to the root; None if it leaves the root. Only ``..`` depends on the anchor."""
+    if not path.startswith("../"):
+        return path
+    joined = posixpath.normpath(posixpath.join(anchors[-1], path))
     return None if joined == ".." or joined.startswith("../") else joined
 
 
@@ -394,43 +545,41 @@ def missing_references(claims: Iterable[Claim], root: Path, prefix: str = "") ->
 
     ``root`` is resolved. ``prefix`` is the directory ``Claim.path`` is relative to, as a POSIX path relative to
     ``root``. A claim parsed by anything but ``parse_text`` has no raw line, and so no paths. A claim stated several
-    times is read in each place, since only one may have its path in code, but judged from its first place."""
+    times is read in each place, since only one may have its path in code, and each place from its own directory."""
     if current_read_limits() is not None:
         return {}  # a budgeted run has no walk to spare, and a cut-off walk would call existing files missing
     questions: list[_Question] = []
     wanted: set[str] = set()
+    lines: dict[str, tuple[list[int], list[Reference]]] = {}  # for this call only: lines can be hostile, servers live long
     for claim in claims:
         if claim._raw is None:
             continue
-        anchors = _anchors(claim, prefix)
-        for source in (claim._raw, *claim._raw_copies):
-            for ref in references_in(*source):
-                path = None if noise(ref) else _from_root(ref, anchors)
+        for stated_at, source in ((claim.path, claim._raw), *claim._raw_copies):
+            anchors = _anchors(stated_at, prefix)
+            for ref in references_in(*source, lines=lines):
+                path = None if noise(ref) else _from_root(ref.path, anchors)
                 if path is not None:
-                    questions.append(_Question(claim.id, ref, path, anchors))
-                    wanted |= _wanted_names(path)
+                    whole = None if ref.whole is None else _from_root(ref.whole, anchors)
+                    questions.append(_Question(claim.id, ref, path, anchors, whole))
+                    wanted |= _wanted_names(path) | (_wanted_names(whole) if whole is not None else set())
     if not questions:
         return {}
     tree = walk_tree(root, wanted)
     if tree is None:
         return {}
-    open_questions = [q for q in questions
-                      if not tree.answers(q.path) and not tree.unknowable(q.path)
-                      and any(tree.holds_folder(anchor, q.path.split("/")[0]) for anchor in q.anchors)]
-    if not open_questions:
+    open_questions = [q for q in questions if q.still_open(tree)]
+    if not open_questions or sparse_checkout(root):
         return {}
     ignored = git_ignored(root, (name for q in open_questions for name in _ignore_names(q)))
-    found: dict[str, list[str]] = {}
+    found: dict[str, dict[str, None]] = {}
     for question in open_questions:
         if ignored is None:
             if any(part.lower() in GENERATED for part in question.path.split("/")[:-1]):
                 continue
         elif not ignored.isdisjoint(_ignore_names(question)):
             continue
-        written = found.setdefault(question.claim, [])
-        if question.ref.written not in written:
-            written.append(question.ref.written)
-    return found
+        found.setdefault(question.claim, {})[question.ref.written] = None
+    return {claim: list(written) for claim, written in found.items()}
 
 
 def detail(written: str) -> str:

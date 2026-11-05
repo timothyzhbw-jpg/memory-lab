@@ -38,12 +38,19 @@ class Claim(BaseModel):
     # (the raw line, then where in it this claim's markup starts and ends). The text above has its markup removed, and
     # ``references`` needs the code spans. Private, so reports, IDs and the JSON shape do not change.
     _raw: tuple[str, int, int] | None = PrivateAttr(default=None)
-    _raw_copies: list[tuple[str, int, int]] = PrivateAttr(default_factory=list)  # of later copies, merged into this
+    # Of later copies, merged into this: (the file stating the copy, its raw line as above).
+    _raw_copies: list[tuple[str, tuple[str, int, int]]] = PrivateAttr(default_factory=list)
+
+    def __eq__(self, other: object) -> bool:
+        """By the fields alone: how the markup of the line happened to look is not part of what the claim says."""
+        if not isinstance(other, Claim):
+            return NotImplemented
+        return type(self) is type(other) and self.__dict__ == other.__dict__
 
     def _absorb_raw(self, copy: Claim) -> None:
         """Keep the raw lines of a copy of this claim: only one of them may write a path in code."""
         if copy._raw is not None:
-            self._raw_copies += [copy._raw, *copy._raw_copies]
+            self._raw_copies += [(copy.path, copy._raw), *copy._raw_copies]
 
     @property
     def location(self) -> str:

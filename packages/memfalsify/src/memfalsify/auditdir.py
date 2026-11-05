@@ -69,8 +69,10 @@ def _note(files: list[str], evidence: str, passed_over: list[Skipped]) -> str:
 
 def _in_directory(prefix: PurePosixPath, claim: Claim) -> Claim:
     """A claim whose path and duplicate locations are relative to the audited directory, not its own file's."""
-    return claim.model_copy(update={"path": (prefix / claim.path).as_posix(),
-                                    "also_at": [(prefix / at).as_posix() for at in claim.also_at]})
+    moved = claim.model_copy(update={"path": (prefix / claim.path).as_posix(),
+                                     "also_at": [(prefix / at).as_posix() for at in claim.also_at]})
+    moved._raw_copies = [((prefix / stated_at).as_posix(), raw) for stated_at, raw in claim._raw_copies]
+    return moved
 
 
 def _combine(parsed: list[tuple[str, list[Claim]]]) -> tuple[list[Claim], dict[str, str]]:

@@ -523,12 +523,15 @@ ISSUE_PROPOSALS = {
 
 
 def needs_attention(report: AuditReport) -> bool:
-    """What ``--strict`` fails on: a status in ``ATTENTION``, or a path the memory names that exists nowhere."""
-    return bool(ATTENTION & report.summary.keys()) or any(has_missing_reference(f) for f in report.findings)
+    """What ``--strict`` fails on: a status in ``ATTENTION``, or a path that exists nowhere on an unconfirmed claim."""
+    return bool(ATTENTION & report.summary.keys()) or any(has_open_missing_reference(f) for f in report.findings)
 
 
-def has_missing_reference(finding: Finding) -> bool:
-    return any(issue.kind == MISSING_REFERENCE for issue in finding.issues)
+def has_open_missing_reference(finding: Finding) -> bool:
+    """A path that exists nowhere, on a claim no person has confirmed. A claim reviewed as supported keeps the issue in
+    the report, but a person decides, in the reviews file, as for every other flag: one false report needs a way out
+    short of turning the whole check off."""
+    return finding.status != "supported" and any(issue.kind == MISSING_REFERENCE for issue in finding.issues)
 
 
 def _relative_to(path: Path, root: Path) -> str | None:

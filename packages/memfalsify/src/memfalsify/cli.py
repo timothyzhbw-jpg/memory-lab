@@ -20,7 +20,7 @@ from memcore.terminal import diagnostic_line
 from memcore.display import json_shield as _json_shield
 
 from . import jev, llm, openai_compat
-from .audit import AuditReport, AuditSet, audit, has_missing_reference, needs_attention
+from .audit import AuditReport, AuditSet, audit, has_open_missing_reference, needs_attention
 from .auditdir import audit_directory
 from .demo import DEFAULT_DIRECTORY, FILES, create_demo, review_line
 from .discover import discover, discovery_to_markdown, same_file
@@ -209,7 +209,7 @@ def _memory_paths(result: AuditSet) -> list[Path]:
 
 def _note_missing_paths(reports: Iterable[AuditReport]) -> None:
     """The status table does not count these, so a note says why ``--strict`` may fail with nothing red in it."""
-    count = sum(has_missing_reference(finding) for report in reports for finding in report.findings)
+    count = sum(has_open_missing_reference(finding) for report in reports for finding in report.findings)
     if count:
         # Text, not bytes: only digits come from the report, and the Action reads stderr through a text stream.
         typer.echo(f"note: {count} claim(s) name a path that exists nowhere under the evidence root; "
@@ -368,7 +368,8 @@ def audit_command(
     stale_days: int = STALE_DAYS,
     follow_links: bool = FOLLOW_LINKS,
     strict: bool = typer.Option(False, help="Exit 1 if any memory is challenged, conflicted, has counterevidence or "
-                                            "names a path that exists nowhere under the evidence root"),
+                                            "names a path that exists nowhere under the evidence root, unless a review "
+                                            "confirms that memory"),
     references: bool = typer.Option(
         True, "--references/--no-references",
         help="Report paths the memory names that exist nowhere under the evidence root (missing_reference). Needs "
