@@ -1,0 +1,66 @@
+name: Bug report
+description: A command crashed, printed something wrong, or did something other than what the docs say.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        中文用户可以直接用中文填写。Feel free to write in Chinese.
+
+        This tracker is public. Please leave out private memory files, evidence, decision logs and credentials: a small made-up example that shows the same behaviour helps most.
+
+        Security problems go to [SECURITY.md](https://github.com/timothyzhbw-jpg/memory-lab/blob/main/SECURITY.md), not here. If an audit flagged the wrong claim or passed over a real contradiction, use the "False flag or missed contradiction" form instead.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part
+      options:
+        - memfalsify
+        - orgmemory
+        - memlab-mcp
+        - memlab-ui
+        - GitHub Action
+        - pre-commit hook
+        - Skill or Claude Code plugin
+        - Docs
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Include the error message or the output that looks wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The commands you ran and the smallest made-up input files that show the problem.
+      placeholder: |
+        memfalsify init demo && cd demo
+        memfalsify audit
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`pip list` shows the package versions. From a checkout, add the commit (`git rev-parse --short HEAD`). For the Action, the commit in your `uses:` line."
+      placeholder: memfalsify 0.5.0, commit 91c0647
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and Python
+      placeholder: Windows 11, Python 3.12
+    validations:
+      required: true
