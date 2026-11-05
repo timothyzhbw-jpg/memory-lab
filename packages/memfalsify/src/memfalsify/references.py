@@ -258,7 +258,8 @@ def _line_references(raw: str) -> _Block:
     trailing slash, and not what the command makes. The whole block at once, since a sentence can end inside a
     command. A path takes the words of the lines it stands on; ``references_in`` adds those of its own sentence."""
     newlines = [match.start() for match in re.finditer("\n", raw)]
-    prose = _CODE_SPAN.sub(lambda match: " " + _BLANKED * (len(match.group()) - 1), raw)
+    # One of the file's own NUL bytes must not read as blanked, and U+FFFD is no more a word or a space than it is.
+    prose = _CODE_SPAN.sub(lambda match: " " + _BLANKED * (len(match.group()) - 1), raw.replace(_BLANKED, "\ufffd"))
     said_on: dict[tuple[int, int], frozenset[str]] = {}
 
     def said(at: int, past: int) -> frozenset[str]:

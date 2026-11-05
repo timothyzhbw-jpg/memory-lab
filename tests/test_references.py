@@ -1374,3 +1374,10 @@ def test_a_hostile_block_takes_time_in_proportion_to_its_length(raw):
 def test_a_code_span_inside_a_prohibition_reads_as_one_space(tmp_path):
     tree(tmp_path, "src/here.py")
     assert flagged(tmp_path, "Do not `git add` or commit `src/secrets.py`.\n") == []
+
+
+@pytest.mark.parametrize("raw", ["re\x00moved `src/secrets.py`.", "Do not `git add` or commit `a/b.py`.", "`a` \x00 `b` removed"])
+def test_what_a_line_says_is_what_it_said_with_each_code_span_as_one_space(raw):
+    expected = frozenset(name for name, words in references_module._LINE_WORDS.items()
+                         if words.search(references_module._CODE_SPAN.sub(" ", raw)))
+    assert references_module._said(references_module._line_references(raw).prose) == expected
