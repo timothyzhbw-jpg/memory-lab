@@ -65,7 +65,7 @@ class Converter:
         self.audit, self.history, self.history_report = audit, history, history_report
         self.repo, self.dataset = repo, dataset
         self.head = history["head"][:12]
-        # The report holds a date: the end of that day comes after any commit of the day.
+        # The report holds only a date, so what comes from it takes the end of that day, in UTC.
         self.audited_at = f"{audit['as_of']}T23:59:59+00:00"
         self.memory_root = PurePosixPath(checked_path(audit["memory_file"])).parent
         self.records: list[dict] = []
@@ -90,13 +90,14 @@ class Converter:
         target.write_bytes(data)
         return name
 
-    def _evidence(self, record_id: str, path: str, quote: str, uri: str, kind: str) -> str:
+    def _evidence(self, record_id: str, data: bytes, relative: str, quote: str, uri: str, kind: str) -> str:
         if "\0" in quote:
             raise ConversionError("a quote holds a NUL character, which no command line can carry")
         if record_id not in self.known:
             self.known.add(record_id)
-            self.records.append({"kind": "evidence", "id": record_id, "path": path, "quote": quote, "source_uri": uri,
-                                 "source_kind": kind, "captured_at": self.audited_at})
+            self.records.append({"kind": "evidence", "id": record_id, "path": self._store(data, relative),
+                                 "quote": quote, "source_uri": uri, "source_kind": kind,
+                                 "captured_at": self.audited_at})
         return record_id
 
     def _event(self, event_id: str, timestamp: str, actor: str, action: str, memory_id: str,
@@ -117,7 +118,7 @@ class Converter:
         if not number.isdigit() or not 1 <= int(number) <= len(lines) or not lines[int(number) - 1].strip():
             raise ConversionError("a report names a memory line that is not in the file")
         line = lines[int(number) - 1]
-        return self._evidence(f"{memory_id}-line", self._store(data, relative), text if text in line else line.strip(),
+        return self._evidence(f"{memory_id}-line", data, relative, text if text in line else line.strip(),
                               f"git:{self.head}:{relative}", "memory_file")
 
     def _writes(self, claim: dict) -> None:
@@ -134,8 +135,7 @@ class Converter:
         if replaced:
             note += f" (edits {checked_id(replaced['memory_id'])})"
         cited = [self._memory_line(memory_id, claim["text"], claim["location"]),
-                 self._evidence(f"{memory_id}-introduced",
-                                self._store(self.history_report.encode("utf-8"), "memfalsify-history.md"),
+                 self._evidence(f"{memory_id}-introduced", self.history_report.encode("utf-8"), "memfalsify-history.md",
                                 introduced_line(self.history_report, memory_id),
                                 f"memfalsify-history:{self.head}", "memory_history")]
         self._event(f"write-request-{memory_id}", introduced["date"], author, "request", memory_id, cited, note)
@@ -149,8 +149,8 @@ class Converter:
         data = self._read(repo_path)
         if hashlib.sha256(data).hexdigest() != span["sha256"]:
             raise ConversionError("an evidence file changed after the audit; run the audit again")
-        return self._evidence(f"{memory_id}-{span['sha256'][:8]}-{span['start']}", self._store(data, repo_path),
-                              span["quote"], f"git:{self.head}:{repo_path}", "evidence_file")
+        return self._evidence(f"{memory_id}-{span['sha256'][:8]}-{span['start']}", data, repo_path, span["quote"],
+                              f"git:{self.head}:{repo_path}", "evidence_file")
 
     def _finding(self, finding: dict) -> None:
         memory_id, status = checked_id(finding["memory_id"]), finding["status"]

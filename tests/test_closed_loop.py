@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+import windows_newlines
 from conftest import EXAMPLES, snapshot, write_text_exact
 from memfalsify.audit import SEVERITY
 from orgmemory.models import DECISIONS
@@ -53,12 +54,24 @@ def cli(name: str, *args: str, cwd: Path) -> bytes:
     return proc.stdout
 
 
+# What stdout and stderr do in a child process on Windows, which --simulate-windows-newlines leaves out of reach.
+WINDOWS_STREAMS = """import io, sys
+for name in ("stdout", "stderr"):
+    setattr(sys, name, io.TextIOWrapper(getattr(sys, name).buffer, encoding="utf-8", newline="\\r\\n", write_through=True))
+"""
+
+
 @pytest.fixture(scope="module")
-def loop(tmp_path_factory):
-    """One run of the demo, as the README runs it. Another hash default and time zone must not change a byte."""
-    work = tmp_path_factory.mktemp("closed-loop") / "work"
-    proc = subprocess.run([sys.executable, str(DEMO / "run_demo.py"), "--work", str(work)],
-                          env=child_env(GIT_DEFAULT_HASH="sha256", TZ="Asia/Shanghai"), capture_output=True)
+def loop(tmp_path_factory, request):
+    """One run of the demo, as the README runs it. Another hash default and time zone must not change a byte,
+    and with --simulate-windows-newlines neither must CRLF on the stdout of every child process."""
+    root = tmp_path_factory.mktemp("closed-loop")
+    env = child_env(GIT_DEFAULT_HASH="sha256", TZ="Asia/Shanghai")
+    if request.config.getoption(windows_newlines.OPTION):
+        write_text_exact(root / "sitecustomize.py", WINDOWS_STREAMS)
+        env["PYTHONPATH"] = os.pathsep.join((str(root), PACKAGE_PATHS))
+    work = root / "work"
+    proc = subprocess.run([sys.executable, str(DEMO / "run_demo.py"), "--work", str(work)], env=env, capture_output=True)
     return proc, work
 
 

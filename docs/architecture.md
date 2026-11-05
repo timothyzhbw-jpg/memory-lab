@@ -75,7 +75,7 @@ From `memfalsify audit --format json`, `findings[]`:
 | `evidence[].reviewer` | `actor` | The first reviewer who confirmed the evidence; otherwise `memfalsify`, which `policy.json` gives a role that may raise risks and comment |
 | `status`, `location`, `text` | `note` | `<status> at <location>: <text>` |
 | `evidence[].span` | `evidence_ids` | One evidence record per span, supporting spans left out unless the status is `conflicted`. For `insufficient_evidence`, which has no span, the record quotes the memory line |
-| report `as_of` | `timestamp` | The end of that day in UTC, after any commit of the day |
+| report `as_of` | `timestamp` | The end of that day in UTC, because the report holds only a date |
 
 | Status | Action | Why |
 |---|---|---|
@@ -139,7 +139,7 @@ The alternatives: add `memory_write` and `memory_approve` actions to orgmemory, 
 The code supports this:
 
 - Replay has nothing new to do. It gates every event with `permitted[event.action]` and treats a subject as an opaque string ([`replay.py`](../packages/orgmemory/src/orgmemory/replay.py)). The demo gets each behavior it needs from unchanged code: the ignored approval, the pending approval, the risk after approval, the authorized rejection. A `memory_approve` would have the same state transitions as `approve`.
-- A new action reaches far for no new state. `Action`, `DECISIONS` and `Decision.action` in [`models.py`](../packages/orgmemory/src/orgmemory/models.py), `_ACTIONS` and the branches in `replay.py`, `periods` and the findings in `audit.py`, `changes.py`, `export.py`, the wording tables in `memlab_ui/decisions.py`, the public API snapshot, and every `policy.json`, whose permissions name actions.
+- A new action reaches far for no new state. `Action`, `DECISIONS` and `Decision.action` in [`models.py`](../packages/orgmemory/src/orgmemory/models.py), `_ACTIONS` and the branches in `replay.py`, `periods` and the findings in `audit.py`, `changes.py`, `export.py`, the wording tables in `memlab_ui/decisions.py`, the public `orgmemory.Action` type that [`api.md`](api.md) documents as eight actions, and every `policy.json`, whose permissions name actions.
 - It would break older readers. `Event.action` and the keys of `Policy.permissions` are closed sets, so a release of orgmemory from before the change would refuse a log that holds a new action. Those are the guarantees that make a log trustworthy; they should move only for a real need.
 - The importers already work this way. GitHub merges and reviews and Jira status changes all map onto the same actions.
 - It keeps the tools independent. New actions would put knowledge of memory files into orgmemory's core.

@@ -75,7 +75,7 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 | `evidence[].reviewer` | `actor` | 第一个确认证据的审阅人；否则是 `memfalsify`，`policy.json` 给它一个可以提出风险和评论的角色 |
 | `status`、`location`、`text` | `note` | `<status> at <location>: <text>` |
 | `evidence[].span` | `evidence_ids` | 每个 span 一条证据记录，支持性的 span 除非状态是 `conflicted` 否则不计。`insufficient_evidence` 没有 span，记录引用记忆里的这一行 |
-| 报告的 `as_of` | `timestamp` | 当天结束时刻（UTC），晚于当天的任何提交 |
+| 报告的 `as_of` | `timestamp` | 当天结束时刻（UTC），因为报告里只有日期 |
 
 | 状态 | 动作 | 原因 |
 |---|---|---|
@@ -139,7 +139,7 @@ history 指出了提交：作者 `agent-7`，标题 `Remember the API rate limit
 代码层面的依据：
 
 - 回放没有新的事情要做。它用 `permitted[event.action]` 检查每个事件，把议题当作不透明的字符串（[`replay.py`](../packages/orgmemory/src/orgmemory/replay.py)）。演示需要的行为都来自未改动的代码：被忽略的批准、待批准状态、批准之后的风险、有权限的否决。`memory_approve` 的状态转换和 `approve` 完全相同。
-- 新动作牵涉很广，却没有带来新状态。[`models.py`](../packages/orgmemory/src/orgmemory/models.py) 里的 `Action`、`DECISIONS` 和 `Decision.action`，`replay.py` 里的 `_ACTIONS` 和各个分支，`audit.py` 里的 `periods` 和各类发现，`changes.py`，`export.py`，`memlab_ui/decisions.py` 里的文案表，公开 API 快照，还有每一份 `policy.json`，它的权限就是按动作命名的。
+- 新动作牵涉很广，却没有带来新状态。[`models.py`](../packages/orgmemory/src/orgmemory/models.py) 里的 `Action`、`DECISIONS` 和 `Decision.action`，`replay.py` 里的 `_ACTIONS` 和各个分支，`audit.py` 里的 `periods` 和各类发现，`changes.py`，`export.py`，`memlab_ui/decisions.py` 里的文案表，[`api.zh-CN.md`](api.zh-CN.md) 写明为八个动作的公开类型 `orgmemory.Action`，还有每一份 `policy.json`，它的权限就是按动作命名的。
 - 旧版本会读不了。`Event.action` 和 `Policy.permissions` 的键都是封闭集合，改动之前发布的 orgmemory 会拒绝含新动作的日志。日志可信靠的正是这些保证，只有真正需要时才该动。
 - 导入工具已经这么做了。GitHub 的合并和评审、Jira 的状态变化，都映射到同一组动作上。
 - 这样两个工具才能保持独立。新动作会把记忆文件的知识带进 orgmemory 的核心。
