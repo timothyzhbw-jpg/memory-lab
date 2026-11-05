@@ -9,6 +9,8 @@
 
 [English](README.md) | 中文
 
+[![CI](https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) [![Python 3.10 to 3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](.github/workflows/ci.yml)
+
 现在的 Agent 记忆工具大多只管“存”和“取”。这个项目关心的是**记住的东西是不是真的**：每条记忆都应该有证据、有时间、能追溯来源；未经授权的信息不应该改变当前状态。
 
 [15 分钟教程](docs/tutorial.zh-CN.md)在 `examples/` 的临时副本上把两个工具走一遍。

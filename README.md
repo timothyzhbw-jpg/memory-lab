@@ -9,6 +9,8 @@
 
 English | [中文](README.zh-CN.md)
 
+[![CI](https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) [![Python 3.10 to 3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](.github/workflows/ci.yml)
+
 Agent memory tools mostly store and retrieve. This project is about **keeping what an agent remembers true**: every memory should have evidence, a place in time, and a traceable origin, and information without authority should not be able to change the current state.
 
 The [15-minute tutorial](docs/tutorial.md) walks through both tools on a temporary copy of `examples/`.
