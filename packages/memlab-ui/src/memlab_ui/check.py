@@ -52,10 +52,13 @@ ADVICE = {
     "disputed": "The two checkers disagree about this source: read both and decide.",
 }
 WHY = (
+    ("same setting", "Both name the same setting, with different values."),
     ("opposing terms", "They use opposite words."),
+    ("different units", "The same number, with a different unit."),
     ("different values", "The numbers are different."),
     ("opposite modality", "One says it must (or always) happen, the other says it need not (or only sometimes)."),
     ("same subject, but only one side is negated", "Only one of them says \"not\"."),
+    ("source says what the claim names was removed", "The source says this was removed."),
 )
 ISSUES = {
     "overgeneralization": "Uses a word like \"always\" or \"never\"; rules like that often have exceptions.",
@@ -84,6 +87,8 @@ SKIP_REASONS = (
     ("symlink escapes evidence root", "a link to outside the folder"),
     ("broken or cyclic symlink", "a broken link"),
     ("not a regular file", "not a regular file"),
+    ("vendored or generated", "vendored or generated, so not read as evidence"),
+    ("long lines", "partly read: lines over 1,000 characters were left out"),
     ("memory skipped", "an agent file that could not be read"),
 )
 TOO_MANY_FOR_DIFF = ("This file has more than {n} statements, too many to compare here. Check it without "
@@ -310,7 +315,10 @@ def marks(e: EvidenceFinding, claim: str, verifier: str) -> tuple[list, list]:
         return _prefix_ranges(claim, found[1]), _prefix_ranges(source, found[2])
     if found := re.match(r"opposite modality: claim '(.+?)' vs source '(.+?)'", why):
         return _phrase_ranges(claim, found[1]), _phrase_ranges(source, found[2])
-    if why.startswith("different values"):
+    if found := re.match(r"same setting (.+?): claim (.+?) vs source (.+)$", why):
+        return (_phrase_ranges(claim, found[1]) + _phrase_ranges(claim, found[2]),
+                _phrase_ranges(source, found[1]) + _phrase_ranges(source, found[3]))
+    if why.startswith(("different values", "different units")):
         return _number_ranges(claim, source), _number_ranges(source, claim)
     return [], []
 

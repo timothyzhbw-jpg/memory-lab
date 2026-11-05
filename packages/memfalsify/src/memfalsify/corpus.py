@@ -6,6 +6,7 @@ text: they are hashed only to check the sidecars that describe them.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePath
@@ -50,6 +51,57 @@ class Passage(BaseModel):
 class Skipped(BaseModel):
     path: str
     reason: str
+
+
+MAX_LINE = 1000  # characters: a longer line is minified, generated or embedded data, not a passage
+LONG_LINE = re.compile(rf"[^\n]{{{MAX_LINE + 1},}}")
+VENDORED_DIRS = frozenset({"vendor", "third_party", "thirdparty", "testdata", "fixtures", "__snapshots__"})
+VENDORED_DIR = "vendored or generated directory: not read as evidence"
+GENERATED_NAMES = ("*.min.js", "*.min.css", "*.snap", "*.svg", "*.patch", "*.lock", "package-lock.json",
+                   "pnpm-lock.yaml", "npm-shrinkwrap.json", "go.sum")
+GENERATED_FILE = "vendored or generated file: not read as evidence"
+
+
+def left_out_reason(relative: str) -> str | None:
+    """Why a directory scan does not read this root-relative path, if it is vendored or generated."""
+    *directories, name = PurePath(relative.lower()).parts
+    if VENDORED_DIRS.intersection(directories):
+        return VENDORED_DIR
+    return GENERATED_FILE if any(fnmatchcase(name, pattern) for pattern in GENERATED_NAMES) else None
+
+
+def long_lines_note(count: int) -> str:
+    return f"long lines: {count} over {MAX_LINE:,} characters not read as passages"
+
+
+_TEST_DIRS = frozenset({"test", "tests", "__tests__", "testing", "spec", "specs", "e2e"})
+_TEST_NAME = re.compile(r"^test_|_test\.|\.test\.|_spec\.|\.spec\.|^conftest\.py$")
+_CHANGELOG_DIRS = frozenset({"changelog", "changelogs"})
+_CHANGELOG_NAME = re.compile(r"^(?:changelog|changes|history|news|releases|release[-_]notes|breaking[-_]changes)\b")
+_EXAMPLE_DIRS = frozenset({"example", "examples", "sample", "samples", "demo", "demos", "cookbook", "cookbooks"})
+_EXAMPLE_NAME = re.compile(r"^examples?\.")
+
+
+def source_kind(relative: str) -> str | None:
+    """``test``, ``changelog`` or ``example`` when the path says the file is one of those: text that shows or records
+    a case rather than states how things are."""
+    *directories, name = PurePath(relative.lower()).parts
+    folders = set(directories)
+    if folders & _TEST_DIRS or _TEST_NAME.search(name):
+        return "test"
+    if folders & _CHANGELOG_DIRS or _CHANGELOG_NAME.search(name):
+        return "changelog"
+    if folders & _EXAMPLE_DIRS or _EXAMPLE_NAME.search(name):
+        return "example"
+    return None
+
+
+_CODE_SUFFIXES = frozenset({".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".rs", ".go", ".java",
+                            ".kt", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".sh", ".bash"})
+
+
+def is_code(relative: str) -> bool:
+    return PurePath(relative).suffix.lower() in _CODE_SUFFIXES
 
 
 def _matches(relative: str, patterns: list[str], directory: bool = False) -> bool:
@@ -100,6 +152,9 @@ def scan(root: Path, exclude: Iterable[str] = (),
             if (Path(directory) / name).is_symlink():
                 skipped.append(Skipped(path=(base / name).as_posix(), reason="symlinked directory not followed"))
                 dirnames.remove(name)
+            elif name.lower() in VENDORED_DIRS:
+                skipped.append(Skipped(path=(base / name).as_posix(), reason=VENDORED_DIR))
+                dirnames.remove(name)
         # Media files are decided after their directory's sidecars, so entries stay in name order.
         local: list[Skipped] = []
         media: dict[str, str] = {}  # media file name -> relative path
@@ -116,6 +171,9 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 local.append(Skipped(path=relative, reason=reason))
                 continue
             if resolved in excluded:
+                continue
+            if reason := left_out_reason(relative):
+                local.append(Skipped(path=relative, reason=reason))
                 continue
             if not resolved.is_file():
                 broken = path.is_symlink() and not resolved.exists()
@@ -162,7 +220,12 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 passages += [p for unit in sidecar.units
                              if (p := _passage(relative, digest, text, unit.start, unit.end, sidecar.ref(unit)))]
                 continue
-            passages += [p for start, end in sentence_spans(text)
+            long_lines = LONG_LINE.findall(text)
+            if long_lines:
+                local.append(Skipped(path=relative, reason=long_lines_note(len(long_lines))))
+            # Blanked with the same length, so the spans still point into the file as it is.
+            readable = LONG_LINE.sub(lambda m: " " * len(m.group()), text) if long_lines else text
+            passages += [p for start, end in sentence_spans(readable)
                          if (p := _passage(relative, digest, text, start, end))]
         covered = {media[name] for name in bound if name in media}
         skipped += [s for s in local if not (s.reason == NO_SIDECAR and s.path in covered)]

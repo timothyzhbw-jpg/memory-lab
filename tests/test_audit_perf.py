@@ -108,16 +108,25 @@ def test_indexed_conflicts_match_pairwise_reference():
 
 
 def test_one_term_claim_is_found_from_a_shared_common_term():
-    # "never billing" covers all of "billing x y z w" with its single term and only it is negated.
-    # The longer claim's rare-term prefix leaves out the common "billing", so it must find the
-    # one-term claim from that shared term, or only one side of the pair reports the conflict.
+    # "never billing" covers all of "billing x y z w" with its single term. The longer claim's rare-term prefix
+    # leaves out the common "billing", so it must find the one-term claim from that shared term before the verifier
+    # decides, which it now does against the conflict: one shared term is no common subject.
     texts = ["billing approves export quota tenant", "billing approves gateway", "billing x y z w",
              "billing a1 b1 c1 d1 e1", "never billing"]
     claims = [Claim(id=f"c{index}", text=text, path="MEMORY.md", line=index + 1)
               for index, text in enumerate(texts)]
     for claim in claims:
         assert issues_for(claim, claims, AS_OF, 180) == reference_issues_for(claim, claims, AS_OF, 180)
-    assert any(issue.kind == "internal_conflict" for issue in issues_for(claims[2], claims, AS_OF, 180))
+    assert not any(issue.kind == "internal_conflict" for issue in issues_for(claims[2], claims, AS_OF, 180))
+
+
+def test_claims_that_share_only_a_key_are_found():
+    # Too little in common for the term index: only the key ties them together.
+    claims = [Claim(id="a", text="retry_limit: 3", path="MEMORY.md", line=1),
+              Claim(id="b", text="The billing importer keeps going for hours on bad days, retry_limit: 5", path="MEMORY.md", line=2)]
+    for claim in claims:
+        assert issues_for(claim, claims, AS_OF, 180) == reference_issues_for(claim, claims, AS_OF, 180)
+    assert [issue.kind for issue in issues_for(claims[0], claims, AS_OF, 180)] == ["internal_conflict"]
 
 
 ZH_SUBJECTS = ("账单服务", "导出接口", "缓存", "网关", "队列", "租户配额", "API", "Q4 发布", "方案", "案")

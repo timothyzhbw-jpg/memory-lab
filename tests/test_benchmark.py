@@ -42,8 +42,8 @@ EVIDENCE = {
                           "The session store does not use Redis; the cache uses Redis.\n"
                           "Bulk export was moved to the January release.\n",
 }
-# (text, truth, issues, tags, evidence). With the lexical verifier the last two are misclassified:
-# a negated distractor sentence flags the Redis claim, and the November paraphrase shares too few terms.
+# (text, truth, issues, tags, evidence). With the lexical verifier the last one is misclassified:
+# the November paraphrase shares too few terms.
 LABELS = [
     ("The public API rate limit is 100 requests per minute.", "contradicted", [], ["numeric"],
      "api.md: The public API rate limit is 500 requests per minute."),
@@ -306,7 +306,7 @@ EXPECTED_LEXICAL = {
     "The team prefers tabs for indentation.": ("supported", "candidate_support"),
     "Priya owns the payments integration.": ("unsupported", "insufficient_evidence"),
     "We probably ship the bulk export next week.": ("unsupported", "insufficient_evidence"),
-    "The cache uses Redis.": ("contradicted", "candidate_counterevidence"),
+    "The cache uses Redis.": ("supported", "candidate_support"),
     "Bulk export ships in November.": ("unsupported", "insufficient_evidence"),
 }
 
@@ -319,19 +319,19 @@ def test_run_script_end_to_end_with_lexical_verifier(cases, tmp_path):
     markdown = done.stdout
     assert markdown.startswith("# MemFalsify benchmark")
     assert "- Verifier: `lexical` · min_coverage 0.5 · max_judged unbounded" in markdown
-    assert "| 0.67 | 0.67 | 0.67 | 2 | 1 | 1 |" in markdown  # contradiction detection
-    assert "| 1.00 | 0.67 | 0.80 | 2 | 0 | 1 |" in markdown  # support detection
-    assert "0.75 (6/8; disputed counts as wrong)" in markdown
-    assert "| supported | 1 | 2 | 0 | 0 |" in markdown
-    assert "| negation_trap | 1 | – | 0/1 (0.00) | 1/1 (1.00) |" in markdown
-    assert "| tiny | supported | contradicted | negation_trap, distractor | The cache uses Redis. |" in markdown
+    assert "| 1.00 | 0.67 | 0.80 | 2 | 0 | 1 |" in markdown  # contradiction detection
+    assert "| 1.00 | 1.00 | 1.00 | 3 | 0 | 0 |" in markdown  # support detection
+    assert "0.88 (7/8; disputed counts as wrong)" in markdown
+    assert "| supported | 0 | 3 | 0 | 0 |" in markdown
+    assert "| negation_trap | 1 | – | 1/1 (1.00) | 0/1 (0.00) |" in markdown
+    assert "The cache uses Redis." not in markdown.split("## Misclassified claims")[1]
     result = json.loads(out.read_text(encoding="utf-8"))
     assert out.read_bytes() == (json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     assert result["settings"] == {"min_coverage": 0.5, "max_judged": None, "verifier": "lexical"}
     assert {p["text"]: (p["predicted"], p["status"]) for p in result["predictions"]} == EXPECTED_LEXICAL
     assert [p["text"] for p in result["predictions"]] == [text for text, *_ in LABELS]
     assert result["metrics"]["citations"] == {"contradicted": {"hits": 2, "n": 2, "rate": 1.0},
-                                              "supported": {"hits": 2, "n": 2, "rate": 1.0}}
+                                              "supported": {"hits": 3, "n": 3, "rate": 1.0}}
     issues = result["metrics"]["issues"]
     assert all(issues[k]["precision"] == issues[k]["recall"] == 1.0
                for k in ("overgeneralization", "relative_time", "inference_marker"))

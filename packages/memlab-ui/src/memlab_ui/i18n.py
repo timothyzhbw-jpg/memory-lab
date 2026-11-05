@@ -175,6 +175,9 @@ ZH: dict[str, str] = {
     "The two checkers disagree about this source: read both and decide.":
         "两个检查器对这个来源意见不一：请阅读两边后自行判断。",
     "They use opposite words.": "两边用了意思相反的词。",
+    "Both name the same setting, with different values.": "两边写的是同一个设置，值却不同。",
+    "The same number, with a different unit.": "数字相同，单位不同。",
+    "The source says this was removed.": "来源说这个已经被移除了。",
     "The numbers are different.": "两边的数字不同。",
     "One says it must (or always) happen, the other says it need not (or only sometimes).":
         "一边说必须（或总是）如此，另一边说不必（或只是有时）。",
@@ -443,6 +446,8 @@ ZH: dict[str, str] = {
         "图片、音频或视频文件，旁边没有转写稿或 OCR 文本",
     "in a hidden folder, or a hidden file": "位于隐藏文件夹中，或本身是隐藏文件",
     "in a folder that is never read": "位于从不读取的文件夹中",
+    "vendored or generated, so not read as evidence": "第三方或生成的内容，不作为证据读取",
+    "partly read: lines over 1,000 characters were left out": "只读了一部分：超过 1,000 个字符的行没有读取",
     "a linked folder, which is not followed": "链接的文件夹，不会跟随",
     "a link to outside the folder": "指向文件夹之外的链接",
     "a broken link": "失效的链接",

@@ -15,13 +15,13 @@ from memcore.paths import InputPathError, input_path
 from memcore.reading import confined_reads, confinement_root, confinement_supported, take
 
 from . import __version__
-from .corpus import Passage, Skipped, scan
+from .corpus import Passage, Skipped, is_code, scan, source_kind
 from .formats import Value
 from .memory import Claim, parse_memory
 from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, CJK, HEDGE, RELATIVE_TIME, coverage_units,
-                   explicit_dates, features, has_negation, normalize)
-from .verify import (Judgment, LexicalVerifier, Verifier, VerifierStats, coverage, judge_all, usage_since,
-                     verifier_usage)
+                   explicit_dates, features, has_negation, named_conflict, named_values, normalize)
+from .verify import (NAMED_VALUE, REASONS, REMOVED, WORDING, Judgment, LexicalVerifier, Verifier, VerifierStats, coverage,
+                     judge_all, strength, usage_since, verifier_usage)
 
 Status = Literal["challenged", "conflicted", "candidate_counterevidence", "disputed",
                  "insufficient_evidence", "candidate_support", "supported"]
@@ -113,7 +113,9 @@ class AuditSet(BaseModel):
     not_searched: list[Skipped] = []  # places the search for memory files passed over, with the reason
 
 
-LEXICAL_NOTE = "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
+LEXICAL_NOTE = ("Unconfirmed matches are candidates found by comparing words: support by term overlap, a contradiction by "
+                "the same setting with another value or two near-identical statements that differ. They can miss "
+                "paraphrases and misread context, and a report without flags has not ruled anything out.")
 MODEL_NOTE = ("Unconfirmed matches are model judgments on passages pre-selected by term overlap; "
               "passages that share too few terms with a memory are never judged, and models can be wrong.")
 MEDIA_NOTE = ("Transcript and OCR quotes show what a sidecar says about a media file, not what was said or shown; "
@@ -173,16 +175,77 @@ def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
     return [passage for *_, passage in ranked[:max_judged]]
 
 
+def naming_passages(claims: list[Claim], passages: list[Passage]) -> dict[str, list[Passage]]:
+    """For each claim that binds a key, the passages that bind the same key to a different value, however little else
+    they share: ``max_steps: int = 500`` says nothing about the rest of a long description of ``max_steps``."""
+    keys = {claim.id: list(named_values(claim.text)) for claim in claims}
+    terms = {key: features(key)[0] for names in keys.values() for key in names}
+    wanted = frozenset().union(*terms.values()) if terms else frozenset()
+    if not wanted:
+        return {}
+    having: dict[str, list[int]] = defaultdict(list)
+    for at, passage in enumerate(passages):
+        for term in passage.words & wanted:
+            having[term].append(at)
+    found: dict[str, list[Passage]] = {}
+    for claim in claims:
+        chosen: set[int] = set()
+        for key in keys[claim.id]:
+            lists = [having.get(term, []) for term in terms[key]]
+            chosen.update(at for at in (min(lists, key=len) if lists else ())
+                          if key in passages[at].span.quote.lower())
+        picked = sorted(chosen)
+        # Within read_limits, these comparisons draw from the comparison budget, as in ``shortlist``.
+        naming = [passages[at] for at in picked[:take("comparisons", len(picked))]
+                  if named_conflict(claim.text, passages[at].span.quote)]
+        if naming:
+            found[claim.id] = naming
+    return found
+
+
+def _rank(evidence: Judgment | EvidenceFinding, verifier: str) -> int:
+    """How strong a lexical contradiction is; every other judgment counts the same, since a model's words rank nothing."""
+    if verifier == _LEXICAL.name and evidence.relation == "contradicts":
+        return strength(evidence.rationale)
+    return len(REASONS)
+
+
 def candidates(claim: Claim, judged: list[tuple[Passage, Judgment]], limit: int) -> list[EvidenceFinding]:
-    """The ``limit`` most telling judged passages: contradictions first, then the most shared terms."""
+    """The ``limit`` most telling judged passages: contradictions first, the strongest reason first, then the most
+    shared terms."""
     words, _ = features(claim.text)
-    scored = [(judgment.relation != "contradicts", -len(words & passage.words), passage.span.location, judgment,
-               passage)
+    scored = [(judgment.relation != "contradicts", _rank(judgment, judgment.verifier),
+               -len(words & passage.words), passage.span.location, judgment, passage)
               for passage, judgment in judged if judgment.relation != "unrelated"]
-    scored.sort(key=lambda item: item[:3])
+    scored.sort(key=lambda item: item[:4])
     return [EvidenceFinding(relation=j.relation, confirmed=False, rationale=j.rationale, opinions=j.opinions,
                             span=p.span)
             for *_, j, p in scored[:limit]]
+
+
+def weighed(judgment: Judgment, path: str, claim: str, passage: str) -> Judgment:
+    """A lexical contradiction, once the file it comes from is known.
+
+    A test, changelog or example shows or records a case, so it does not contradict a claim by itself, unless a
+    changelog or example names the same setting or a changelog says the thing was removed. In source code, opposing
+    words and negation are control flow and error messages, and ``x = 5`` is one assignment among others, so they do
+    not count either."""
+    if judgment.relation != "contradicts":
+        return judgment
+
+    def assigned() -> bool:
+        return named_conflict(claim, passage, set_counts=False) is None
+
+    why = judgment.rationale
+    kind = source_kind(path)
+    if kind is None:
+        if not is_code(path) or not (why.startswith(WORDING) or (why.startswith(NAMED_VALUE) and assigned())):
+            return judgment
+        kind = "source code"
+    elif (kind != "test" and why.startswith(NAMED_VALUE)) or (kind == "changelog" and why == REMOVED):
+        return judgment
+    return Judgment(relation="unrelated", verifier=judgment.verifier,
+                    rationale=f"{kind}: not read as a contradiction by itself ({why})")
 
 
 @dataclass(frozen=True)
@@ -196,6 +259,7 @@ class _Lex:
     # term-count shortcut below does not model; pairs that involve it go to the verifier itself.
     cjk: bool = False
     chars: frozenset[str] = frozenset()
+    keys: frozenset[str] = frozenset()  # what the text binds to a value: a conflict there needs no other shared term
 
 
 _ZH_TERMS = tuple(dict.fromkeys(term for pair in ANTONYMS_ZH for term in pair))
@@ -219,10 +283,11 @@ def _zh_present(text: str) -> frozenset[str]:
 
 def _lex_of(text: str) -> _Lex:
     words, numbers = features(text)
+    keys = frozenset(named_values(text))
     if not CJK.search(text):
-        return _Lex(words, numbers, has_negation(text), _zh_present(text))
+        return _Lex(words, numbers, has_negation(text), _zh_present(text), keys=keys)
     chars = frozenset(CJK.findall(normalize(text)))
-    return _Lex(words, numbers, has_negation(text), _zh_present(text), True, chars)
+    return _Lex(words, numbers, has_negation(text), _zh_present(text), True, chars, keys)
 
 
 def _min_shared(size: int, related: float) -> int:
@@ -255,21 +320,16 @@ def _opposed(claim: _Lex, passage: _Lex) -> bool:
     return False
 
 
-def _directed_contradicts(claim: _Lex, passage: _Lex, shared: int, related: float) -> bool:
-    """``LexicalVerifier.judge(claim, passage).relation == 'contradicts'``, without building a judgment."""
+def _reaches_related(claim: _Lex, passage: _Lex, shared: int, related: float) -> bool:
+    """Whether ``claim`` can clear ``LexicalVerifier.judge``'s coverage cutoff against ``passage``, without building a
+    judgment: most pairs that share a key or a term stop here."""
     size = len(claim.words)
     if size == 0:
         return False
     # ``score < related`` is the verifier's cutoff. Shared terms cannot exceed ``size``.
     if shared / size >= related:
-        if _opposed(claim, passage):
-            return True
-        if claim.numbers and passage.numbers and claim.numbers.isdisjoint(passage.numbers):
-            return True
-        return claim.negated != passage.negated
-    if (shared + 1) / size < related:
-        return False
-    return _opposed(claim, passage)
+        return True
+    return (shared + 1) / size >= related and _opposed(claim, passage)
 
 
 class _ConflictIndex:
@@ -299,7 +359,10 @@ class _ConflictIndex:
         self.contains: dict[str, list[int]] = defaultdict(list)
         self.zh_at: dict[str, list[int]] = defaultdict(list)
         self.chars_at: dict[str, list[int]] = defaultdict(list)
+        self.keyed: dict[str, list[int]] = defaultdict(list)
         for index, lex in enumerate(self.lex):
+            for key in lex.keys:
+                self.keyed[key].append(index)
             counts.update(lex.words)
             for term in lex.words:
                 self.contains[term].append(index)
@@ -416,6 +479,8 @@ class _ConflictIndex:
 
     def _candidates(self, lex: _Lex, text: str, prefix: tuple[str, ...], skip: int | None) -> set[int]:
         chosen: set[int] = set()
+        for key in lex.keys:
+            chosen.update(self.keyed.get(key, ()))
         if prefix:
             for term in prefix:
                 chosen.update(self.contains.get(term, ()))
@@ -448,14 +513,12 @@ class _ConflictIndex:
             if other.id == claim.id:
                 continue
             other_lex = self.lex[index]
-            if lex.cjk or other_lex.cjk:
-                contradicts = any(_LEXICAL.judge(a, b).relation == "contradicts"
-                                  for a, b in ((claim.text, other.text), (other.text, claim.text)))
-            else:
-                shared = len(lex.words & other_lex.words)
-                contradicts = (_directed_contradicts(lex, other_lex, shared, self.related)
-                               or _directed_contradicts(other_lex, lex, shared, self.related))
-            if contradicts:
+            shared = len(lex.words & other_lex.words)
+            if (lex.cjk or other_lex.cjk or lex.keys & other_lex.keys
+                    or _reaches_related(lex, other_lex, shared, self.related)
+                    or _reaches_related(other_lex, lex, shared, self.related)) and any(
+                    _LEXICAL.judge(a, b).relation == "contradicts"
+                    for a, b in ((claim.text, other.text), (other.text, claim.text))):
                 found.append(Issue(kind="internal_conflict",
                                    detail=f"may contradict {other.id} at {other.location}: \"{other.text}\""))
         return found
@@ -581,6 +644,10 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     by_id = {c.id: c for c in claims}
     confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
     picked = {claim.id: shortlist(claim, passages, min_coverage, max_judged) for claim in targets}
+    if verifier.name == _LEXICAL.name and max_judged is None:  # a model's lower coverage bar lets these through
+        for claim_id, naming in naming_passages(targets, passages).items():
+            chosen = {id(passage) for passage in picked[claim_id]}
+            picked[claim_id] += [passage for passage in naming if id(passage) not in chosen]
     pairs = [(claim.text, passage.span.quote) for claim in targets for passage in picked[claim.id]]
     before = verifier_usage(verifier)
     judgments = iter(judge_all(verifier, pairs, max_concurrency))
@@ -591,6 +658,9 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     for claim in targets:
         reviewed = confirmed.get(claim.id, [])
         judged = [(passage, next(judgments)) for passage in picked[claim.id]]
+        if verifier.name == _LEXICAL.name:
+            judged = [(passage, weighed(judgment, passage.span.path, claim.text, passage.span.quote))
+                      for passage, judgment in judged]
         evidence = reviewed + [c for c in candidates(claim, judged, max_candidates)
                                if not any(_overlaps(c.span, r.span) for r in reviewed)]
         status = status_of(evidence)
@@ -601,8 +671,10 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
         findings.append(Finding(memory_id=claim.id, text=claim.text, location=claim.location, section=claim.section,
                                 metadata=claim.metadata,
                                 status=status, evidence=evidence, issues=issues, proposals=proposals))
-    findings.sort(key=lambda f: SEVERITY.index(f.status))
-    summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
+    # Within a status, the strongest reason first; a stable sort keeps file order after that.
+    findings.sort(key=lambda f: (SEVERITY.index(f.status), min((_rank(e, verifier.name) for e in f.evidence),
+                                                               default=len(REASONS))))
+    summary ={s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
     media = any(p.span.media for p in passages) or any(e.span.media for f in findings for e in f.evidence)
     return AuditReport(memory_file=memory_file, files_read=files_read,
                        evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,

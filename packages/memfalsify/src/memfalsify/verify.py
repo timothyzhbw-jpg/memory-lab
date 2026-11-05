@@ -19,9 +19,23 @@ from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from .text import CJK, char_coverage, features, modality_conflict, negation, opposing_terms
+from .text import (CJK, char_coverage, clauses, features, has_cue, is_absolute, is_date, is_prohibition,
+                   modality_conflict, named_conflict, negation,
+                   opposing_terms, plain_words, quantities, reached_terms, removed_terms, stated_terms, statements,
+                   units_differ)
 
 Relation = Literal["supports", "contradicts", "unrelated", "disputed"]
+NAMED_VALUE = "same setting"  # how a named-value contradiction's rationale starts; it outranks the other rules
+REMOVED = "source says what the claim names was removed"
+WORDING = ("opposing terms", "same subject, but only one side is negated")  # how the wording rules' rationales start
+# How much each lexical reason says, strongest first, as measured on real repositories (benchmarks/memfalsify/wild).
+REASONS = (NAMED_VALUE, "different units", "different values", REMOVED, "opposing terms", "opposite modality",
+           "same subject")
+
+
+def strength(rationale: str) -> int:
+    """The rank of a lexical contradiction's reason: lower is stronger, and any other text ranks last."""
+    return next((rank for rank, reason in enumerate(REASONS) if rationale.startswith(reason)), len(REASONS))
 
 # Shared by the model verifiers, so that when two of them disagree it is about the evidence,
 # not about differently worded definitions.
@@ -168,8 +182,97 @@ def coverage(claim: str, passage: str) -> float:
     return min(matched, len(claim_words)) / len(claim_words)
 
 
+NEAR = 0.6  # two texts are about the same subject when each covers at least this share of the other
+MIN_SHARED = 2  # and they share at least this many terms
+NEGATION_SHARED = 3  # a negation is a small word: it takes more shared terms to tell that it is about the same thing
+OPPOSING_NEAR = 0.4  # an opposing word says more than a "not": the rest of the sentence may differ more
+NUMBERS_NEAR = 0.5  # a number next to the same word is evidence by itself, so the sentences may differ a little more
+REMOVED_TERMS = 4
+
+
+def _near(one: str, other: str, least: int = MIN_SHARED, near: float = NEAR) -> bool:
+    """Each text covers at least ``near`` of the other, on at least ``least`` shared terms. CJK text is measured per
+    character, which has no term count to go by."""
+    if min(coverage(one, other), coverage(other, one)) < near:
+        return False
+    words, _ = features(one)
+    others, _ = features(other)
+    return len(words & others) >= least or bool(CJK.search(one + other))
+
+
+def opposed_on_same_subject(claim: str, passage: str) -> tuple[str, str] | None:
+    """Opposing terms that stand as words, not parts of a name, in two sentences or clauses about the same subject."""
+    for a, b in ((claim, passage), *((a, b) for a in clauses(claim) for b in clauses(passage))):
+        if (found := opposing_terms(plain_words(a), plain_words(b))) and _near(a, b, near=OPPOSING_NEAR):
+            return found
+    return None
+
+
+def number_conflict(claim: str, passage: str) -> tuple[list[str], list[str]] | None:
+    """(claim numbers, source numbers) when two nearly identical sentences, or clauses, attach different numbers to
+    the same word. Numbers inside names, paths, references, dates and times, or bound to a key, do not count."""
+    ours, theirs = quantities(claim), quantities(passage)
+    if not ours or not theirs:
+        return None
+    values, others = {q.value for q in ours}, {q.value for q in theirs}
+    whole = _near(claim, passage, near=NUMBERS_NEAR)
+    for one in ours:
+        for other in theirs:
+            if (one.value not in others and other.value not in values and one.next_to & other.next_to
+                    and is_date(one.value) == is_date(other.value)
+                    and (whole or _near(one.clause, other.clause, near=NUMBERS_NEAR))):
+                return [one.value], [other.value]
+    return None
+
+
+def unit_conflict(claim: str, passage: str) -> tuple[str, str] | None:
+    """(claim amount, source amount) when two nearly identical sentences, or clauses, give the same number different
+    units: 2 minutes and 2 seconds, 512 GB and 512 GiB."""
+    ours, theirs = quantities(claim), quantities(passage)
+    for one in ours:
+        for other in theirs:
+            if units_differ(one, other) and (_near(claim, passage, near=NUMBERS_NEAR)
+                                             or _near(one.clause, other.clause, near=NUMBERS_NEAR)):
+                return one.written, other.written
+    return None
+
+
+def _negates(negated: str, plain: str) -> bool:
+    """A statement of ``negated`` reaches a word ``plain`` states without negation, and the two have one subject."""
+    if is_prohibition(negated):
+        return False
+    aside = reached_terms(plain)
+    words = stated_terms(plain) - aside
+    terms, _ = features(plain)
+    for statement in statements(negated):
+        reached = reached_terms(statement)
+        if not reached & words or reached & aside:
+            continue
+        # One counterexample contradicts an absolute statement, however much else it says.
+        if is_absolute(plain) and coverage(plain, statement) >= NEAR and len(terms & features(statement)[0]) >= NEGATION_SHARED:
+            return True
+        if any(_near(statement, part, NEGATION_SHARED) for part in (plain, *clauses(plain))):
+            return True
+    return False
+
+
+def negation_conflict(claim: str, passage: str) -> bool:
+    """One side negates a word the other states plainly, in two statements about the same subject."""
+    return _negates(claim, passage) or _negates(passage, claim)
+
+
+def removal_conflict(claim: str, passage: str) -> bool:
+    """The source says what the claim names was removed: all the claim's terms stand before the words that say so."""
+    words, _ = features(claim)
+    if len(words) < REMOVED_TERMS or removed_terms(claim):
+        return False
+    return any(words <= removed_terms(part) for part in statements(passage))
+
+
 class LexicalVerifier:
-    """Term overlap plus opposing terms, numeric, modality and negation mismatches. Fast, explainable, shallow."""
+    """Named values first, then opposing terms, numbers, modality and negation on texts about the same subject.
+
+    Fast, explainable, shallow."""
     name = "lexical"
 
     def __init__(self, related: float = 0.6, support: float = 0.75) -> None:
@@ -177,26 +280,44 @@ class LexicalVerifier:
         self.support = support
 
     def judge(self, claim: str, passage: str) -> Judgment:
+        named = named_conflict(claim, passage)
+        if named:
+            return Judgment(relation="contradicts", verifier=self.name,
+                            rationale=f"{NAMED_VALUE} {named[0]}: claim {named[1]} vs source {named[2]}")
         score = coverage(claim, passage)
         if score < self.related:
             return Judgment(relation="unrelated", rationale=f"term coverage {score:.2f}", verifier=self.name)
+        cjk = bool(CJK.search(claim) or CJK.search(passage))
         opposed = opposing_terms(claim, passage)
-        if opposed:
+        terms = opposed if cjk else opposed and opposed_on_same_subject(claim, passage)
+        if terms:
             return Judgment(relation="contradicts", verifier=self.name,
-                            rationale=f"opposing terms: claim '{opposed[0]}…' vs source '{opposed[1]}…'")
-        _, claim_numbers = features(claim)
-        _, passage_numbers = features(passage)
-        if claim_numbers and passage_numbers and not claim_numbers & passage_numbers:
+                            rationale=f"opposing terms: claim '{terms[0]}…' vs source '{terms[1]}…'")
+        units = unit_conflict(claim, passage)
+        if units:
             return Judgment(relation="contradicts", verifier=self.name,
-                            rationale=f"different values: claim {sorted(claim_numbers)} vs source {sorted(passage_numbers)}")
+                            rationale=f"different units: claim {units[0]} vs source {units[1]}")
+        differ = number_conflict(claim, passage)
+        if differ:
+            return Judgment(relation="contradicts", verifier=self.name,
+                            rationale=f"different values: claim {differ[0]} vs source {differ[1]}")
         modal = modality_conflict(claim, passage)
         if modal:
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale=f"opposite modality: claim '{modal[0]}' vs source '{modal[1]}'")
-        if (negation(claim, passage) is None) != (negation(passage, claim) is None):
+        negated_once = ((negation(claim, passage) is None) != (negation(passage, claim) is None) if cjk
+                        else has_cue(claim) != has_cue(passage))
+        if negated_once if cjk else negation_conflict(claim, passage):
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale="same subject, but only one side is negated")
-        if score >= self.support:
+        if removal_conflict(claim, passage):
+            return Judgment(relation="contradicts", verifier=self.name,
+                            rationale=REMOVED)
+        _, claim_numbers = features(claim)
+        _, passage_numbers = features(passage)
+        # What the rules above read as doubtful is no support either, even when it is no contradiction.
+        doubtful = opposed or negated_once or (claim_numbers and passage_numbers and not claim_numbers & passage_numbers)
+        if score >= self.support and not doubtful:
             return Judgment(relation="supports", verifier=self.name,
                             rationale=f"source restates the claim (term coverage {score:.2f})")
         return Judgment(relation="unrelated", rationale=f"partial overlap only ({score:.2f})", verifier=self.name)

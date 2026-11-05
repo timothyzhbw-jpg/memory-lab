@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 from functools import lru_cache
+from typing import NamedTuple
 
 STOPWORDS = frozenset("""
 a an the is are was were be been being am to of in on at by for with and or but as it its this that these
@@ -47,11 +48,12 @@ SUFFIXES = ("ations", "ation", "ments", "ment", "ions", "ion", "ency", "ence", "
             "ies", "ied", "ed", "es", "al", "ly", "s", "e")
 
 # Pairs of terms that cannot both describe the same state. English terms are stemmed on load.
+# States only: add/remove, start/stop and open/close are things that happen in turn, and on real repositories they
+# were noise every time.
 ANTONYMS_EN = [("approve", "reject"), ("approve", "deny"), ("accept", "reject"), ("accept", "decline"),
                ("enable", "disable"), ("allow", "block"), ("allow", "forbid"), ("pass", "fail"),
-               ("succeed", "fail"), ("true", "false"), ("add", "remove"), ("start", "stop"),
-               ("open", "close"), ("include", "exclude"), ("increase", "decrease"), ("public", "private"),
-               ("required", "optional"), ("supported", "deprecated")]
+               ("succeed", "fail"), ("true", "false"), ("include", "exclude"), ("increase", "decrease"),
+               ("public", "private"), ("required", "optional"), ("supported", "deprecated")]
 ANTONYMS_ZH = [("批准", "拒绝"), ("批准", "否决"), ("通过", "否决"), ("同意", "拒绝"), ("启用", "禁用"),
                ("开启", "关闭"), ("允许", "禁止"), ("成功", "失败"), ("增加", "减少"), ("支持", "弃用")]
 
@@ -450,3 +452,316 @@ def sentence_spans(text: str) -> Iterator[tuple[int, int]]:
             if re.search(r"\w", stripped):
                 yield base + pos + offset, base + pos + offset + len(stripped)
             pos = cut
+
+
+# --- clauses -----------------------------------------------------------------------------------------
+
+# Where one statement ends and the next begins. Not inside 14:00 or localhost:5420.
+_STATEMENT_BREAK = re.compile(r":(?![\d/])|;|\||[。！？]|\s[-–—]\s")
+# Inside a statement. Not inside 1,000.
+_CLAUSE_BREAK = re.compile(rf"{_STATEMENT_BREAK.pattern}|,(?!\d)|、|\s(?:and|but)\s")
+# Every clause is compared with every clause and text in an audit is untrusted, so both are bounded.
+_SPLIT_UP_TO = 2000  # characters: a longer text is one part
+_MOST_PARTS = 32  # parts read from a text, and numbers
+
+
+def _spans(text: str, breaks: re.Pattern) -> Iterator[tuple[int, int]]:
+    """[start, end) of the parts of ``text`` between ``breaks``; a very long text is one part."""
+    at = 0
+    if len(text) <= _SPLIT_UP_TO:
+        for found in breaks.finditer(text):
+            yield at, found.start()
+            at = found.end()
+    yield at, len(text)
+
+
+def _split(text: str, breaks: re.Pattern) -> list[str]:
+    text = normalize(text)
+    return [part for start, end in _spans(text, breaks) if (part := text[start:end].strip())][:_MOST_PARTS]
+
+
+def statements(text: str) -> list[str]:
+    """The parts of normalized ``text`` between colons, semicolons, table bars and spaced dashes."""
+    return _split(text, _STATEMENT_BREAK)
+
+
+def clauses(text: str) -> list[str]:
+    """The statements of ``text``, split further at commas and at ``and`` and ``but``."""
+    return _split(text, _CLAUSE_BREAK)
+
+
+def _content_terms(text: str) -> list[str]:
+    """Stemmed content words, and lone CJK characters, in text order; numbers are left out."""
+    found: list[str] = []
+    for match in TOKEN.finditer(text):
+        token = match.group()
+        if token[0].isdigit():
+            continue
+        if CJK.match(token):
+            found += [char for piece in _cjk_pieces(token) for char in piece]
+        elif (word := _word(token)) is not None:
+            found.append(word)
+    return found
+
+
+# --- named values ------------------------------------------------------------------------------------
+
+_NO_VALUE = frozenset({"none", "null", "nil", "undefined"})
+_BOOLEAN = frozenset({"true", "false"})
+_NUMBER = re.compile(r"[-+]?(\d[\d_]*(?:,\d{3})*(?:\.\d+)?)([A-Za-z%]{0,3})")
+_NAME = r"[A-Za-z_][\w.-]*"
+# A literal: quoted without spaces, a number with at most a short unit, a boolean, or a null (which means no value).
+_LITERAL = (r"(?P<value>\"[^\"\s{}$]{1,40}\"|'[^'\s{}$]{1,40}'|`[^`\s{}$]{1,40}`|[-+]?\d[\d_,.]{0,40}[A-Za-z%]{0,3}(?![\w-])|"
+            r"(?:[Tt]rue|[Ff]alse|TRUE|FALSE|[Nn]one|null|nil|undefined)(?![\w-]))")
+_NUMERIC = r"(?P<value>[-+]?\d[\d_,.]{0,40}[A-Za-z%]{0,3}(?![\w-]))"
+_KEYED = rf"(?<![\w./@#-])(?P<quote>[`\"']?)(?P<key>{_NAME})(?P=quote)"
+DEFAULT, STATED, SET = "default", "stated", "set"
+_BINDINGS = tuple((kind, re.compile(pattern)) for kind, pattern in (
+    # key (default: 100), `key` (optional, default `100`)
+    (DEFAULT, _KEYED + r"\s*[(\[]\s*(?:[^()\[\]\n]{0,40}?[,;]\s*)?defaults?(?:\s+(?:is|to|of))?\s*[:=]?\s*" + _LITERAL),
+    # key: int = 180, key: float = Field(default=0.1, ...)
+    (DEFAULT, _KEYED + r"\s*:\s*[\w.\[\], |\"']{1,60}?\s*=\s*(?:\w*[Ff]ield\(\s*(?:\.\.\.\s*,\s*)?(?:default\s*=\s*)?)?"
+     + _LITERAL),
+    # key defaults to 100
+    (DEFAULT, _KEYED + r"\s+defaults?\s+(?:to|is)\s+" + _LITERAL),
+    # key: 100, "key": 5
+    (STATED, _KEYED + r"\s*:(?!=)\s*" + _LITERAL),
+    # | key | 100 |, | key | int | 100 |
+    (STATED, r"\|\s*" + _KEYED + r"\s*\|\s*(?:`?(?:int|float|str|string|bool|boolean|number)`?\s*\|\s*)?" + _LITERAL
+     + r"\s*(?=\||$)"),
+    # `key` is 100: only a number, since ``x is True`` is mostly a condition in code
+    (STATED, _KEYED + r"\s+is\s+" + _NUMERIC),
+    # key=100, key = 100, key := 100
+    (SET, _KEYED + r"\s*:?=(?!=)\s*" + _LITERAL),
+    # --flag 100
+    (SET, r"(?<![\w-])--(?P<key>[A-Za-z][\w-]*)(?:=|\s+)" + _LITERAL),
+))
+
+
+class Binding(NamedTuple):
+    kind: str  # DEFAULT, STATED, or SET: a value set in one place, which says nothing about a default
+    value: str  # compares by meaning
+    written: str
+
+
+def _is_key(name: str, quote: str) -> bool:
+    """Whether a name reads as a setting: snake_case, kebab-case, camelCase, dotted, or written in backticks."""
+    if quote == "`" or "_" in name or "-" in name or re.search(r"[a-z][A-Z]", name):
+        return True
+    return "." in name and all(len(part) > 1 for part in name.split("."))
+
+
+def _literal(raw: str) -> str | None:
+    """A literal in a form that compares by meaning; None for a null or nothing usable."""
+    value = raw.strip("`\"' ").rstrip(".,")
+    low = value.lower()
+    if not value or low in _NO_VALUE:
+        return None
+    if low in _BOOLEAN:
+        return low
+    if number := _NUMBER.fullmatch(value):
+        digits = number.group(1).replace("_", "").replace(",", "")
+        return _number(Decimal(digits)) + number.group(2).lower()
+    return low
+
+
+def _binds(match: re.Match) -> bool:
+    """Whether a pattern's match names a setting, rather than a word that happens to stand before a value."""
+    groups = match.groupdict()
+    return "quote" not in groups or _is_key(groups["key"].rstrip(".-"), groups["quote"])
+
+
+@lru_cache(maxsize=32768)
+def named_values(text: str) -> dict[str, tuple[Binding, ...]]:
+    """key (lowercase) -> what ``text`` binds it to. Numbers, booleans and short quoted strings; a null is no value."""
+    text = fold_width(text)
+    found: dict[str, list[Binding]] = {}
+    for kind, pattern in _BINDINGS:
+        for match in pattern.finditer(text):
+            if _binds(match) and (value := _literal(match.group("value"))) is not None:
+                written = match.group("value").strip("`\"' ").rstrip(".,")
+                key = match.group("key").rstrip(".-")
+                # MAX_STEPS = 100 declares a constant; it is not one assignment among others.
+                found.setdefault(key.lower(), []).append(Binding(STATED if kind == SET and key.isupper() else kind,
+                                                                 value, written))
+    return {key: tuple(bindings) for key, bindings in found.items()}
+
+
+def _differs(one: str, other: str) -> bool:
+    """Whether two comparable values are different, as far as text can tell."""
+    first, second = _NUMBER.fullmatch(one), _NUMBER.fullmatch(other)
+    if first and second and first.group(2) and second.group(2) and first.group(2) != second.group(2):
+        return False  # 500ms and 1s: units the text does not convert
+    if first and second:
+        return first.group(1) != second.group(1)
+    return one != other and not one.startswith(other + ".") and not other.startswith(one + ".")
+
+
+def named_conflict(claim: str, passage: str, set_counts: bool = True) -> tuple[str, str, str] | None:
+    """(key, claim value, source value) when both texts bind the same key to different values.
+
+    A value set somewhere (``key=100``, ``key = 100``, ``--flag 100``) is not compared with a stated default (``key
+    (default: 3)``, ``key: int = 3``): setting 100 in one place says nothing about the default. Without ``set_counts``,
+    a value the passage sets is not compared at all."""
+    theirs = named_values(passage)
+    for key, ours in named_values(claim).items():
+        pairs = [(a, b) for a in ours for b in theirs.get(key, ())
+                 if {a.kind, b.kind} != {DEFAULT, SET} and (set_counts or b.kind != SET)]
+        if pairs and all(_differs(a.value, b.value) for a, b in pairs):
+            return key, pairs[0][0].written, pairs[0][1].written
+    return None
+
+
+# --- numbers -----------------------------------------------------------------------------------------
+
+# A number or date standing on its own: not part of a name, path, issue reference, time or port, and not the operand
+# of an operator (``lines.length + 1``).
+_QUANTITY = re.compile(r"(?<![A-Za-z0-9_.\-/@#:+%])(?<![-+*/] )(?<!== )(?<!!= )v?(\d{4}-\d{2}-\d{2}|\d+(?:\.\d+)*)"
+                       r"(?:%|[A-Za-z]{1,3}(?![A-Za-z0-9_]))?"
+                       r"(?![A-Za-z0-9_/:]|[.\-][A-Za-z0-9_])")
+_TERMINAL_ESCAPE = re.compile(r"(?:\x1b|\\u001b|\\x1b)\[[0-9;]*[A-Za-z]")  # raw, or as a report stores it
+_NEARBY = 80  # characters read on each side of a number to find the words next to it
+# Units that measure the same thing; a sentence that keeps the digits and changes the unit changes the amount.
+_UNITS = {
+    **dict.fromkeys(("ms", "msec", "millisecond", "milliseconds", "milisegundo", "milisegundos", "毫秒"), "ms"),
+    **dict.fromkeys(("s", "sec", "secs", "second", "seconds", "segundo", "segundos", "秒"), "s"),
+    **dict.fromkeys(("min", "mins", "minute", "minutes", "minuto", "minutos", "分钟"), "min"),
+    **dict.fromkeys(("h", "hr", "hrs", "hour", "hours", "hora", "horas", "小时"), "h"),
+    **dict.fromkeys(("day", "days", "día", "días", "dia", "dias", "天"), "day"),
+    **dict.fromkeys(("week", "weeks", "semana", "semanas", "周", "星期"), "week"),
+    **dict.fromkeys(("month", "months", "mes", "meses", "个月"), "month"),
+    **dict.fromkeys(("year", "years", "año", "años", "年"), "year"),
+    **{size: size for size in ("kb", "mb", "gb", "tb", "pb", "kib", "mib", "gib", "tib", "pib")},
+}
+_UNIT_KINDS = {**dict.fromkeys(("ms", "s", "min", "h", "day", "week", "month", "year"), "time"),
+               **dict.fromkeys(("kb", "mb", "gb", "tb", "pb", "kib", "mib", "gib", "tib", "pib"), "size")}
+_UNIT_AFTER = re.compile(r"\s?(毫秒|分钟|小时|个月|星期|秒|天|周|年|[^\W\d_㐀-鿿]+)")
+
+
+class Quantity(NamedTuple):
+    value: str
+    unit: str | None  # a unit of time or size right after the number
+    written: str  # the number and its unit, as written
+    next_to: frozenset[str]  # the content terms right next to it
+    clause: str
+
+
+def is_date(value: str) -> bool:
+    return "-" in value
+
+
+def _quantity(digits: str) -> str:
+    """The number without zero padding: 0723 and 723, 2.0 and 2 are one value; 3.10 and 3.1 stay two."""
+    if is_date(digits):
+        return digits
+    head, dot, rest = digits.partition(".")
+    head = head.lstrip("0") or "0"
+    return head if not dot or set(rest) == {"0"} else f"{head}.{rest}"
+
+
+def _unbound(text: str) -> str:
+    """``text`` with the values bound to a key blanked: those are for ``named_conflict``, not for number comparison."""
+    for _, pattern in _BINDINGS:
+        text = pattern.sub(lambda match: " " * len(match.group()) if _binds(match) or match.groupdict().get("quote")
+                           else match.group(), text)
+    return text
+
+
+@lru_cache(maxsize=4096)
+def quantities(text: str) -> tuple[Quantity, ...]:
+    """Each number in ``text`` that stands on its own and is not bound to a key."""
+    text = _unbound(_TERMINAL_ESCAPE.sub(" ", normalize(text)))
+    found = []
+    for at, end in _spans(text, _CLAUSE_BREAK):
+        part = text[at:end]
+        for match in _QUANTITY.finditer(part):
+            start = at + match.start()
+            rest = text[at + match.end(1):at + match.end(1) + _NEARBY]
+            before = _content_terms(text[max(0, start - _NEARBY):start])
+            word = _UNIT_AFTER.match(rest)
+            unit = _UNITS.get(word.group(1).lower()) if word else None
+            written = match.group(1) + word.group() if unit else match.group().strip()
+            found.append(Quantity(_quantity(match.group(1)), unit, written,
+                                  frozenset(before[-1:] + _content_terms(rest)[:2]), part.strip()))
+    return tuple(found[:_MOST_PARTS])
+
+
+def units_differ(one: Quantity, other: Quantity) -> bool:
+    """The same number with a different unit of the same kind: 2 minutes and 2 seconds, 512 GB and 512 GiB."""
+    return (one.value == other.value and one.unit is not None and other.unit is not None and one.unit != other.unit
+            and _UNIT_KINDS[one.unit] == _UNIT_KINDS[other.unit])
+
+
+# --- scoped negation ---------------------------------------------------------------------------------
+
+NEGATION_SCOPE = 3  # content words after a cue that it can reach
+# As NEGATION_EN, less what is mostly code (``None``, ``not(...)``, ``is not None``) or names (``--no-cache``), plus
+# the contrasts that put a word aside just as well.
+_CUE = re.compile(r"(?<![-_./`])\b(?:not(?!\(|\s+(?:none|null|nil|undefined)\b)|no longer|no|never|nobody|nothing|neither|"
+                  r"nor|without|cannot|none of|instead of|rather than|\w+n't|skip(?:s|ped|ping)?|"
+                  r"bypass(?:es|ed|ing)?)\b(?![-_])", re.I)
+_ABSOLUTE_WORD = re.compile(r"\b(?:always|every|everyone|everything|never)\b", re.I)
+_PROHIBITION = re.compile(r"^\W*(?:do not|don't|never|skip)\b", re.I)
+
+
+# snake_case, kebab-case, dotted and camelCase names, --flags and call() names, each read as one term here.
+_WHOLE_NAME = re.compile(r"(?<![\w.-])(?:-{0,2}[A-Za-z_]\w*(?:[._-]+\w+)+|--\w+|[a-z]+[A-Z]\w*|[A-Za-z_]\w*\(\))")
+
+
+def plain_words(text: str) -> str:
+    """``text`` without its names and code spans, whose words (``allowed_domains``, ``.enable(``, `` `Closes #1` ``) are
+    no statement of anything."""
+    return _WHOLE_NAME.sub(" ", re.sub(r"`[^`\n]*`", " ", text))
+
+
+def _whole_terms(text: str) -> list[str]:
+    """Content terms in text order, with a name as one lowercase term."""
+    found: list[str] = []
+    at = 0
+    for match in _WHOLE_NAME.finditer(text):
+        found += _content_terms(text[at:match.start()])
+        found.append(match.group().lower())
+        at = match.end()
+    return found + _content_terms(text[at:])
+
+
+def stated_terms(text: str) -> frozenset[str]:
+    return frozenset(_whole_terms(normalize(text)))
+
+
+@lru_cache(maxsize=4096)
+def reached_terms(text: str) -> frozenset[str]:
+    """The terms a negation cue reaches in Latin-script ``text``, the next few of the cue's clause, unless the text
+    also states them plainly: before a cue, or in a clause without one."""
+    reached: set[str] = set()
+    plain: set[str] = set()
+    for part in clauses(text):
+        cues = list(_CUE.finditer(part))
+        plain.update(_whole_terms(part[:cues[0].start()] if cues else part))
+        for match in cues:
+            reached.update(_whole_terms(part[match.end():])[:NEGATION_SCOPE])
+    return frozenset(reached - plain)
+
+
+def has_cue(text: str) -> bool:
+    return bool(_CUE.search(text))
+
+
+def is_absolute(text: str) -> bool:
+    """A statement with ``always``, ``every`` or ``never`` in it. Opening with one, it is an instruction."""
+    match = _ABSOLUTE_WORD.search(text)
+    return bool(match) and bool(re.search(r"\w", text[:match.start()]))
+
+
+def is_prohibition(text: str) -> bool:
+    """A line opening with ``Do not``, ``Never`` or ``Skip``: an instruction, not a statement of how things are."""
+    return bool(_PROHIBITION.match(text))
+
+
+_REMOVED = re.compile(r"\b(?:was|were|been)\s+(?:\w+\s+)?(?:removed|deleted|dropped|retired)\b", re.I)
+
+
+def removed_terms(text: str) -> frozenset[str]:
+    """The content terms before a ``was removed`` (``were deleted``, ``was dropped``...) in ``text``."""
+    match = _REMOVED.search(text)
+    return features(text[:match.start()])[0] if match else frozenset()
