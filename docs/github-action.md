@@ -174,7 +174,7 @@ The CLI leaves `--strict` off and, without `--evidence`, has nothing to contradi
 | `evidence` | `.` | Evidence directory, relative to the workspace. |
 | `exclude` | none | Globs to leave out of the evidence, one per line (see Exclusions); with `memory: auto`, also out of discovery. |
 | `strict` | `"true"` | Fail when any instruction is challenged, conflicted, disputed, has possible counterevidence or (without `diff-base`) names a path that exists nowhere in the evidence. |
-| `references` | `"true"` | Report paths an instruction names that exist nowhere in the evidence (`missing_reference`; see the [quick start](quickstart.md)). `"false"` turns this off. Not used with `diff-base`. |
+| `references` | `"true"` | Report paths an instruction names that exist nowhere in the evidence (`missing_reference`; see the [quick start](quickstart.md)). `"false"` turns this off, and it is the way out of one false report here, since the action does not read reviews. Not used with `diff-base`. |
 | `verifier` | `lexical` | `lexical`, `llm`, `jev`, `dual`, `cascade` or `openai` (see Model verifiers). |
 | `openai-model` | none | `verifier: openai`: the model, as the provider names it. Required with that verifier; there is no default. |
 | `provider` | `openai` | `verifier: openai`: preset base URL and key variable: `openai`, `grok`, `deepseek`, `gemini` or `ollama`. |
