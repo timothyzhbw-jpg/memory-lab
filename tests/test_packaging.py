@@ -1,5 +1,6 @@
 """Package metadata: each version agrees with ``__version__``, and every pin between the packages admits
-the version in this repository, so the five packages install together from one checkout."""
+the version in this repository, so the packages install together from one checkout. The metadata is complete
+enough for PyPI, and the memory-lab meta-distribution installs the others without modules of its own."""
 import ast
 import importlib
 import importlib.util
@@ -20,6 +21,11 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGES = {"memlab-core": ("memcore", "memcore"), "memfalsify": ("memfalsify", "memfalsify"),
             "orgmemory": ("orgmemory", "orgmemory"), "memlab-mcp": ("memlab-mcp", "memlab_mcp"),
             "memlab-ui": ("memlab-ui", "memlab_ui")}
+META = "memory-lab"  # packages/memory-lab: no module, so no __version__ and no import checks
+
+
+def _meta() -> dict:
+    return tomllib.loads((REPO / "packages" / META / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 def _projects() -> dict[str, tuple[dict, str]]:
@@ -51,7 +57,7 @@ def test_pins_between_packages_admit_the_versions_here():
 def test_each_package_ships_the_license():
     """setuptools puts packages/<name>/LICENSE into the sdist and wheel; it must be the repository's."""
     license_text = (REPO / "LICENSE").read_bytes()
-    for directory, _ in PACKAGES.values():
+    for directory in [directory for directory, _ in PACKAGES.values()] + [META]:
         assert (REPO / "packages" / directory / "LICENSE").read_bytes() == license_text, directory
 
 
@@ -61,6 +67,116 @@ def test_changelog_has_an_entry_for_each_current_version():
     for name, (_, version) in _projects().items():
         assert name in sections, f"CHANGELOG.md has no '## {name}' section"
         assert f"\n### {version} - " in sections[name], f"CHANGELOG.md has no {name} {version} entry"
+    if META in sections:  # the section lands when the release's changelog is written; then this line can go
+        assert f"\n### {_meta()['project']['version']} - " in sections[META]
+
+
+# --- the memory-lab meta-distribution -----------------------------------------------------------------------
+
+def _next_minor(version: str) -> str:
+    release = Version(version).release
+    return f"{release[0]}.{release[1] + 1}"
+
+
+def test_meta_distribution_holds_no_modules():
+    config = _meta()
+    assert config["project"]["name"] == META
+    assert config["tool"]["setuptools"]["packages"] == []
+    assert sorted(path.name for path in (REPO / "packages" / META).iterdir()
+                  if path.name not in ("build", "__pycache__") and not path.name.endswith(".egg-info")
+                  ) == ["LICENSE", "README.md", "pyproject.toml"]
+
+
+def test_meta_distribution_installs_the_two_tools_and_offers_the_extras():
+    project = _meta()["project"]
+    assert [Requirement(r).name for r in project["dependencies"]] == ["memfalsify", "orgmemory"]
+    extras = {name: [Requirement(r) for r in values] for name, values in project["optional-dependencies"].items()}
+    assert sorted(extras) == ["all", "jev", "llm", "mcp", "openai", "ui"]
+    assert [(r.name, r.extras) for r in extras["ui"]] == [("memlab-ui", set())]
+    assert [(r.name, r.extras) for r in extras["mcp"]] == [("memlab-mcp", set())]
+    memfalsify_extras = _projects()["memfalsify"][0]["optional-dependencies"]
+    for name in ("llm", "jev", "openai", "all"):  # each passes through to the memfalsify extra of that name
+        assert name in memfalsify_extras
+        assert [(r.name, r.extras) for r in extras[name]] == [("memfalsify", {name})]
+
+
+def test_meta_distribution_pins_admit_exactly_one_minor_of_each_package():
+    """CHANGELOG.md's rule, and the versions here: the floor is in this minor, the next minor is out."""
+    project = _meta()["project"]
+    projects = _projects()
+    requirements = project["dependencies"] + [r for extra in project["optional-dependencies"].values() for r in extra]
+    for requirement in map(Requirement, requirements):
+        version = projects[requirement.name][1]
+        assert requirement.specifier.contains(version), f"{requirement} excludes {version}"
+        assert not requirement.specifier.contains(_next_minor(version)), f"{requirement} admits another minor"
+        assert Version(version).release[:2] == _floor(requirement).release[:2], f"{requirement} admits another minor"
+
+
+def test_the_meta_pin_check_catches_a_pin_that_is_too_wide():
+    assert Requirement("memfalsify>=0.4,<0.6").specifier.contains(_next_minor("0.4.0"))
+
+
+# --- ready for PyPI -----------------------------------------------------------------------------------------
+
+def _all_projects() -> dict[str, dict]:
+    return {**{name: project for name, (project, _) in _projects().items()}, META: _meta()["project"]}
+
+
+def _ci_python_versions() -> set[str]:
+    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    return set(re.findall(r'"(3\.\d+)"', re.search(r"^\s+python-version: \[(.*)\]$", workflow, re.MULTILINE).group(1)))
+
+
+def test_each_package_has_the_metadata_pypi_shows():
+    for name, project in _all_projects().items():
+        assert project["description"] and project["keywords"], name
+        assert project["readme"] == "README.md" and project["requires-python"] == ">=3.10", name
+        assert project["license"] == "Apache-2.0", name
+        assert {"Homepage", "Documentation", "Repository", "Issues", "Changelog"} <= set(project["urls"]), name
+        assert all(url.startswith("https://github.com/timothyzhbw-jpg/memory-lab") for url in project["urls"].values())
+
+
+def test_classifiers_name_the_python_versions_ci_tests():
+    tested = _ci_python_versions()
+    assert tested >= {"3.10", "3.13"}
+    for name, project in _all_projects().items():
+        classified = {c.rsplit(" :: ", 1)[1] for c in project["classifiers"]
+                      if re.fullmatch(r"Programming Language :: Python :: 3\.\d+", c)}
+        assert classified == tested, name
+
+
+def test_license_stays_an_spdx_expression():
+    """PEP 639: setuptools refuses a License classifier next to the license expression."""
+    for name, project in _all_projects().items():
+        assert not [c for c in project["classifiers"] if c.startswith("License ::")], name
+
+
+def test_servers_that_need_posix_say_so_in_their_classifiers():
+    for name, project in _all_projects().items():
+        systems = {c for c in project["classifiers"] if c.startswith("Operating System ::")}
+        if name in ("memlab-mcp", "memlab-ui"):
+            assert systems == {"Operating System :: MacOS", "Operating System :: POSIX :: Linux"}, name
+        else:
+            assert systems == {"Operating System :: OS Independent"}, name
+
+
+def test_package_readmes_link_only_absolute_urls():
+    """PyPI renders the README away from the repository: a relative link or image would break there."""
+    for directory in [directory for directory, _ in PACKAGES.values()] + [META]:
+        text = (REPO / "packages" / directory / "README.md").read_text(encoding="utf-8")
+        links = re.findall(r"\]\(([^)\s]+)", text) + re.findall(r"(?:src|href)=[\"']([^\"']+)", text)
+        assert links, directory
+        assert [link for link in links if not link.startswith("https://")] == [], directory
+
+
+def test_dists_table_lists_every_package_here():
+    spec = importlib.util.spec_from_file_location("dists", REPO / "scripts" / "dists.py")
+    dists = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dists)
+    expected = {name: directory for name, (directory, _) in PACKAGES.items()} | {META: META}
+    assert dists.PACKAGES == expected and dists.RELEASE == META
+    assert sorted(path.name for path in (REPO / "packages").iterdir() if (path / "pyproject.toml").is_file()) == \
+        sorted(expected.values())
 
 
 # The names each module defined in released versions of the packages here (from their tags; see _source).

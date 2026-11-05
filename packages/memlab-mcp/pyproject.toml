@@ -9,6 +9,22 @@ description = "Read-only Model Context Protocol server for MemFalsify and Verifi
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
+keywords = ["mcp", "model-context-protocol", "agent-memory", "ai-agents", "read-only"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
 dependencies = [
     "memlab-core>=0.4,<0.5",
     "memfalsify>=0.5,<0.6",
@@ -20,6 +36,9 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/timothyzhbw-jpg/memory-lab"
+Documentation = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/docs/mcp.md"
+Repository = "https://github.com/timothyzhbw-jpg/memory-lab"
+Issues = "https://github.com/timothyzhbw-jpg/memory-lab/issues"
 Changelog = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]

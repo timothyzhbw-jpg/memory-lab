@@ -1,0 +1,8 @@
+# The tools that build and check the distributions: .github/workflows/publish.yml and scripts/rehearse_install.py
+# install the hash-locked publish-requirements.txt made from this file (scripts/update-action-lock.sh regenerates it).
+# setuptools is the build backend of packages/*/pyproject.toml; builds run with --no-isolation so that this lock,
+# not whatever the index serves that day, decides what built the files. readme-renderer[md] lets twine check Markdown.
+build
+twine
+readme-renderer[md]
+setuptools>=77
