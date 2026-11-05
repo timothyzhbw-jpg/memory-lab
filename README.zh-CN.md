@@ -13,16 +13,18 @@
 
 [15 分钟教程](docs/tutorial.zh-CN.md)在 `examples/` 的临时副本上把两个工具走一遍。
 
+两个工具如何衔接：[docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) 讲清两者的关系，并逐字段说明 MemFalsify 的一条发现如何变成 orgmemory 的一个事件。[examples/closed-loop](examples/closed-loop/README.zh-CN.md) 用一条命令在合成数据上跑完整条链，从 `MEMORY.md` 里的一行，一直到谁批准了它、有没有这个权限。
+
 `记住 → 验证 → 质疑 → 裁决 → 演进`
 
-项目包含两个相互独立的工具，共用一个证据核心：
+项目包含两个相互独立的工具，共用一个证据核心。MemFalsify 问一条记忆有没有证据，orgmemory 问是谁放进去的、有没有这个权限，因为写入记忆本身就是一次组织决策：
 
 | | **MemFalsify** | **可验证的组织记忆**（`orgmemory`） |
 |---|---|---|
 | 回答的问题 | 这条记忆有证据支撑吗？ | 这是当前的、经过授权的状态吗？ |
 | 输入 | `MEMORY.md` 或各家 Agent 的指令文件（`CLAUDE.md`、`AGENTS.md`、Cursor、Copilot、Gemini、Windsurf）+ 一个证据文件目录 | 事件日志 + 角色权限策略 + 证据清单 |
 | 输出 | 审计报告：引用原文、发现的问题、建议操作 | 每个议题的当前状态、决策来源、审计轨迹、决策流程审计、ADR 导出 |
-| 会写入什么 | 不写入任何东西（只输出你要求的报告） | 回放和审计时不写入；`append` 和 GitHub、Jira 导入工具只追加；`export` 只在数据集之外新建文件 |
+| 会写入什么 | 不改动你的记忆和证据：只写你要求的报告、`init` 生成的示例，以及 `evidence from-git` 写到 `--output` 的文件 | 回放和审计时不写入；`append` 和 GitHub、Jira 导入工具只追加；`export` 只在数据集之外新建文件 |
 
 默认完全离线运行，不需要任何 API key；可以选择开启模型验证（Claude 和 TypeSafe AI 的 Jev）。需要 Python 3.10+，许可证 Apache-2.0。
 
@@ -40,13 +42,21 @@
 
 ## 快速上手
 
+从一份全新的检出到第一份报告，全程离线，不需要 API key。PyPI 上暂时还没有这些包，所以第一段从检出目录安装（Python 3.10+）：
+
 ```bash
 git clone https://github.com/timothyzhbw-jpg/memory-lab && cd memory-lab
 python -m venv .venv && source .venv/bin/activate
 pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
 ```
 
-按需安装即可：`memcore` 加上任意一个工具就能单独使用。需要模型验证时再装 `pip install -e 'packages/memfalsify[all]'`。
+```bash
+memfalsify init demo --lang zh && cd demo && memfalsify audit
+```
+
+报告里有一条证据似乎与之矛盾的记忆（两边原文都会列出）、一条有支持证据的记忆和一条没有证据的记忆。在你自己的仓库里，直接运行 `memfalsify audit` 会检查它找到的每个智能体指令文件和 `MEMORY.md`，与仓库其余内容对照。[docs/quickstart.zh-CN.md](docs/quickstart.zh-CN.md) 讲解如何读报告和下一步，包括把提交说明变成证据的 `memfalsify evidence from-git`。
+
+下面的示例在检出的仓库根目录运行。按需安装即可：`memcore` 加上任意一个工具就能单独使用。需要模型验证时再装 `pip install -e 'packages/memfalsify[all]'`。
 
 更习惯用浏览器？`pip install -e packages/memlab-ui` 后运行 `memlab-ui --root examples`，就会打开一个覆盖两个工具的本地只读网页（见[网页](#网页)）。它需要 macOS 或 Linux：与 MCP 服务器一样，在 Windows 上会以退出码 2 结束。
 
@@ -573,11 +583,11 @@ POSIX `O_NOFOLLOW` 和 `dir_fd` 支持，因此在 Windows 上会拒绝启动并
 | `--verifier` | 谁来判断 | 需要什么 | 取舍 |
 |---|---|---|---|
 | `lexical`（默认） | 词语重合、反义词、数字、否定 | 无 | 离线、结果确定、可解释；识别不了换种说法的表述 |
-| `llm` | Claude 阅读证据并写出判断理由（`--llm-model`，默认 `claude-opus-5-5`） | `pip install 'memfalsify[llm]'` 和 Anthropic 凭据 | 能理解换说法和上下文；按调用计费，**会把记忆和证据原文发给 Anthropic API** |
-| `jev` | [Jev](https://docs.typesafe.ai)：TypeSafe AI 的判断模型，只做决策不生成文字，在三种关系中选一个并给出各自的概率（`--jev-model`，默认 `jev-latest`） | `pip install 'memfalsify[jev]'` 和 `TYPESAFE_API_KEY` | 成本只有 LLM 评委的零头，带校准过的置信度；没有文字解释，**会把记忆和证据原文发给 TypeSafe API** |
+| `llm` | Claude 阅读证据并写出判断理由（`--llm-model`，默认 `claude-opus-5-5`） | `pip install -e 'packages/memfalsify[llm]'` 和 Anthropic 凭据 | 能理解换说法和上下文；按调用计费，**会把记忆和证据原文发给 Anthropic API** |
+| `jev` | [Jev](https://docs.typesafe.ai)：TypeSafe AI 的判断模型，只做决策不生成文字，在三种关系中选一个并给出各自的概率（`--jev-model`，默认 `jev-latest`） | `pip install -e 'packages/memfalsify[jev]'` 和 `TYPESAFE_API_KEY` | 成本只有 LLM 评委的零头，带校准过的置信度；没有文字解释，**会把记忆和证据原文发给 TypeSafe API** |
 | `dual` | `llm` 和 `jev` 各自独立判断 | 两者都要 | 意见一致就照常输出；不一致就标为 `disputed`，报告里列出双方意见 |
 | `cascade` | 先问 `jev`；只有 Jev 的置信度低于 `--accept-at`（默认 0.8）时才问 Claude | 两者都要 | Jev 大多有把握时，成本接近只用 Jev；报告里会同时显示 Jev 没把握的意见和 Claude 的判断。Jev 有把握的答案不会再被交叉核对 |
-| `openai` | 任何兼容 OpenAI Chat Completions API 的模型阅读证据并写出判断理由：OpenAI、xAI Grok、DeepSeek、Google Gemini 或本地 Ollama（`--provider`），也可以是其他端点（`--base-url`）。`--openai-model` 必填 | `pip install 'memfalsify[openai]'`，以及服务商对应变量里的 key（`--api-key-env` 可指定别的变量）；Ollama 不需要 | 与 `llm` 相同的提示和判断格式，模型由你选；**会把记忆和证据原文发到配置的端点**，用 Ollama 时数据留在本机 |
+| `openai` | 任何兼容 OpenAI Chat Completions API 的模型阅读证据并写出判断理由：OpenAI、xAI Grok、DeepSeek、Google Gemini 或本地 Ollama（`--provider`），也可以是其他端点（`--base-url`）。`--openai-model` 必填 | `pip install -e 'packages/memfalsify[openai]'`，以及服务商对应变量里的 key（`--api-key-env` 可指定别的变量）；Ollama 不需要 | 与 `llm` 相同的提示和判断格式，模型由你选；**会把记忆和证据原文发到配置的端点**，用 Ollama 时数据留在本机 |
 
 ```bash
 memfalsify audit MEMORY.md --evidence evidence --verifier dual

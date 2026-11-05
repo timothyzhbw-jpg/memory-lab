@@ -195,7 +195,7 @@ def test_cli_stdout_with_crlf_is_normalized_before_it_is_hashed():
 
 
 def test_the_work_directory_goes_through_no_symlink(tmp_path, make_symlink):
-    """`orgmemory append` refuses a path through a symlink, and the default temporary directory on macOS is one."""
+    """The expected reports should not depend on a link above the work directory, like macOS's default temp."""
     (tmp_path / "real").mkdir()
     make_symlink(tmp_path / "link", tmp_path / "real", directory=True)
     assert run_demo.work_directory(tmp_path / "link" / "run") == (tmp_path / "real" / "run").resolve()

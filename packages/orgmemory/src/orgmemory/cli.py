@@ -36,7 +36,15 @@ policy_app = typer.Typer(no_args_is_help=True,
                          help="Record effective-dated role changes in policy-log.jsonl (append-only).")
 app.add_typer(policy_app, name="policy")
 
-DATASET = typer.Argument(..., exists=True, file_okay=False,
+def _settle_dataset(dataset: Optional[Path]) -> Optional[Path]:
+    """Resolve links above the dataset once: those are the machine's, like /tmp and /var on macOS.
+
+    The dataset directory itself and everything below it stay unresolved, so a link there is still refused.
+    """
+    return None if dataset is None else dataset.parent.resolve() / dataset.name
+
+
+DATASET = typer.Argument(..., exists=True, file_okay=False, callback=_settle_dataset,
                          help="Directory with events.jsonl, policy.json, evidence.jsonl and optionally policy-log.jsonl")
 
 
@@ -68,6 +76,14 @@ def _echo_exact(text: str) -> None:
 
 def _as_of(value: Optional[str], flag: str = "--as-of") -> Optional[datetime]:
     return _moment(value, flag) if value is not None else None
+
+
+def _append(path: Path, record: dict) -> None:
+    """Append one record. A link in the dataset is refused, not followed, and that refusal is a clean exit 2."""
+    try:
+        append_jsonl(path, record)
+    except (ValueError, OSError) as exc:
+        _fail(f"cannot append to {path.name}: a part of its path is a link or not a directory ({exc})")
 
 
 def _load(dataset: Path) -> Dataset:
@@ -228,7 +244,7 @@ def append_command(dataset: Path = DATASET,
         Dataset(data.events + [new], data.policy, data.evidence, data.policy_log)
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
-    append_jsonl(dataset / "events.jsonl", new.model_dump(mode="json", exclude_none=True))
+    _append(dataset / "events.jsonl", new.model_dump(mode="json", exclude_none=True))
     typer.echo(f"appended {terminal_text(new.id)}")
 
 
@@ -243,7 +259,7 @@ def _record_role_change(dataset: Path, action: str, id: str, timestamp: str, act
         Dataset(data.events, data.policy, data.evidence, [*(data.policy_log or []), change])
     except (ValidationError, ValueError) as exc:
         _fail(str(exc))
-    append_jsonl(dataset / POLICY_LOG, change.model_dump(mode="json", exclude_none=True))
+    _append(dataset / POLICY_LOG, change.model_dump(mode="json", exclude_none=True))
     typer.echo(f"appended {terminal_text(change.id)} to {POLICY_LOG}")
 
 
@@ -307,7 +323,7 @@ def evidence_add(
                               captured_at=captured_at, locator=span.media.locator if span.media else None)
     except (ValidationError, ValueError, OSError) as exc:
         _fail(str(exc))
-    append_jsonl(manifest, entry.model_dump(mode="json"))
+    _append(manifest, entry.model_dump(mode="json"))
     where = span.location if span.media is None else f"{span.citation} ({span.media.label} {span.location})"
     typer.echo(terminal_text(f"registered {id} at {where}"))
 

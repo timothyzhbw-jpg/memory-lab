@@ -15,6 +15,64 @@ Release 0.5 contains:
 | `packages/memlab-mcp` | `memlab-mcp` | 0.5.0 | 0.4.0 |
 | `packages/memlab-ui` | `memlab-ui` | 0.1.0 | none (new) |
 
+## Unreleased
+
+### Added
+
+- memfalsify: `memfalsify init [DIR]` (default `memfalsify-demo`, `--lang en|zh`) writes a small offline demo:
+  `MEMORY.md` with three claims, `evidence/` with two files and an empty `reviews.jsonl`. `memfalsify audit` inside it
+  shows one possible contradiction with both quotes, one piece of supporting evidence and one unsupported claim. It
+  refuses with exit 2, writing nothing, if a target exists. The templates ship in the wheel.
+- memfalsify: the MEMORY argument of `memfalsify audit` is now optional. Left out, the command takes every instruction
+  file `memfalsify discover` finds in the current directory plus a top-level `MEMORY.md`, in path order, and compares
+  them with that directory or `--evidence`. The evidence follows the rules of the Action and the web page, which keep
+  Memory Lab's own files (review records, decision logs, generated reports) out of it. One line on stderr says which
+  files were chosen. Several files share one Markdown or HTML report, and a claim stated in several files is reported
+  once. `--format json` prints one `AuditSet` object at any file count. `--strict` keeps its meaning across the files.
+  An empty choice exits 2 and suggests `memfalsify init`. Runs that name a file print the same bytes as 0.5.0
+  (`tests/fixtures/audit-explicit`).
+- memfalsify: `memfalsify evidence from-git --since WHEN --output DIR [--repo DIR] [--max-commits N]` writes one small
+  Markdown file per commit, named by its short hash: subject, body, author date and full hash. The same commits give
+  the same bytes and a re-run adds only new files. `--since` takes a date or a revision, validated like the other
+  revision inputs. Commit messages are treated as untrusted: names come from the hash, and control, bidi and
+  zero-width characters are stored as visible `\uXXXX` escapes, so printing a file is safe. A GitHub version is on the
+  roadmap.
+- memfalsify: public API `memfalsify.AuditSet` and `memfalsify.audit_directory`.
+- memlab (`packages/memlab`, new): a meta-distribution holding no modules. It installs `memfalsify` and `orgmemory`,
+  with the extras `ui` (memlab-ui), `mcp` (memlab-mcp), `llm`, `jev`, `openai` and `all` (the last four pass through to
+  memfalsify's extras of those names). Its version names the release. It is called `memlab` because PyPI treats
+  `memory-lab` as the existing project `memorylab`: see [docs/publishing.md](docs/publishing.md#the-name-memlab).
+- Repository: `docs/architecture.md` and `docs/architecture.zh-CN.md`: how MemFalsify and orgmemory relate, the data
+  flow across Remember, Verify, Challenge, Resolve and Evolve, the field-by-field mapping from a finding to an event,
+  and why orgmemory keeps its eight event actions.
+- Repository: `examples/closed-loop/`: a runnable demo on synthetic data. A small git repository, `memfalsify audit` and
+  `history`, `to_events.py` (standard library only) and the real `orgmemory evidence add`, `append`, `audit` and
+  `explain`. An approval from someone without the permission is recorded and ignored; a person who holds it rejects the
+  line, and the correction goes through the loop again. The expected reports are committed, and
+  `tests/test_closed_loop.py` runs the demo from scratch with the real CLIs and compares them.
+- Repository: `docs/quickstart.md` and `docs/quickstart.zh-CN.md`: the path to a first report, how to read it, running
+  it in your own repository, and git history as evidence.
+- Repository: `.github/workflows/publish.yml`, a manual workflow that publishes to PyPI through Trusted Publishing, in
+  dependency order. It starts only from "Run workflow", takes a typed `confirm` that must equal the built memlab
+  version, and by default (`target: build-only`) uploads nothing. Nothing has been published yet. What the owner does
+  once on pypi.org, and the dry runs: [docs/publishing.md](docs/publishing.md).
+- Repository: `scripts/dists.py` builds every sdist and wheel with hash-locked tools
+  (`scripts/publish-requirements.txt`) and checks them against the checkout. `scripts/rehearse_install.py` installs them
+  in a fresh virtualenv and runs the commands. CI's new `packaging` job runs the rehearsal on every push.
+
+### Changed
+
+- memlab-core, memfalsify, orgmemory, memlab-mcp, memlab-ui: PyPI metadata (keywords, classifiers for Python 3.10 to
+  3.13, and `Documentation`, `Repository` and `Issues` links), and READMEs that stand alone on PyPI, with an install
+  line and a link in place of "the root README". memlab-mcp and memlab-ui declare macOS and Linux as their operating
+  systems.
+
+### Fixed
+
+- orgmemory: `append`, `evidence add` and `policy grant`/`revoke` accept a dataset path that goes through a link above
+  the dataset, such as `/tmp` or `/var` on macOS; they used to end in a traceback. A link at the dataset directory or
+  below it is still refused, now as a clean exit 2.
+
 ## Release 0.5
 
 Release 0.5 contains memlab-core 0.4.0, memfalsify 0.5.0, orgmemory 0.4.1, memlab-mcp 0.5.0 and the new
@@ -812,6 +870,12 @@ Changes are collected in the [release 0.4 section](#release-04).
 ### 0.1.0 - 2026-10-12
 
 First release. Changes are collected in the [release 0.5 section](#release-05).
+
+## memlab
+
+### 0.5.0 - Unreleased
+
+First version. See [Unreleased](#unreleased).
 
 ## Repository
 

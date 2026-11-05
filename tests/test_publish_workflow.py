@@ -75,7 +75,7 @@ def test_every_input_must_be_chosen_and_the_default_uploads_nothing():
     target = _block(inputs, "target", 6)
     assert "default: build-only" in target and re.findall(r"- ([\w-]+)$", target, re.MULTILINE) == \
         ["build-only", "testpypi", "pypi"]
-    assert "default: memory-lab" in _block(inputs, "stop-after", 6)
+    assert "default: memlab" in _block(inputs, "stop-after", 6)
 
 
 def test_uploads_run_only_on_the_right_target_after_the_build():
@@ -169,7 +169,7 @@ def test_the_build_tools_lock_is_exact_and_hashed():
 
 def test_uploads_follow_the_dependency_order():
     order = list(dists.PACKAGES)
-    assert order[0] == "memlab-core" and order[-1] == "memory-lab"
+    assert order[0] == "memlab-core" and order[-1] == "memlab"
     for job in ("publish", "dry-run"):
         assert re.findall(r"packages-dir: dist/([\w-]+)", _jobs()[job]) == order, job
     position = {name: index for index, name in enumerate(order)}
@@ -220,7 +220,8 @@ def _metadata(name, version, requires=(), readme="# Readme\n"):
     return ("\n".join(lines) + "\n\n" + readme).encode("utf-8")
 
 
-def _write_dist(out, name, version, *, requires=(), readme="# Readme\n", wheel_version=None, sdist_version=None):
+def _write_dist(out, name, version, *, requires=(), readme="# Readme\n", wheel_version=None, sdist_version=None,
+                wheel_requires=None):
     """A wheel and an sdist holding what the real ones hold: only metadata and the required files."""
     directory = out / name
     directory.mkdir(parents=True)
@@ -228,7 +229,8 @@ def _write_dist(out, name, version, *, requires=(), readme="# Readme\n", wheel_v
     module = dists.MODULES.get(name)
     with zipfile.ZipFile(directory / f"{stem}-{version}-py3-none-any.whl", "w") as archive:
         info = f"{stem}-{version}.dist-info"
-        archive.writestr(f"{info}/METADATA", _metadata(name, wheel_version or version, requires, readme))
+        archive.writestr(f"{info}/METADATA", _metadata(name, wheel_version or version,
+                                                       requires if wheel_requires is None else wheel_requires, readme))
         archive.writestr(f"{info}/licenses/LICENSE", b"license\n")
         if module:
             archive.writestr(f"{module}/py.typed", b"")
@@ -253,14 +255,14 @@ def built(tmp_path):
     out = tmp_path / "dist"
     versions = _versions()
     requires = {"memfalsify": [f"memlab-core<9,>={versions['memlab-core']}"],
-                "memory-lab": [f"memfalsify<9,>={versions['memfalsify']}", 'memfalsify[llm]<9; extra == "llm"']}
+                "memlab": [f"memfalsify<9,>={versions['memfalsify']}", 'memfalsify[llm]<9; extra == "llm"']}
     for name, version in versions.items():
         _write_dist(out, name, version, requires=requires.get(name, ()))
     return out
 
 
 def _release():
-    return _versions()["memory-lab"]
+    return _versions()["memlab"]
 
 
 def test_check_passes_files_that_match(built, capsys):
@@ -275,7 +277,7 @@ def test_check_writes_the_built_files_to_the_job_summary(built, tmp_path):
     text = summary.read_bytes().decode("utf-8")
     assert text.startswith("before\n## Built files\n") and "\r" not in text
     version = _release()
-    assert f"`memory_lab-{version}-py3-none-any.whl`" in text and len(re.findall(r"`[0-9a-f]{64}`", text)) == 12
+    assert f"`memlab-{version}-py3-none-any.whl`" in text and len(re.findall(r"`[0-9a-f]{64}`", text)) == 12
 
 
 @pytest.mark.parametrize("confirm", ["9.9.9", "", "v0.5.0", "0.5.0 ", "0.5.0\n::error::forged", "-x", "\x1b[2J"])
@@ -298,7 +300,7 @@ def test_check_refuses_a_version_that_differs_from_the_checkout(tmp_path, capsys
     assert "memfalsify: the wheel holds version 9.9.9" in capsys.readouterr().out
 
 
-def test_check_refuses_when_a_file_name_and_its_metadata_disagree(tmp_path, capsys):
+def test_check_refuses_when_only_the_wheel_holds_another_version(tmp_path, capsys):
     out = tmp_path / "dist"
     versions = _versions()
     for name, version in versions.items():
@@ -329,6 +331,14 @@ def test_check_refuses_a_pin_that_excludes_a_built_version(tmp_path, capsys):
     assert "memfalsify: its pin memlab-core>=99 excludes the built memlab-core" in capsys.readouterr().out
 
 
+def test_check_reads_the_pins_in_the_wheel_as_well_as_the_sdist(tmp_path, capsys):
+    out = tmp_path / "dist"
+    for name, version in _versions().items():
+        _write_dist(out, name, version, wheel_requires=["memlab-core>=99"] if name == "memfalsify" else None)
+    assert dists.check(out, _release(), environ={}) == 1
+    assert "memfalsify: its pin memlab-core>=99 excludes the built memlab-core" in capsys.readouterr().out
+
+
 def test_check_refuses_a_relative_readme_link(tmp_path, capsys):
     out = tmp_path / "dist"
     for name, version in _versions().items():
@@ -351,9 +361,9 @@ def test_check_refuses_modules_in_the_meta_wheel_and_a_missing_image(tmp_path, c
     out = tmp_path / "dist"
     for name, version in _versions().items():
         _write_dist(out, name, version)
-    wheel = next((out / "memory-lab").glob("*.whl"))
+    wheel = next((out / "memlab").glob("*.whl"))
     with zipfile.ZipFile(wheel, "a") as archive:
-        archive.writestr("memory_lab/__init__.py", b"")
+        archive.writestr("memlab/__init__.py", b"")
     wheel = next((out / "memlab-ui").glob("*.whl"))
     with zipfile.ZipFile(wheel) as archive:
         kept = {n: archive.read(n) for n in archive.namelist() if not n.endswith("ui-dark.png")}
@@ -363,8 +373,12 @@ def test_check_refuses_modules_in_the_meta_wheel_and_a_missing_image(tmp_path, c
             archive.writestr(entry, body)
     assert dists.check(out, _release(), environ={}) == 1
     printed = capsys.readouterr().out
-    assert "memory-lab: the wheel should hold no modules" in printed
+    assert "memlab: the wheel should hold no modules" in printed
     assert "memlab-ui: the wheel holds no memlab_ui/static/ui-dark.png" in printed
+
+
+def test_relative_links_finds_reference_style_targets():
+    assert dists.relative_links("See [docs][d] and [site][s].\n\n[d]: docs/a.md\n[s]: https://x.example\n") == ["docs/a.md"]
 
 
 def test_relative_links_finds_markdown_and_html_forms():
@@ -391,14 +405,14 @@ def test_rehearsal_proves_nothing_of_ours_came_from_the_index():
 
 
 @pytest.mark.parametrize("extras, needed", [
-    ((), ["memlab-core", "memfalsify", "orgmemory", "memory-lab"]),
-    (("llm",), ["memlab-core", "memfalsify", "orgmemory", "memory-lab"]),
-    (("ui",), ["memlab-core", "memfalsify", "orgmemory", "memlab-ui", "memory-lab"]),
-    (("ui", "mcp"), ["memlab-core", "memfalsify", "orgmemory", "memlab-mcp", "memlab-ui", "memory-lab"]),
+    ((), ["memlab-core", "memfalsify", "orgmemory", "memlab"]),
+    (("llm",), ["memlab-core", "memfalsify", "orgmemory", "memlab"]),
+    (("ui",), ["memlab-core", "memfalsify", "orgmemory", "memlab-ui", "memlab"]),
+    (("ui", "mcp"), ["memlab-core", "memfalsify", "orgmemory", "memlab-mcp", "memlab-ui", "memlab"]),
 ])
 def test_rehearsal_installs_the_wheels_the_built_metadata_asks_for(tmp_path, extras, needed):
     out = tmp_path / "dist"
-    requires = {"memory-lab": ["memfalsify<9,>=0", "orgmemory<9,>=0", 'memlab-ui<9,>=0; extra == "ui"',
+    requires = {"memlab": ["memfalsify<9,>=0", "orgmemory<9,>=0", 'memlab-ui<9,>=0; extra == "ui"',
                                'memlab-mcp<9,>=0; extra == "mcp"', 'memfalsify[llm]<9,>=0; extra == "llm"',
                                'pydantic>=2; extra == "llm"'],
                 "memfalsify": ["memlab-core<9,>=0", "typer>=0", 'memfalsify[llm]; extra == "all"'],
@@ -414,7 +428,7 @@ def test_rehearsal_installs_the_wheels_the_built_metadata_asks_for(tmp_path, ext
 @pytest.mark.parametrize("name", ["docs/publishing.md", "docs/publishing.zh-CN.md"])
 def test_publishing_docs_spell_out_what_the_owner_types(name):
     text = (ROOT / name).read_text(encoding="utf-8")
-    for needed in ("timothyzhbw-jpg", "`memory-lab`", "`publish.yml`", "`pypi`", "`testpypi`", "stop-after",
+    for needed in ("timothyzhbw-jpg", "`memlab`", "`publish.yml`", "`pypi`", "`testpypi`", "stop-after",
                    "https://pypi.org/manage/account/publishing/", "https://pypi.org/account/register/",
                    "https://test.pypi.org/manage/account/publishing/", "memorylab",
                    # PyPI's own messages for the two things that stop a first publication

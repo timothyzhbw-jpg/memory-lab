@@ -6,7 +6,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "memory-lab"
+name = "memlab"
 version = "0.5.0"
 description = "Installs MemFalsify and orgmemory together: audit agent memory against evidence, replay team decisions"
 readme = "README.md"

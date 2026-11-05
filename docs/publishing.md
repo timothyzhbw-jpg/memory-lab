@@ -7,27 +7,13 @@ Publishing is one manual workflow, [`.github/workflows/publish.yml`](../.github/
 no password or API token is stored anywhere. Steps 1 to 3 are done once, by the repository owner, because they need
 his PyPI account. After that, each release is one press of the button in step 4.
 
-## Before you start: the name `memory-lab`
+## The name `memlab`
 
-PyPI refuses a new name that equals an existing one after it drops `-`, `_` and `.` and treats `l` and `i` as `1` and
-`o` as `0`. The project [`memorylab`](https://pypi.org/project/memorylab/) exists (one release, 0.0.1, March 2025), so
-for `memory-lab` the form in step 3 will answer "This project name is too similar to an existing project". This comes
-from PyPI's source code and its project list as of 2026-11-04; nobody has tried the form, because that needs the
-account. `memlab-core`, `memfalsify`, `orgmemory`, `memlab-mcp` and `memlab-ui` have no such collision. TestPyPI has
-no `memorylab`, so a dry run there succeeds and says nothing about this.
-
-Pick one before step 3:
-
-- **Publish five packages and leave `memory-lab` out.** Stop after round 5 in step 3, and choose
-  `stop-after: memlab-ui` for later releases. Nothing else changes. The install line becomes
-  `pip install memfalsify orgmemory`, and `memlab-ui` and `memlab-mcp` install by their own names.
-- **Rename the meta-distribution.** `memlab` has no collision as of 2026-11-04. Change `name` in
-  `packages/memory-lab/pyproject.toml`, then the name in that directory's README, `scripts/dists.py`,
-  `scripts/rehearse_install.py`, `publish.yml`, this page and `tests/test_packaging.py`;
-  `tests/test_publish_workflow.py` fails on any place you miss.
-- **Ask for the name.** Write to the owner of `memorylab`, or file a [PEP 541](https://peps.python.org/pep-0541/)
-  request at [pypi/support](https://github.com/pypi/support). This takes weeks or more, and the outcome is theirs to
-  decide. The first option works in the meantime.
+The package that installs everything is called `memlab`, not `memory-lab`. PyPI refuses a new name that equals an
+existing one after it drops `-`, `_` and `.` and treats `l` and `i` as `1` and `o` as `0`, and the project
+[`memorylab`](https://pypi.org/project/memorylab/) exists (one release, 0.0.1, March 2025). This comes from PyPI's
+source code and its project list as of 2026-11-04; nobody has tried the form with that name, because that needs the
+account. `memlab`, `memlab-core`, `memfalsify`, `orgmemory`, `memlab-mcp` and `memlab-ui` have no such collision.
 
 ## 1. PyPI account (once)
 
@@ -78,7 +64,7 @@ For each round below:
 | 3 | `orgmemory` | `orgmemory` |
 | 4 | `memlab-mcp` | `memlab-mcp` |
 | 5 | `memlab-ui` | `memlab-ui` |
-| 6 | `memory-lab` | `memory-lab` |
+| 6 | `memlab` | `memlab` |
 
 Round 6 needs the decision above about that name. A pending publisher does not reserve a name, so go straight from
 adding it to pressing the button.
@@ -90,18 +76,18 @@ Open <https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/publish.ym
 | Field | Value |
 |---|---|
 | Use workflow from | `main` |
-| confirm | the version in `packages/memory-lab/pyproject.toml` |
+| confirm | the version in `packages/memlab/pyproject.toml` |
 | target | `pypi` |
-| stop-after | during step 3, the project of the round. Later, `memory-lab`, or `memlab-ui` while that name is left out |
+| stop-after | during step 3, the project of the round. Later, `memlab` |
 
 Press the green **Run workflow**. The run then does this:
 
 1. **Build and check every package** builds an sdist and a wheel of all six packages, runs `twine check --strict`, and
    compares the files with this checkout and with your `confirm` value. A `confirm` that differs from the built
-   memory-lab version stops the run here, before any upload. The job's summary lists each file with its SHA-256.
+   memlab version stops the run here, before any upload. The job's summary lists each file with its SHA-256.
 2. If you added a required reviewer, press **Review deployments**, then **Approve and deploy**.
 3. **Upload to PyPI** uploads in dependency order: `memlab-core`, `memfalsify`, `orgmemory`, `memlab-mcp`, `memlab-ui`,
-   `memory-lab`, stopping after the package you chose.
+   `memlab`, stopping after the package you chose.
 
 ## 5. Check the result
 
@@ -114,8 +100,8 @@ python3 -m venv /tmp/memlab-check
 ```
 
 Then open <https://pypi.org/project/memfalsify/> and the other project pages. The README should render, and the
-sidebar should list the repository under **Verified details** and name `publish.yml` under **Provenance**. Once
-`memory-lab` is on PyPI, also try `pip install "memory-lab[ui]"` and `memlab-ui --help`.
+sidebar should list the repository under **Verified details**. Under **Download files**, **View provenance details**
+should name `publish.yml` for each file. Once `memlab` is on PyPI, also try `pip install "memlab[ui]"` and `memlab-ui --help`.
 
 Last, change the Install section of the root README to the published form.
 
@@ -129,7 +115,8 @@ on your machine, including a clean install from the wheels:
 python3 scripts/rehearse_install.py
 ```
 
-CI runs this on every push (the `packaging` job).
+On macOS, start it from Python 3.11 or newer: one of the locked tools has no macOS wheel for 3.10. `--python` picks
+another version for the install itself. CI runs this on every push (the `packaging` job).
 
 **TestPyPI.** A separate site with separate accounts. It proves the workflow, the publisher settings and the
 attestations end to end. It does not show whether PyPI will accept a name.
@@ -143,7 +130,7 @@ attestations end to end. It does not show whether PyPI will accept a name.
 
 ```bash
 python3 -m venv /tmp/memlab-testpypi
-/tmp/memlab-testpypi/bin/pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ memory-lab
+/tmp/memlab-testpypi/bin/pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ memlab
 /tmp/memlab-testpypi/bin/memfalsify --help
 ```
 
@@ -152,19 +139,19 @@ TestPyPI keeps versions too: a second run of the same version is skipped, so try
 ## Later releases
 
 1. Bump the versions that changed and move the pins between packages (each pin admits one minor version; see the top
-   of [CHANGELOG.md](../CHANGELOG.md)). `memory-lab` gets a new version every release, because its version names the
+   of [CHANGELOG.md](../CHANGELOG.md)). `memlab` gets a new version every release, because its version names the
    release.
 2. Merge to `main` and wait for CI.
-3. Press the button with the new version, `target: pypi` and `stop-after: memory-lab`. There is no form to fill in:
+3. Press the button with the new version, `target: pypi` and `stop-after: memlab`. There is no form to fill in:
    the publisher from step 3 serves all the projects.
 
 ## When something goes wrong
 
 | What you see | What it means |
 |---|---|
-| `the confirm input differs from the built memory-lab version` | You typed another version, or `main` holds a different one. Nothing was uploaded. The message names the built version. |
+| `the confirm input differs from the built memlab version` | You typed another version, or `main` holds a different one. Nothing was uploaded. The message names the built version. |
 | `target pypi works from main only` | **Use workflow from** pointed at another branch or tag. Nothing was uploaded. |
-| `This project name is too similar to an existing project` on the PyPI form | See [the name `memory-lab`](#before-you-start-the-name-memory-lab). |
+| `This project name is too similar to an existing project` on the PyPI form | See [the name `memlab`](#the-name-memlab). |
 | `already been registered for a different project name` on the PyPI form | The previous round's pending publisher has not been used yet. Press the button for it first, or delete it on the same page. |
 | `Non-user identities cannot create new projects` in an upload step | The run reached a project whose pending publisher you have not added yet, usually because `stop-after` was left past the current round. Everything before that step is fine. Add the next publisher, or lower `stop-after`, and press again. |
 | `invalid-publisher` in an upload step | PyPI has no publisher matching this run. Compare the four values you entered in step 3 with the claims the step prints. |

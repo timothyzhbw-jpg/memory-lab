@@ -3,15 +3,15 @@
 
     python scripts/dists.py build DIST               one sdist and one wheel per package, in DIST/<distribution>/
     python scripts/dists.py check DIST --confirm V   stop (exit 1) if anything built should not go to PyPI
-    python scripts/dists.py needs DIST --extras ui   the wheels that memory-lab[ui] installs from this repository
-    python scripts/dists.py release                  the release version: memory-lab's, in this checkout
+    python scripts/dists.py needs DIST --extras ui   the wheels that memlab[ui] installs from this repository
+    python scripts/dists.py release                  the release version: memlab's, in this checkout
 
 ``build`` needs the tools in scripts/publish-requirements.txt. It copies each package to a temporary directory first,
 so it leaves the checkout clean and a stale ``*.egg-info`` from an editable install cannot reach an sdist.
 
 ``check`` compares what is inside the built files with this checkout: the name and version in each file, the pins
 between the packages, the licence, ``py.typed``, the web page's images, and the README links, which must work on
-pypi.org. The version in ``--confirm`` must equal the built memory-lab's, which names the release. See
+pypi.org. The version in ``--confirm`` must equal the built memlab's, which names the release. See
 docs/publishing.md.
 """
 from __future__ import annotations
@@ -41,14 +41,14 @@ REPO = Path(__file__).resolve().parent.parent
 # Distribution -> directory under packages/, in upload order: each comes after everything it depends on, so the
 # index never offers a package whose pins nothing can satisfy. publish.yml uploads in this order.
 PACKAGES = {"memlab-core": "memcore", "memfalsify": "memfalsify", "orgmemory": "orgmemory",
-            "memlab-mcp": "memlab-mcp", "memlab-ui": "memlab-ui", "memory-lab": "memory-lab"}
-RELEASE = "memory-lab"  # holds no modules, and its version names the release
+            "memlab-mcp": "memlab-mcp", "memlab-ui": "memlab-ui", "memlab": "memlab"}
+RELEASE = "memlab"  # holds no modules, and its version names the release
 MODULES = {"memlab-core": "memcore", "memfalsify": "memfalsify", "orgmemory": "orgmemory",
            "memlab-mcp": "memlab_mcp", "memlab-ui": "memlab_ui"}
 IMAGES = {"memlab-ui": ("memlab_ui/static/memory-lab-icon-32.png", "memlab_ui/static/memory-lab-icon-64.png",
                         "memlab_ui/static/ui-dark.png", "memlab_ui/static/ui-light.png")}
 VERSION = re.compile(r"[0-9][0-9A-Za-z.!+-]*")
-_LINK = re.compile(r"\]\(([^)\s]+)|(?:src|href)=[\"']([^\"']+)")
+_LINK = re.compile(r"\]\(([^)\s]+)|(?:src|href)=[\"']([^\"']+)|^\s{0,3}\[[^\]]+\]:\s*(\S+)", re.MULTILINE)
 
 
 def _display():
@@ -74,7 +74,7 @@ def build(out: Path, repo: Path = REPO) -> None:
 
 def relative_links(markdown: str) -> list[str]:
     """Link and image targets that only work next to the file in this repository, not on pypi.org."""
-    targets = [first or second for first, second in _LINK.findall(markdown)]
+    targets = [next(filter(None, groups)) for groups in _LINK.findall(markdown)]
     return [target for target in targets if not re.match(r"https?://|#", target)]
 
 
@@ -122,6 +122,7 @@ def problems_in(out: Path, confirm: str, repo: Path = REPO) -> tuple[list[str], 
     found: dict[str, tuple[str, list[Path]]] = {}
     expected = expected_versions(repo)
     built: dict[str, object] = {}
+    requires: list[tuple[str, str, str]] = []
     if out.is_dir():
         problems += [f"unexpected entry in the output directory: {entry.name}" for entry in sorted(out.iterdir())
                      if entry.name not in PACKAGES]
@@ -141,6 +142,7 @@ def problems_in(out: Path, confirm: str, repo: Path = REPO) -> tuple[list[str], 
                 problems.append(f"{name}: the {kind} {path.name} cannot be read")
                 continue
             built[name] = metadata
+            requires += [(name, kind, line) for line in metadata.get_all("Requires-Dist") or ()]
             if canonicalize_name(str(metadata["Name"])) != canonicalize_name(name):
                 problems.append(f"{name}: the {kind} says its name is {metadata['Name']}")
             if metadata["Version"] != expected[name]:
@@ -152,12 +154,11 @@ def problems_in(out: Path, confirm: str, repo: Path = REPO) -> tuple[list[str], 
             problems += _contents(name, kind, names)
         if name in built:
             found[name] = (str(built[name]["Version"]), [wheels[0], sdists[0]])
-    for name, metadata in built.items():
-        for line in metadata.get_all("Requires-Dist") or ():
-            requirement = Requirement(line)
-            pinned = canonicalize_name(requirement.name)
-            if pinned in found and not requirement.specifier.contains(found[pinned][0]):
-                problems.append(f"{name}: its pin {requirement} excludes the built {pinned} {found[pinned][0]}")
+    for name, kind, line in requires:  # pip reads the wheel's and an sdist install reads the sdist's, so check both
+        requirement = Requirement(line)
+        pinned = canonicalize_name(requirement.name)
+        if pinned in found and not requirement.specifier.contains(found[pinned][0]):
+            problems.append(f"{name}: its pin {requirement} excludes the built {pinned} {found[pinned][0]} ({kind})")
     if not VERSION.fullmatch(confirm):
         problems.append("the confirm input is not a version number")
     elif RELEASE in found and confirm != found[RELEASE][0]:

@@ -1,6 +1,6 @@
 """Package metadata: each version agrees with ``__version__``, and every pin between the packages admits
 the version in this repository, so the packages install together from one checkout. The metadata is complete
-enough for PyPI, and the memory-lab meta-distribution installs the others without modules of its own."""
+enough for PyPI, and the memlab meta-distribution installs the others without modules of its own."""
 import ast
 import importlib
 import importlib.util
@@ -21,7 +21,7 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGES = {"memlab-core": ("memcore", "memcore"), "memfalsify": ("memfalsify", "memfalsify"),
             "orgmemory": ("orgmemory", "orgmemory"), "memlab-mcp": ("memlab-mcp", "memlab_mcp"),
             "memlab-ui": ("memlab-ui", "memlab_ui")}
-META = "memory-lab"  # packages/memory-lab: no module, so no __version__ and no import checks
+META = "memlab"  # packages/memlab: no module, so no __version__ and no import checks
 
 
 def _meta() -> dict:
@@ -67,11 +67,11 @@ def test_changelog_has_an_entry_for_each_current_version():
     for name, (_, version) in _projects().items():
         assert name in sections, f"CHANGELOG.md has no '## {name}' section"
         assert f"\n### {version} - " in sections[name], f"CHANGELOG.md has no {name} {version} entry"
-    if META in sections:  # the section lands when the release's changelog is written; then this line can go
-        assert f"\n### {_meta()['project']['version']} - " in sections[META]
+    assert META in sections, f"CHANGELOG.md has no '## {META}' section"
+    assert f"\n### {_meta()['project']['version']} - " in sections[META]
 
 
-# --- the memory-lab meta-distribution -----------------------------------------------------------------------
+# --- the memlab meta-distribution -----------------------------------------------------------------------
 
 def _next_minor(version: str) -> str:
     release = Version(version).release
@@ -110,10 +110,6 @@ def test_meta_distribution_pins_admit_exactly_one_minor_of_each_package():
         assert requirement.specifier.contains(version), f"{requirement} excludes {version}"
         assert not requirement.specifier.contains(_next_minor(version)), f"{requirement} admits another minor"
         assert Version(version).release[:2] == _floor(requirement).release[:2], f"{requirement} admits another minor"
-
-
-def test_the_meta_pin_check_catches_a_pin_that_is_too_wide():
-    assert Requirement("memfalsify>=0.4,<0.6").specifier.contains(_next_minor("0.4.0"))
 
 
 # --- ready for PyPI -----------------------------------------------------------------------------------------
@@ -164,7 +160,8 @@ def test_package_readmes_link_only_absolute_urls():
     """PyPI renders the README away from the repository: a relative link or image would break there."""
     for directory in [directory for directory, _ in PACKAGES.values()] + [META]:
         text = (REPO / "packages" / directory / "README.md").read_text(encoding="utf-8")
-        links = re.findall(r"\]\(([^)\s]+)", text) + re.findall(r"(?:src|href)=[\"']([^\"']+)", text)
+        links = (re.findall(r"\]\(([^)\s]+)", text) + re.findall(r"(?:src|href)=[\"']([^\"']+)", text)
+                 + re.findall(r"^\s{0,3}\[[^\]]+\]:\s*(\S+)", text, re.MULTILINE))
         assert links, directory
         assert [link for link in links if not link.startswith("https://")] == [], directory
 

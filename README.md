@@ -13,16 +13,18 @@ Agent memory tools mostly store and retrieve. This project is about **keeping wh
 
 The [15-minute tutorial](docs/tutorial.md) walks through both tools on a temporary copy of `examples/`.
 
+How the two tools connect: [docs/architecture.md](docs/architecture.md) states the relationship and maps a MemFalsify finding to an orgmemory event, field by field. [examples/closed-loop](examples/closed-loop/README.md) runs the whole chain on synthetic data with one command, from a line in `MEMORY.md` to who approved it and whether they were allowed to.
+
 `Remember → Verify → Challenge → Resolve → Evolve`
 
-It contains two independent tools that share one evidence core:
+It contains two independent tools that share one evidence core. MemFalsify asks whether a memory is backed by evidence, and orgmemory asks who put it there and whether they were allowed to, because writing a memory is itself an organizational decision:
 
 | | **MemFalsify** | **Verified Organizational Memory** (`orgmemory`) |
 |---|---|---|
 | Question | *Is this memory backed by evidence?* | *Is this the current, authorized state?* |
 | Input | `MEMORY.md` or an agent's instruction files (`CLAUDE.md`, `AGENTS.md`, Cursor, Copilot, Gemini, Windsurf) + a directory of evidence files | Event log + role policy + evidence manifest |
 | Output | Audit report: cited quotes, issues, proposed actions | Current state per subject, decision provenance, audit trail, decision-process audit, ADR export |
-| Writes | Nothing (only the report you ask for) | Nothing on replay or audit; `append` and the GitHub and Jira importers only append; `export` only creates new files outside the dataset |
+| Writes | Nothing in your memory or evidence: only the report you ask for, the demo `init` writes, and the files `evidence from-git` writes to `--output` | Nothing on replay or audit; `append` and the GitHub and Jira importers only append; `export` only creates new files outside the dataset |
 
 By default everything runs offline with no API keys; optional model verifiers (Claude and TypeSafe AI's Jev) can be switched on. Python 3.10+, Apache-2.0.
 
@@ -41,13 +43,21 @@ By default everything runs offline with no API keys; optional model verifiers (C
 
 ## Quick start
 
+From a fresh checkout to a first report, offline and with no API key. Nothing is on PyPI yet, so the first block installs from a checkout (Python 3.10+):
+
 ```bash
-git clone <this repo> memory-lab && cd memory-lab
+git clone https://github.com/timothyzhbw-jpg/memory-lab && cd memory-lab
 python -m venv .venv && source .venv/bin/activate
 pip install -e packages/memcore -e packages/memfalsify -e packages/orgmemory
 ```
 
-Install only what you need: `memcore` plus either tool works on its own.
+```bash
+memfalsify init demo && cd demo && memfalsify audit
+```
+
+The report shows one claim the evidence seems to contradict, with both quotes, one claim with supporting evidence, and one with no evidence. In your own repository, a plain `memfalsify audit` checks every agent instruction file it finds, plus `MEMORY.md`, against the rest of the repository. [docs/quickstart.md](docs/quickstart.md) explains the report and the next steps, including `memfalsify evidence from-git`, which turns commit messages into evidence.
+
+The examples below run from the root of the checkout. Install only what you need: `memcore` plus either tool works on its own.
 
 Prefer a browser? `pip install -e packages/memlab-ui` and `memlab-ui --root examples` open a local, read-only page for both tools (see [*Web page*](#web-page)). It needs macOS or Linux: on Windows it exits with code 2, like the MCP server.
 
@@ -580,11 +590,11 @@ A verifier judges one memory against one evidence passage as `supports`, `contra
 | `--verifier` | Who judges | Needs | Trade-off |
 |---|---|---|---|
 | `lexical` (default) | Term overlap, opposing terms, numbers, negation | Nothing | Offline, deterministic, explainable; misses paraphrases |
-| `llm` | Claude reads the passage and explains its verdict (`--llm-model`, default `claude-opus-5-5`) | `pip install 'memfalsify[llm]'` and Anthropic credentials | Understands paraphrase and context; costs API calls and **sends memory and evidence text to the API** |
-| `jev` | [Jev](https://docs.typesafe.ai), TypeSafe AI's decision-only judgment model, picks one of the three relations and returns a probability for each (`--jev-model`, default `jev-latest`) | `pip install 'memfalsify[jev]'` and `TYPESAFE_API_KEY` | A small fraction of an LLM judge's cost, with a calibrated confidence; no written explanation, and **sends memory and evidence text to the TypeSafe API** |
+| `llm` | Claude reads the passage and explains its verdict (`--llm-model`, default `claude-opus-5-5`) | `pip install -e 'packages/memfalsify[llm]'` and Anthropic credentials | Understands paraphrase and context; costs API calls and **sends memory and evidence text to the API** |
+| `jev` | [Jev](https://docs.typesafe.ai), TypeSafe AI's decision-only judgment model, picks one of the three relations and returns a probability for each (`--jev-model`, default `jev-latest`) | `pip install -e 'packages/memfalsify[jev]'` and `TYPESAFE_API_KEY` | A small fraction of an LLM judge's cost, with a calibrated confidence; no written explanation, and **sends memory and evidence text to the TypeSafe API** |
 | `dual` | `llm` and `jev`, independently | Both | Agreement passes through; disagreement becomes `disputed`, and the report shows both opinions |
 | `cascade` | `jev` first; Claude only when Jev's confidence is below `--accept-at` (default 0.8) | Both | Close to Jev's cost when Jev is usually sure; the report shows Jev's unsure opinion next to Claude's verdict. No cross-check on answers Jev is confident about |
-| `openai` | A model behind any OpenAI-compatible Chat Completions API reads the passage and explains its verdict: OpenAI, xAI Grok, DeepSeek, Google Gemini or a local Ollama server (`--provider`), or another endpoint (`--base-url`). `--openai-model` is required | `pip install 'memfalsify[openai]'` and the provider's key in its variable (`--api-key-env` names another); none for Ollama | The same prompt and verdict schema as `llm` on the model you choose; **sends memory and evidence text to the configured endpoint**, which with Ollama stays on your machine |
+| `openai` | A model behind any OpenAI-compatible Chat Completions API reads the passage and explains its verdict: OpenAI, xAI Grok, DeepSeek, Google Gemini or a local Ollama server (`--provider`), or another endpoint (`--base-url`). `--openai-model` is required | `pip install -e 'packages/memfalsify[openai]'` and the provider's key in its variable (`--api-key-env` names another); none for Ollama | The same prompt and verdict schema as `llm` on the model you choose; **sends memory and evidence text to the configured endpoint**, which with Ollama stays on your machine |
 
 ```bash
 memfalsify audit MEMORY.md --evidence evidence --verifier dual

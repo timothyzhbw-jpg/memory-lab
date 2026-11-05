@@ -30,6 +30,42 @@ def event(id, when, actor, action, **fields):
             "evidence_ids": ["wed"], **fields}
 
 
+# --- a dataset path through a link ------------------------------------------------------
+
+NEW_EVENT = json.dumps(event("ev-link", "2026-10-11T09:00:00+00:00", "dev", "comment"))
+
+
+def test_a_link_above_the_dataset_is_the_machines_and_appends_work(org_demo, tmp_path, make_symlink):
+    """macOS's /tmp and /var are links; `orgmemory append /tmp/x/dataset` used to end in a traceback."""
+    link = tmp_path / "link"
+    make_symlink(link, org_demo.parent, directory=True)
+    result = runner.invoke(app, ["append", str(link / org_demo.name), "--event", NEW_EVENT])
+    assert result.exit_code == 0, result.output
+    assert b"ev-link" in (org_demo / "events.jsonl").read_bytes()
+
+
+def test_a_dataset_that_is_itself_a_link_is_a_clean_refusal(org_demo, tmp_path, make_symlink):
+    link = tmp_path / "link"
+    make_symlink(link, org_demo, directory=True)
+    before = (org_demo / "events.jsonl").read_bytes()
+    result = runner.invoke(app, ["append", str(link), "--event", NEW_EVENT])
+    assert result.exit_code == 2 and not isinstance(result.exception, OSError)
+    assert "cannot append to events.jsonl" in result.output
+    assert (org_demo / "events.jsonl").read_bytes() == before
+
+
+def test_a_linked_log_file_is_a_clean_refusal(org_demo, tmp_path, make_symlink):
+    outside = tmp_path / "outside.jsonl"
+    write_text_exact(outside, "keep\n")
+    (org_demo / "evidence.jsonl").rename(org_demo / "evidence.moved")
+    make_symlink(org_demo / "evidence.jsonl", outside)
+    result = runner.invoke(app, ["evidence", "add", str(org_demo), "--id", "x", "--path", "sources/none.md",
+                                 "--quote", "q", "--source-uri", "u", "--source-kind", "doc",
+                                 "--captured-at", "2026-10-11T09:00:00+00:00"])
+    assert result.exit_code == 2 and not isinstance(result.exception, OSError)
+    assert outside.read_bytes() == b"keep\n"
+
+
 # --- the Monday-Thursday scenario ------------------------------------------------------
 
 def test_thursday_request_does_not_override_wednesday_decision(org_demo):

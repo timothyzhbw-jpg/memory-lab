@@ -6,23 +6,12 @@
 [Trusted Publishing](https://docs.pypi.org/trusted-publishers/)：PyPI 直接信任本仓库的这个工作流，所以任何地方都不存密码或
 API token。第 1 到 3 步只需做一次，必须由仓库所有者本人来做，因为要用他的 PyPI 账号。之后每次发布只需点一次第 4 步的按钮。
 
-## 开始之前：`memory-lab` 这个名字
+## `memlab` 这个名字
 
-PyPI 判断新名字时，会先去掉 `-`、`_`、`.`，再把 `l` 和 `i` 当作 `1`、把 `o` 当作 `0`，结果与已有项目相同就拒绝。
-[`memorylab`](https://pypi.org/project/memorylab/) 这个项目已经存在（只有一个版本 0.0.1，2025 年 3 月），所以第 3 步的表单
-对 `memory-lab` 会回答 “This project name is too similar to an existing project”。这个结论来自 PyPI 的源代码和
-2026-11-04 的项目列表；表单本身没有人试过，因为那需要账号。`memlab-core`、`memfalsify`、`orgmemory`、`memlab-mcp`、
-`memlab-ui` 都没有这样的冲突。TestPyPI 上没有 `memorylab`，所以在那里试运行会成功，但说明不了这个问题。
-
-第 3 步之前，从下面选一个：
-
-- **发布五个包，先不发 `memory-lab`。** 第 3 步做到第 5 轮为止，以后的发布选 `stop-after: memlab-ui`，其他都不用改。安装命令变成
-  `pip install memfalsify orgmemory`，`memlab-ui` 和 `memlab-mcp` 用各自的名字安装。
-- **给这个元包改名。** 截至 2026-11-04，`memlab` 没有冲突。先改 `packages/memory-lab/pyproject.toml` 里的 `name`，再改
-  该目录的 README、`scripts/dists.py`、`scripts/rehearse_install.py`、`publish.yml`、本文和 `tests/test_packaging.py` 里的名字；
-  漏改的地方 `tests/test_publish_workflow.py` 会报错。
-- **申请这个名字。** 联系 `memorylab` 的所有者，或者到 [pypi/support](https://github.com/pypi/support) 提交
-  [PEP 541](https://peps.python.org/pep-0541/) 申请。这要几周甚至更久，结果也由对方决定。在此期间可以先用第一种做法。
+用来一次装好所有工具的包叫 `memlab`，不叫 `memory-lab`。PyPI 判断新名字时，会先去掉 `-`、`_`、`.`，再把 `l` 和 `i` 当作 `1`、
+把 `o` 当作 `0`，结果与已有项目相同就拒绝，而 [`memorylab`](https://pypi.org/project/memorylab/) 这个项目已经存在（只有一个版本
+0.0.1，2025 年 3 月）。这个结论来自 PyPI 的源代码和 2026-11-04 的项目列表；没有人用这个名字试过表单，因为那需要账号。`memlab`、
+`memlab-core`、`memfalsify`、`orgmemory`、`memlab-mcp`、`memlab-ui` 都没有这样的冲突。
 
 ## 1. PyPI 账号（一次）
 
@@ -66,7 +55,7 @@ publisher，这个 publisher 之后为它创建过的所有项目服务。
 | 3 | `orgmemory` | `orgmemory` |
 | 4 | `memlab-mcp` | `memlab-mcp` |
 | 5 | `memlab-ui` | `memlab-ui` |
-| 6 | `memory-lab` | `memory-lab` |
+| 6 | `memlab` | `memlab` |
 
 第 6 轮要先决定上面说的名字问题。pending publisher 不会替你保留名字，所以添加之后请马上点按钮。
 
@@ -77,17 +66,17 @@ publisher，这个 publisher 之后为它创建过的所有项目服务。
 | 字段 | 填写 |
 |---|---|
 | Use workflow from | `main` |
-| confirm | `packages/memory-lab/pyproject.toml` 里的版本号 |
+| confirm | `packages/memlab/pyproject.toml` 里的版本号 |
 | target | `pypi` |
-| stop-after | 第 3 步期间选这一轮的项目。以后选 `memory-lab`；不发这个名字时选 `memlab-ui` |
+| stop-after | 第 3 步期间选这一轮的项目。以后选 `memlab` |
 
 点绿色的 **Run workflow**。之后会发生这些事：
 
 1. **Build and check every package** 为六个包各构建一个 sdist 和一个 wheel，运行 `twine check --strict`，再把这些文件和当前代码、
-   你填的 `confirm` 对比。`confirm` 与构建出的 memory-lab 版本不同，运行就在这里停下，什么都不会上传。这个任务的摘要会列出每个文件和它的
+   你填的 `confirm` 对比。`confirm` 与构建出的 memlab 版本不同，运行就在这里停下，什么都不会上传。这个任务的摘要会列出每个文件和它的
    SHA-256。
 2. 如果你加了 required reviewer，点 **Review deployments**，再点 **Approve and deploy**。
-3. **Upload to PyPI** 按依赖顺序上传：`memlab-core`、`memfalsify`、`orgmemory`、`memlab-mcp`、`memlab-ui`、`memory-lab`，到你选的那个包为止。
+3. **Upload to PyPI** 按依赖顺序上传：`memlab-core`、`memfalsify`、`orgmemory`、`memlab-mcp`、`memlab-ui`、`memlab`，到你选的那个包为止。
 
 ## 5. 检查结果
 
@@ -99,8 +88,8 @@ python3 -m venv /tmp/memlab-check
 /tmp/memlab-check/bin/orgmemory --help
 ```
 
-然后打开 <https://pypi.org/project/memfalsify/> 和其他项目页面。README 应该能正常显示；侧栏的 **Verified details** 下应该列出本仓库，
-**Provenance** 下应该写着 `publish.yml`。`memory-lab` 发布之后，再试一下 `pip install "memory-lab[ui]"` 和 `memlab-ui --help`。
+然后打开 <https://pypi.org/project/memfalsify/> 和其他项目页面。README 应该能正常显示；侧栏的 **Verified details** 下应该列出本仓库。
+**Download files** 里每个文件的 **View provenance details** 应该写着 `publish.yml`。`memlab` 发布之后，再试一下 `pip install "memlab[ui]"` 和 `memlab-ui --help`。
 
 最后，把根目录 README 的安装一节改成发布后的写法。
 
@@ -113,6 +102,7 @@ python3 -m venv /tmp/memlab-check
 python3 scripts/rehearse_install.py
 ```
 
+在 macOS 上要用 Python 3.11 或更新的版本启动它，因为有一个锁定的工具没有 3.10 的 macOS wheel。`--python` 可以为安装本身选择别的版本。
 CI 每次推送都会运行它（`packaging` 任务）。
 
 **TestPyPI。** 这是另一个网站，账号也是独立的。它能从头到尾验证工作流、publisher 设置和 attestation，但不能说明 PyPI 是否接受某个名字。
@@ -124,7 +114,7 @@ CI 每次推送都会运行它（`packaging` 任务）。
 
 ```bash
 python3 -m venv /tmp/memlab-testpypi
-/tmp/memlab-testpypi/bin/pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ memory-lab
+/tmp/memlab-testpypi/bin/pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ memlab
 /tmp/memlab-testpypi/bin/memfalsify --help
 ```
 
@@ -132,18 +122,18 @@ TestPyPI 同样保留版本：同一个版本第二次运行会被跳过，所�
 
 ## 以后的发布
 
-1. 给有改动的包升版本，并调整包之间的版本约束（每个约束只允许一个 minor 版本，见 [CHANGELOG.md](../CHANGELOG.md) 开头）。`memory-lab` 每次发布都要升版本，
+1. 给有改动的包升版本，并调整包之间的版本约束（每个约束只允许一个 minor 版本，见 [CHANGELOG.md](../CHANGELOG.md) 开头）。`memlab` 每次发布都要升版本，
    因为它的版本号就是这次发布的编号。
 2. 合并到 `main`，等 CI 通过。
-3. 填新版本号，选 `target: pypi` 和 `stop-after: memory-lab`，点按钮。不用再填表单：第 3 步的 publisher 为所有项目服务。
+3. 填新版本号，选 `target: pypi` 和 `stop-after: memlab`，点按钮。不用再填表单：第 3 步的 publisher 为所有项目服务。
 
 ## 出问题时
 
 | 你看到的 | 含义 |
 |---|---|
-| `the confirm input differs from the built memory-lab version` | 你填了别的版本，或者 `main` 上是另一个版本。什么都没有上传。提示里写着构建出的版本。 |
+| `the confirm input differs from the built memlab version` | 你填了别的版本，或者 `main` 上是另一个版本。什么都没有上传。提示里写着构建出的版本。 |
 | `target pypi works from main only` | **Use workflow from** 选了其他分支或标签。什么都没有上传。 |
-| PyPI 表单显示 `This project name is too similar to an existing project` | 见[这个名字的说明](#开始之前memory-lab-这个名字)。 |
+| PyPI 表单显示 `This project name is too similar to an existing project` | 见[这个名字的说明](#memlab-这个名字)。 |
 | PyPI 表单显示 `already been registered for a different project name` | 上一轮的 pending publisher 还没有用过。先为它点一次按钮，或者在同一页面删除它。 |
 | 上传步骤出现 `Non-user identities cannot create new projects` | 运行走到了一个你还没有添加 pending publisher 的项目，通常是 `stop-after` 超过了当前这一轮。这一步之前的都没问题。添加下一个 publisher，或者调低 `stop-after`，再点一次按钮。 |
 | 上传步骤出现 `invalid-publisher` | PyPI 找不到与这次运行匹配的 publisher。把你在第 3 步填的四个值与该步骤打印的 claims 对比。 |

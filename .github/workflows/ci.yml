@@ -73,7 +73,7 @@ jobs:
         run: python -m pytest -q --simulate-windows-newlines
 
   # The rehearsal for publishing (docs/publishing.md), on every push: build all six packages, check them, install
-  # memory-lab[ui,mcp] from those wheels in a fresh virtualenv and run its commands. Nothing is uploaded.
+  # memlab[ui,mcp] from those wheels in a fresh virtualenv and run its commands. Nothing is uploaded.
   packaging:
     name: Build and install the wheels (Linux, Python 3.13)
     runs-on: ubuntu-latest

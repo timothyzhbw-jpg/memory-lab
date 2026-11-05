@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type the version in packages/memory-lab/pyproject.toml, for example 0.5.0. Any other value stops the run before an upload."
+        description: "Type the version in packages/memlab/pyproject.toml, for example 0.5.0. Any other value stops the run before an upload."
         required: true
         type: string
       target:
@@ -25,9 +25,9 @@ on:
         description: "Upload in dependency order and stop after this package. The first publication goes one package per run: see docs/publishing.md."
         required: true
         type: choice
-        default: memory-lab
+        default: memlab
         options:
-          - memory-lab
+          - memlab
           - memlab-ui
           - memlab-mcp
           - orgmemory
@@ -111,22 +111,22 @@ jobs:
           packages-dir: dist/orgmemory
           skip-existing: true
       - name: memlab-mcp
-        if: inputs.stop-after == 'memlab-mcp' || inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
+        if: inputs.stop-after == 'memlab-mcp' || inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memlab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist/memlab-mcp
           skip-existing: true
       - name: memlab-ui
-        if: inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
+        if: inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memlab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist/memlab-ui
           skip-existing: true
-      - name: memory-lab
-        if: inputs.stop-after == 'memory-lab'
+      - name: memlab
+        if: inputs.stop-after == 'memlab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
-          packages-dir: dist/memory-lab
+          packages-dir: dist/memlab
           skip-existing: true
 
   dry-run:
@@ -163,23 +163,23 @@ jobs:
           packages-dir: dist/orgmemory
           skip-existing: true
       - name: memlab-mcp
-        if: inputs.stop-after == 'memlab-mcp' || inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
+        if: inputs.stop-after == 'memlab-mcp' || inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memlab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/memlab-mcp
           skip-existing: true
       - name: memlab-ui
-        if: inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
+        if: inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memlab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/memlab-ui
           skip-existing: true
-      - name: memory-lab
-        if: inputs.stop-after == 'memory-lab'
+      - name: memlab
+        if: inputs.stop-after == 'memlab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
-          packages-dir: dist/memory-lab
+          packages-dir: dist/memlab
           skip-existing: true
