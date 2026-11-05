@@ -601,7 +601,7 @@ class ValueConflict(NamedTuple):
     key: str
     claim: str
     source: str
-    both_set: bool  # both sides merely set it, which says less than a statement of what it is
+    merely_set: bool  # a side only sets it somewhere, which says less than a statement of what it is
 
 
 def named_conflict(claim: str, passage: str, set_counts: bool = True) -> ValueConflict | None:
@@ -609,14 +609,14 @@ def named_conflict(claim: str, passage: str, set_counts: bool = True) -> ValueCo
 
     A value set somewhere (``key=100``, ``key = 100``, ``--flag 100``) is not compared with a stated default (``key
     (default: 3)``, ``key: int = 3``): setting 100 in one place says nothing about the default. Without ``set_counts``,
-    a value the passage sets is not compared at all."""
+    a value set somewhere is not compared at all."""
     theirs = named_values(passage)
     for key, ours in named_values(claim).items():
         pairs = [(a, b) for a in ours for b in theirs.get(key, ())
-                 if {a.kind, b.kind} != {DEFAULT, SET} and (set_counts or b.kind != SET)]
+                 if {a.kind, b.kind} != {DEFAULT, SET} and (set_counts or SET not in (a.kind, b.kind))]
         if pairs and all(_differs(a.value, b.value) for a, b in pairs):
             return ValueConflict(key, pairs[0][0].written, pairs[0][1].written,
-                                 all(a.kind == SET and b.kind == SET for a, b in pairs))
+                                 all(SET in (a.kind, b.kind) for a, b in pairs))
     return None
 
 
@@ -709,7 +709,7 @@ _CUE = re.compile(r"(?<![-_./`])\b(?:not(?!\(|\s+(?:none|null|nil|undefined)\b)|
                   r"nor|without|cannot|none of|instead of|rather than|\w+n't|skip(?:s|ped|ping)?|"
                   r"bypass(?:es|ed|ing)?)\b(?![-_])", re.I)
 _ABSOLUTE_WORD = re.compile(r"\b(?:always|every|everyone|everything|never)\b", re.I)
-_PROHIBITION = re.compile(r"^\W*(?:do not|don't|never|skip)\b", re.I)
+_PROHIBITION = re.compile(r"^\W*(?:please\s+)?(?:do not|don't|never|skip)\b", re.I)
 
 
 # snake_case, kebab-case, dotted and camelCase names, --flags and call() names, each read as one term here.

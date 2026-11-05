@@ -9,10 +9,10 @@ The rules run in this order, and the first that fires gives the report's reason.
 | Reason in the report | Rule |
 |---|---|
 | `same setting max_steps: claim 100 vs source 500` | Both texts state the same key with different values. |
+| `set differently timeout: claim 30 vs source 60` | The same, when a side merely sets the key (`key=30`, `key = 30`, `--key 30`). |
 | `opposing terms: claim 'approv…' vs source 'reject…'` | Two texts about the same subject use opposing words, outside names and code spans. |
 | `different units: claim 2 minutes vs source 2 seconds` | Two texts about the same subject give the same number a different unit of time or size. |
 | `different values: claim ['100'] vs source ['60']` | Two nearly identical texts attach different numbers, or different dates, to the same word. |
-| `set differently timeout: claim 30 vs source 60` | Both texts merely set the same key (`key=30`, `key = 30`, `--key 30`) to different values, and share most of their terms. |
 | `opposite modality: claim '所有' vs source '仅'` | Chinese text only: the two sides stand at opposite ends of all/only or must/need not. |
 | `same subject, but only one side is negated` | One side negates a word the other side states plainly, in two statements about the same subject. |
 | `source says what the claim names was removed` | Every term of the claim, at least four, stands before "was removed" (or deleted, dropped, retired) in the source. |
@@ -24,7 +24,7 @@ A passage also has to share most of the claim's terms to be looked at (half of t
 - A key looks like an identifier: `snake_case`, `kebab-case`, `camelCase`, `dotted.name`, a `--flag`, or a name in backticks. Keys match exactly or ignoring case. `Note: 3 things` binds nothing.
 - These forms bind a key: `key: 100`, `key = 100`, `key=100`, `key (default: 100)`, `key: int = 180`, `key: float = Field(default=0.1, ...)`, `key defaults to 100`, `` `key` is 100 ``, `"key": 5`, `| key | 100 |`, `--flag 100`.
 - Values are numbers, booleans and short quoted strings. `None` and `null` mean no value here. `100`, `100.0` and `1_000` compare as numbers. `500ms` and `1s` are left alone, since their units are not converted.
-- A value set somewhere (`key=100`, `key = 100`, `--flag 100`) is not compared with a stated default (`key (default: 3)`, `key: int = 3`). Passing 100 in one call says nothing about the default. Two values that are merely set say little about each other, so that reason ranks low and needs a file that is no test, example, changelog or source code.
+- A value set somewhere (`key=100`, `key = 100`, `--flag 100`) is not compared with a stated default (`key (default: 3)`, `key: int = 3`). Passing 100 in one call says nothing about the default. Against anything else a value that is merely set counts for less: that reason ranks low, needs a file that is no test, example, changelog or source code, and the passage has to share the claim's terms like any other.
 
 ### Same subject
 

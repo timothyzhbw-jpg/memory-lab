@@ -9,10 +9,10 @@
 | 报告里的理由 | 规则 |
 |---|---|
 | `same setting max_steps: claim 100 vs source 500` | 两段文字声明同一个键时写了不同的值。 |
+| `set differently timeout: claim 30 vs source 60` | 同上，但有一边只是设置这个键（`key=30`、`key = 30`、`--key 30`）。 |
 | `opposing terms: claim 'approv…' vs source 'reject…'` | 主题相同的两段文字用了意思相反的词，且这些词不在名称或代码片段里。 |
 | `different units: claim 2 minutes vs source 2 seconds` | 主题相同的两段文字给同一个数字配了不同的时间或容量单位。 |
 | `different values: claim ['100'] vs source ['60']` | 几乎相同的两段文字在同一个词旁边写了不同的数字或日期。 |
-| `set differently timeout: claim 30 vs source 60` | 两段文字只是把同一个键设置（`key=30`、`key = 30`、`--key 30`）成不同的值，且共享大部分词。 |
 | `opposite modality: claim '所有' vs source '仅'` | 只用于中文：两边分别站在“所有/仅”或“必须/无需”的两端。 |
 | `same subject, but only one side is negated` | 主题相同的两句话里，一边否定了另一边正面陈述的词。 |
 | `source says what the claim names was removed` | 记忆的所有词（至少四个）都出现在证据里“was removed”（或 deleted、dropped、retired）之前。 |
@@ -24,7 +24,7 @@
 - 键要长得像标识符：`snake_case`、`kebab-case`、`camelCase`、`dotted.name`、`--flag`，或写在反引号里的名称。键按原样匹配，或忽略大小写匹配。`Note: 3 things` 不绑定任何东西。
 - 这些写法会绑定键：`key: 100`、`key = 100`、`key=100`、`key (default: 100)`、`key: int = 180`、`key: float = Field(default=0.1, ...)`、`key defaults to 100`、`` `key` is 100 ``、`"key": 5`、`| key | 100 |`、`--flag 100`。
 - 值可以是数字、布尔值和带引号的短字符串。`None` 和 `null` 表示这里没有值。`100`、`100.0`、`1_000` 按数字比较。`500ms` 和 `1s` 不比较，因为单位不做换算。
-- 在某处设置的值（`key=100`、`key = 100`、`--flag 100`）不和声明的默认值（`key (default: 3)`、`key: int = 3`）比较。一次调用传 100，说明不了默认值是多少。两边都只是设置值时，互相说明不了太多，所以这个理由排得靠后，而且来源不能是测试、示例、变更日志或源代码。
+- 在某处设置的值（`key=100`、`key = 100`、`--flag 100`）不和声明的默认值（`key (default: 3)`、`key: int = 3`）比较。一次调用传 100，说明不了默认值是多少。和其他写法比较时，只是设置的值分量也轻一些：这个理由排得靠后，来源不能是测试、示例、变更日志或源代码，证据也要像其他配对一样共享记忆的词。
 
 ### 主题相同
 

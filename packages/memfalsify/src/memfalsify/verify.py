@@ -26,7 +26,7 @@ from .text import (CJK, char_coverage, clauses, features, has_cue, is_absolute, 
 
 Relation = Literal["supports", "contradicts", "unrelated", "disputed"]
 NAMED_VALUE = "same setting"  # how a named-value contradiction's rationale starts; it outranks the other rules
-SET_VALUES = "set differently"  # the same when both sides merely set the value, in a config or an example
+SET_VALUES = "set differently"  # the same when a side merely sets the value, as in a config or an example
 REMOVED = "source says what the claim names was removed"
 # How much each lexical reason says, strongest first, as measured on real repositories (benchmarks/memfalsify/wild).
 REASONS = (NAMED_VALUE, "different units", "different values", REMOVED, SET_VALUES, "opposing terms", "opposite modality",
@@ -241,7 +241,7 @@ def _negates(negated: str, plain: str) -> bool:
     """A statement of ``negated`` reaches a word ``plain`` states without negation, and the two have one subject."""
     if is_prohibition(negated):
         return False
-    aside = reached_terms(plain)
+    aside = frozenset().union(*map(reached_terms, statements(plain)))
     words = stated_terms(plain) - aside
     terms, _ = features(plain)
     for statement in statements(negated):
@@ -282,7 +282,7 @@ class LexicalVerifier:
     def judge(self, claim: str, passage: str) -> Judgment:
         named = named_conflict(claim, passage)
         if named:
-            reason = SET_VALUES if named.both_set else NAMED_VALUE
+            reason = SET_VALUES if named.merely_set else NAMED_VALUE
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale=f"{reason} {named.key}: claim {named.claim} vs source {named.source}")
         score = coverage(claim, passage)

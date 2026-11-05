@@ -22,7 +22,7 @@ def relation(claim, passage):
 # --- named values ----------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("source", [
-    "max_steps: 500", "max_steps = 500", "max_steps (default: 500)", "max_steps (default 500)",
+    "max_steps: 500", "max_steps (default: 500)", "max_steps (default 500)",
     "max_steps: int = 500", "max_steps: int = Field(default=500, description='Steps.')",
     '"max_steps": 500,', "| max_steps | 500 |", "| `max_steps` | int | 500 | Steps |", "`max_steps` (default: `500`)",
     "max_steps defaults to 500", "`max_steps` is 500", "MAX_STEPS: 500", "max_steps: 500.0 # plenty",
@@ -42,6 +42,11 @@ def test_a_key_reads_as_an_identifier(key):
                                   "see README: 3"])
 def test_a_plain_word_is_not_a_key(text):
     assert named_values(text) == {}
+
+
+@pytest.mark.parametrize("source", ["max_steps = 500", "max_steps=500", "--max_steps 500", "--max_steps=500"])
+def test_a_value_set_somewhere_counts_against_a_plain_statement(source):
+    assert judge("max_steps: 100", source).rationale == "set differently max_steps: claim 100 vs source 500"
 
 
 def test_a_flag_is_a_key():
@@ -220,6 +225,7 @@ def test_negation_on_the_same_subject(claim, source):
     ("Always use yarn instead of npm for dependency management", "Use `yarn` for dependency management, never `npm`"),
     ("Do not refactor unrelated code.", "Unrelated code gets a refactor in its own pull request."),
     ("Never add a test plan to the description.", "description: Generate a test plan for it"),
+    ("Please do not open pull requests for typos.", "Prior to opening pull requests for typos, read this."),
     ("The path is not_found in the cache layer", "The path is in the cache layer"),
     ("Run the build with --no-cache for each release", "Run the build for each release"),
     ("save_encoding (default: 'utf-8'): Encoding for saved notes", "save_encoding: str | None = 'utf-8',"),
@@ -303,11 +309,20 @@ def test_in_source_code_only_a_declared_value_counts(rationale):
 
 @pytest.mark.parametrize("source, relation_after", [("retry_limit: int = 5", "contradicts"), ("RETRY_LIMIT = 5", "contradicts"),
                                                      ("retry_limit = 5", "unrelated"), ("call(retry_limit=5)", "unrelated")])
-def test_in_source_code_a_value_must_be_declared(source, relation_after):
+def test_in_source_code_a_value_must_be_declared(source, relation_after):  # by the memory line too: see the next test
     claim = "retry_limit: 3"
     assert relation(claim, source) == "contradicts"
     assert weighed(judge(claim, source), "src/a.py", claim, source).relation == relation_after
     assert weighed(judge(claim, source), "docs/a.md", claim, source).relation == "contradicts"
+
+
+def test_a_memory_line_that_only_sets_a_value_finds_nothing_in_code():
+    assert weighed(judge('class_name = "a"', "class_name: 'b'"), "src/a.tsx", 'class_name = "a"', "class_name: 'b'").relation == "unrelated"
+
+
+def test_both_sides_negating_the_same_word_agree():
+    assert relation("Name it exactly session_id with type Session (not client: Client).",
+                    "**Warning:** Name it `session_id: Session`, not `client: Client`.") != "contradicts"
 
 
 def test_a_word_the_negated_text_also_states_plainly_is_not_negated():
@@ -437,6 +452,7 @@ def test_strength_ranks_only_what_it_knows():
 
 def test_the_passage_that_names_the_key_is_found_and_comes_first(ranked):
     finding = next(f for f in ranked.findings if f.text.startswith("retry_limit"))
+    assert named_conflict(finding.text, "retry_limit = 5", set_counts=False) is None
     assert finding.evidence[0].span.quote == "retry_limit: int = 5"
     assert finding.evidence[0].rationale == "same setting retry_limit: claim 3 vs source 5"
 
