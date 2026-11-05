@@ -2,7 +2,7 @@
 
 [English](tutorial.md) | 中文
 
-大约 15 分钟，从本仓库的一份检出开始。你会安装命令行工具，对照证据审计一份 `MEMORY.md`，记下一条人工确认，在一个一次性的 git 仓库里用 `memfalsify diff` 审计 `CLAUDE.md` 和 `AGENTS.md` 的改动，查看 `history` 和 `rollback`，回放一份组织数据集，解释一个议题，审计决策过程，用 `orgmemory github convert` 转换 GitHub 示例抓取，并注册只读 MCP 服务器。
+[快速上手](quickstart.zh-CN.md)用两条命令就能得到第一份报告。这一页大约需要 15 分钟，从本仓库的一份检出开始。你会安装命令行工具，对照证据审计一份 `MEMORY.md`，记下一条人工确认，在一个一次性的 git 仓库里用 `memfalsify diff` 审计 `CLAUDE.md` 和 `AGENTS.md` 的改动，查看 `history` 和 `rollback`，回放一份组织数据集，解释一个议题，审计决策过程，用 `orgmemory github convert` 转换 GitHub 示例抓取，并注册只读 MCP 服务器。
 
 在仓库根目录、同一个终端里，按顺序运行下面的代码块。后面的块会用到前面设下的变量。每个块都是 bash，第一行是 `# exit N`，也就是这个块的退出码。`0` 表示命令跑完了。带 `--strict` 时的 `1` 表示报告里有一条需要人来看的记忆或决策。`2` 表示参数不对或输入读不了；这些块都不期望 `2`。
 

@@ -1,0 +1,374 @@
+{
+  "tool": "memfalsify",
+  "version": "0.5.0",
+  "mode": "read_only",
+  "memory_file": "MEMORY.md",
+  "files_read": [
+    "MEMORY.md"
+  ],
+  "evidence_root": ".",
+  "excluded": [],
+  "verifier": "lexical",
+  "verifier_stats": [],
+  "as_of": "2026-10-10",
+  "summary": {
+    "candidate_counterevidence": 2,
+    "insufficient_evidence": 3,
+    "candidate_support": 2
+  },
+  "findings": [
+    {
+      "memory_id": "m-27e874e0",
+      "text": "Feature A (bulk export) is approved for the November release.",
+      "location": "MEMORY.md:7",
+      "section": "Product decisions",
+      "metadata": {},
+      "status": "candidate_counterevidence",
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "confirmed": false,
+          "rationale": "same subject, but only one side is negated",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "reviews.jsonl",
+            "sha256": "b112faf49a66c328101bce019896e6e995d197e9a7837a3a7f1da0158846bb43",
+            "start": 0,
+            "end": 275,
+            "quote": "{\"memory_id\": \"m-27e874e0\", \"relation\": \"contradicts\", \"path\": \"notes/2026-10-07-decision-log.md\", \"quote\": \"Product manager rejects Feature A (bulk export) for the November release.\", \"reviewer\": \"demo-reviewer\", \"note\": \"Decision log records a rejection, not an approval.\"}",
+            "line": 1,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        },
+        {
+          "relation": "contradicts",
+          "confirmed": false,
+          "rationale": "opposing terms: claim 'approv…' vs source 'reject…'",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "evidence/notes/2026-10-07-decision-log.md",
+            "sha256": "86dc52dbbfe2802b7196c7b834bfba22807efead21f2371bea68875fc653ad47",
+            "start": 30,
+            "end": 103,
+            "quote": "Product manager rejects Feature A (bulk export) for the November release.",
+            "line": 3,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        }
+      ],
+      "issues": [
+        {
+          "kind": "internal_conflict",
+          "detail": "may contradict m-8b09698a at MEMORY.md:8: \"Feature A was rejected by the product manager.\""
+        }
+      ],
+      "proposals": [
+        {
+          "action": "verify_counterevidence",
+          "reason": "Possible contrary evidence; confirm or dismiss it in reviews.jsonl.",
+          "replacement": null
+        },
+        {
+          "action": "resolve_internal_conflict",
+          "reason": "Two memories disagree; at most one can stay as written.",
+          "replacement": null
+        }
+      ]
+    },
+    {
+      "memory_id": "m-8b09698a",
+      "text": "Feature A was rejected by the product manager.",
+      "location": "MEMORY.md:8",
+      "section": "Product decisions",
+      "metadata": {},
+      "status": "candidate_counterevidence",
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "confirmed": false,
+          "rationale": "same subject, but only one side is negated",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "reviews.jsonl",
+            "sha256": "b112faf49a66c328101bce019896e6e995d197e9a7837a3a7f1da0158846bb43",
+            "start": 0,
+            "end": 275,
+            "quote": "{\"memory_id\": \"m-27e874e0\", \"relation\": \"contradicts\", \"path\": \"notes/2026-10-07-decision-log.md\", \"quote\": \"Product manager rejects Feature A (bulk export) for the November release.\", \"reviewer\": \"demo-reviewer\", \"note\": \"Decision log records a rejection, not an approval.\"}",
+            "line": 1,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        },
+        {
+          "relation": "supports",
+          "confirmed": false,
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "evidence/notes/2026-10-07-decision-log.md",
+            "sha256": "86dc52dbbfe2802b7196c7b834bfba22807efead21f2371bea68875fc653ad47",
+            "start": 30,
+            "end": 103,
+            "quote": "Product manager rejects Feature A (bulk export) for the November release.",
+            "line": 3,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        }
+      ],
+      "issues": [
+        {
+          "kind": "internal_conflict",
+          "detail": "may contradict m-27e874e0 at MEMORY.md:7: \"Feature A (bulk export) is approved for the November release.\""
+        }
+      ],
+      "proposals": [
+        {
+          "action": "verify_counterevidence",
+          "reason": "Possible contrary evidence; confirm or dismiss it in reviews.jsonl.",
+          "replacement": null
+        },
+        {
+          "action": "resolve_internal_conflict",
+          "reason": "Two memories disagree; at most one can stay as written.",
+          "replacement": null
+        }
+      ]
+    },
+    {
+      "memory_id": "m-88f63934",
+      "text": "The bulk export will ship next week.",
+      "location": "MEMORY.md:10",
+      "section": "Product decisions",
+      "metadata": {},
+      "status": "insufficient_evidence",
+      "evidence": [],
+      "issues": [
+        {
+          "kind": "relative_time",
+          "detail": "'next week' has no absolute date"
+        }
+      ],
+      "proposals": [
+        {
+          "action": "attach_evidence",
+          "reason": "No evidence found; add a source or label this memory unverified.",
+          "replacement": null
+        },
+        {
+          "action": "add_absolute_date",
+          "reason": "Replace relative time with the date it refers to.",
+          "replacement": null
+        }
+      ]
+    },
+    {
+      "memory_id": "m-f19a6676",
+      "text": "2026-03-02: Feature B was postponed to Q3.",
+      "location": "MEMORY.md:11",
+      "section": "Product decisions",
+      "metadata": {},
+      "status": "insufficient_evidence",
+      "evidence": [],
+      "issues": [
+        {
+          "kind": "possibly_stale",
+          "detail": "latest date 2026-03-02 is over 180 days before 2026-10-10"
+        }
+      ],
+      "proposals": [
+        {
+          "action": "attach_evidence",
+          "reason": "No evidence found; add a source or label this memory unverified.",
+          "replacement": null
+        },
+        {
+          "action": "reverify",
+          "reason": "Re-check this against current sources.",
+          "replacement": null
+        }
+      ]
+    },
+    {
+      "memory_id": "m-f71d8f28",
+      "text": "Priya owns the payments integration.",
+      "location": "MEMORY.md:15",
+      "section": "Team",
+      "metadata": {},
+      "status": "insufficient_evidence",
+      "evidence": [],
+      "issues": [],
+      "proposals": [
+        {
+          "action": "attach_evidence",
+          "reason": "No evidence found; add a source or label this memory unverified.",
+          "replacement": null
+        }
+      ]
+    },
+    {
+      "memory_id": "m-d4ec01d6",
+      "text": "Bulk export depends on the billing schema migration.",
+      "location": "MEMORY.md:9",
+      "section": "Product decisions",
+      "metadata": {},
+      "status": "candidate_support",
+      "evidence": [
+        {
+          "relation": "supports",
+          "confirmed": false,
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "evidence/notes/2026-10-06-standup.md",
+            "sha256": "0c7d4e8173110dc495239596688100e88c747c0aa2fd1064b2e78c05fae8a3d9",
+            "start": 35,
+            "end": 115,
+            "quote": "Bulk export depends on the billing schema migration, which is still in progress.",
+            "line": 3,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        },
+        {
+          "relation": "supports",
+          "confirmed": false,
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "infra.md",
+            "sha256": "92cc136bb7a93b002a2c931a3f117b48c7993ea68c9e846c1e77a0a88678b4e1",
+            "start": 241,
+            "end": 293,
+            "quote": "Bulk export depends on the billing schema migration.",
+            "line": 9,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        },
+        {
+          "relation": "supports",
+          "confirmed": false,
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "reviews.jsonl",
+            "sha256": "b112faf49a66c328101bce019896e6e995d197e9a7837a3a7f1da0158846bb43",
+            "start": 276,
+            "end": 459,
+            "quote": "{\"memory_id\": \"m-d4ec01d6\", \"relation\": \"supports\", \"path\": \"notes/2026-10-06-standup.md\", \"quote\": \"Bulk export depends on the billing schema migration\", \"reviewer\": \"demo-reviewer\"}",
+            "line": 2,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        }
+      ],
+      "issues": [],
+      "proposals": [
+        {
+          "action": "confirm_support",
+          "reason": "Possible supporting evidence; confirm it to mark this memory supported.",
+          "replacement": null
+        }
+      ]
+    },
+    {
+      "memory_id": "m-2c4e9e63",
+      "text": "We probably use squash merges for pull requests.",
+      "location": "MEMORY.md:16",
+      "section": "Team",
+      "metadata": {},
+      "status": "candidate_support",
+      "evidence": [
+        {
+          "relation": "supports",
+          "confirmed": false,
+          "rationale": "source restates the claim (term coverage 1.00)",
+          "reviewer": null,
+          "opinions": [],
+          "span": {
+            "path": "evidence/CONTRIBUTING.md",
+            "sha256": "c12fb71d6a8000b433700a1d98ba8c599c057220ada03bc0c46222e70dcf78e7",
+            "start": 16,
+            "end": 52,
+            "quote": "Use squash merges for pull requests.",
+            "line": 3,
+            "id": null,
+            "source_uri": null,
+            "source_kind": "file",
+            "captured_at": null,
+            "media": null
+          }
+        }
+      ],
+      "issues": [
+        {
+          "kind": "inference_marker",
+          "detail": "'probably' marks an inference, not an observation"
+        }
+      ],
+      "proposals": [
+        {
+          "action": "confirm_support",
+          "reason": "Possible supporting evidence; confirm it to mark this memory supported.",
+          "replacement": null
+        },
+        {
+          "action": "label_as_inference",
+          "reason": "Keep it explicitly marked as an inference, or verify it.",
+          "replacement": null
+        }
+      ]
+    }
+  ],
+  "skipped_evidence": [
+    {
+      "path": "report.html",
+      "reason": "MemFalsify report: a report cannot be its own evidence"
+    },
+    {
+      "path": "report.md",
+      "reason": "MemFalsify report: a report cannot be its own evidence"
+    },
+    {
+      "path": "evidence/media/whiteboard.png",
+      "reason": "media file: no usable transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it"
+    }
+  ],
+  "limitations": [
+    "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context.",
+    "Only human reviews (reviews.jsonl) can mark a memory supported or challenged.",
+    "Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.",
+    "Missing evidence means unverified, not false. No memory was modified."
+  ]
+}

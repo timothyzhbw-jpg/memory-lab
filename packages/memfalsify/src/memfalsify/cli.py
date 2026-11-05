@@ -1,7 +1,9 @@
-"""memfalsify command line. Reads memory and evidence; writes only the report you ask for."""
+"""memfalsify command line. Reads memory and evidence; writes only what you ask for: a report, the demo ``init``
+makes, the files ``evidence from-git`` makes. Existing memory is never changed."""
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from collections.abc import Callable, Iterable
 from datetime import date
@@ -18,17 +20,23 @@ from memcore.terminal import diagnostic_line
 from memcore.display import json_shield as _json_shield
 
 from . import jev, llm, openai_compat
-from .audit import ATTENTION, audit
-from .discover import discover, discovery_to_markdown
+from .audit import ATTENTION, AuditSet, audit
+from .auditdir import audit_directory
+from .demo import DEFAULT_DIRECTORY, FILES, create_demo, review_line
+from .discover import discover, discovery_to_markdown, same_file
+from .gitevidence import evidence_from_git
 from .history import diff_to_markdown, history_to_markdown, memory_diff, memory_history
-from .htmlreport import diff_to_html, to_html
+from .htmlreport import diff_to_html, set_to_html, to_html
 from .memory import claim_record, parse_memory
-from .report import to_markdown
+from .report import LABELS, set_to_markdown, to_markdown
 from .rollback import rollback_patch
 from .verify import CascadeVerifier, DualVerifier, LexicalVerifier, Verifier, VerifierError
 
 app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
-                  help="Audit agent memory and instruction files against evidence. Never modifies memory.")
+                  help="Audit agent memory and instruction files against evidence. Never modifies memory.\n\n"
+                       "New here? Run: memfalsify init demo && cd demo && memfalsify audit")
+evidence_app = typer.Typer(cls=SafeTyperGroup, no_args_is_help=True, add_completion=False,
+                           help="Turn project history into evidence files to audit against (--evidence).")
 
 # Memory files are Markdown: MEMORY.md and the instruction files `discover` lists.
 MEMORY_KINDS = ("a memory or agent instruction file: MEMORY.md, CLAUDE.md, AGENTS.md, GEMINI.md, "
@@ -45,6 +53,11 @@ class ReportFormat(str, Enum):
     markdown = "markdown"
     json = "json"
     html = "html"
+
+
+class DemoLanguage(str, Enum):
+    en = "en"
+    zh = "zh"
 
 
 class VerifierChoice(str, Enum):
@@ -125,11 +138,23 @@ def _emit(text: str, markdown: bool) -> None:
     typer.echo(text if markdown else _json_shield(text), nl=False)
 
 
+def _same_file(one: Path, other: Path) -> bool:
+    """Whether two paths lead to one file: the same place once links are followed (even if nothing is there yet),
+    or the same file under two names."""
+    try:
+        return one.resolve() == other.resolve() or same_file(one, other)
+    except (OSError, RuntimeError, ValueError):  # nothing there; Python 3.10 raises RuntimeError on a cyclic link
+        return False
+
+
 def _write(output: Path, data: bytes, protected: Iterable[Path], what: str = "report") -> None:
-    """Write exact bytes (no newline translation); never over a memory file."""
-    if output.resolve() in {Path(p).resolve() for p in protected}:
+    """Write exact bytes (no newline translation); never over a memory file, by any name or link."""
+    if any(_same_file(output, Path(p)) for p in protected):
         _fail(f"refusing to overwrite a memory file with the {what}")
-    output.write_bytes(data)
+    try:
+        output.write_bytes(data)
+    except OSError as exc:
+        _fail(f"cannot write the {what}: {exc}")
     typer.echo(f"wrote {terminal_text(str(output))}", err=True)
 
 
@@ -156,14 +181,76 @@ def _echo_exact(text: str) -> None:
     typer.echo(text.encode("ascii"), nl=False)
 
 
+def _echo_utf8(text: str, err: bool = False) -> None:
+    """UTF-8 bytes, whatever the console's encoding: LF stays LF, and a cp1252 stream cannot refuse Chinese text."""
+    typer.echo(text.encode("utf-8"), nl=False, err=err)
+
+
+def _note(message: str) -> None:
+    """One line on stderr that may name files, whatever their names are written in."""
+    _echo_utf8(diagnostic_line(message) + "\n", err=True)
+
+
 def _render(fmt: ReportFormat, report, markdown: Callable[..., str], html: Callable[..., str]) -> str:
     if fmt is ReportFormat.json:
         return report.model_dump_json(indent=2) + "\n"
     return html(report) if fmt is ReportFormat.html else markdown(report)
 
 
+def _memory_paths(result: AuditSet) -> list[Path]:
+    """Everything an ``audit`` with no MEMORY argument took for memory: chosen and read, but also chosen or linked
+    and then skipped, or passed over, since writing to such a link would land on the file behind it."""
+    names = [*result.files, *(place.path for place in result.not_searched)]
+    for report in result.reports:
+        names += report.files_read
+        names += [s.path for s in report.skipped_evidence if s.reason.startswith("memory skipped: ")]
+    return [Path(name) for name in names]
+
+
+def _finish_directory(result: AuditSet, fmt: ReportFormat, output: Optional[Path], strict: bool) -> None:
+    """Output and exit code of ``audit`` with no MEMORY argument."""
+    if not result.files:
+        applied = " (--exclude applied)" if result.excluded else ""
+        _fail(f"no memory or instruction file found in this directory{applied}; "
+              "run `memfalsify init` to make a demo, or name a file: memfalsify audit FILE")
+    text = _render(fmt, result, set_to_markdown, set_to_html)
+    if output:
+        _write(output, text.encode("utf-8"), _memory_paths(result))
+    else:
+        _echo_utf8(_json_shield(text) if fmt is ReportFormat.json else text)
+    claims = sum(len(report.findings) for report in result.reports)
+    counts = ", ".join(f"{n} {LABELS[status].lower()}" for status, n in result.summary.items())
+    _note(f"note: {claims} claim(s) in {len(result.files)} file(s){': ' + counts if counts else ''}. "
+          "Nothing was changed. A flag means \"read the quotes\"; a person decides, in a reviews file.")
+    if strict and any(ATTENTION & report.summary.keys() for report in result.reports):
+        raise typer.Exit(1)
+
+
+AUDIT_HELP = """Audit a memory or instruction file and print an evidence-cited report with proposed (unapplied) actions.
+
+With no MEMORY: audit every instruction file `memfalsify discover` finds in the current directory, plus its \
+MEMORY.md, in path order, and compare them with that directory unless --evidence says otherwise. Hidden, skipped \
+and generated files stay out of the evidence. --exclude also leaves files out of the choice.
+
+Several files share one report. --format json then always gives one object with a list of reports. A note on \
+stderr says which files were chosen."""
+FROM_GIT_HELP = """Write one small Markdown file per commit (subject, body, author date, full hash), named by its \
+short hash.
+
+The result works with --evidence. The same commits give the same bytes, and a re-run adds only new files. Only \
+--output is written, and a file holding anything else stops the run; the repository is only read.
+
+Commit messages are untrusted. Control, bidi and zero-width characters are stored as visible \\uXXXX escapes, not raw \
+and not removed: quotes stay exact, printing a file is safe, and the full hash leads to the original bytes.
+
+A GitHub version (pull request titles and bodies) is on the roadmap."""
+
+
 # Options shared by `audit` and `diff`.
-MEMORY_ARG = typer.Argument(..., exists=True, dir_okay=False, help="File to audit, " + MEMORY_KINDS)
+MEMORY_ARG = typer.Argument(
+    None, exists=True, dir_okay=False,
+    help="File to audit, " + MEMORY_KINDS + ". Leave it out to audit every such file in the current directory, "
+                                            "plus its MEMORY.md")
 GIT_MEMORY_ARG = typer.Argument(..., exists=True, dir_okay=False, help="In a git work tree, " + MEMORY_KINDS)
 EVIDENCE = typer.Option(None, "--evidence", "-e", help="Directory of evidence files")
 EXCLUDE = typer.Option(
@@ -221,9 +308,47 @@ MIN_COVERAGE = typer.Option(
     help="Share of a memory's terms a passage must contain to be judged (default 0.5 lexical, 0.2 models)")
 
 
-@app.command("audit")
+@app.command("init")
+def init_command(
+    directory: Path = typer.Argument(
+        Path(DEFAULT_DIRECTORY), help="Where to write the demo; created if it does not exist"),
+    lang: DemoLanguage = typer.Option(DemoLanguage.en, "--lang", help="Language of the demo's memory and evidence"),
+) -> None:
+    """Write a tiny demo to audit: MEMORY.md with 3 claims, evidence/ with 2 files, an empty reviews.jsonl.
+
+    Works offline. Refuses (exit 2, nothing written) if a target file already exists."""
+    try:
+        alone = not directory.is_dir() or not any(directory.iterdir())
+        create_demo(directory, lang.value)
+    except (ValueError, OSError) as exc:
+        _fail(str(exc))
+    place = f"./{directory}" if str(directory).startswith("-") else str(directory)  # cd would read an option
+    steps = ([f"  cd {terminal_text(shlex.quote(place))}"] if directory != Path(".") else [])
+    expect = (["You should see one claim the evidence seems to contradict (both quotes shown), one with supporting",
+               "evidence and one with no evidence."] if alone else
+              ["This directory held other files, and the audit reads those too, so the report can show more than the",
+               "demo's three claims. For the demo alone, run:",
+               "  memfalsify audit MEMORY.md --evidence evidence"])
+    _echo_utf8("\n".join([
+        f"Wrote {terminal_text(str(directory))}: " + ", ".join(FILES) + ".",
+        "",
+        "Next, run:",
+        *steps,
+        "  memfalsify audit",
+        "",
+        *expect,
+        "",
+        "To confirm the contradiction yourself, add this line to reviews.jsonl:",
+        f"  {review_line(lang.value)}",
+        "Then run:",
+        "  memfalsify audit --reviews reviews.jsonl",
+        "",
+    ]))
+
+
+@app.command("audit", help=AUDIT_HELP)
 def audit_command(
-    memory: Path = MEMORY_ARG,
+    memory: Optional[Path] = MEMORY_ARG,
     evidence: Optional[Path] = EVIDENCE,
     exclude: Optional[list[str]] = EXCLUDE,
     reviews: Optional[Path] = REVIEWS,
@@ -247,21 +372,30 @@ def audit_command(
     max_concurrency: int = MAX_CONCURRENCY,
     batch: bool = BATCH,
 ) -> None:
-    """Audit a memory or instruction file and print an evidence-cited report with proposed (unapplied) actions."""
     try:
         reference = date.fromisoformat(as_of) if as_of else None
         judge = build_verifier(verifier, llm_model, jev_model, accept_at, batch=batch, progress=_progress,
                                openai=openai_settings(openai_model, provider, base_url, api_key_env,
                                                       openai_response_format))
-        report = audit(memory, evidence, reviews, verifier=judge, as_of=reference, stale_days=stale_days,
-                       follow_links=follow_links, exclude=exclude or (),
-                       max_concurrency=concurrency(verifier, max_concurrency),
-                       **preselection(verifier, min_coverage, max_judged))
+        if memory is None:
+            result = audit_directory(Path("."), evidence, reviews, verifier=judge, as_of=reference,
+                                     stale_days=stale_days, follow_links=follow_links, exclude=exclude or (),
+                                     max_concurrency=concurrency(verifier, max_concurrency), progress=_note,
+                                     **preselection(verifier, min_coverage, max_judged))
+        else:
+            report = audit(memory, evidence, reviews, verifier=judge, as_of=reference, stale_days=stale_days,
+                           follow_links=follow_links, exclude=exclude or (),
+                           max_concurrency=concurrency(verifier, max_concurrency),
+                           **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
+    if memory is None:
+        _finish_directory(result, fmt, output, strict)
+        return
     text = _render(fmt, report, to_markdown, to_html)
     if output:
-        _write(output, text.encode("utf-8"), (Path(memory).absolute().parent.resolve() / p for p in report.files_read))
+        base = Path(memory).absolute().parent.resolve()
+        _write(output, text.encode("utf-8"), (Path(memory), *(base / p for p in report.files_read)))
     elif fmt is ReportFormat.html:
         _echo_exact(text)
     else:
@@ -414,6 +548,36 @@ def discover_command(
         _fail(str(exc))
     _emit(discovery_to_markdown(report) if fmt is Format.markdown else report.model_dump_json(indent=2) + "\n",
           fmt is Format.markdown)
+
+
+@evidence_app.command("from-git", help=FROM_GIT_HELP)
+def evidence_from_git_command(
+    since: str = typer.Option(
+        ..., "--since", metavar="WHEN",
+        help="Commits after this point: a date (2026-01-31 means midnight UTC; 2026-01-31T12:00:00+02:00; "
+             "'30 days ago'), filtered by committer date, or a commit, tag or branch, meaning the commits after it "
+             "up to HEAD. A value that looks like a date is read as a date"),
+    output: Path = typer.Option(..., "--output", "-o", file_okay=False,
+                                help="Directory for the evidence files; created if it does not exist"),
+    repo: Path = typer.Option(Path("."), "--repo", exists=True, file_okay=False,
+                              help="Directory inside the repository to read (default: the current directory)"),
+    max_commits: int = typer.Option(500, "--max-commits", min=1, help="Write at most this many commits, newest first"),
+) -> None:
+    try:
+        result = evidence_from_git(since, output, repo=repo, max_commits=max_commits)
+    except (ValueError, OSError) as exc:
+        _fail(str(exc))
+    _note(f"note: --since read as {result.since}")
+    if result.cut_short:
+        _note(f"note: stopped at --max-commits {max_commits}; older commits in the window were left out")
+    where = terminal_text(shlex.quote(str(output.absolute())))
+    _echo_utf8(f"Wrote {len(result.written)} new file(s) to {terminal_text(str(output))}; "
+               f"{len(result.unchanged)} already there.\n"
+               "From the directory with your memory files, audit against them with: "
+               f"memfalsify audit --evidence {where}\n")
+
+
+app.add_typer(evidence_app, name="evidence")
 
 
 def main() -> None:

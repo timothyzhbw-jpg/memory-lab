@@ -177,6 +177,11 @@ def _file_id(status: os.stat_result, name: str) -> tuple:
     return (status.st_dev, status.st_ino)
 
 
+def same_file(one: Path, other: Path) -> bool:
+    """Whether two existing paths lead to one file, as far as the filesystem can tell. ``OSError`` if one is missing."""
+    return _file_id(os.stat(one), str(one)) == _file_id(os.stat(other), str(other))
+
+
 def _cell(text: str) -> str:
     """One table cell. Pipes are escaped so they cannot split the row, including inside the code span."""
     return code_span(text).replace("|", "\\|")

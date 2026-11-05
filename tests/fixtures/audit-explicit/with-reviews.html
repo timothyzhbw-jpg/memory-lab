@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="generator" content="memfalsify">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>MemFalsify audit report</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --panel: #f6f8fa; --link: #0969da;
+  --red-bg: #ffebe9; --red-fg: #a40e26; --amber-bg: #fff8c5; --amber-fg: #6c4400;
+  --blue-bg: #ddf4ff; --blue-fg: #0a3069; --green-bg: #dafbe1; --green-fg: #116329;
+  --gray-bg: #eff2f5; --gray-fg: #424a53;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --panel: #161b22; --link: #58a6ff;
+    --red-bg: #42181c; --red-fg: #ffa198; --amber-bg: #3b2b05; --amber-fg: #e3b341;
+    --blue-bg: #0c2d6b; --blue-fg: #a5d6ff; --green-bg: #0f3d1f; --green-fg: #7ee787;
+    --gray-bg: #262c36; --gray-fg: #d1d7e0;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); overflow-wrap: break-word;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: .5rem 0 1rem; }
+h2 { font-size: 1.3rem; line-height: 1.3; margin: 2rem 0 .75rem; padding-bottom: .25rem;
+     border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 .5rem; overflow-wrap: break-word; }
+p { margin: .4rem 0; }
+a { color: var(--link); overflow-wrap: break-word; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+       font-size: .875em; background: var(--panel); padding: .1em .3em; border-radius: 4px;
+       overflow-wrap: break-word; }
+.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; margin: 0 0 1rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: break-word; }
+.scroll { overflow-x: auto; margin: .5rem 0 1rem; }
+table { border-collapse: collapse; }
+caption { text-align: left; color: var(--muted); padding-bottom: .25rem; }
+th, td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: left; vertical-align: top; }
+thead th, tfoot th, tfoot td { background: var(--panel); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin: 0 0 1rem; }
+blockquote { margin: .5rem 0; padding: .4rem .8rem; border-left: 4px solid var(--line); background: var(--panel);
+             white-space: pre-wrap; overflow-wrap: break-word; }
+ul { padding-left: 1.25rem; margin: .25rem 0 .5rem; }
+li { margin: .25rem 0; overflow-wrap: break-word; }
+.label { font-weight: 600; margin: .75rem 0 .25rem; }
+.muted { color: var(--muted); }
+.hash { font-size: .75em; }
+time { white-space: nowrap; }
+.badge { display: inline-block; padding: 0 .5em; border-radius: 1em; font-size: .8rem; font-weight: 600;
+         white-space: nowrap; vertical-align: .1em; }
+.red { background: var(--red-bg); color: var(--red-fg); }
+.amber { background: var(--amber-bg); color: var(--amber-fg); }
+.blue { background: var(--blue-bg); color: var(--blue-fg); }
+.green { background: var(--green-bg); color: var(--green-fg); }
+.gray { background: var(--gray-bg); color: var(--gray-fg); }
+.ctl { font: .75em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--red-fg);
+       border: 1px dashed currentColor; border-radius: 3px; padding: 0 .2em; }
+@media (max-width: 40rem) {
+  main { padding: 1rem; }
+  .meta { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .meta dd { margin-bottom: .5rem; }
+  .item { padding: .6rem .75rem; }
+  ul { padding-left: 1rem; }
+}
+@media print {
+  .item { break-inside: avoid; }
+  a { color: inherit; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>MemFalsify audit report</h1>
+<dl class="meta">
+<dt>Memory</dt><dd><code>MEMORY.md</code> (2 file(s): <code>MEMORY.md</code>, <code>infra.md</code>)</dd>
+<dt>Evidence root</dt><dd><code>evidence</code></dd>
+<dt>Verifier</dt><dd><code>lexical</code></dd>
+<dt>As of</dt><dd><time datetime="2026-10-10">2026-10-10</time></dd>
+<dt>Mode</dt><dd><strong>read_only</strong> (no memory was modified)</dd>
+</dl>
+<section>
+<h2>Summary</h2>
+<div class="scroll"><table>
+<caption>Memories by status</caption>
+<thead><tr><th scope="col">Status</th><th scope="col">Memories</th></tr></thead>
+<tbody>
+<tr><th scope="row"><a href="#status-challenged">CHALLENGED</a></th><td class="num">1</td></tr>
+<tr><th scope="row"><a href="#status-candidate_counterevidence">POSSIBLE COUNTEREVIDENCE</a></th><td class="num">3</td></tr>
+<tr><th scope="row"><a href="#status-insufficient_evidence">NO EVIDENCE</a></th><td class="num">3</td></tr>
+<tr><th scope="row"><a href="#status-candidate_support">POSSIBLE SUPPORT</a></th><td class="num">2</td></tr>
+<tr><th scope="row"><a href="#status-supported">SUPPORTED</a></th><td class="num">1</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="status-challenged">
+<h2><span class="badge red">CHALLENGED</span> 1 memory</h2>
+<article class="item">
+<h3><span class="badge red">CHALLENGED</span> <code>m-27e874e0</code></h3>
+<blockquote>Feature A (bulk export) is approved for the November release.</blockquote>
+<p><code>MEMORY.md:7</code> &middot; Product decisions</p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge red">contradicts</span> confirmed by demo-reviewer &middot; <code>notes/2026-10-07-decision-log.md:3</code> <span class="muted">(characters 30&ndash;103)</span> &middot; sha256 <code class="hash">86dc52dbbfe2802b7196c7b834bfba22807efead21f2371bea68875fc653ad47</code></p>
+<p>Decision log records a rejection, not an approval.</p>
+<blockquote>Product manager rejects Feature A (bulk export) for the November release.</blockquote></li>
+</ul>
+<p class="label">Issues</p>
+<ul>
+<li><code>internal_conflict</code>: may contradict m-8b09698a at MEMORY.md:8: &quot;Feature A was rejected by the product manager.&quot;</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>review_or_retire</code>: A reviewer confirmed contrary evidence; correct or remove this memory by hand.</li>
+<li><code>resolve_internal_conflict</code>: Two memories disagree; at most one can stay as written.</li>
+</ul>
+</article>
+</section>
+<section id="status-candidate_counterevidence">
+<h2><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> 3 memories</h2>
+<article class="item">
+<h3><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> <code>m-9efe3be5</code></h3>
+<blockquote>The public API rate limit is 100 requests per minute.</blockquote>
+<p><code>infra.md:6</code></p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>docs/api.md:3</code> <span class="muted">(characters 14&ndash;74)</span> &middot; sha256 <code class="hash">057549a717f819689300d9f6a6100815a89af373b943f7ab3a50b6c3b689ec71</code></p>
+<p>different values: claim [&#x27;100&#x27;] vs source [&#x27;60&#x27;]</p>
+<blockquote>The public API rate limit is 60 requests per minute per key.</blockquote></li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> <code>m-f0a6035e</code></h3>
+<blockquote>The main database runs PostgreSQL 15.</blockquote>
+<p><code>infra.md:7</code></p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>docs/database.md:3</code> <span class="muted">(characters 12&ndash;77)</span> &middot; sha256 <code class="hash">871f23010759eb6d0d18af3334e3d46bea2fd334a3c4058dc1e3eac75fe9337d</code></p>
+<p>different values: claim [&#x27;15&#x27;] vs source [&#x27;16&#x27;]</p>
+<blockquote>The main database runs PostgreSQL 16 since the September upgrade.</blockquote></li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> <code>m-6d879fbb</code></h3>
+<blockquote>Deployments always go through the staging cluster.</blockquote>
+<p><code>infra.md:8</code></p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>notes/2026-09-12-incident.md:3</code> <span class="muted">(characters 23&ndash;98)</span> &middot; sha256 <code class="hash">870054974f9496baa1d5afeb42215764fe03270b40475e189313fa4fcf1d859d</code></p>
+<p>same subject, but only one side is negated</p>
+<blockquote>A hotfix was deployed directly to production, skipping the staging cluster.</blockquote></li>
+</ul>
+<p class="label">Issues</p>
+<ul>
+<li><code>overgeneralization</code>: absolute wording &#x27;always&#x27;</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+<li><code>narrow_scope</code>: State the cases the evidence actually covers.</li>
+</ul>
+</article>
+</section>
+<section id="status-insufficient_evidence">
+<h2><span class="badge gray">NO EVIDENCE</span> 3 memories</h2>
+<article class="item">
+<h3><span class="badge gray">NO EVIDENCE</span> <code>m-88f63934</code></h3>
+<blockquote>The bulk export will ship next week.</blockquote>
+<p><code>MEMORY.md:10</code> &middot; Product decisions</p>
+<p class="label">Issues</p>
+<ul>
+<li><code>relative_time</code>: &#x27;next week&#x27; has no absolute date</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>attach_evidence</code>: No evidence found; add a source or label this memory unverified.</li>
+<li><code>add_absolute_date</code>: Replace relative time with the date it refers to.</li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge gray">NO EVIDENCE</span> <code>m-f19a6676</code></h3>
+<blockquote>2026-03-02: Feature B was postponed to Q3.</blockquote>
+<p><code>MEMORY.md:11</code> &middot; Product decisions</p>
+<p class="label">Issues</p>
+<ul>
+<li><code>possibly_stale</code>: latest date 2026-03-02 is over 180 days before 2026-10-10</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>attach_evidence</code>: No evidence found; add a source or label this memory unverified.</li>
+<li><code>reverify</code>: Re-check this against current sources.</li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge gray">NO EVIDENCE</span> <code>m-f71d8f28</code></h3>
+<blockquote>Priya owns the payments integration.</blockquote>
+<p><code>MEMORY.md:15</code> &middot; Team</p>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>attach_evidence</code>: No evidence found; add a source or label this memory unverified.</li>
+</ul>
+</article>
+</section>
+<section id="status-candidate_support">
+<h2><span class="badge blue">POSSIBLE SUPPORT</span> 2 memories</h2>
+<article class="item">
+<h3><span class="badge blue">POSSIBLE SUPPORT</span> <code>m-8b09698a</code></h3>
+<blockquote>Feature A was rejected by the product manager.</blockquote>
+<p><code>MEMORY.md:8</code> &middot; Product decisions</p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge green">supports</span> candidate, unconfirmed &middot; <code>notes/2026-10-07-decision-log.md:3</code> <span class="muted">(characters 30&ndash;103)</span> &middot; sha256 <code class="hash">86dc52dbbfe2802b7196c7b834bfba22807efead21f2371bea68875fc653ad47</code></p>
+<p>source restates the claim (term coverage 1.00)</p>
+<blockquote>Product manager rejects Feature A (bulk export) for the November release.</blockquote></li>
+</ul>
+<p class="label">Issues</p>
+<ul>
+<li><code>internal_conflict</code>: may contradict m-27e874e0 at MEMORY.md:7: &quot;Feature A (bulk export) is approved for the November release.&quot;</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>confirm_support</code>: Possible supporting evidence; confirm it to mark this memory supported.</li>
+<li><code>resolve_internal_conflict</code>: Two memories disagree; at most one can stay as written.</li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge blue">POSSIBLE SUPPORT</span> <code>m-2c4e9e63</code></h3>
+<blockquote>We probably use squash merges for pull requests.</blockquote>
+<p><code>MEMORY.md:16</code> &middot; Team</p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge green">supports</span> candidate, unconfirmed &middot; <code>CONTRIBUTING.md:3</code> <span class="muted">(characters 16&ndash;52)</span> &middot; sha256 <code class="hash">c12fb71d6a8000b433700a1d98ba8c599c057220ada03bc0c46222e70dcf78e7</code></p>
+<p>source restates the claim (term coverage 1.00)</p>
+<blockquote>Use squash merges for pull requests.</blockquote></li>
+</ul>
+<p class="label">Issues</p>
+<ul>
+<li><code>inference_marker</code>: &#x27;probably&#x27; marks an inference, not an observation</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>confirm_support</code>: Possible supporting evidence; confirm it to mark this memory supported.</li>
+<li><code>label_as_inference</code>: Keep it explicitly marked as an inference, or verify it.</li>
+</ul>
+</article>
+</section>
+<section id="status-supported">
+<h2><span class="badge green">SUPPORTED</span> 1 memory</h2>
+<article class="item">
+<h3><span class="badge green">SUPPORTED</span> <code>m-d4ec01d6</code></h3>
+<blockquote>Bulk export depends on the billing schema migration.</blockquote>
+<p><code>MEMORY.md:9</code> &middot; Product decisions</p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge green">supports</span> confirmed by demo-reviewer &middot; <code>notes/2026-10-06-standup.md:3</code> <span class="muted">(characters 35&ndash;86)</span> &middot; sha256 <code class="hash">0c7d4e8173110dc495239596688100e88c747c0aa2fd1064b2e78c05fae8a3d9</code></p>
+<p>confirmed by reviewer</p>
+<blockquote>Bulk export depends on the billing schema migration</blockquote></li>
+</ul>
+<p class="label">Issues</p>
+<ul>
+<li><code>duplicate</code>: also stated at infra.md:9</li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>deduplicate</code>: Keep one copy so future edits cannot diverge.</li>
+</ul>
+</article>
+</section>
+<section>
+<h2>Skipped evidence</h2>
+<div class="scroll"><table>
+<caption>Files not read</caption>
+<thead><tr><th scope="col">Path</th><th scope="col">Reason</th></tr></thead>
+<tbody>
+<tr><th scope="row"><code>media/whiteboard.png</code></th><td>media file: no usable transcript (.vtt, .srt) or OCR sidecar (.ocr.json) next to it</td></tr>
+</tbody>
+</table></div>
+</section>
+<section>
+<h2>Limitations</h2>
+<ul>
+<li>Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context.</li>
+<li>Only human reviews (reviews.jsonl) can mark a memory supported or challenged.</li>
+<li>Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.</li>
+<li>Missing evidence means unverified, not false. No memory was modified.</li>
+</ul>
+</section>
+</main>
+</body>
+</html>

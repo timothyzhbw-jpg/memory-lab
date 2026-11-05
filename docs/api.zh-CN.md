@@ -251,6 +251,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 |---|---|
 | `memfalsify.ATTENTION` | 严格审计计数的冻结状态集合：challenged、conflicted、candidate_counterevidence、disputed。 |
 | `memfalsify.AuditReport` | 只读审计结果，包含发现、状态计数、各模型后端的 API 用量（verifier_stats）、跳过的证据及局限。 |
+| `memfalsify.AuditSet` | 审计一个目录的结果：选中的文件、汇总的状态计数、按顺序每个文件一份 AuditReport，以及查找文件时跳过的位置（not_searched）。不带 MEMORY 参数的 `memfalsify audit --format json` 输出的就是它。 |
 | `memfalsify.CascadeVerifier` | 构造参数为 first、second、accept_at=0.8；首个验证器置信度不足时升级。judge_many 先让 first 判断全部片段，再让 second 判断其中没把握的；usage() 合并两个后端的用量。 |
 | `memfalsify.Change` | 不可变比较结果：类型、新旧 Claim、相似度及移动标记。 |
 | `memfalsify.Claim` | 解析后的记忆，包含稳定 ID、文本、路径、行号、章节、重复位置，以及所在文件格式规定的 frontmatter 元数据（例如 Cursor 规则的 globs）。 |
@@ -286,6 +287,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.__version__` | 已安装发行包的版本字符串。 |
 | `memfalsify.audit` | 解析记忆并用可选的证据与人工审核记录进行审计；不修改记忆。max_concurrency 限制同时进行的验证器调用数（默认 1）。 |
 | `memfalsify.audit_claims` | 审计已解析的记忆；only= 限定输出，但审核与冲突检查仍使用全部记忆。memory_paths 不作为证据。 |
+| `memfalsify.audit_directory` | 审计一个目录里 discover 找到的每个指令文件和顶层的 MEMORY.md，对照 evidence_root（默认就是这个目录），按路径排序；一个都没有时返回 files 为空的 AuditSet。多个文件里相同的记忆只报告一次。不修改记忆。 |
 | `memfalsify.audit_staged` | 用工作区里的证据审计 git 暂存区（index）中记忆文件的每条记忆（链接的 .md 文件也从暂存区读取）；不修改记忆。 |
 | `memfalsify.claim_id` | 返回规范化文本的记忆 ID。 |
 | `memfalsify.compare` | 按 ID、章节及词语相似度确定性比较两组 Claim。 |
@@ -305,6 +307,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 ```python
 audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
 audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
+audit_directory(directory: Path=Path('.'), evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, progress: Callable[[str], None] | None=None) -> AuditSet
 audit_staged(memory_file: Path, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]

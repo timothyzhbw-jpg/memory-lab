@@ -31,6 +31,7 @@
   "memfalsify": [
     "ATTENTION",
     "AuditReport",
+    "AuditSet",
     "CascadeVerifier",
     "Change",
     "Claim",
@@ -66,6 +67,7 @@
     "__version__",
     "audit",
     "audit_claims",
+    "audit_directory",
     "audit_staged",
     "claim_id",
     "compare",

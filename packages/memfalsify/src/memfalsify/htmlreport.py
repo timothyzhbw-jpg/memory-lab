@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from memcore import htmlpage as h
 
-from .audit import SEVERITY, AuditReport, EvidenceFinding, Finding
+from .audit import SEVERITY, AuditReport, AuditSet, EvidenceFinding, Finding
 from .corpus import HTML_GENERATOR
 from .history import ClaimVersion, DiffReport
-from .report import LABELS
+from .report import LABELS, attention_count
 from .verify import VerifierStats
 
 TONE = {"challenged": "red", "conflicted": "red", "candidate_counterevidence": "amber", "disputed": "amber",
@@ -69,13 +69,14 @@ def _status_table(summary: dict[str, int], caption: str) -> str:
     return h.table(caption, ["Status", "Memories"], rows, numeric=[1])
 
 
-def _findings(findings: list[Finding], level: int) -> str:
-    """Findings grouped under one heading per status, most severe first."""
+def _findings(findings: list[Finding], level: int, anchor: str = "") -> str:
+    """Findings grouped under one heading per status, most severe first. ``anchor`` keeps the section IDs unique
+    in a page that holds several reports."""
     out = []
     for status in SEVERITY:
         group = [f for f in findings if f.status == status]
         if group:
-            out.append(f'<section id="status-{status}">\n'
+            out.append(f'<section id="{anchor}status-{status}">\n'
                        f"<h{level}>{status_badge(status)} {len(group)} memor{'y' if len(group) == 1 else 'ies'}"
                        f"</h{level}>")
             out += [_finding(f, level + 1) for f in group]
@@ -135,6 +136,50 @@ def to_html(report: AuditReport) -> str:
     if report.findings:
         body.append(_findings(report.findings, 2))
     body += _skipped(report) + _limitations(report.limitations)
+    return h.page("MemFalsify audit report", "\n".join(body), HTML_GENERATOR)
+
+
+def set_to_html(result: AuditSet) -> str:
+    """``memfalsify audit`` with no MEMORY argument. One file gives exactly its own page, unless the search passed a
+    place over, which that page has no room for. Otherwise one page: totals, a table of the files with links, one
+    section per file, then the skipped evidence and limitations of all of them, each line once."""
+    if len(result.reports) == 1 and not result.not_searched:
+        return to_html(result.reports[0])
+    meta = [("Memory", _files(result.files)),
+            ("Evidence root", h.code(result.evidence_root)),
+            *([("Excluded from evidence", ", ".join(h.code(p) for p in result.excluded))] if result.excluded else []),
+            ("Verifier", h.code(result.verifier)), ("As of", h.when(result.as_of)),
+            ("Mode", f"<strong>{h.text(result.mode)}</strong> (no memory was modified)")]
+    body = ["<h1>MemFalsify audit report</h1>", h.meta(meta), "<section>\n<h2>Summary</h2>"]
+    if result.summary:
+        body.append(h.table("Memories by status", ["Status", "Memories"],
+                            [[h.text(LABELS[s]), str(n)] for s, n in result.summary.items()], numeric=[1]))
+    else:
+        body.append("<p>No claims were found in the memory.</p>")
+    body.append(h.table("Files", ["File", "Memories", "Need attention"],
+                        [[f'<a href="#file-{index}">{h.code(r.memory_file)}</a>', str(len(r.findings)),
+                          str(attention_count(r))] for index, r in enumerate(result.reports)], numeric=[1, 2]))
+    body.append("</section>")
+    for index, report in enumerate(result.reports):
+        body.append(f'<section id="file-{index}">\n<h2>{h.code(report.memory_file)}</h2>')
+        also = [p for p in report.files_read if p != report.memory_file]
+        rows = ([("Also read", ", ".join(h.code(p) for p in also))] if also else [])
+        rows += [("API usage", _usage(stats)) for stats in report.verifier_stats]
+        if rows:
+            body.append(h.meta(rows))
+        body.append(_findings(report.findings, 3, f"file-{index}-") if report.findings else
+                    "<p>No claims of its own: nothing here, or only what another file listed here already states.</p>")
+        body.append("</section>")
+    skipped = dict.fromkeys((s.path, s.reason) for report in result.reports for s in report.skipped_evidence)
+    if skipped:
+        body += ["<section>\n<h2>Skipped evidence</h2>",
+                 h.table("Files not read", ["Path", "Reason"], [[h.code(p), h.text(r)] for p, r in skipped]),
+                 "</section>"]
+    if result.not_searched:
+        body += ["<section>\n<h2>Not searched for memory files</h2>",
+                 h.table("Places not searched", ["Path", "Reason"],
+                         [[h.code(s.path), h.text(s.reason)] for s in result.not_searched]), "</section>"]
+    body += _limitations(list(dict.fromkeys(line for report in result.reports for line in report.limitations)))
     return h.page("MemFalsify audit report", "\n".join(body), HTML_GENERATOR)
 
 

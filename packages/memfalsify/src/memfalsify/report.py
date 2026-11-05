@@ -4,9 +4,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from memcore import EvidenceSpan
-from memcore.display import report_text
+from memcore.display import report_text, table_code
 
-from .audit import AuditReport, Finding
+from .audit import ATTENTION, AuditReport, AuditSet, Finding
 from .corpus import REPORT_HEADER
 from .formats import Value
 from .gitstore import code_span, show_text
@@ -131,4 +131,50 @@ def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
         out += [skipped_line(s.path, s.reason, show) for s in report.skipped_evidence]
         out.append("")
     out += ["## Limitations", ""] + [f"- {show(line)}" for line in report.limitations]
+    return "\n".join(out) + "\n"
+
+
+def attention_count(report: AuditReport) -> int:
+    return sum(n for status, n in report.summary.items() if status in ATTENTION)
+
+
+def set_to_markdown(result: AuditSet) -> str:
+    """``memfalsify audit`` with no MEMORY argument. One file reads exactly like its own report, unless the search
+    passed a place over, which that report has no room for. Otherwise one document: totals, a table of the files,
+    one section per file in order, then the skipped evidence and limitations of all of them, each line once."""
+    if len(result.reports) == 1 and not result.not_searched:
+        return to_markdown(result.reports[0])
+    out = [REPORT_HEADER, "",
+           f"- Memory: {len(result.files)} files: " + ", ".join(code_span(p) for p in result.files),
+           f"- Evidence root: {code_span(result.evidence_root)}",
+           *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in result.excluded)]
+             if result.excluded else []),
+           f"- Verifier: {code_span(result.verifier)} · as of {result.as_of} · mode: **{result.mode}** "
+           "(no memory was modified)",
+           "", "| Status | Memories |", "|---|---|"]
+    out += [f"| {LABELS[s]} | {n} |" for s, n in result.summary.items()]
+    out += ["", "| File | Memories | Need attention |", "|---|---|---|"]
+    out += [f"| {table_code(r.memory_file)} | {len(r.findings)} | {attention_count(r)} |" for r in result.reports]
+    out.append("")
+    for report in result.reports:
+        out += [f"## {code_span(report.memory_file)}", ""]
+        also = [p for p in report.files_read if p != report.memory_file]
+        if also or report.verifier_stats:
+            out += [*(["- Also read: " + ", ".join(code_span(p) for p in also)] if also else []),
+                    *usage_lines(report), ""]
+        if not report.findings:
+            out += ["No claims of its own: nothing here, or only what another file listed here already states.", ""]
+        for finding in report.findings:
+            out += _finding(finding)
+    skipped = dict.fromkeys((s.path, s.reason) for report in result.reports for s in report.skipped_evidence)
+    if skipped:
+        out += ["## Skipped evidence", ""]
+        out += [skipped_line(path, reason, show_text) for path, reason in skipped]
+        out.append("")
+    if result.not_searched:
+        out += ["## Not searched for memory files", ""]
+        out += [skipped_line(s.path, s.reason, show_text) for s in result.not_searched]
+        out.append("")
+    limitations = dict.fromkeys(line for report in result.reports for line in report.limitations)
+    out += ["## Limitations", ""] + [f"- {show_text(line)}" for line in limitations]
     return "\n".join(out) + "\n"

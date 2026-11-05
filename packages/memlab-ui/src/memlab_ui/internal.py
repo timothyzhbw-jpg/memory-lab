@@ -77,7 +77,7 @@ def _object(text: str) -> dict | None:
         return None
     try:
         value = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # nesting too deep for the parser is not one of our records either
         return None
     return value if isinstance(value, dict) else None
 
