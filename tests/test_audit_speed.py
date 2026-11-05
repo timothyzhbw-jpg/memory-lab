@@ -546,3 +546,30 @@ def test_text_without_non_ascii_characters_is_left_as_it_is():
     for text in ("", "plain", "1,000 + 2,000", "a\tb\nc"):
         assert normalize(text) == text
     assert list(sentence_spans("# Title\n\n- One. Two!\n")) == [(2, 7), (11, 15), (16, 20)]
+
+
+# --- the floor and the rules that read a pair under it ----------------------------------------------------------------
+
+def _named_project(tmp_path: Path, claim: str, name: str, passage: str) -> Path:
+    write_text_exact(tmp_path / "MEMORY.md", f"- {claim}\n")
+    (tmp_path / "evidence").mkdir()
+    write_text_exact(tmp_path / "evidence" / name, f"{passage}\n")
+    return tmp_path
+
+
+@pytest.mark.parametrize("limit", (None, 5))
+def test_a_setting_named_under_the_floor_is_flagged(tmp_path, limit):
+    """Half the claim's terms, under ``related``: with a limit ``naming_passages`` does not run, so no floor applies."""
+    claim, passage = "`max_steps` (default: 100) caps every agent run.", "`max_steps` (default: 500)."
+    assert 0.5 <= coverage(claim, passage) < LexicalVerifier().related
+    root = _named_project(tmp_path, claim, "a.md", passage)
+    report = audit(root / "MEMORY.md", root / "evidence", as_of=AS_OF, max_judged=limit)
+    assert report.findings[0].status == "candidate_counterevidence"
+
+
+def test_a_setting_named_far_under_the_floor_is_flagged(tmp_path):
+    claim = "`max_steps` (default: 100) is how many separate rounds of work an agent may take before it gives up."
+    root = _named_project(tmp_path, claim, "a.py", "max_steps: int = 500,")
+    assert coverage(claim, "max_steps: int = 500,") < 0.5
+    report = audit(root / "MEMORY.md", root / "evidence", as_of=AS_OF)
+    assert report.findings[0].evidence[0].rationale == "same setting max_steps: claim 100 vs source 500"

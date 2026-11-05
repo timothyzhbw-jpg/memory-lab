@@ -424,3 +424,14 @@ def test_a_set_report_with_one_file_shows_the_count(tmp_path, monkeypatch):
     result = audit_directory(Path("."), reviews=Path(lines.name))
     assert result.dismissed == {"ada": 1}
     assert "- Dismissed by a person: 1 candidate(s) (ada: 1)\n" in set_to_markdown(result)
+
+
+def test_a_dismissal_leaves_every_other_passage_where_it_was_found(tmp_path):
+    """The index all claims share holds positions in the whole list, and a dismissal shortens one claim's list."""
+    other = "Uploads are limited to 10 files per request."
+    root = project(tmp_path, f"- {CLAIM}\n- {other}\n",
+                   **{"api.md": f"{QUOTE}\nThe public API allows 70 requests per minute.\n"
+                                f"Uploads are limited to 20 files per request.\n"})
+    found = {f.text: [e.span.quote for e in f.evidence] for f in run(root, dismissal()).findings}
+    assert found == {CLAIM: ["The public API allows 70 requests per minute."],
+                     other: ["Uploads are limited to 20 files per request."]}

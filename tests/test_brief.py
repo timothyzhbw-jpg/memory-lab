@@ -135,3 +135,15 @@ def test_diff_has_no_brief_format(tmp_path):
     root = _project(tmp_path, "- Backups run nightly.\n")
     result = CliRunner().invoke(app, ["diff", str(root / "MEMORY.md"), "--base", "HEAD", "--format", "brief"])
     assert result.exit_code == 2
+
+
+def test_what_a_person_dismissed_is_counted(tmp_path):
+    claim, quote = "The public API allows 100 requests per minute.", "The public API allows 60 requests per minute."
+    root = _project(tmp_path, f"- {claim}\n", api=f"{quote}\n")
+    reviews = tmp_path.parent / f"{tmp_path.name}-reviews.jsonl"
+    write_text_exact(reviews, json.dumps({"memory_id": claim_id(claim), "relation": "unrelated", "path": "api.md",
+                                          "quote": quote, "reviewer": "ada"}) + "\n")
+    result = _audit(str(root / "MEMORY.md"), "--evidence", str(root), "--reviews", str(reviews))
+    assert result.exit_code == 0
+    assert "Nothing flagged in 1 claim(s). 1 have no evidence, which means unchecked, not wrong. " \
+           "1 candidate(s) dismissed by a person." in _lines(result)

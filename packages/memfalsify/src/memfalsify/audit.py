@@ -354,14 +354,20 @@ def _rank(evidence: Judgment | EvidenceFinding, verifier: str) -> int:
     return len(REASONS)
 
 
+def _declared_in_code(judgment: Judgment, passage: Passage) -> bool:
+    """A setting's value as the code declares it: what runs, where a document only says what runs."""
+    return (judgment.verifier == _LEXICAL.name and judgment.relation == "contradicts"
+            and judgment.rationale.startswith(NAMED_VALUE) and is_code(passage.path))
+
+
 def candidates(claim: Claim, judged: list[tuple[Passage, Judgment]], limit: int) -> list[EvidenceFinding]:
-    """The ``limit`` most telling judged passages: contradictions first, the strongest reason first, then the most
-    shared terms."""
+    """The ``limit`` most telling judged passages: contradictions first, the strongest reason first, then a value the
+    code declares, then the most shared terms."""
     words, _ = features(claim.text)
     scored = [(judgment.relation != "contradicts", _rank(judgment, judgment.verifier),
-               -len(words & passage.words), passage.location, judgment, passage)
+               not _declared_in_code(judgment, passage), -len(words & passage.words), passage.location, judgment, passage)
               for passage, judgment in judged if judgment.relation != "unrelated"]
-    scored.sort(key=lambda item: item[:4])
+    scored.sort(key=lambda item: item[:5])
     return [EvidenceFinding(relation=j.relation, confirmed=False, rationale=j.rationale, opinions=j.opinions,
                             span=p.span)
             for *_, j, p in scored[:limit]]

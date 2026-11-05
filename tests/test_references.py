@@ -1307,3 +1307,13 @@ def test_the_quick_start_says_what_the_check_cannot_see_and_how_a_person_clears_
     text = (ROOT / page).read_text(encoding="utf-8")
     for word in ("node_modules", "--reviews", "sparse checkout"):
         assert word in text, word
+
+
+def test_a_wrapped_sentence_names_its_path_on_any_of_its_lines(tmp_path):
+    tree(tmp_path, "src/here.py")
+    write_text_exact(tmp_path / "AGENTS.md", "The parser is quick and small, and it lives\nin `src/gone.py` for now. "
+                                             "The renderer\nis in `src/here.py` as usual.\n")
+    report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
+    by_text = {f.text: [i.kind for i in f.issues] for f in report.findings}
+    assert by_text == {"The parser is quick and small, and it lives in src/gone.py for now.": ["missing_reference"],
+                       "The renderer is in src/here.py as usual.": []}

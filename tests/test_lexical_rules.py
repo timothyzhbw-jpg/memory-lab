@@ -773,3 +773,12 @@ def test_skips_reach_the_report(tmp_path):
     assert "`vendor`: vendored or generated directory" in report
     assert "`a.svg`: vendored or generated file" in report
     assert "`b.md`: long lines: 1 over 1,000 characters" in report
+
+
+def test_a_value_the_code_declares_comes_before_a_document_saying_the_same(tmp_path):
+    write_text_exact(tmp_path / "MEMORY.md", "- `max_steps` (default: 100): Maximum agent steps per run.\n")
+    (tmp_path / "evidence" / "docs").mkdir(parents=True)
+    write_text_exact(tmp_path / "evidence" / "docs" / "agent.md", "`max_steps` (default: `500`): Maximum agent steps per run\n")
+    write_text_exact(tmp_path / "evidence" / "service.py", "max_steps: int = 500,\n")
+    report = audit(tmp_path / "MEMORY.md", tmp_path / "evidence", as_of=date(2026, 11, 5))
+    assert [e.span.path for e in report.findings[0].evidence] == ["service.py", "docs/agent.md"]

@@ -61,12 +61,13 @@ def _summary(summary: dict[str, int], missing_paths: int) -> str:
     return ", ".join(counts) or "no claims"
 
 
-def _closing(claims: int, flagged: int, summary: dict[str, int]) -> list[str]:
+def _closing(claims: int, flagged: int, summary: dict[str, int], dismissed: dict[str, int]) -> list[str]:
+    settled = f" {sum(dismissed.values())} candidate(s) dismissed by a person." if dismissed else ""
     if flagged:
-        return [f"{flagged} of {claims} claim(s) need a look.", FOOTER]
+        return [f"{flagged} of {claims} claim(s) need a look.{settled}", FOOTER]
     unchecked = summary.get("insufficient_evidence", 0)
     note = f" {unchecked} have no evidence, which means unchecked, not wrong." if unchecked else ""
-    return [f"Nothing flagged in {claims} claim(s).{note}", FOOTER]
+    return [f"Nothing flagged in {claims} claim(s).{note}{settled}", FOOTER]
 
 
 def _missing_paths(findings: list[Finding]) -> int:
@@ -78,7 +79,7 @@ def to_brief(report: AuditReport) -> str:
     out = [f"{diagnostic_line(report.memory_file)}: {_summary(report.summary, _missing_paths(report.findings))}", ""]
     for finding in flagged:
         out += _finding(finding)
-    out += _closing(len(report.findings), len(flagged), report.summary)
+    out += _closing(len(report.findings), len(flagged), report.summary, report.dismissed)
     return "\n".join(out) + "\n"
 
 
@@ -94,5 +95,5 @@ def set_to_brief(result: AuditSet) -> str:
         out.append("")
         for finding in flagged:
             out += _finding(finding)
-    out += _closing(len(findings), sum(map(_flagged, findings)), result.summary)
+    out += _closing(len(findings), sum(map(_flagged, findings)), result.summary, result.dismissed)
     return "\n".join(out) + "\n"
