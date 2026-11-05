@@ -369,6 +369,14 @@ def test_the_collector_stays_off_if_it_was_off():
         gc.enable()
 
 
+def test_what_was_built_really_is_frozen():
+    """On every Python: 3.12 starts with objects frozen, and that must not read as a host's freeze."""
+    before = gc.get_freeze_count()
+    with out_of_collection(lambda: [[] for _ in range(2000)]) as built_value:
+        assert len(built_value) == 2000 and gc.get_freeze_count() >= before + 2000
+    assert gc.get_freeze_count() == 0
+
+
 def test_a_freeze_the_host_made_stays_the_hosts():
     gc.freeze()
     frozen = gc.get_freeze_count()

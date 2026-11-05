@@ -202,6 +202,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
 
 
 T = TypeVar("T")
+_FROZEN_AT_IMPORT = gc.get_freeze_count()  # not always 0: Python 3.12 starts with objects of its own frozen
 
 
 class _Collector:
@@ -211,7 +212,7 @@ class _Collector:
     holders = 0  # ``with`` blocks open
     builders = 0  # of those, the ones still building
     was_enabled = True
-    freezing = False  # False when something else had already frozen objects: those are not ours to thaw
+    freezing = False  # False when something else has frozen objects since the import: those are not ours to thaw
 
 
 @contextmanager
@@ -222,11 +223,11 @@ def out_of_collection(build: Callable[[], T]) -> Iterator[T]:
     nothing, took a quarter of the audit. So the collector stays off while they are built, and then they are frozen:
     it runs as usual for everything made after that, such as a model verifier's API client. With several blocks open
     the last one out puts things back. If the host process froze objects itself, nothing here freezes or thaws, and
-    only the speed changes."""
+    only the speed changes. The thaw also takes what Python 3.12 froze at startup, which those objects do not mind."""
     state = _Collector
     with state.lock:
         if not state.holders:
-            state.freezing = gc.get_freeze_count() == 0
+            state.freezing = gc.get_freeze_count() <= _FROZEN_AT_IMPORT
         state.holders += 1
         if not state.builders:
             state.was_enabled = gc.isenabled()
