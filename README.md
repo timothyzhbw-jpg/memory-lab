@@ -664,8 +664,9 @@ accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run
 The [real-repository benchmark](benchmarks/memfalsify/wild/README.md) measures the same verifier on the agent files of
 15 public repositories. The rules took the flagged pairs from 1,719 to 47 and the flagged claims from 794 to 29. Of 413
 sampled pairs labeled by two AI models, 16 are still flagged and 9 of those are real: precision 0.56, or 0.33 once
-scaled for how negation was sampled. These are the repositories the rules were tuned on, no person labeled anything,
-and recall is not measured.
+scaled for how negation was sampled. Those are the repositories the rules were tuned on. **On 23 repositories they were
+not tuned on, 1 of 282 flagged pairs is real**, so expect most lexical contradiction flags to be false. No person labeled
+anything, and recall is not measured. A path a memory names is looked up rather than judged, and did far better there.
 
 The [Organizational Memory benchmark](benchmarks/orgmemory/README.md) has ten labeled datasets with 233 labels
 (598 checks) on final states at chosen times, audit-trail outcomes, audit findings and validation errors. The cases

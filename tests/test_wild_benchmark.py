@@ -150,3 +150,12 @@ def test_a_clone_at_another_commit_is_named(clones, labels, tmp_path):
 
 def test_clones_are_required_unless_checking():
     assert runner.invoke(wild.app, []).exit_code == 2
+
+
+def test_the_holdout_labels_hold_metadata_and_hashes_only():
+    rows = wild.load_labels(wild.HOLDOUT)
+    assert len(rows) == 282 and sum(row.label == "real" for row in rows) == 1
+    raw = wild.HOLDOUT.read_bytes()
+    assert raw.endswith(b"\n") and b"\r" not in raw
+    assert all(set(json.loads(line)) <= set(wild.Row.model_fields) for line in raw.decode("utf-8").splitlines())
+    assert not {row.repo for row in rows} & {row.repo for row in wild.load_labels()}

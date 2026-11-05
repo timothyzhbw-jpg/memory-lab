@@ -30,7 +30,28 @@ The result is 11 real and 402 not real.
 
 The way text is read changed after the labeling (wrapped lines are joined in claims and in prose evidence, abbreviations no longer cut a sentence, fragments are no longer claims), so the hashes were re-pointed at the text as it now reads. Of the 413 pairs, 72 name the longer claim that holds the labeled piece and 26 the longer passage, with the label kept. 19 pairs, all `not_real`, name text that is no longer a claim (a label, a table header, a closing tag) and carry `claim_dropped`: they count as no longer flagged. Nobody labeled the longer claims again, so a pair labeled on a fragment now stands for its whole sentence.
 
-The rules were tuned on these repositories. A further set of repositories was kept out as a holdout, and is not part of these labels.
+The rules were tuned on these repositories. A further set was kept out, and its numbers are [much worse](#repositories-the-rules-were-not-tuned-on).
+
+## Repositories the rules were not tuned on
+
+The rules were then frozen and run, once, on the 39 agent files of the 23 repositories kept out. Every audit finished, the slowest in 91 s. They flagged 282 pairs on 175 claims, and `labels-holdout.jsonl` holds all of them, not a sample, made as above: Claude and Codex labeled each pair without seeing each other's labels, and a third reader, Claude again, settled the 4 disagreements.
+
+| Rule | Flagged | Real |
+|---|---|---|
+| same subject, only one side negated | 159 | 1 |
+| opposing terms | 81 | 0 |
+| different values | 21 | 0 |
+| same setting | 19 | 0 |
+| source says it was removed | 2 | 0 |
+| all | 282 | 1 |
+
+**That is precision 0.004, against 0.56 on the repositories above.** Read that second number as what tuning on a few rows can reach, not as what to expect on your own repository. 96 of the 282 pairs come from one repository and 75 from another, so the count of false flags depends a lot on how a project writes. The one real row is also weak evidence: the rule fired on a fragment of the line, and the contradiction only shows in the text around it.
+
+What the false flags look like: two sentences that say the same thing in other words, where a negation or a pair of opposites happens to differ (`Node hooks fire however the run is driven` and `fire no matter how`); `validateUrl: true` for one case against `validateUrl: false` for another; neighbouring rows of a version table; numbers in two different examples. Similarity does not save them: among the negation rows whose terms overlap by 90%, none is real. On this evidence, a lexical verifier can tell that two statements are about the same thing, but not whether they disagree. The rules page says what follows from that.
+
+Paths are another matter, since they are looked up. On the same files 9 missing paths were reported. Both models agreed that 2 are real and 1 is not. They split on the other 6, which name a path that moved or never existed under that name (`src/shell/` is now `src/runtime/shell/`), and those went to real on adjudication: 8 of 9 if a stale path counts, 2 of 9 if it counts only when nothing took its place. Those rules were tuned on 38 clones that overlap these repositories, so this is not held out the way the table above is.
+
+To reproduce the table: `python benchmarks/memfalsify/wild/run.py --clones DIR --labels benchmarks/memfalsify/wild/labels-holdout.jsonl --no-audit`.
 
 ## How it can mislead
 

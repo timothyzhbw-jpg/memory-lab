@@ -41,8 +41,9 @@ Release 0.5 contains:
   `--max-judged`.
 - memfalsify: two more lexical reasons: `different units` (2 minutes against 2 seconds, 512 GB against 512 GiB, and in a
   named value `512MB` against `512GB` or `30m` against `30s`) and `source says what the claim names was removed`.
-- `benchmarks/memfalsify/wild/`: a real-repository benchmark with 413 labeled pairs from public projects' agent files, as
-  hashes and metadata, and a script that needs your own clones. All labeling is by AI models, not people; its README says
+- `benchmarks/memfalsify/wild/`: a real-repository benchmark with 413 labeled pairs from public projects' agent files, and
+  all 282 flagged pairs from 23 repositories kept out of tuning, as hashes and metadata, and a script that needs your
+  own clones. All labeling is by AI models, not people; its README says
   how the numbers can mislead.
 - `docs/lexical-rules.md` and `docs/lexical-rules.zh-CN.md`: the lexical rules in full.
 - memfalsify: `memfalsify audit --format brief`, a short view for the terminal: only the claims that need a look, each
@@ -116,7 +117,8 @@ Release 0.5 contains:
   `not`, in words of its own, speaks against it. `Do not use npm in this repository.` against `Use npm in this
   repository.` is flagged; `Do not run migrations in production.` against `Run migrations in production after every
   deploy.` is not. On 15 public repositories' agent files, flagged pairs went from 1,719 to 47 and flagged claims from
-  794 to 29. `audit --strict` and the GitHub Action therefore pass where they used to fail, and a clean report says less
+  794 to 29. On 23 repositories the rules were not tuned on, 1 of 282 flagged pairs is real, so most flags are still
+  false. `audit --strict` and the GitHub Action therefore pass where they used to fail, and a clean report says less
   than a flag does. Some real contradictions are no longer flagged; `docs/lexical-rules.md` lists what the verifier
   misses.
 - **Behavior change.** memfalsify: add/remove, start/stop and open/close are no longer opposing terms for English text,

@@ -32,6 +32,7 @@ from memfalsify.corpus import MAX_LINE, as_read, left_out_reason  # noqa: E402
 from memfalsify.text import sentence_spans  # noqa: E402
 
 LABELS = Path(__file__).resolve().parent / "labels.jsonl"
+HOLDOUT = Path(__file__).resolve().parent / "labels-holdout.jsonl"  # every flagged pair of repositories kept out of tuning
 # Pairs the rules found when the sample was drawn. Every opposing and numbers pair was labeled, negation was capped.
 POPULATION = {"negation": 1218, "opposing": 83, "numbers": 70}
 HEX64 = r"^[0-9a-f]{64}$"
@@ -53,7 +54,7 @@ class Row(BaseModel):
     source_line: Optional[int] = Field(ge=1)
     claim_sha256: str = Field(pattern=HEX64)
     quote_sha256: str = Field(pattern=HEX64)
-    rule: Literal["negation", "opposing", "numbers"]
+    rule: Literal["negation", "opposing", "numbers", "named_value", "removal"]
     label: Literal["real", "not_real"]
     why: Why
     tier: Tier
@@ -108,7 +109,7 @@ def _quote(clone: Path, row: Row) -> tuple[str | None, int]:
     return None, width
 
 
-def score_labeled(rows: list[Row], clones: Path) -> dict:
+def score_labeled(rows: list[Row], clones: Path, population: dict[str, int] | None = None) -> dict:
     """Flagged, real and not_real per labeling-time rule, for the current code: the rules, then the file's kind, with
     paths and long lines left out as a directory scan leaves them out."""
     verifier = LexicalVerifier()
@@ -142,7 +143,7 @@ def score_labeled(rows: list[Row], clones: Path) -> dict:
         elif row.label == "real":
             lost.append(row)
     totals = sum(by_rule.values(), Counter())
-    weight = {rule: POPULATION.get(rule, count["labeled"]) / count["labeled"] for rule, count in by_rule.items()}
+    weight = {rule: (population or {}).get(rule, count["labeled"]) / count["labeled"] for rule, count in by_rule.items()}
     scaled_flagged = sum(weight[rule] * count["flagged"] for rule, count in by_rule.items())
     return {"by_rule": {rule: dict(by_rule[rule]) for rule in sorted(by_rule)}, "total": dict(totals),
             "precision": totals["real"] / totals["flagged"] if totals["flagged"] else None,
@@ -182,7 +183,7 @@ def to_markdown(rows: list[Row], result: dict, audits: dict | None, stale: list[
         out.append(f"| {rule} | {count.get('labeled', 0)} | {count.get('labeled_real', 0)} | {flagged} | "
                    f"{count.get('real', 0)} | {count.get('not_real', 0)} | "
                    f"{count.get('real', 0) / flagged if flagged else 0:.2f} |")
-    if result["scaled_precision"] is not None:
+    if result["scaled_precision"] is not None and result["scaled_precision"] != result["precision"]:
         out += ["", f"Scaled to all the pairs each rule found when the sample was drawn, since negation was sampled: "
                     f"precision {result['scaled_precision']:.2f}."]
     out += ["", f"Real rows lost: {len(result['real_lost'])}"]
@@ -202,7 +203,7 @@ app = typer.Typer(add_completion=False)
 def main(clones: Optional[Path] = typer.Option(None, help="Directory holding <owner>__<name> clones at the labeled commits"),
          check: bool = typer.Option(False, help="Validate labels.jsonl and stop; needs no clones"),
          no_audit: bool = typer.Option(False, "--no-audit", help="Score the labeled pairs only, without the full audits"),
-         labels: Path = typer.Option(LABELS, help="The labels file"),
+         labels: Path = typer.Option(LABELS, help="The labels file; labels-holdout.jsonl holds the repositories kept out of tuning"),
          json_out: Optional[Path] = typer.Option(None, "--json", help="Also write every number as JSON")) -> None:
     rows = load_labels(labels)
     if check:
@@ -214,7 +215,7 @@ def main(clones: Optional[Path] = typer.Option(None, help="Directory holding <ow
         raise typer.Exit(2)
     commits = {row.repo: row.sha for row in rows}
     stale = sorted(repo for repo, sha in commits.items() if head(clone_of(clones, repo)) != sha)
-    result = score_labeled(rows, clones)
+    result = score_labeled(rows, clones, POPULATION if labels == LABELS else None)
     audits = None if no_audit else flagged_pairs(rows, clones)
     typer.echo(to_markdown(rows, result, audits, stale).encode("utf-8"), nl=False)
     if json_out is not None:

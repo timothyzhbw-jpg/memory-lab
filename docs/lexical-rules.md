@@ -92,6 +92,8 @@ Within a status, findings are ordered by their strongest reason: a named value, 
 
 ## How much to trust a flag
 
+**On 23 repositories the rules were not tuned on, 1 of 282 flagged pairs is real** ([the numbers](../benchmarks/memfalsify/wild/README.md#repositories-the-rules-were-not-tuned-on)). The figures below are from the repositories they were tuned on.
+
 On the agent files of 15 public repositories, these rules took the flagged pairs from 1,719 to 47 and the flagged claims from 794 to 29, and 9 of the 16 labeled pairs still flagged are real (0.33 once scaled for how negation was sampled). A `same subject, but only one side is negated` finding is the weakest: none of those read as real there. The [real-repository benchmark](../benchmarks/memfalsify/wild/README.md) has the numbers and how they can mislead, and [`benchmarks/memfalsify/RESULTS.md`](../benchmarks/memfalsify/RESULTS.md) has the synthetic cases.
 
 Flags are rare by design now, so a clean report says little. The verifier still misses:
