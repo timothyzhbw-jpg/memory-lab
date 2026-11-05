@@ -13,9 +13,9 @@ from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
 from memcore.paths import SKIP_DIRS, input_path
-from memcore.reading import read_file_bytes, read_head, walk_files
+from memcore.reading import read_head, walk_files
 
-from .corpus import _matches, is_report
+from .corpus import MAX_BYTES, _matches, is_report
 
 HEAD = 16 * 1024
 REVIEWS = "review records"
@@ -80,7 +80,7 @@ def _object(text: str) -> dict | None:
         return None
     try:
         value = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # nesting too deep for the parser is not one of our records either
         return None
     return value if isinstance(value, dict) else None
 
@@ -113,8 +113,11 @@ def own_files(evidence: Path, exclude: Iterable[str] = ()) -> list[tuple[str, st
                 head = read_head(path, HEAD + 1)
                 complete = len(head) <= HEAD
                 if not complete and head.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"{"):
-                    # A JSON report has its marker inside: read all of it.
-                    head, complete = read_file_bytes(path), True
+                    # A JSON report has its marker inside: read all of it, up to what the scan reads. A larger
+                    # file can never be evidence, so the head has to do.
+                    whole = read_head(path, MAX_BYTES + 1)
+                    if len(whole) <= MAX_BYTES:
+                        head, complete = whole, True
             except (OSError, ValueError):
                 continue
             reason = classify(name, head if complete else head[:HEAD], complete, decision_folder)

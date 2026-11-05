@@ -139,10 +139,10 @@ def attention_count(report: AuditReport) -> int:
 
 
 def set_to_markdown(result: AuditSet) -> str:
-    """``memfalsify audit`` with no MEMORY argument. One file reads exactly like its own report. Several files get
-    one document: totals, a table of the files, one section per file in order, then the skipped evidence and
-    limitations of all of them, each line once."""
-    if len(result.reports) == 1:
+    """``memfalsify audit`` with no MEMORY argument. One file reads exactly like its own report, unless the search
+    passed a place over, which that report has no room for. Otherwise one document: totals, a table of the files,
+    one section per file in order, then the skipped evidence and limitations of all of them, each line once."""
+    if len(result.reports) == 1 and not result.not_searched:
         return to_markdown(result.reports[0])
     out = [REPORT_HEADER, "",
            f"- Memory: {len(result.files)} files: " + ", ".join(code_span(p) for p in result.files),

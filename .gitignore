@@ -8,4 +8,5 @@ dist/
 .pytest_cache/
 # What the quick start writes when it is followed from the root of a checkout.
 /demo/
+/history/
 /memfalsify-demo/

@@ -113,7 +113,7 @@ class AuditSet(BaseModel):
     not_searched: list[Skipped] = []  # places the search for memory files passed over, with the reason
 
 
-LEXICAL_NOTE ="Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
+LEXICAL_NOTE = "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
 MODEL_NOTE = ("Unconfirmed matches are model judgments on passages pre-selected by term overlap; "
               "passages that share too few terms with a memory are never judged, and models can be wrong.")
 MEDIA_NOTE = ("Transcript and OCR quotes show what a sidecar says about a media file, not what was said or shown; "
@@ -539,6 +539,9 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
     return report
 
 
+NOTHING_LEFT = "no evidence passages indexed with --exclude; check the exclusion patterns"
+
+
 def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path],
                  evidence_root: Path | None = None, reviews: Path | None = None, verifier: Verifier | None = None,
                  as_of: date | None = None, stale_days: int = 180, max_candidates: int = 3,
@@ -560,6 +563,8 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     # When a selection is empty there is nothing to look up, so the evidence is not scanned.
     scanned = root is not None and (selected is None or bool(targets))
     passages, skipped = scan(root, exclude=exclude, memory_files=memory_paths) if scanned else ([], [])
+    if targets and root is not None and exclude and not passages:
+        raise EvidenceError(NOTHING_LEFT)
     return judge_passages(claims, targets, passages, skipped, memory_file=memory_file, files_read=files_read,
                           evidence_root=evidence_root, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
                           stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
@@ -574,8 +579,6 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     """``audit_claims`` from the point where the evidence has been scanned. ``targets`` are the claims to report;
     ``skipped`` receives what the reviews leave out. ``conflict_index``, over ``claims``, can be shared."""
     by_id = {c.id: c for c in claims}
-    if targets and root is not None and exclude and not passages:
-        raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
     confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
     picked = {claim.id: shortlist(claim, passages, min_coverage, max_judged) for claim in targets}
     pairs = [(claim.text, passage.span.quote) for claim in targets for passage in picked[claim.id]]

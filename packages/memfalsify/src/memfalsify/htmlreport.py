@@ -140,10 +140,10 @@ def to_html(report: AuditReport) -> str:
 
 
 def set_to_html(result: AuditSet) -> str:
-    """``memfalsify audit`` with no MEMORY argument. One file gives exactly its own page. Several files share one
-    page: totals, a table of the files with links, one section per file, then the skipped evidence and limitations
-    of all of them, each line once."""
-    if len(result.reports) == 1:
+    """``memfalsify audit`` with no MEMORY argument. One file gives exactly its own page, unless the search passed a
+    place over, which that page has no room for. Otherwise one page: totals, a table of the files with links, one
+    section per file, then the skipped evidence and limitations of all of them, each line once."""
+    if len(result.reports) == 1 and not result.not_searched:
         return to_html(result.reports[0])
     meta = [("Memory", _files(result.files)),
             ("Evidence root", h.code(result.evidence_root)),

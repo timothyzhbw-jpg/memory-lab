@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from memcore import EvidenceError
 from memcore.paths import InputPathError, input_path
 
-from .audit import SEVERITY, AuditReport, AuditSet, _ConflictIndex, judge_passages
+from .audit import NOTHING_LEFT, SEVERITY, AuditReport, AuditSet, _ConflictIndex, judge_passages
 from .corpus import Passage, Skipped, _matches, scan
 from .discover import discover
 from .memory import Claim, parse_memory
@@ -63,7 +63,7 @@ def _note(files: list[str], evidence: str, passed_over: list[Skipped]) -> str:
     what = f"auditing {listed} against {evidence}" if len(files) == 1 else (
         f"auditing {len(files)} files against {evidence}: {listed}")
     if passed_over:
-        what += f" ({len(passed_over)} place(s) not searched: see memfalsify discover)"
+        what += f" ({len(passed_over)} place(s) not searched: see the report)"
     return "note: " + what
 
 
@@ -159,6 +159,9 @@ def audit_directory(directory: Path = Path("."), evidence_root: Path | None = No
                 progress(f"note: {relative} holds reviews, which apply only with --reviews {relative}")
     left_out = [root / relative for relative, _ in own] + ([Path(reviews)] if reviews else [])
     passages, skipped = scan(root, exclude=exclude, memory_files=left_out) if claims else ([], [])
+    # Only when --exclude is what emptied the evidence: a pattern that matches nothing changes nothing.
+    if claims and exclude and not passages and scan(root, memory_files=left_out)[0]:
+        raise EvidenceError(NOTHING_LEFT)
     corpus = _Corpus(root, passages, skipped)
     own_skips = [Skipped(path=relative, reason=_OWN_REASONS[reason]) for relative, reason in own]
     conflicts = _ConflictIndex(claims) if claims else None

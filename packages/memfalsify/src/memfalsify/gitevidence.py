@@ -3,17 +3,18 @@
 One small Markdown file per commit, named by the commit's hash, holding its full hash, author date, subject and
 body. The same commits give the same bytes, and a re-run leaves existing files alone. Git runs as in ``gitstore``:
 argument lists, the pinned options and environment, ``--end-of-options``, revisions validated and resolved first.
-Nothing here writes to the repository, and only ``git log`` and ``git rev-parse`` run, so no hook does.
+Nothing here writes to the repository, and only ``git log``, ``git rev-list`` and ``git rev-parse`` run, so no hook
+does.
 
 Commit messages are untrusted. They never reach a file name or the terminal: names come from the validated hash,
 and only names and counts are printed. In the file, a fixed header comes first, so a message cannot make the file
 look like a report (which ``scan`` would skip) or change the header a reader sees first.
 
 Control characters are stored as visible escapes, not raw and not removed. Evidence hashes and quote offsets cover
-the file's bytes, so a quote stays exact either way. Raw, a quote could not be typed into ``reviews.jsonl`` from
-what a report shows, and printing the file could drive a terminal. Removed, a zero-width or bidi character
-would vanish without a trace, and the text could read as a word the author's bytes did not hold. The commit named
-by the full hash keeps the original bytes. Bytes that are not UTF-8 become U+FFFD, so the file stays readable.
+the file's bytes, so a quote stays exact either way. Raw, a report could only show a quote with its characters
+replaced, and printing the file could drive a terminal. Removed, a zero-width or bidi character would vanish
+without a trace, and the text could read as a word the author's bytes did not hold. The commit named by the full
+hash keeps the original bytes. Bytes that are not UTF-8 become U+FFFD, so the file stays readable.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ from pathlib import Path
 
 from memcore.display import one_line
 
+from .discover import same_file
 from .gitstore import (GIT_OPTIONS, HEX, GitError, HistoryError, _env, _failure, _git_executable, _resolve, _run,
                        check_revision, printable)
 
@@ -39,7 +41,8 @@ _READ_OPTIONS = ("--no-replace-objects", "-c", "i18n.logOutputEncoding=UTF-8", "
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _DATETIME = re.compile(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)(Z|[+-]\d{2}:\d{2})?")
 _RELATIVE = re.compile(r"(\d{1,6})[ .](second|minute|hour|day|week|month|year)s?(?:[ .]ago)?", re.IGNORECASE)
-_EPOCH = datetime(1970, 1, 2, tzinfo=timezone.utc)  # git misreads anything earlier as a recent date
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)  # no commit date is earlier
+_UTC_FORMAT = "%Y-%m-%d %H:%M:%S %z"
 _SINCE_HELP = ("a date such as 2026-01-31 (midnight UTC), 2026-01-31T12:00:00+02:00 or '30 days ago', "
                "or a commit, tag or branch in this repository")
 
@@ -68,7 +71,7 @@ def _bad_date(value: str) -> HistoryError:
 
 
 def _utc(moment: datetime) -> str:
-    return max(moment, _EPOCH).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S +0000")
+    return max(moment, _EPOCH).astimezone(timezone.utc).strftime(_UTC_FORMAT)
 
 
 def _ago(count: int, unit: str, now: datetime) -> datetime:
@@ -87,11 +90,11 @@ def _ago(count: int, unit: str, now: datetime) -> datetime:
 
 
 def date_argument(value: str, now: datetime | None = None) -> str | None:
-    """``value`` as an absolute date git reads the same way on every machine, or None if it does not look like one.
+    """``value`` as an absolute date in UTC, or None if it does not look like one.
 
-    git fills a missing time of day with the current time, reads an unknown word as now, and misreads large
-    relative dates and dates before 1970 without a word. So only these forms reach it, spelled out in UTC, and
-    earlier dates are moved up to 1970-01-02. A relative date still depends on when it runs."""
+    Only these forms count as dates, and git never reads them: it fills a missing time of day with the current time,
+    reads an unknown word as now, and misreads large relative dates and dates before 1970 or from 2100 on without a
+    word. Earlier dates are moved up to 1970-01-01. A relative date still depends on when it runs."""
     try:
         if _DATE.fullmatch(value):
             day = date.fromisoformat(value)
@@ -106,10 +109,42 @@ def date_argument(value: str, now: datetime | None = None) -> str | None:
     return None
 
 
-def _log_range(git: str, repo: Path, since: str, head: str) -> tuple[list[str], str]:
-    """The ``git log`` arguments that select the commits, and how ``since`` was read, for the user."""
+def _commits_since(git: str, repo: Path, head: str, when: float, limit: int) -> list[str]:
+    """The first ``limit`` commits from ``head``, in git's order, whose committer date is ``when`` or later.
+
+    The dates are compared here, over the whole history. ``git log --since`` stops walking at the first older
+    commit, so one old-dated commit would hide all that lies behind it, and ``--since-as-filter`` needs git 2.37."""
+    args = [git, "-C", str(repo), *GIT_OPTIONS, *_READ_OPTIONS, "rev-list", "--timestamp", "--end-of-options", head,
+            "--"]
+    try:
+        process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, env=_env())
+    except OSError as exc:
+        raise GitError(f"cannot run git: {exc}", "cannot run git") from exc
+    kept: list[str] = []
+    with process:
+        for line in process.stdout:
+            stamp, _, full = line.decode("ascii", "replace").strip().partition(" ")
+            if not stamp.isdecimal() or not HEX.fullmatch(full):
+                process.kill()
+                raise HistoryError("cannot parse git rev-list output")
+            if int(stamp) >= when:
+                kept.append(full)
+            if len(kept) == limit:
+                process.kill()
+                return kept
+    if process.returncode:
+        raise GitError(f"git rev-list failed with exit code {process.returncode}", "git rev-list failed")
+    return kept
+
+
+def _read_window(git: str, repo: Path, since: str, head: str, limit: int) -> tuple[bytes, str]:
+    """The ``git log`` output of the first ``limit`` commits ``since`` selects, and how it was read, for the user."""
     if (when := date_argument(since)) is not None:
-        return [f"--since={when}", "--end-of-options", head], f"the date {when} (committer date)"
+        moment = datetime.strptime(when, _UTC_FORMAT)
+        listed = "".join(full + "\n" for full in _commits_since(git, repo, head, moment.timestamp(), limit))
+        out = _read_log(git, repo, ["--no-walk=unsorted", "--stdin"], limit, listed.encode("ascii")) if listed else b""
+        return out, f"the date {when} (committer date)"
     try:
         commit = _resolve(git, repo, since)
     except GitError:
@@ -117,7 +152,8 @@ def _log_range(git: str, repo: Path, since: str, head: str) -> tuple[list[str], 
     except HistoryError:
         raise HistoryError(f"--since: {printable(since)!r} is neither a date nor a commit in this repository; "
                            f"use {_SINCE_HELP}") from None
-    return ["--end-of-options", f"{commit}..{head}"], f"commit {commit[:SHORT_HASH]} (later commits up to HEAD)"
+    out = _read_log(git, repo, ["--end-of-options", f"{commit}..{head}"], limit)
+    return out, f"commit {commit[:SHORT_HASH]} (later commits up to HEAD)"
 
 
 def parse_log(out: bytes) -> list[Commit]:
@@ -133,15 +169,19 @@ def parse_log(out: bytes) -> list[Commit]:
             for index in range(0, len(fields), 4)]
 
 
-def _read_log(git: str, repo: Path, selection: list[str], limit: int) -> bytes:
+def _read_log(git: str, repo: Path, selection: list[str], limit: int, listed: bytes | None = None) -> bytes:
+    """``git log`` of ``selection``; ``listed`` is what it reads on stdin (for ``--stdin``, which it reads first)."""
     args = [git, "-C", str(repo), *GIT_OPTIONS, *_READ_OPTIONS, "log", "--no-patch", "--no-color", "-z",
             f"--max-count={limit}", _LOG_FORMAT, *selection, "--"]
     try:
-        process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL, env=_env())
+        process = subprocess.Popen(args, stdin=subprocess.DEVNULL if listed is None else subprocess.PIPE,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=_env())
     except OSError as exc:
         raise GitError(f"cannot run git: {exc}", "cannot run git") from exc
     with process:
+        if listed is not None:
+            process.stdin.write(listed)
+            process.stdin.close()
         data = process.stdout.read(MAX_LOG_BYTES + 1)
         if len(data) > MAX_LOG_BYTES:
             process.kill()
@@ -195,6 +235,18 @@ def _same_file(path: Path, data: bytes) -> bool | None:
     return path.read_bytes() == data
 
 
+def _inside(target: Path, place: Path) -> bool:
+    """Whether ``target`` is ``place`` or below it, by file identity: on a case-insensitive filesystem ``.GIT`` is
+    the directory ``.git``, though the two paths read differently."""
+    for parent in (target, *target.parents):
+        try:
+            if same_file(parent, place):
+                return True
+        except OSError:  # a part of ``target`` that does not exist yet
+            continue
+    return False
+
+
 def _git_locations(git: str, repo: Path) -> list[Path]:
     """The repository's git directory and common directory; raises if ``repo`` is not in a repository."""
     proc = _run(git, repo, ["rev-parse", "--absolute-git-dir", "--git-common-dir"])
@@ -222,9 +274,12 @@ def evidence_from_git(since: str, output: Path, repo: Path = Path("."), max_comm
     repo, output = Path(repo), Path(output)
     if not repo.is_dir():
         raise HistoryError(f"not a directory: {printable(str(repo))}")
-    target = output.resolve()
+    try:
+        target = output.resolve()
+    except RuntimeError:  # Python 3.10, on a cyclic link
+        raise HistoryError(f"--output is a cyclic link: {printable(str(output))}") from None
     for place in _git_locations(git, repo):
-        if target == place or target.is_relative_to(place):
+        if _inside(target, place):
             raise HistoryError("--output is inside the git directory; evidence never goes into the repository itself")
     try:
         head = _resolve(git, repo, "HEAD")
@@ -232,8 +287,8 @@ def evidence_from_git(since: str, output: Path, repo: Path = Path("."), max_comm
         raise
     except HistoryError:
         raise HistoryError(f"{printable(str(repo))} has no commits yet") from None
-    selection, read_as = _log_range(git, repo, since, head)
-    commits = parse_log(_read_log(git, repo, selection, max_commits + 1))
+    out, read_as = _read_window(git, repo, since, head, max_commits + 1)
+    commits = parse_log(out)
     result = FromGit(output=output, since=read_as, cut_short=len(commits) > max_commits)
     commits = commits[:max_commits]
     names = file_names([commit.full_hash for commit in commits])

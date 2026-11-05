@@ -21,12 +21,13 @@ from typer.testing import CliRunner
 from conftest import snapshot, write_text_exact
 from memcore import locate_quote
 from memcore.display import one_line
+from memcore.reading import read_limits
 from memfalsify import AuditReport, AuditSet, __version__, audit_directory, claim_id
 from memfalsify import auditdir, demo, gitevidence, ownfiles
 from memfalsify.audit import ATTENTION, MODEL_NOTE
 from memfalsify.auditdir import select_memories
 from memfalsify.cli import app
-from memfalsify.corpus import is_report, scan
+from memfalsify.corpus import MAX_BYTES, is_report, scan
 from memfalsify.gitevidence import date_argument, file_names, parse_log, render
 from memfalsify.htmlreport import set_to_html
 from memfalsify.report import set_to_markdown
@@ -299,6 +300,33 @@ def test_exclude_applies_to_files_and_evidence(agent_tree):
                    for e in f.evidence)
 
 
+def test_an_exclude_that_matches_nothing_changes_nothing(tmp_path, monkeypatch):
+    write(tmp_path, {"CLAUDE.md": "@AGENTS.md\n\n- Deploys use the staging cluster.\n",
+                     "AGENTS.md": "- The nightly export stops at midnight on Sundays.\n"})
+    monkeypatch.chdir(tmp_path)
+    assert audit_here().exit_code == 0
+    result = audit_here("--exclude", "vendor/**", "--format", "json")
+    assert result.exit_code == 0, result.output
+    assert AuditSet.model_validate_json(result.stdout).excluded == ["vendor/**"]
+    (tmp_path / "empty").mkdir()
+    assert audit_here("--evidence", "empty", "--exclude", "vendor/**").exit_code == 0
+
+
+def test_an_exclude_that_empties_the_evidence_still_fails(tmp_path, monkeypatch):
+    write(tmp_path, {"MEMORY.md": "- The public API allows 100 requests per minute.\n",
+                     "docs/api.md": "The public API allows 60 requests per minute.\n"})
+    monkeypatch.chdir(tmp_path)
+    result = audit_here("--evidence", "docs", "--exclude", "api.md")
+    assert result.exit_code == 2 and "--exclude" in result.stderr
+
+
+def test_a_named_file_keeps_its_exclude_check(tmp_path, monkeypatch):
+    write(tmp_path, {"MEMORY.md": "- The public API allows 100 requests per minute.\n"})
+    monkeypatch.chdir(tmp_path)
+    result = audit_here("MEMORY.md", "--evidence", ".", "--exclude", "vendor/**")
+    assert result.exit_code == 2 and "no evidence passages indexed with --exclude" in result.stderr
+
+
 def test_reviews_work_across_files_and_unknown_ids_still_fail(agent_tree):
     claim = "The billing service runs in Frankfurt."
     write(agent_tree, {"docs/infra.md": "The billing service was moved to Dublin.\n"})
@@ -351,9 +379,63 @@ def test_memory_labs_own_files_are_left_out(tmp_path, monkeypatch, name, text, r
     assert name not in [s.path for s in named.skipped_evidence]
 
 
+def test_recognising_own_files_never_reads_past_the_scan_limit(tmp_path):
+    """A JSON dump larger than memory must not be read whole to learn that it is not a report."""
+    (tmp_path / "data.jsonl").write_bytes(b'{"a": 1}\n' + b" " * (3 * MAX_BYTES))
+    with read_limits(total_bytes=10 ** 12) as limits:  # within limits every byte read is counted
+        assert ownfiles.own_files(tmp_path) == []
+    assert 0 < limits.bytes_read <= ownfiles.HEAD + MAX_BYTES + 2
+
+
+def test_recognition_still_works_up_to_the_limit_and_by_the_first_line(tmp_path):
+    review = {"memory_id": "m", "relation": "supports", "path": "p", "quote": "q", "reviewer": "r"}
+    report = {"tool": "orgmemory", "mode": "read_only"}
+    (tmp_path / "reviews.jsonl").write_bytes(json.dumps(review).encode("utf-8") + b"\n" + b" " * (2 * MAX_BYTES))
+    (tmp_path / "replay.json").write_bytes(
+        json.dumps({**report, "padding": "x" * (2 * ownfiles.HEAD)}).encode("utf-8"))
+    (tmp_path / "huge.json").write_bytes(json.dumps({**report, "padding": "x" * MAX_BYTES}).encode("utf-8"))
+    assert ownfiles.own_files(tmp_path) == [("replay.json", ownfiles.GENERATED), ("reviews.jsonl", ownfiles.REVIEWS)]
+
+
+def test_a_json_file_over_the_limit_is_listed_as_too_large(tmp_path, monkeypatch):
+    write(tmp_path, {"MEMORY.md": "- The public API allows 100 requests per minute.\n"})
+    (tmp_path / "data.json").write_bytes(b'{"a": 1,' + b" " * MAX_BYTES + b"}")
+    monkeypatch.chdir(tmp_path)
+    assert audit_set().reports[0].skipped_evidence[0].reason == "larger than 2 MB"
+
+
+def nested(depth: int, opening: str = '{"a":', closing: str = "}") -> str:
+    return opening * depth + "0" * (opening == '{"a":') + closing * depth
+
+
+@pytest.mark.parametrize("name,text", [
+    ("payload.json", nested(10000)),
+    ("short.json", nested(1200)),
+    ("records.jsonl", nested(10000) + "\n"),
+    ("clip.ocr.json", nested(10000)),
+    ("importer.json", '{"importer": ' + nested(900, "[", "]") + "}"),
+    ("importer-deeper.json", '{"importer": ' + nested(5000, "[", "]") + "}"),
+])
+def test_deeply_nested_json_is_ordinary_evidence_not_a_crash(tmp_path, monkeypatch, name, text):
+    write(tmp_path, {"CLAUDE.md": "- The public API allows 100 requests per minute.\n", name: text})
+    monkeypatch.chdir(tmp_path)
+    assert ownfiles.own_files(tmp_path) == []
+    result = audit_here()
+    assert result.exit_code == 0, repr(result.exception)
+    assert "# MemFalsify audit report" in result.stdout
+
+
+@pytest.mark.parametrize("depth", [900, 1200, 10000])
+def test_the_web_page_copy_survives_deep_nesting_too(tmp_path, depth):
+    internal = pytest.importorskip("memlab_ui.internal")
+    write(tmp_path, {"payload.json": nested(depth)})
+    assert internal.internal_files(tmp_path) == []
+
+
 def test_own_file_recognition_stays_in_step_with_the_web_page():
     internal = pytest.importorskip("memlab_ui.internal")
     assert inspect.getsource(internal.classify) == inspect.getsource(ownfiles.classify)
+    assert inspect.getsource(internal._object) == inspect.getsource(ownfiles._object)
     for name in ("_REVIEW", "_EVENT", "_ROLE_CHANGE", "_MANIFEST", "_CLAIM", "_ORG_REPORTS", "_ORG_HTML", "_ADR", "_CSV",
                  "_IMPORTER_SETTINGS", "REVIEWS", "DECISION_LOG", "GENERATED", "HEAD"):
         assert getattr(internal, name) == getattr(ownfiles, name), name
@@ -376,6 +458,117 @@ def test_output_never_lands_on_a_memory_file(agent_tree, name):
     result = audit_here("--output", name)
     assert result.exit_code == 2
     assert (agent_tree / name).read_bytes() == before
+
+
+def hard_link(path: Path, target: Path) -> None:
+    try:
+        os.link(target, path)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"no hard links here: {exc}")
+
+
+LINKED_INSTRUCTIONS = "- The deploy freeze starts on Friday.\n"
+
+
+@pytest.fixture
+def skipped_instructions(tmp_path, monkeypatch, make_symlink):
+    """A chosen instruction file that parsing skips: its link leads out of its own directory."""
+    write(tmp_path, {"instructions.md": LINKED_INSTRUCTIONS})
+    (tmp_path / ".github").mkdir()
+    make_symlink(tmp_path / ".github" / "copilot-instructions.md", Path("..") / "instructions.md")
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+@pytest.mark.parametrize("target", [".github/copilot-instructions.md", "instructions.md"])
+def test_output_never_lands_on_a_chosen_file_parsing_skipped(skipped_instructions, target):
+    assert audit_set().files == [".github/copilot-instructions.md"]
+    assert audit_set().reports[0].files_read == []
+    result = audit_here("--output", target)
+    assert result.exit_code == 2 and "refusing to overwrite" in result.stderr
+    assert (skipped_instructions / "instructions.md").read_bytes() == LINKED_INSTRUCTIONS.encode("utf-8")
+
+
+def test_a_named_file_parsing_skipped_is_protected_too(skipped_instructions):
+    name = ".github/copilot-instructions.md"
+    result = runner.invoke(app, ["audit", name, "--output", name])
+    assert result.exit_code == 2 and "refusing to overwrite" in result.stderr
+    assert (skipped_instructions / "instructions.md").read_bytes() == LINKED_INSTRUCTIONS.encode("utf-8")
+
+
+@pytest.mark.parametrize("name", ["CLAUDE.md", "report.md"])
+def test_output_never_lands_on_a_memory_file_through_a_hard_link(tmp_path, monkeypatch, name):
+    original = b"- The public API allows 100 requests per minute.\n"
+    (tmp_path / "AGENTS.md").write_bytes(original)
+    hard_link(tmp_path / name, tmp_path / "AGENTS.md")
+    monkeypatch.chdir(tmp_path)
+    result = audit_here("--output", name)
+    assert result.exit_code == 2 and "refusing to overwrite" in result.stderr
+    assert (tmp_path / "AGENTS.md").read_bytes() == original
+
+
+def test_a_named_file_is_protected_through_a_hard_link(tmp_path, monkeypatch):
+    original = b"- The public API allows 100 requests per minute.\n"
+    (tmp_path / "CLAUDE.md").write_bytes(original)
+    hard_link(tmp_path / "copy.md", tmp_path / "CLAUDE.md")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["audit", "CLAUDE.md", "--output", "copy.md"])
+    assert result.exit_code == 2 and (tmp_path / "CLAUDE.md").read_bytes() == original
+
+
+def test_output_never_goes_through_a_memory_link_the_search_passed_over(agent_tree, make_symlink, tmp_path):
+    (agent_tree / "MEMORY.md").unlink()
+    write(tmp_path, {"outside.md": "- A file outside the project.\n"})
+    make_symlink(agent_tree / "MEMORY.md", tmp_path / "outside.md")
+    assert audit_here("--output", "MEMORY.md").exit_code == 2
+    assert (tmp_path / "outside.md").read_bytes() == b"- A file outside the project.\n"
+    (agent_tree / "MEMORY.md").unlink()
+    make_symlink(agent_tree / "MEMORY.md", agent_tree / "missing.md")  # a broken one
+    assert audit_here("--output", "MEMORY.md").exit_code == 2
+    assert not (agent_tree / "missing.md").exists()
+
+
+def test_output_never_goes_through_a_linked_note_parsing_skipped(tmp_path, monkeypatch, make_symlink):
+    write(tmp_path, {"outside.md": "- A note outside the project.\n",
+                     "project/MEMORY.md": "- [Notes](notes.md)\n- The billing service runs in Frankfurt.\n"})
+    make_symlink(tmp_path / "project" / "notes.md", tmp_path / "outside.md")
+    monkeypatch.chdir(tmp_path / "project")
+    assert audit_here("--output", "notes.md").exit_code == 2
+    assert (tmp_path / "outside.md").read_bytes() == b"- A note outside the project.\n"
+
+
+def test_output_elsewhere_still_works_with_a_skipped_file_present(skipped_instructions):
+    result = audit_here("--output", "report.md")
+    assert result.exit_code == 0, result.output
+    assert (skipped_instructions / "report.md").read_bytes().startswith(b"# MemFalsify audit report")
+
+
+@pytest.fixture
+def cycle_raises(monkeypatch):
+    """``Path.resolve`` on a cyclic link as Python 3.10 has it; on later versions it does not raise."""
+    real = Path.resolve
+
+    def resolve(self, strict=False):
+        if self.name == "loop":
+            raise RuntimeError("Symlink loop from 'loop'")
+        return real(self, strict)
+
+    monkeypatch.setattr(Path, "resolve", resolve)
+
+
+@pytest.mark.parametrize("named", [(), ("MEMORY.md",)])
+@pytest.mark.parametrize("simulate", [False, True])
+def test_a_cyclic_link_as_output_is_a_clean_error(agent_tree, make_symlink, request, named, simulate):
+    make_symlink(agent_tree / "loop", "loop")
+    if simulate:
+        request.getfixturevalue("cycle_raises")
+    result = audit_here(*named, "--output", "loop")
+    assert result.exit_code == 2 and "cannot write the report" in result.stderr, repr(result.exception)
+
+
+def test_a_named_output_that_cannot_be_written_is_a_clean_error(agent_tree):
+    result = audit_here("MEMORY.md", "--output", "no/such/directory/report.md")
+    assert result.exit_code == 2 and "cannot write the report" in result.stderr, repr(result.exception)
 
 
 def test_an_output_that_cannot_be_written_is_a_clean_error(agent_tree):
@@ -417,6 +610,20 @@ def test_a_file_with_nothing_of_its_own_says_so(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert "No claims of its own" in audit_here().stdout
     assert "No claims of its own" in audit_here("--format", "html").stdout
+
+
+@pytest.mark.parametrize("fmt", ["markdown", "html", "json"])
+def test_a_place_not_searched_is_in_the_report_even_with_one_file(tmp_path, monkeypatch, make_symlink, fmt):
+    write(tmp_path, {"AGENTS.md": "- The nightly export stops at midnight on Sundays.\n"})
+    make_symlink(tmp_path / "MEMORY.md", tmp_path / "missing.md")
+    monkeypatch.chdir(tmp_path)
+    result = audit_here("--format", fmt)
+    assert result.exit_code == 0
+    assert "1 place(s) not searched: see the report" in result.stderr
+    if fmt == "json":
+        assert [s["path"] for s in json.loads(result.stdout)["not_searched"]] == ["MEMORY.md"]
+    else:
+        assert "Not searched for memory files" in result.stdout and "MEMORY.md" in result.stdout
 
 
 def test_json_is_one_object_with_a_stable_shape_at_any_count(agent_tree, tmp_path, monkeypatch):
@@ -525,6 +732,28 @@ def test_init_prints_the_exact_next_commands(in_tmp):
         assert name in printed
 
 
+def test_init_prints_a_cd_that_works_for_a_leading_dash(in_tmp):
+    result = runner.invoke(app, ["init", "--", "-weird"])
+    assert result.exit_code == 0, result.output
+    assert "  cd ./-weird\n" in result.stdout
+    assert (in_tmp / "-weird" / "MEMORY.md").is_file()
+
+
+def test_init_promises_the_three_outcomes_only_in_a_directory_of_its_own(in_tmp, monkeypatch):
+    fresh = runner.invoke(app, ["init", "new"]).stdout
+    assert "You should see one claim" in fresh
+    (in_tmp / "empty").mkdir()
+    assert "You should see one claim" in runner.invoke(app, ["init", "empty"]).stdout
+    write(in_tmp, {"project/CLAUDE.md": "- Deploys use the staging cluster.\n- The billing service runs in Dublin.\n"})
+    monkeypatch.chdir(in_tmp / "project")
+    printed = runner.invoke(app, ["init", "."]).stdout
+    assert "You should see one claim" not in printed
+    assert "  memfalsify audit MEMORY.md --evidence evidence\n" in printed
+    assert audit_set().files == ["CLAUDE.md", "MEMORY.md"]
+    alone = AuditReport.model_validate_json(audit_here("MEMORY.md", "--evidence", "evidence", "--format", "json").stdout)
+    assert alone.summary == OUTCOMES
+
+
 def test_init_defaults_to_a_new_directory(in_tmp):
     assert runner.invoke(app, ["init"]).exit_code == 0
     assert sorted(p.relative_to(in_tmp / demo.DEFAULT_DIRECTORY).as_posix()
@@ -618,7 +847,7 @@ def test_templates_are_declared_for_the_wheel():
 
 
 def test_the_wheel_really_holds_the_templates(tmp_path):
-    """Builds the wheel offline from a copy, when setuptools is installed; CI and the acceptance run install it."""
+    """Builds the wheel offline from a copy, when setuptools is installed; the CI test jobs install it."""
     setuptools = pytest.importorskip("setuptools")
     if tuple(int(part) for part in setuptools.__version__.split(".")[:1]) < (77,):
         pytest.skip("packages/memfalsify needs setuptools>=77")
@@ -805,7 +1034,7 @@ def test_since_is_validated_and_nothing_is_written(history, tmp_path, since):
     ("2026-01-31T12:00:00+02:00", "2026-01-31 10:00:00 +0000"),
     ("2026-01-31 12:00", "2026-01-31 12:00:00 +0000"),
     ("2026-01-31T12:00:00Z", "2026-01-31 12:00:00 +0000"),
-    ("1960-01-01", "1970-01-02 00:00:00 +0000"),
+    ("1960-01-01", "1970-01-01 00:00:00 +0000"),
     ("30 days ago", "2026-10-05 12:00:00 +0000"),
     ("30.days.ago", "2026-10-05 12:00:00 +0000"),
     ("2 Weeks", "2026-10-21 12:00:00 +0000"),
@@ -813,9 +1042,9 @@ def test_since_is_validated_and_nothing_is_written(history, tmp_path, since):
     ("1 month ago", "2026-10-04 12:00:00 +0000"),
     ("13 months ago", "2025-10-04 12:00:00 +0000"),
     ("3.years.ago", "2023-11-04 12:00:00 +0000"),
-    ("100000 days ago", "1970-01-02 00:00:00 +0000"),  # git would misread this without a word
-    ("999999 years ago", "1970-01-02 00:00:00 +0000"),
-    ("999999 weeks ago", "1970-01-02 00:00:00 +0000"),
+    ("100000 days ago", "1970-01-01 00:00:00 +0000"),  # git would misread this without a word
+    ("999999 years ago", "1970-01-01 00:00:00 +0000"),
+    ("999999 weeks ago", "1970-01-01 00:00:00 +0000"),
     ("v1.0", None),
     ("HEAD~2", None),
     ("20260131", None),
@@ -849,6 +1078,78 @@ def test_since_as_a_date_is_midnight_utc_on_the_committer_date(history, tmp_path
     relative = tmp_path / "relative"
     assert from_git("--since", "100000 days ago", "--output", str(relative)).exit_code == 0
     assert len(list(relative.iterdir())) == 2
+
+
+def commit_on(repo, message: str, when: str) -> str:
+    """A commit with this author and committer date, whatever the order of the history."""
+    env = {**os.environ, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when}
+    subprocess.run([shutil.which("git"), "-C", str(repo.root), "-c", "commit.gpgsign=false", "commit", "-q",
+                    "--allow-empty", "-m", message], env=env, check=True)
+    return repo.git("rev-parse", "HEAD").strip()
+
+
+@needs_git
+def test_a_commit_with_an_old_date_hides_nothing_behind_it(history, tmp_path):
+    behind = commit_on(history, "Behind the old one", "2026-11-03T00:00:00+00:00")
+    old = commit_on(history, "Dated long ago", "2026-01-01T00:00:00+00:00")
+    head = commit_on(history, "Newest", "2026-11-04T00:00:00+00:00")
+    out = tmp_path / "out"
+    result = from_git("--since", "2026-11-01", "--output", str(out))
+    assert result.exit_code == 0, result.output
+    assert sorted(p.name for p in out.iterdir()) == sorted([f"{behind[:12]}.md", f"{head[:12]}.md"])
+    assert not (out / f"{old[:12]}.md").exists()
+    cut = tmp_path / "cut"
+    limited = from_git("--since", "2026-11-01", "--output", str(cut), "--max-commits", "1")
+    assert [p.name for p in cut.iterdir()] == [f"{head[:12]}.md"] and "stopped at --max-commits 1" in limited.stderr
+
+
+@needs_git
+def test_an_old_dated_head_hides_nothing_either(history, tmp_path):
+    behind = commit_on(history, "Behind the old one", "2026-11-03T00:00:00+00:00")
+    commit_on(history, "Dated long ago", "2026-01-01T00:00:00+00:00")
+    out = tmp_path / "out"
+    assert from_git("--since", "2026-11-01", "--output", str(out)).exit_code == 0
+    assert [p.name for p in out.iterdir()] == [f"{behind[:12]}.md"]
+
+
+@needs_git
+def test_the_date_window_keeps_git_order_across_a_merge(history, tmp_path):
+    base = commit_on(history, "Base", "2026-01-01T00:00:00+00:00")
+    side = commit_on(history, "Side", "2026-11-02T00:00:00+00:00")
+    history.git("checkout", "-q", "-b", "other", base)
+    other = commit_on(history, "Other", "2026-11-03T00:00:00+00:00")
+    stamp = "2026-11-04T00:00:00+00:00"
+    subprocess.run([shutil.which("git"), "-C", str(history.root), "-c", "commit.gpgsign=false", "merge", "-q",
+                    "--no-edit", "--no-ff", side], env={**os.environ, "GIT_COMMITTER_DATE": stamp,
+                                                        "GIT_AUTHOR_DATE": stamp}, check=True)
+    merged = history.git("rev-parse", "HEAD").strip()
+    out = tmp_path / "out"
+    assert from_git("--since", "2026-11-01", "--output", str(out), "--max-commits", "2").exit_code == 0
+    assert sorted(p.name for p in out.iterdir()) == sorted([f"{merged[:12]}.md", f"{other[:12]}.md"])
+
+
+@needs_git
+@pytest.mark.parametrize("since", ["2100-01-01", "2200-06-01", "9999-12-31", "9999-12-31T00:00:00Z"])
+def test_a_date_far_in_the_future_selects_nothing(history, tmp_path, since):
+    history.commit("One")
+    out = tmp_path / "out"
+    result = from_git("--since", since, "--output", str(out))
+    assert result.exit_code == 0 and "Wrote 0 new file(s)" in result.stdout, result.output
+    assert list(out.iterdir()) == [] and since[:4] in result.stderr
+
+
+@needs_git
+def test_a_date_before_1970_selects_a_commit_from_the_first_day(history, tmp_path):
+    early = commit_on(history, "At the start of time", "@1 +0000")
+    out = tmp_path / "out"
+    assert from_git("--since", "1960-01-01", "--output", str(out)).exit_code == 0
+    assert [p.name for p in out.iterdir()] == [f"{early[:12]}.md"]
+
+
+@pytest.mark.parametrize("since", ["9999-12-31T23:59:59-23:00", "0000-01-01"])
+def test_a_date_out_of_range_is_refused(tmp_path, since):
+    with pytest.raises(ValueError, match="not a valid date"):
+        date_argument(since)
 
 
 @needs_git
@@ -918,6 +1219,28 @@ def test_a_file_with_other_content_stops_the_run_with_nothing_written(history, t
     assert sorted(p.name for p in out.iterdir()) == [f"{second[:12]}.md"]
     assert (out / f"{second[:12]}.md").read_bytes() == b"mine\n"
     assert not (out / f"{first[:12]}.md").exists()
+
+
+@needs_git
+def test_a_case_variant_of_the_git_directory_is_refused(history):
+    history.commit("One")
+    if not (history.root / ".GIT").exists():
+        pytest.skip("this filesystem is case-sensitive: .GIT is another directory")
+    before = snapshot(history.root / ".git")
+    result = from_git("--since", "2026-10-01", "--output", ".GIT/evil")
+    assert result.exit_code == 2 and "inside the git directory" in result.stderr
+    assert snapshot(history.root / ".git") == before
+
+
+@needs_git
+@pytest.mark.parametrize("simulate", [False, True])
+def test_a_cyclic_link_as_output_directory_is_a_clean_error(history, make_symlink, request, simulate):
+    history.commit("One")
+    make_symlink(history.root / "loop", "loop")
+    if simulate:
+        request.getfixturevalue("cycle_raises")
+    result = from_git("--since", "2026-10-01", "--output", "loop")
+    assert result.exit_code == 2, repr(result.exception)
 
 
 @needs_git
@@ -1015,6 +1338,81 @@ def test_the_files_work_with_evidence(history, tmp_path, monkeypatch):
     assert audit_here("MEMORY.md", "--evidence", str(out), "--strict").exit_code == 1
 
 
+@needs_git
+def test_the_printed_command_works_from_where_the_memory_files_are(history, tmp_path, monkeypatch):
+    history.commit("Lower the limit\n\nThe public API allows 60 requests per minute.")
+    printed = from_git("--since", "2026-10-01", "--output", "commits").stdout
+    hint = printed.strip().splitlines()[-1]
+    assert "memory files" in hint
+    command = shlex.split(hint.split(": ", 1)[1])
+    assert command[:3] == ["memfalsify", "audit", "--evidence"]
+    project = tmp_path / "project"
+    write(project, {"MEMORY.md": "- The public API allows 100 requests per minute.\n"})
+    monkeypatch.chdir(project)
+    result = runner.invoke(app, command[1:])
+    assert result.exit_code == 0, result.output
+    assert "POSSIBLE COUNTEREVIDENCE" in result.stdout
+
+
+@needs_git
+def test_a_stored_escape_in_a_quote_goes_into_reviews_from_the_json_report(history, tmp_path, monkeypatch):
+    """The quick start sends a person to ``--format json`` for this: the quote there is ready to paste."""
+    full = commit_bytes(history, b"The public API allows \x1b[31m60 requests per minute.\n")
+    out = tmp_path / "commits"
+    assert from_git("--since", "2026-10-01", "--output", str(out)).exit_code == 0
+    claim = "The public API allows 100 requests per minute."
+    project = tmp_path / "project"
+    write(project, {"MEMORY.md": f"- {claim}\n"})
+    monkeypatch.chdir(project)
+    shown = audit_here("--evidence", str(out), "--format", "json").stdout
+    pasted = re.search(r'"quote": ("[^\n]*"),?\n', shown).group(1)
+    assert "\\\\u001b" in pasted
+    line = (f'{{"memory_id": "{claim_id(claim)}", "relation": "contradicts", "path": "{full[:12]}.md", '
+            f'"quote": {pasted}, "reviewer": "you"}}\n')
+    write(project, {"reviewed.jsonl": line})
+    result = audit_set("--evidence", str(out), "--reviews", "reviewed.jsonl")
+    assert result.summary == {"challenged": 1}
+
+
+@posix_only
+@pytest.mark.parametrize("script,message", [("echo 'not a timestamp line'", "cannot parse"),
+                                            (f"echo '12 {'a' * 39}'", "cannot parse"),
+                                            ("exit 3", "failed with exit code 3")])
+def test_a_rev_list_that_misbehaves_is_a_clean_error(tmp_path, script, message):
+    fake = tmp_path / "fake-git"
+    write_text_exact(fake, f"#!/bin/sh\n{script}\n")
+    fake.chmod(0o755)
+    with pytest.raises(ValueError, match=message):
+        gitevidence._commits_since(str(fake), tmp_path, "a" * 40, 0.0, 5)
+
+
+def zero_file_index(monkeypatch) -> None:
+    real = os.stat
+
+    def stat(path, *args, **kwargs):
+        fields = list(real(path, *args, **kwargs))
+        fields[1] = fields[2] = 0  # st_ino, st_dev: some filesystems report no file index
+        return os.stat_result(tuple(fields))
+
+    monkeypatch.setattr(os, "stat", stat)
+
+
+def test_a_zero_file_index_does_not_make_every_output_a_memory_file(tmp_path, monkeypatch):
+    write(tmp_path, {"MEMORY.md": "- The nightly export stops at midnight on Sundays.\n", "report.md": "old\n"})
+    monkeypatch.chdir(tmp_path)
+    zero_file_index(monkeypatch)
+    assert audit_here("--output", "report.md").exit_code == 0
+    assert audit_here("--output", "MEMORY.md").exit_code == 2
+
+
+@needs_git
+def test_a_zero_file_index_does_not_put_every_output_in_the_git_directory(history, tmp_path, monkeypatch):
+    history.commit("One")
+    zero_file_index(monkeypatch)
+    assert from_git("--since", "2026-10-01", "--output", str(tmp_path / "out")).exit_code == 0
+    assert from_git("--since", "2026-10-01", "--output", ".git/evil").exit_code == 2
+
+
 def test_parse_log_refuses_what_is_not_four_fields_of_a_hash():
     good = "a" * 40
     assert parse_log(f"{good}\0date\0subject\0body\n\0".encode()) == [
@@ -1085,8 +1483,31 @@ def test_the_quick_start_blocks_marked_with_an_exit_code_run_in_order(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "POSSIBLE COUNTEREVIDENCE" in proc.stdout and "NO EVIDENCE" in proc.stdout
     assert "CHALLENGED" in proc.stdout
-    commits = list((tmp_path / "demo" / "history" / "commits").iterdir())
+    commits = list((tmp_path / "history" / "commits").iterdir())
     assert len(commits) == 1 and re.fullmatch(r"[0-9a-f]{12}\.md", commits[0].name)
+    # The page's last step audits the demo against those commits, from the directory with the memory file.
+    assert f"`{commits[0].name}:" in proc.stdout
+    assert "no memory or instruction file" not in proc.stderr
+    assert "not searched" not in proc.stderr  # nothing in the page's steps sets off a warning to explain
+
+
+@pytest.mark.parametrize("page", [QUICKSTART, QUICKSTART_ZH])
+def test_the_quick_start_says_only_what_holds(page):
+    """Each of these sentences was false once: the page promised more than the commands do."""
+    prose = page.read_text(encoding="utf-8")
+    assert "audit --evidence commits" not in prose  # from history/ there is no memory file to audit
+    assert "audit --evidence ../history/commits" in prose
+    assert ".venv\\Scripts\\Activate.ps1" in prose  # a Windows venv has no bin/activate
+    for old in ("You can copy it into `reviews.jsonl` as it is", "可以直接复制到 `reviews.jsonl`",
+                "takes two commands", "只要两条命令", "Everything here runs offline", "这里的一切都离线运行"):
+        assert old not in prose
+    assert any("reviews.jsonl" in line and "\\uXXXX" in line and "--format json" in line for line in prose.splitlines())
+
+
+def test_ci_builds_the_wheel_the_test_above_needs_setuptools_for():
+    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    installs = [line for line in workflow.splitlines() if "run: python -m pip install -e packages/memcore" in line]
+    assert len(installs) == 2 and all('"setuptools>=77"' in line for line in installs)
 
 
 class CountingVerifier:

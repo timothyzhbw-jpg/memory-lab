@@ -2,7 +2,7 @@
 
 English | [中文](quickstart.zh-CN.md)
 
-From nothing to a first MemFalsify report takes two commands: one to install, one to make a demo and audit it. Everything here runs offline, with no API key. The [tutorial](tutorial.md) goes further: `diff`, `history`, `rollback` and the other tool in this repository.
+From nothing to a first MemFalsify report takes one install step and one command that makes a demo and audits it. The clone and `pip install` need the network; everything after them runs offline, with no API key. The [tutorial](tutorial.md) goes further: `diff`, `history`, `rollback` and the other tool in this repository.
 
 ## 1. Install
 
@@ -66,24 +66,26 @@ The evidence is the current directory, or `--evidence DIR`. The rules are the on
 
 The report lists what it skipped. `--exclude GLOB` (repeatable) leaves files out of both the choice of memory files and the evidence: `memfalsify audit --exclude 'tests/fixtures/**' --exclude 'vendor/**'`.
 
-Several files share one report, in path order: totals, a table of the files, then a section per file. A claim stated in two files appears once, with the other place listed as a duplicate. With one file, the Markdown and HTML reports have the same layout as `memfalsify audit FILE --evidence .`. With `--format json` the shape does not depend on the count: one object with `files`, `summary` and `reports`, a list of the same objects `memfalsify audit FILE --format json` prints. `--strict` means what it always means: exit 1 if any claim in any of the files needs attention.
+Several files share one report, in path order: totals, a table of the files, then a section per file. A claim stated in two files appears once, with the other place listed as a duplicate. With one file, the Markdown and HTML reports have the same layout as `memfalsify audit FILE --evidence .`, unless the search passed over a place, which then gets a section of its own. With `--format json` the shape does not depend on the count: one object with `files`, `summary` and `reports`, a list of the same objects `memfalsify audit FILE --format json` prints. `--strict` means what it always means: exit 1 if any claim in any of the files needs attention.
 
 Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, no evidence unless you pass `--evidence`, and only the skips of the evidence scan, so a review file or decision log inside `--evidence` reads as evidence there.
 
 ## Use git history as evidence
 
-Commit messages often record what was decided and why. This turns them into evidence files:
+Commit messages often record what was decided and why. Starting from the demo directory, this turns them into evidence files:
 
 ```bash
 # exit 0
-git init -q history && cd history
+cd .. && git init -q history && cd history
 git -c user.name=you -c user.email=you@example.com commit -q --allow-empty -m "Lower the public API limit to 60 requests per minute"
 memfalsify evidence from-git --since 2026-01-01 --output commits --max-commits 100
+cd ../demo
+memfalsify audit --evidence ../history/commits
 ```
 
-Then compare against them with `memfalsify audit --evidence commits`. If `commits/` sits inside the project, a plain `memfalsify audit` reads it along with everything else.
+The last two lines go back to the demo, because an audit runs from the directory that holds the memory files. The report now cites the commit message as possible counterevidence to the 100 requests claim. If `commits/` sits inside the project, a plain `memfalsify audit` reads it along with everything else.
 
-`--since` takes a date (`2026-01-31` means midnight UTC, `2026-01-31T12:00:00+02:00`, `'30 days ago'`), matched against the committer date, or a commit, tag or branch, meaning the commits after it up to `HEAD`. A value that looks like a date is read as a date, and a value that is neither a date nor a commit is refused.
+`--since` takes a date (`2026-01-31` means midnight UTC, `2026-01-31T12:00:00+02:00`, `'30 days ago'`), matched against the committer date, or a commit, tag or branch, meaning the commits after it up to `HEAD`. A value that looks like a date is read as a date, and a value that is neither a date nor a commit is refused. A date is checked against every commit in the history, so a commit with an old date hides nothing behind it.
 
 Each commit becomes one small Markdown file, named by its 12-digit hash (the full hash, if two selected commits share 12 digits). It starts with a fixed header, the short hash, the full hash and the author date, followed by the subject and body:
 
@@ -100,7 +102,7 @@ The same commits give the same bytes, so a re-run adds only what is new. Dates g
 
 A commit message is text from whoever wrote the commit, so it is a candidate source like any other. Control, bidi and zero-width characters in a message are stored as visible `\uXXXX` escapes, not raw and not removed (a joiner inside real text, as in Persian or an emoji sequence, stays):
 
-- A quote and its hash describe the evidence file, so the quote in a report is exact either way, and it matches what you see when you open the file. You can copy it into `reviews.jsonl` as it is.
+- A quote and its hash describe the evidence file, so the quote in a report is exact either way, and it matches what you see when you open the file. A `reviews.jsonl` line is JSON, so a stored `\uXXXX` in a quote takes a doubled backslash there; `memfalsify audit --format json` shows the quote in that form, ready to copy.
 - Printing the file cannot drive your terminal.
 - Removing such characters would hide that they were there, and could turn the text into a word its author's bytes did not hold. The full hash leads to the original.
 
@@ -110,4 +112,4 @@ A GitHub version, with pull request titles and bodies, is on the roadmap.
 
 ## Windows
 
-The commands are the same. PowerShell 7 accepts `&&`; in Windows PowerShell 5, use `;`: `memfalsify init demo; cd demo; memfalsify audit`. To add the review line, paste it into `reviews.jsonl` with an editor. The `printf` command above is bash.
+Activate the virtual environment with `.venv\Scripts\Activate.ps1`. The other commands are the same. PowerShell 7 accepts `&&`; in Windows PowerShell 5, use `;`: `memfalsify init demo; cd demo; memfalsify audit`. To add the review line, paste it into `reviews.jsonl` with an editor. The `printf` command above is bash.

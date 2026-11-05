@@ -2,7 +2,7 @@
 
 [English](quickstart.md) | 中文
 
-从零到第一份 MemFalsify 报告只要两条命令：一条安装，一条生成示例并审计。这里的一切都离线运行，不需要 API key。[教程](tutorial.zh-CN.md)讲得更多：`diff`、`history`、`rollback`，以及本仓库的另一个工具。
+从零到第一份 MemFalsify 报告，只需一步安装和一条命令（生成示例并审计）。克隆和 `pip install` 要联网，之后的一切都离线运行，不需要 API key。[教程](tutorial.zh-CN.md)讲得更多：`diff`、`history`、`rollback`，以及本仓库的另一个工具。
 
 ## 1. 安装
 
@@ -66,24 +66,26 @@ memfalsify audit
 
 报告会列出跳过了什么。`--exclude GLOB`（可重复）同时把文件排除在记忆文件的选择和证据之外：`memfalsify audit --exclude 'tests/fixtures/**' --exclude 'vendor/**'`。
 
-多个文件共用一份报告，按路径排序：先是总数和文件表，然后每个文件一节。两个文件里相同的一条记忆只出现一次，另一处列为重复。只有一个文件时，Markdown 和 HTML 报告的版式与 `memfalsify audit FILE --evidence .` 相同。`--format json` 的结构不随文件数变化：一个对象，含 `files`、`summary` 和 `reports`，后者的每一项就是 `memfalsify audit FILE --format json` 打印的那种对象。`--strict` 的含义不变：任何文件里有记忆需要注意，就退出 1。
+多个文件共用一份报告，按路径排序：先是总数和文件表，然后每个文件一节。两个文件里相同的一条记忆只出现一次，另一处列为重复。只有一个文件时，Markdown 和 HTML 报告的版式与 `memfalsify audit FILE --evidence .` 相同；如果搜索跳过了某个位置，报告会为它单列一节。`--format json` 的结构不随文件数变化：一个对象，含 `files`、`summary` 和 `reports`，后者的每一项就是 `memfalsify audit FILE --format json` 打印的那种对象。`--strict` 的含义不变：任何文件里有记忆需要注意，就退出 1。
 
 指定文件，比如 `memfalsify audit CLAUDE.md`，和以前一样：只审计这个文件，除非传 `--evidence`，否则没有证据；并且只按证据扫描本身的规则跳过文件，所以 `--evidence` 里的审核文件或决策日志在这种用法下会被当作证据。
 
 ## 把 git 历史当作证据
 
-提交说明常常记着决定了什么、为什么。下面的命令把它们变成证据文件：
+提交说明常常记着决定了什么、为什么。从示例目录开始，下面的命令把它们变成证据文件：
 
 ```bash
 # exit 0
-git init -q history && cd history
+cd .. && git init -q history && cd history
 git -c user.name=you -c user.email=you@example.com commit -q --allow-empty -m "Lower the public API limit to 60 requests per minute"
 memfalsify evidence from-git --since 2026-01-01 --output commits --max-commits 100
+cd ../demo
+memfalsify audit --evidence ../history/commits
 ```
 
-然后用 `memfalsify audit --evidence commits` 对照它们。如果 `commits/` 就在项目里面，直接运行 `memfalsify audit` 也会读到它。
+最后两行回到示例目录，因为审计要在放着记忆文件的目录里运行。报告现在会引用这条提交说明，作为那条 100 次请求记忆的可能反证。如果 `commits/` 就在项目里面，直接运行 `memfalsify audit` 也会读到它。
 
-`--since` 接受日期（`2026-01-31` 表示 UTC 零点，`2026-01-31T12:00:00+02:00`，`'30 days ago'`），按提交者日期（committer date）筛选；也接受提交、标签或分支，表示它之后直到 `HEAD` 的提交。看起来像日期的值按日期读，既不是日期也不是提交的值会被拒绝。
+`--since` 接受日期（`2026-01-31` 表示 UTC 零点，`2026-01-31T12:00:00+02:00`，`'30 days ago'`），按提交者日期（committer date）筛选；也接受提交、标签或分支，表示它之后直到 `HEAD` 的提交。看起来像日期的值按日期读，既不是日期也不是提交的值会被拒绝。日期会和历史里的每个提交比较，所以一个日期很旧的提交不会挡住它后面的提交。
 
 每个提交生成一个小的 Markdown 文件，以 12 位哈希命名（如果选中的两个提交前 12 位相同，就用完整哈希）。文件以固定的头部开始：短哈希、完整哈希、作者日期，后面是标题和正文：
 
@@ -100,7 +102,7 @@ Lower the public API limit to 60 requests per minute
 
 提交说明是提交者写的文字，所以它和其他来源一样只是候选。说明里的控制字符、双向控制字符和零宽字符会存成可见的 `\uXXXX` 转义，既不保留原样，也不删除（真实文字里的连接符会保留，比如波斯文或表情符号序列）：
 
-- 引文和哈希描述的是证据文件本身，所以报告里的引文无论如何都是精确的，也和打开文件看到的一致，可以直接复制到 `reviews.jsonl`。
+- 引文和哈希描述的是证据文件本身，所以报告里的引文无论如何都是精确的，也和打开文件看到的一致。`reviews.jsonl` 的每一行是 JSON，所以引文里存下的 `\uXXXX` 要写成双反斜杠；`memfalsify audit --format json` 显示的就是这种写法，可以直接复制。
 - 打印这个文件不会操控你的终端。
 - 删除这些字符会掩盖它们存在过，还可能把文字变成作者的原始字节里并没有的词。完整哈希可以找到原文。
 
@@ -110,4 +112,4 @@ GitHub 版本（pull request 的标题和正文）在路线图上。
 
 ## Windows
 
-命令相同。PowerShell 7 接受 `&&`；Windows PowerShell 5 要用 `;`：`memfalsify init demo; cd demo; memfalsify audit`。添加审核那一行时，用编辑器粘贴到 `reviews.jsonl`。上面的 `printf` 命令是 bash 的写法。
+用 `.venv\Scripts\Activate.ps1` 激活虚拟环境，其余命令相同。PowerShell 7 接受 `&&`；Windows PowerShell 5 要用 `;`：`memfalsify init demo; cd demo; memfalsify audit`。添加审核那一行时，用编辑器粘贴到 `reviews.jsonl`。上面的 `printf` 命令是 bash 的写法。
