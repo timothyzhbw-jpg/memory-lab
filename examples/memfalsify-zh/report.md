@@ -10,19 +10,6 @@
 | NO EVIDENCE | 3 |
 | POSSIBLE SUPPORT | 1 |
 
-### POSSIBLE COUNTEREVIDENCE · `m-54b237eb`
-
-> 功能A（批量导出）已批准，随11月版本发布。
-
-`MEMORY.md:5` · `产品`
-
-**Evidence**
-- contradicts (candidate, unconfirmed) · `记录/2026-10-07-决策记录.md:3` · sha256 `faf3d9030f65` · opposing terms: claim '批准…' vs source '拒绝…'
-  > 产品经理拒绝了功能A（批量导出），不随11月版本发布。
-
-**Proposed actions** (not applied)
-- `verify_counterevidence`: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.
-
 ### POSSIBLE COUNTEREVIDENCE · `m-124e4d91`
 
 > 公开 API 的限流是每分钟 100 次请求。
@@ -32,6 +19,19 @@
 **Evidence**
 - contradicts (candidate, unconfirmed) · `文档/api.md:3` · sha256 `ab042ee74c57` · different values: claim ['100'] vs source ['60']
   > 公开 API 的限流是每分钟 60 次请求。
+
+**Proposed actions** (not applied)
+- `verify_counterevidence`: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.
+
+### POSSIBLE COUNTEREVIDENCE · `m-54b237eb`
+
+> 功能A（批量导出）已批准，随11月版本发布。
+
+`MEMORY.md:5` · `产品`
+
+**Evidence**
+- contradicts (candidate, unconfirmed) · `记录/2026-10-07-决策记录.md:3` · sha256 `faf3d9030f65` · opposing terms: claim '批准…' vs source '拒绝…'
+  > 产品经理拒绝了功能A（批量导出），不随11月版本发布。
 
 **Proposed actions** (not applied)
 - `verify_counterevidence`: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.
@@ -107,7 +107,7 @@
 
 ## Limitations
 
-- Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context.
+- Unconfirmed matches are candidates found by comparing words: support by term overlap, a contradiction by the same setting with another value or two near-identical statements that differ. They can miss paraphrases and misread context, and a report without flags has not ruled anything out.
 - Only human reviews (reviews.jsonl) can mark a memory supported or challenged.
 - Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.
 - Missing evidence means unverified, not false. No memory was modified.
