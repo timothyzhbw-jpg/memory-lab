@@ -28,6 +28,44 @@ Timings below are one machine (macOS, CPython 3.13), before and after that chang
 
 A 3,000-claim audit went from 290 s to 0.58 s. cProfile of the old 300-claim run spent almost all of its time in `LexicalVerifier.judge` → `features` → `stem` (on the order of 10^8 `endswith` calls). After the change, a 1,000-claim profile tokenizes each sentence a handful of times and spends the rest on the candidate pairs.
 
+## MemFalsify audit on a large repository
+
+A monorepo stresses the evidence side of an audit: millions of passages rather than thousands of claims. `--evidence N` times one audit of 200 synthetic claims against a synthetic repository of about N passages, where every line holds terms common to the whole repository and a few lines restate a claim.
+
+```bash
+.venv/bin/python benchmarks/perf/run.py --evidence 200000
+```
+
+At 200,000 passages that went from 13.0 s and 711 MB of peak RSS to 1.6 s and 270 MB. The script only prints; nothing asserts a time. `tests/test_audit_speed.py` guards the speed by counting work instead: a claim must not read passages it cannot reach, a stem is worked out once per token, line numbers do not count from the start of the file, and the lexical verifier is not asked about pairs it must call unrelated.
+
+The table below is the same audit on real public repositories, as shallow clones: `memfalsify audit FILE --evidence REPO --format json --as-of 2026-11-04`, the whole process, one run each, on one machine (Apple M4 Pro, 24 GB, CPython 3.13.9) with other jobs running, at a load average around 8. Before is the tree before these changes. n8n and bun hit a 900 s limit there, so their old whole-run figures are unknown. Peak RSS comes from `/usr/bin/time -l`. macOS leaves compressed pages out of RSS, so the figure moves with memory pressure; the peak memory footprint from the same tool is in brackets.
+
+| Repository | File | Passages | Claims | Before (s) | After (s) | Peak RSS before (MB) | Peak RSS after (MB) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| mem0 | `CLAUDE.md` | 290,145 | 746 | 113.2 | 3.7 | 1,106 (1,108) | 402 (356) |
+| supabase | `CLAUDE.md` | 1,413,533 | 50 | 197.0 | 17.9 | 4,015 (4,362) | 1,138 (1,147) |
+| next.js | `AGENTS.md` | 2,350,303 | 324 | 1,197.0 | 42.0 | 5,752 (6,525) | 1,352 (2,116) |
+| grafana | `CLAUDE.md` | 3,978,701 | 87 | 946.9 | 35.7 | 9,664 (10,671) | 2,026 (2,466) |
+| n8n | `AGENTS.md` | 4,272,802 | 1,057 | over 900 | 53.6 | not known | 2,417 (2,749) |
+| bun | `AGENTS.md` | 6,907,553 | 169 | over 900 | 70.5 | not known | 3,255 (4,958) |
+
+Small repositories gained too: excalidraw 16.0 s to 2.4 s, browser-use 13.7 s to 1.1 s, withastro/astro 60.0 s to 6.0 s, astral-sh/uv 55.1 s to 4.0 s, facebook/react 45.6 s to 7.6 s, langchain 80.2 s to 4.1 s, deno 201.4 s to 12.7 s.
+
+Reports stay byte-identical. Where both versions finish, the JSON report of each run above is the same file before and after. For n8n and bun a sample of the claims stands in: 60 of the 382 claims in n8n's `AGENTS.md` (636.5 s and 11,434 MB of peak footprint before, 45.9 s and 2,502 MB after), and 40 of bun's 169 with `test/` and `vendor/` left out of the evidence (396.6 s and 6,719 MB before, 19.9 s and 1,796 MB after), because all of bun would have needed about 20 GB before. Both samples gave the same report in both versions.
+
+A cProfile of the supabase run showed where the time went, and each of these changed:
+
+- Every claim walked every passage. `_PassageIndex` now keeps, for the terms of the claims being audited and their opposites, which passages hold them, and a claim scores only the passages it can reach. A passage needs a share of the claim's terms to clear the threshold, so the claim's rarest terms are enough to find it, except that an opposing term counts as a match, so the opposites are looked up too. Candidates are scored in passage order, so ties keep the order they always had.
+- Scoring tokenized the passage again. It now reads the terms the scan already found, and only a claim with Chinese text, measured per character, goes through `coverage`.
+- Most shortlisted pairs fell between the shortlist's threshold (0.5) and the lexical verifier's `related` (0.6). The verifier has to call those unrelated and the report drops them, so they are no longer asked about: 3.1 million pairs on n8n, of which about 95% were such pairs. A subclass of `LexicalVerifier` and every model verifier still get all of them.
+- Each passage carried two Pydantic models and their dictionaries. A `Passage` is now a small dataclass that builds its `EvidenceSpan` when asked, which is most of the memory saved.
+- Line numbers counted newlines from the start of the file, once per passage. They now come from a bisection over the newline positions.
+- `stem` ran about 18 `endswith` checks per token with nothing memoized. A bounded cache from token to term now answers over nine lookups in ten, and passages share one string per term.
+- The cycle collector walked the passages again and again, about a quarter of the run on supabase and next.js, and found nothing to free. It now stays off while they are built, and they are frozen until the audit ends (`out_of_collection`). It runs as usual for anything made after that, such as a model verifier's API client.
+- `Path.relative_to` builds every parent to answer, and `input_path` asks it several times per file. A comparison of `parts` answers the common case, and pathlib still decides everything else.
+
+What is left is mostly the scan itself: about 6 µs per passage to split sentences and extract terms, and about 400 µs per file for the path policy and the confined read. Holding one `confined_reads` open across a scan would save about a third of that per-file cost, but it moves the CLI from `os.walk` to the descriptor walk, which reports some `stat` errors differently, so it was left alone. Process pools were not needed.
+
 ## orgmemory validate, replay, explain and audit
 
 `orgmemory.py` builds a deterministic synthetic dataset and times `validate`, `replay`, `explain` and `audit` the way the CLI runs them: load the dataset, do the work, and build the default text report. Dataset generation is timed separately and is not included in the command times. Peak memory is tracemalloc's high-water mark for that call, so the seconds include tracing overhead. The peak is Python allocations, not the process RSS.

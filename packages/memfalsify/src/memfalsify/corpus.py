@@ -6,13 +6,19 @@ text: they are hashed only to check the sidecars that describe them.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable
+import gc
+import re
+from bisect import bisect_left
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePath
+from typing import TypeVar
 
 from pydantic import BaseModel
 
-from memcore import EvidenceSpan, MediaRef, SidecarError, load_sidecar, make_span, sha256_bytes, sidecar_format
+from memcore import EvidenceSpan, MediaRef, SidecarError, load_sidecar, sha256_bytes, sidecar_format
 from memcore.paths import InputPathError, input_path
 from memcore.reading import ReadLimitError, available, read_input_bytes, take, walk_files
 from memcore.sidecar import LABELS, MEDIA_SUFFIXES
@@ -41,10 +47,27 @@ def is_report(text: str) -> bool:
             or (text.startswith("<!DOCTYPE html>") and HTML_MARKER in text[:300]))
 
 
-class Passage(BaseModel):
-    span: EvidenceSpan
+@dataclass(slots=True)
+class Passage:
+    """One indexed sentence or cue and its terms. A large repository has millions of them and a report cites a few,
+    so this holds what an ``EvidenceSpan`` is made of and builds the span when asked for."""
+    path: str
+    digest: str
+    quote: str
+    start: int
+    line: int
+    media: MediaRef | None
     words: frozenset[str]
     numbers: frozenset[str]
+
+    @property
+    def location(self) -> str:
+        return f"{self.path}:{self.line}"
+
+    @property
+    def span(self) -> EvidenceSpan:
+        return EvidenceSpan(path=self.path, sha256=self.digest, start=self.start, end=self.start + len(self.quote),
+                            quote=self.quote, line=self.line, source_kind="file", media=self.media)
 
 
 class Skipped(BaseModel):
@@ -58,13 +81,18 @@ def _matches(relative: str, patterns: list[str], directory: bool = False) -> boo
     return any(fnmatchcase(name, pattern) for name in names for pattern in patterns)
 
 
-def _passage(relative: str, digest: str, text: str, start: int, end: int,
+def _newlines(text: str) -> list[int]:
+    """Where the newlines are, for ``_passage``. Counting from the start of the file per passage is quadratic."""
+    return [match.start() for match in re.finditer("\n", text)]
+
+
+def _passage(relative: str, digest: str, text: str, newlines: list[int], start: int, end: int,
              media: MediaRef | None = None) -> Passage | None:
-    words, numbers = features(text[start:end])
+    quote = text[start:end]
+    words, numbers = features(quote)
     if not words or not take("passages"):  # take: within read_limits only, a passage budget
         return None
-    span = make_span(relative, digest, text, start, end, source_kind="file", media=media)
-    return Passage(span=span, words=words, numbers=numbers)
+    return Passage(relative, digest, quote, start, bisect_left(newlines, start) + 1, media, words, numbers)
 
 
 def scan(root: Path, exclude: Iterable[str] = (),
@@ -85,6 +113,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
 
     for directory, dirnames, filenames in walk_files(root, onerror=walk_error):
         base = Path(directory).relative_to(root)
+        prefix = base.as_posix() + "/" if base.parts else ""
         dirnames[:] = sorted(d for d in dirnames
                              if not _matches((base / d).as_posix(), patterns, directory=True))
         for name in dirnames[:]:
@@ -105,10 +134,10 @@ def scan(root: Path, exclude: Iterable[str] = (),
         media: dict[str, str] = {}  # media file name -> relative path
         bound: set[str] = set()  # names of media files a sidecar was checked against and indexed for
         for name in sorted(filenames):
-            path = Path(directory) / name
-            relative = path.relative_to(root).as_posix()
+            relative = prefix + name
             if _matches(relative, patterns):
                 continue
+            path = Path(directory) / name
             try:
                 resolved = input_path(root, path)
             except InputPathError as exc:
@@ -148,6 +177,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 local.append(Skipped(path=relative, reason="MemFalsify report: a report cannot be its own evidence"))
                 continue
             digest = sha256_bytes(raw)
+            newlines = _newlines(text)
             fmt = sidecar_format(name)
             if fmt is not None:
                 try:
@@ -160,10 +190,35 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 if sidecar.media_sha256 is not None:
                     bound.add(PurePath(sidecar.media).name)
                 passages += [p for unit in sidecar.units
-                             if (p := _passage(relative, digest, text, unit.start, unit.end, sidecar.ref(unit)))]
+                             if (p := _passage(relative, digest, text, newlines, unit.start, unit.end,
+                                               sidecar.ref(unit)))]
                 continue
             passages += [p for start, end in sentence_spans(text)
-                         if (p := _passage(relative, digest, text, start, end))]
+                         if (p := _passage(relative, digest, text, newlines, start, end))]
         covered = {media[name] for name in bound if name in media}
         skipped += [s for s in local if not (s.reason == NO_SIDECAR and s.path in covered)]
     return passages, skipped
+
+
+T = TypeVar("T")
+
+
+@contextmanager
+def out_of_collection(build: Callable[[], T]) -> Iterator[T]:
+    """``build()``, kept out of the cycle collector's sight for the length of a ``with`` block.
+
+    Passages hold no reference cycles, and on a large repository walking millions of them again and again, to free
+    nothing, took a quarter of the audit. So the collector stays off while they are built, and then they are frozen:
+    it runs as usual for everything made after that, such as a model verifier's API client."""
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        built = build()
+        gc.freeze()
+    finally:
+        if enabled:
+            gc.enable()
+    try:
+        yield built
+    finally:
+        gc.unfreeze()

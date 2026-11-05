@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TextIO
 
-from .paths import InputPathError, input_path
+from .paths import InputPathError, below, input_path
 
 
 _ROOT: ContextVar[tuple[Path, int] | None] = ContextVar("memlab_read_root", default=None)
@@ -312,7 +312,7 @@ def _open(path: Path, encoding: str | None = None):
         if str(exc) == "path escapes root":
             raise ValueError("read path is outside the server root") from None
         raise
-    relative = resolved.relative_to(base)
+    relative = below(resolved, base)
     directory_fd = _directory(relative.parts[:-1], root_fd)
     try:
         # NONBLOCK also prevents a regular file swapped for a FIFO from hanging

@@ -2,12 +2,17 @@
 
     .venv/bin/python benchmarks/perf/run.py
     .venv/bin/python benchmarks/perf/run.py --sizes 100 500 --profile 500
+    .venv/bin/python benchmarks/perf/run.py --evidence 200000
 
 Builds synthetic MEMORY.md files of exactly 100, 500, 1,000 and 3,000 claims (plus a few
 duplicate copies that merge away), and also times the repository README.md. Synthetic claims
 are a pure function of their index: clusters share terms so some pairs conflict, and unrelated
 clusters do not. ``diff`` compares a committed file with a working tree where every 10th claim
 is revised. Timings cover the library calls, not process startup.
+
+``--evidence N`` times one audit of 200 claims against a synthetic repository of about N
+passages, the way a large monorepo stresses it: every line holds terms common to the whole
+repository, and a few lines hold the rare terms of a claim.
 """
 from __future__ import annotations
 
@@ -21,6 +26,11 @@ import tempfile
 import time
 from datetime import date
 from pathlib import Path
+
+try:
+    import resource
+except ImportError:  # Windows
+    resource = None
 
 ROOT = Path(__file__).resolve().parents[2]
 for _package in ("memcore", "memfalsify"):  # this checkout, not another install
@@ -168,6 +178,37 @@ def run_sizes(sizes: list[int], readme: bool) -> None:
             _row(label, claims, audit_s, diff_s)
 
 
+def render_evidence(root: Path, passages: int) -> None:
+    """About ``passages`` sentences in files of 200 lines. Every 50th line restates a claim."""
+    lines_per_file = 200
+    for number in range(max(1, passages // lines_per_file)):
+        lines = [sentence(number * lines_per_file + line) if line % 50 == 0
+                 else f"Common words fill line {line} of generated file {number}." for line in range(lines_per_file)]
+        path = root / f"dir{number % 100:02d}" / f"file{number:05d}.md"
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+
+
+def time_evidence(passages: int) -> None:
+    """One audit of 200 claims against about ``passages`` passages, and the peak resident size of this process."""
+    print(f"{'passages':>10} {'claims':>7} {'audit_s':>10} {'peak_rss_mb':>12}", flush=True)
+    with tempfile.TemporaryDirectory(prefix="memfalsify-perf-") as tmp:
+        root = Path(tmp)
+        evidence = root / "evidence"
+        evidence.mkdir()
+        render_evidence(evidence, passages)
+        memory = root / "MEMORY.md"
+        memory.write_bytes(render_memory(200).encode("utf-8"))
+        started = time.perf_counter()
+        report = audit(memory, evidence, as_of=AS_OF, follow_links=False)
+        elapsed = time.perf_counter() - started
+    peak = "?"
+    if resource is not None:
+        size = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        peak = f"{size / (1 << 20 if sys.platform == 'darwin' else 1 << 10):.0f}"  # bytes on macOS, KiB on Linux
+    print(f"{passages:10d} {len(report.findings):7d} {elapsed:10.3f} {peak:>12}", flush=True)
+
+
 def profile_audit(count: int) -> None:
     with tempfile.TemporaryDirectory(prefix="memfalsify-perf-") as tmp:
         path = Path(tmp) / "profile.md"
@@ -187,7 +228,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-readme", action="store_true", help="skip README.md")
     parser.add_argument("--profile", type=int, metavar="N",
                         help="cProfile one synthetic audit of N claims instead of the timing table")
+    parser.add_argument("--evidence", type=int, metavar="N",
+                        help="time one audit against a synthetic repository of about N passages instead of the table")
     args = parser.parse_args(argv)
+    if args.evidence is not None:
+        time_evidence(args.evidence)
+        return
     if args.profile is not None:
         profile_audit(args.profile)
         return

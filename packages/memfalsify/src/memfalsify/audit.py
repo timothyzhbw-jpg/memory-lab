@@ -15,7 +15,7 @@ from memcore.paths import InputPathError, input_path
 from memcore.reading import confined_reads, confinement_root, confinement_supported, take
 
 from . import __version__
-from .corpus import Passage, Skipped, scan
+from .corpus import Passage, Skipped, out_of_collection, scan
 from .formats import Value
 from .memory import Claim, parse_memory
 from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, CJK, HEDGE, RELATIVE_TIME, coverage_units,
@@ -156,19 +156,74 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
     return confirmed
 
 
-def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
-              max_judged: int | None = None) -> list[Passage]:
-    """The passages to ask the verifier about: those sharing terms with the claim, best ``max_judged`` first."""
+class _PassageIndex:
+    """Which passages hold each term of the given claims, so that a claim reads only the passages it can reach.
+
+    Only those claims' terms and their opposites get postings, in passage order: walking the passages once costs
+    far less than one claim's walk did, and the postings stay small however many terms the evidence has."""
+
+    def __init__(self, passages: list[Passage], claims: Iterable[Claim]):
+        wanted: set[str] = set()
+        for claim in claims:
+            words, _ = features(claim.text)
+            wanted |= words
+            wanted.update(*(_EN_OPPOSITES.get(term, ()) for term in words))
+        self.postings: dict[str, list[int]] = {term: [] for term in wanted}
+        for position, passage in enumerate(passages):
+            for term in passage.words & wanted:
+                self.postings[term].append(position)
+
+    def reachable(self, words: frozenset[str], text: str, min_coverage: float) -> list[int]:
+        """Positions, in passage order, of at least every passage that shares a term with the claim ``text`` and can
+        reach ``min_coverage``."""
+        postings = self.postings
+        if CJK.search(text):
+            keys = list(words)  # measured per character (``char_coverage``), so one shared term can be enough
+        else:
+            # Without an opposing term a passage needs ``needed`` of the claim's terms, so it holds one of the rarest
+            # ``size - needed + 1``. With an opposing term it holds that term.
+            size = len(words)
+            needed = next((shared for shared in range(1, size + 1) if shared / size >= min_coverage), size + 1)
+            keys = sorted(words, key=lambda term: (len(postings[term]), term))[:size - needed + 1]
+            keys.extend(opposite for term in words for opposite in _EN_OPPOSITES.get(term, ()))
+        found: set[int] = set()
+        for key in keys:
+            found.update(postings[key])
+        return sorted(found)
+
+
+def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5, max_judged: int | None = None,
+              index: _PassageIndex | None = None) -> list[Passage]:
+    """The passages to ask the verifier about: those sharing terms with the claim, best ``max_judged`` first.
+
+    ``index`` must cover ``passages`` and this claim; share one when shortlisting many claims."""
     words, _ = features(claim.text)
     if not words:
         return []
-    ranked = []
     # Within read_limits, comparisons draw from a budget; the passages past it are not compared.
-    for passage in passages[:take("comparisons", len(passages))]:
-        shared = len(words & passage.words)
-        score = coverage(claim.text, passage.span.quote) if shared else 0.0
-        if shared and score >= min_coverage:
-            ranked.append((-score, -shared, passage.span.location, passage))
+    compared = take("comparisons", len(passages))
+    if index is None:
+        index = _PassageIndex(passages, [claim])
+    chinese = bool(CJK.search(claim.text))
+    size = len(words)
+    opposing = [(term, opposite) for term in words for opposite in _EN_OPPOSITES.get(term, ())]
+    ranked = []
+    # In passage order: the sort below is stable, and passages on one line can tie on all of its keys.
+    for position in index.reachable(words, claim.text, min_coverage):
+        if position >= compared:
+            break
+        passage = passages[position]
+        terms = passage.words
+        shared = len(words & terms)
+        if not shared:
+            continue
+        if chinese:
+            score = coverage(claim.text, passage.quote)
+        else:  # ``coverage`` from the terms in hand, without reading the quote again; no Chinese terms can oppose
+            opposed = any(opposite in terms and term not in terms for term, opposite in opposing)
+            score = min(shared + opposed, size) / size
+        if score >= min_coverage:
+            ranked.append((-score, -shared, passage.location, passage))
     ranked.sort(key=lambda item: item[:3])
     return [passage for *_, passage in ranked[:max_judged]]
 
@@ -176,7 +231,7 @@ def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
 def candidates(claim: Claim, judged: list[tuple[Passage, Judgment]], limit: int) -> list[EvidenceFinding]:
     """The ``limit`` most telling judged passages: contradictions first, then the most shared terms."""
     words, _ = features(claim.text)
-    scored = [(judgment.relation != "contradicts", -len(words & passage.words), passage.span.location, judgment,
+    scored = [(judgment.relation != "contradicts", -len(words & passage.words), passage.location, judgment,
                passage)
               for passage, judgment in judged if judgment.relation != "unrelated"]
     scored.sort(key=lambda item: item[:3])
@@ -561,14 +616,18 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     if exclude and root is None:
         raise EvidenceError("--exclude requires --evidence: patterns are relative to the evidence root")
     # When a selection is empty there is nothing to look up, so the evidence is not scanned.
-    scanned = root is not None and (selected is None or bool(targets))
-    passages, skipped = scan(root, exclude=exclude, memory_files=memory_paths) if scanned else ([], [])
-    if targets and root is not None and exclude and not passages:
-        raise EvidenceError(NOTHING_LEFT)
-    return judge_passages(claims, targets, passages, skipped, memory_file=memory_file, files_read=files_read,
-                          evidence_root=evidence_root, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
-                          stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
-                          max_judged=max_judged, exclude=exclude, max_concurrency=max_concurrency)
+    wanted = root is not None and (selected is None or bool(targets))
+
+    def scanned() -> tuple[list[Passage], list[Skipped]]:
+        return scan(root, exclude=exclude, memory_files=memory_paths) if wanted else ([], [])
+
+    with out_of_collection(scanned) as (passages, skipped):
+        if targets and root is not None and exclude and not passages:
+            raise EvidenceError(NOTHING_LEFT)
+        return judge_passages(claims, targets, passages, skipped, memory_file=memory_file, files_read=files_read,
+                              evidence_root=evidence_root, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
+                              stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
+                              max_judged=max_judged, exclude=exclude, max_concurrency=max_concurrency)
 
 
 def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Passage], skipped: list[Skipped], *,
@@ -580,8 +639,12 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     ``skipped`` receives what the reviews leave out. ``conflict_index``, over ``claims``, can be shared."""
     by_id = {c.id: c for c in claims}
     confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
-    picked = {claim.id: shortlist(claim, passages, min_coverage, max_judged) for claim in targets}
-    pairs = [(claim.text, passage.span.quote) for claim in targets for passage in picked[claim.id]]
+    index = _PassageIndex(passages, targets) if targets else None
+    # The lexical verifier calls a pair under ``related`` unrelated, and ``candidates`` drops that: no need to ask.
+    # Most shortlisted pairs are such pairs. Asking about them took longer than everything else after the scan.
+    floor = max(min_coverage, verifier.related) if type(verifier) is LexicalVerifier else min_coverage
+    picked = {claim.id: shortlist(claim, passages, floor, max_judged, index) for claim in targets}
+    pairs = [(claim.text, passage.quote) for claim in targets for passage in picked[claim.id]]
     before = verifier_usage(verifier)
     judgments = iter(judge_all(verifier, pairs, max_concurrency))
     stats = usage_since(before, verifier_usage(verifier))
@@ -603,7 +666,7 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
                                 status=status, evidence=evidence, issues=issues, proposals=proposals))
     findings.sort(key=lambda f: SEVERITY.index(f.status))
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
-    media = any(p.span.media for p in passages) or any(e.span.media for f in findings for e in f.evidence)
+    media = any(p.media for p in passages) or any(e.span.media for f in findings for e in f.evidence)
     return AuditReport(memory_file=memory_file, files_read=files_read,
                        evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,
                        verifier=verifier.name, verifier_stats=stats, as_of=as_of, summary=summary,
