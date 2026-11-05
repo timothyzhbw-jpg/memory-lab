@@ -85,8 +85,8 @@ The audit entry points never edit memory. Evidence failures raise `memcore.Evide
 malformed inputs raise `ValueError` (including Pydantic validation errors); file I/O can raise `OSError`.
 
 Custom verifiers implement `Verifier`: `name: str` and
-`judge(claim: str, passage: str) -> Judgment`. Package import does not import `anthropic` or
-`typesafe_sdk` or `openai`. Constructing `LLMVerifier`/`JevVerifier`/`OpenAICompatVerifier` requires the
+`judge(claim: str, passage: str) -> Judgment`. `anthropic`, `typesafe_sdk` and `openai` are imported only when a
+verifier that needs one of them is constructed. Constructing `LLMVerifier`/`JevVerifier`/`OpenAICompatVerifier` requires the
 `[llm]`/`[jev]`/`[openai]` extra and credentials or an injected client. `DualVerifier(LLMVerifier(), JevVerifier())` keeps disagreements;
 `CascadeVerifier(JevVerifier(), LLMVerifier(), accept_at=0.8)` escalates low confidence.
 For model audits, explicitly set `min_coverage=0.2, max_judged=8` to match CLI preselection.
