@@ -95,7 +95,7 @@ def test_hostile_text_in_a_flag_is_escaped(tmp_path):
 
 
 def test_a_long_quote_is_cut_and_a_path_is_not():
-    assert len(_clip("word " * 100)) == 100 and _clip("word " * 100).endswith("…")
+    assert len(_clip("word " * 100)) == 90 and _clip("word " * 100).endswith("…")
     assert _clip("short") == "short"
 
 

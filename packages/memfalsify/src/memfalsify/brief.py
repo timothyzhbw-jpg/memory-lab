@@ -9,7 +9,7 @@ from memcore.terminal import diagnostic_line
 from .audit import ATTENTION, MISSING_REFERENCE, AuditReport, AuditSet, EvidenceFinding, Finding, has_open_missing_reference
 from .report import LABELS
 
-_WIDTH = 100
+_WIDTH = 90  # with the 10 characters of indent, a line fits in 100
 _SHOWN_CONFIRMED = 2
 FOOTER = ('A flag means "read the two quotes": a person decides, in a reviews file. No memory was modified.\n'
           "All claims and every source: --format markdown or --format html.")
