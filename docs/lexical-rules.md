@@ -16,7 +16,7 @@ The rules err towards keeping. Chinese text always stays, and so does anything t
 
 A claim's ID comes from its text, so a re-wrapped paragraph keeps its IDs, while a fix to how a line is read gives it a new one. A review naming an old ID then stops the audit with `unknown memory_id`, or, for a dismissal, is listed under `Skipped evidence`.
 
-A heading above a list does not change how the items are read: `Use npm in this package.` under `## Do NOT` is compared as it is written, and the heading only shows next to it in the report. On the repositories measured, 3% of the claims sit under such a heading or lead-in, and the first sentence of an item is often negated while the next one is a plain statement (`Use an optional group.`), so reading a whole list as negated would be wrong as often as right.
+A heading above a list does not change how the items are read: `Use npm in this package.` under `## Do NOT` is compared as it is written, and the heading only shows next to it in the report. On the repositories measured, about 3% of the claims sit under such a heading or lead-in, and in such a list the first sentence of an item is negated while the next one is often a plain statement (`Use an optional group.`), so reading the whole list as negated would misread those.
 
 ## When it says a passage may contradict a claim
 
