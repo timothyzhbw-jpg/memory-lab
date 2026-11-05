@@ -64,6 +64,15 @@ def component_skip_reason(relative: Path, *, directory: bool = False, instructio
     return None
 
 
+def below(path: Path, root: Path) -> PurePath:
+    """``path.relative_to(root)``. An audit asks this several times per file, and pathlib builds every parent to
+    answer. When the parts differ pathlib still decides: they can differ in case on Windows, or it raises ValueError."""
+    parts, base = path.parts, root.parts
+    if parts[:len(base)] == base:
+        return PurePath(*parts[len(base):])
+    return path.relative_to(root)
+
+
 def input_path(root: Path, path: Path, *, directory: bool = False, instructions: bool = False) -> Path:
     """Resolve an input inside root, excluding hidden/skipped walked AND target components.
 
@@ -75,7 +84,7 @@ def input_path(root: Path, path: Path, *, directory: bool = False, instructions:
     root = Path(root).resolve()
     walked = Path(path).absolute()
     try:
-        relative = walked.relative_to(root)
+        relative = below(walked, root)
     except ValueError:
         raise InputPathError("path escapes root") from None
     if reason := component_skip_reason(relative, directory=directory, instructions=instructions):
@@ -87,7 +96,7 @@ def input_path(root: Path, path: Path, *, directory: bool = False, instructions:
             raise
         raise InputPathError("broken or cyclic symlink") from None
     try:
-        relative = resolved.relative_to(root)
+        relative = below(resolved, root)
     except ValueError:
         raise InputPathError("path escapes root") from None
     if reason := component_skip_reason(relative, directory=directory, instructions=instructions):

@@ -21,7 +21,7 @@ from memcore import EvidenceError
 from memcore.paths import InputPathError, input_path
 
 from .audit import NOTHING_LEFT, SEVERITY, AuditReport, AuditSet, _ConflictIndex, judge_passages
-from .corpus import Passage, Skipped, _matches, scan
+from .corpus import Passage, Skipped, _matches, out_of_collection, scan
 from .discover import discover
 from .memory import Claim, parse_memory
 from .ownfiles import DECISION_LOG, GENERATED, REVIEWS, own_files
@@ -109,7 +109,7 @@ class _Corpus:
 
     def without(self, files: list[Path]) -> tuple[list[Passage], list[Skipped]]:
         out = set(files)
-        return ([p for p in self.passages if self._file(p.span.path) not in out],
+        return ([p for p in self.passages if self._file(p.path) not in out],
                 [s for s in self.skipped if self._file(s.path) not in out])
 
 
@@ -158,25 +158,29 @@ def audit_directory(directory: Path = Path("."), evidence_root: Path | None = No
             if reason == REVIEWS and "/" not in relative:  # a review file further down belongs to something else
                 progress(f"note: {relative} holds reviews, which apply only with --reviews {relative}")
     left_out = [root / relative for relative, _ in own] + ([Path(reviews)] if reviews else [])
-    passages, skipped = scan(root, exclude=exclude, memory_files=left_out) if claims else ([], [])
-    # Only when --exclude is what emptied the evidence: a pattern that matches nothing changes nothing.
-    if claims and exclude and not passages and scan(root, memory_files=left_out)[0]:
-        raise EvidenceError(NOTHING_LEFT)
-    corpus = _Corpus(root, passages, skipped)
-    own_skips = [Skipped(path=relative, reason=_OWN_REASONS[reason]) for relative, reason in own]
-    conflicts = _ConflictIndex(claims) if claims else None
-    reports: list[AuditReport] = []
-    for name in names:
-        targets = [claim for claim in claims if owner[claim.id] == name]
-        prefix = PurePosixPath(name).parent
-        base = (directory / name).absolute().parent.resolve()
-        here, skips = corpus.without(read[name]) if targets else ([], [])
-        reports.append(judge_passages(
-            claims, targets, here, [*memory_skips[name], *skips, *(own_skips if targets else [])], memory_file=name,
-            files_read=[(prefix / p.relative_to(base).as_posix()).as_posix() for p in read[name]],
-            evidence_root=evidence, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
-            stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
-            max_judged=max_judged, exclude=exclude, max_concurrency=max_concurrency, conflict_index=conflicts))
+
+    def scanned() -> tuple[list[Passage], list[Skipped]]:
+        return scan(root, exclude=exclude, memory_files=left_out) if claims else ([], [])
+
+    with out_of_collection(scanned) as (passages, skipped):
+        # Only when --exclude is what emptied the evidence: a pattern that matches nothing changes nothing.
+        if claims and exclude and not passages and scan(root, memory_files=left_out)[0]:
+            raise EvidenceError(NOTHING_LEFT)
+        corpus = _Corpus(root, passages, skipped)
+        own_skips = [Skipped(path=relative, reason=_OWN_REASONS[reason]) for relative, reason in own]
+        conflicts = _ConflictIndex(claims) if claims else None
+        reports: list[AuditReport] = []
+        for name in names:
+            targets = [claim for claim in claims if owner[claim.id] == name]
+            prefix = PurePosixPath(name).parent
+            base = (directory / name).absolute().parent.resolve()
+            here, skips = corpus.without(read[name]) if targets else ([], [])
+            reports.append(judge_passages(
+                claims, targets, here, [*memory_skips[name], *skips, *(own_skips if targets else [])], memory_file=name,
+                files_read=[(prefix / p.relative_to(base).as_posix()).as_posix() for p in read[name]],
+                evidence_root=evidence, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
+                stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
+                max_judged=max_judged, exclude=exclude, max_concurrency=max_concurrency, conflict_index=conflicts))
     totals = Counter()
     for report in reports:
         totals.update(report.summary)

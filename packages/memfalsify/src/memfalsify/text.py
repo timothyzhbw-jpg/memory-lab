@@ -180,6 +180,8 @@ def normalize(text: str) -> str:
     multipliers (``1200万`` -> ``12000000``), percentages (``百分之十``, ``一成`` -> ``10%``), halves
     (``半小时`` -> ``0.5小时``, ``一年半`` -> ``1.5年``) and dates (``2026年10月11日`` -> ``2026-10-11``).
     """
+    if text.isascii():  # most of a repository, and nothing to fold
+        return text
     if not CJK.search(text):
         return fold_width(text)
     text = fold_width(_THOUSANDS.sub("", text))
@@ -214,6 +216,9 @@ def _cjk_tokens(run: str) -> Iterator[str]:
                 yield piece[i:i + 3]
 
 
+# Bounded: audit text is untrusted. Tokens repeat a lot in a repository, so nearly every lookup is a hit, and
+# passages that use a term share one string for it instead of keeping a copy each.
+@lru_cache(maxsize=1 << 18)
 def _word(token: str) -> str | None:
     """The term for a Latin-script token, or None for a stopword."""
     if len(token) == 1 and token.isupper():
@@ -226,8 +231,7 @@ def _word(token: str) -> str | None:
 
 def _tokens(text: str) -> Iterator[tuple[bool, str]]:
     """Yield (is_number, token) in text order: stemmed content words, CJK n-grams and numbers."""
-    for match in TOKEN.finditer(normalize(text)):
-        token = match.group()
+    for token in TOKEN.findall(normalize(text)):
         if token[0].isdigit():
             yield True, token
         elif "㐀" <= token[0] <= "鿿":
@@ -433,13 +437,15 @@ def explicit_dates(text: str) -> list[date]:
     return found
 
 
+_LINE = re.compile(r"[^\n]+")
 _LEAD = re.compile(r"^(?:\s*(?:#{1,6}|>|[-*+]|\d+[.)]|\[[ xX]\])\s+)+")
 _BOUNDARY = re.compile(r"[。！？；]|[.!?;](?=\s|$)")
+_WORD_CHARACTER = re.compile(r"\w")
 
 
 def sentence_spans(text: str) -> Iterator[tuple[int, int]]:
     """Yield [start, end) character spans of sentences, with markdown list/heading markers trimmed."""
-    for line in re.finditer(r"[^\n]+", text):
+    for line in _LINE.finditer(text):
         base, body, pos = line.start(), line.group(), 0
         cuts = [m.end() for m in _BOUNDARY.finditer(body)] + [len(body)]
         for cut in cuts:
@@ -447,6 +453,6 @@ def sentence_spans(text: str) -> Iterator[tuple[int, int]]:
             lead = _LEAD.match(segment)
             offset = lead.end() if lead else len(segment) - len(segment.lstrip())
             stripped = segment[offset:].rstrip()
-            if re.search(r"\w", stripped):
+            if _WORD_CHARACTER.search(stripped):
                 yield base + pos + offset, base + pos + offset + len(stripped)
             pos = cut
