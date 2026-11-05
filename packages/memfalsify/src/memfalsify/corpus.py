@@ -202,7 +202,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
 
 
 T = TypeVar("T")
-_FROZEN_AT_IMPORT = gc.get_freeze_count()  # not always 0: Python 3.12 starts with objects of its own frozen
+_FROZEN_AT_STARTUP = 1000  # Python 3.12 starts with a few hundred objects frozen; a host's freeze holds thousands
 
 
 class _Collector:
@@ -212,7 +212,7 @@ class _Collector:
     holders = 0  # ``with`` blocks open
     builders = 0  # of those, the ones still building
     was_enabled = True
-    freezing = False  # False when something else has frozen objects since the import: those are not ours to thaw
+    freezing = False  # False when the host has frozen objects: those are not ours to thaw
 
 
 @contextmanager
@@ -227,7 +227,7 @@ def out_of_collection(build: Callable[[], T]) -> Iterator[T]:
     state = _Collector
     with state.lock:
         if not state.holders:
-            state.freezing = gc.get_freeze_count() <= _FROZEN_AT_IMPORT
+            state.freezing = gc.get_freeze_count() <= _FROZEN_AT_STARTUP
         state.holders += 1
         if not state.builders:
             state.was_enabled = gc.isenabled()
