@@ -38,7 +38,7 @@ A monorepo stresses the evidence side of an audit: millions of passages rather t
 
 At 200,000 passages that went from 13.0 s and 711 MB of peak RSS to 1.6 s and 270 MB. The script only prints; nothing asserts a time. `tests/test_audit_speed.py` guards the speed by counting work instead: a claim must not read passages it cannot reach, a stem is worked out once per token, line numbers do not count from the start of the file, and the lexical verifier is not asked about pairs it must call unrelated.
 
-The table below is the same audit on real public repositories, as shallow clones: `memfalsify audit FILE --evidence REPO --format json --as-of 2026-11-04`, the whole process, one run each, on one machine (Apple M4 Pro, 24 GB, CPython 3.13.9) with other jobs running, at a load average around 8. Before is the tree before these changes. n8n and bun hit a 900 s limit there, so their old peak is unknown. Peak RSS comes from `/usr/bin/time -l`. macOS leaves compressed pages out of RSS, so the figure moves with memory pressure; the peak memory footprint from the same tool is in brackets.
+The table below is the same audit on real public repositories, as shallow clones: `memfalsify audit FILE --evidence REPO --format json --as-of 2026-11-04`, the whole process, one run each, on one machine (Apple M4 Pro, 24 GB, CPython 3.13.9) with other jobs running, at a load average around 8. Before is the tree before these changes. n8n and bun hit a 900 s limit there, so their old whole-run figures are unknown. Peak RSS comes from `/usr/bin/time -l`. macOS leaves compressed pages out of RSS, so the figure moves with memory pressure; the peak memory footprint from the same tool is in brackets.
 
 | Repository | File | Passages | Claims | Before (s) | After (s) | Peak RSS before (MB) | Peak RSS after (MB) |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -51,7 +51,7 @@ The table below is the same audit on real public repositories, as shallow clones
 
 Small repositories gained too: excalidraw 16.0 s to 2.4 s, browser-use 13.7 s to 1.1 s, withastro/astro 60.0 s to 6.0 s, astral-sh/uv 55.1 s to 4.0 s, facebook/react 45.6 s to 7.6 s, langchain 80.2 s to 4.1 s, deno 201.4 s to 12.7 s.
 
-Reports stay byte-identical. Where both versions finish, the JSON report of each run above is the same file before and after.
+Reports stay byte-identical. Where both versions finish, the JSON report of each run above is the same file before and after. For n8n and bun a sample of the claims stands in: 60 of the 382 claims in n8n's `AGENTS.md` (636.5 s and 11,434 MB of peak footprint before, 45.9 s and 2,502 MB after), and 40 of bun's 169 with `test/` and `vendor/` left out of the evidence (396.6 s and 6,719 MB before, 19.9 s and 1,796 MB after), because all of bun would have needed about 20 GB before. Both samples gave the same report in both versions.
 
 A cProfile of the supabase run showed where the time went, and each of these changed:
 

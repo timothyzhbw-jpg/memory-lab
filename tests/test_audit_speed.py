@@ -277,8 +277,10 @@ class AsksAboutEverything(LexicalVerifier):
     """A subclass may judge differently, so it gets every pair: the behaviour from before the shortcut."""
 
 
-@pytest.mark.parametrize(("min_coverage", "max_judged"), ((0.5, None), (0.2, None), (0.2, 8), (0.5, 1), (0.75, 2), (0.0, 3)))
-def test_not_asking_the_lexical_verifier_about_unrelated_pairs_changes_no_report(built, tmp_path, min_coverage, max_judged):
+@pytest.mark.parametrize(("min_coverage", "max_judged"),
+                         ((0.5, None), (0.2, None), (0.2, 8), (0.5, 1), (0.75, 2), (0.0, 3)))
+def test_not_asking_the_lexical_verifier_about_unrelated_pairs_changes_no_report(built, tmp_path, min_coverage,
+                                                                                 max_judged):
     _, _, evidence = built
     memory = tmp_path / "MEMORY.md"
     options = {"min_coverage": min_coverage, "max_judged": max_judged}
