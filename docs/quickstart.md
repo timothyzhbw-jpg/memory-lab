@@ -35,7 +35,7 @@ memfalsify init demo && cd demo && memfalsify audit
 
 - The flags come from comparing words, so a flag means "read these two quotes", not "this is wrong". A flag needs the same setting with another value, or two nearly identical statements that differ; the comparison can still miss a paraphrase and misread context, so a report without flags has not ruled anything out. That is what `Verifier: lexical` in the header means ([the rules](lexical-rules.md)); [model verifiers](local-setup.md) are optional.
 - The scan skips vendored and generated files and lines over 1,000 characters, and lists them under `Skipped evidence`.
-- `m-c1b4957f` is the claim's ID, taken from its text. Editing a claim gives it a new ID, so an old review stops applying.
+- `m-c1b4957f` is the claim's ID, taken from its text. Editing a claim gives it a new ID, so an old review stops applying. The lines of a wrapped paragraph or list item are one claim, located at the line it starts on. A heading used as a label, a table header or a closing tag is no claim ([what counts as one](lexical-rules.md#what-counts-as-a-claim)).
 - `Proposed actions` are suggestions. MemFalsify writes reports and proposals only; your memory files stay as they are.
 - The exit code is 0 whatever the report says, until you pass `--strict`: then it is 1 when a claim needs attention. It is 2 when the input cannot be used.
 
@@ -48,6 +48,8 @@ memfalsify audit --reviews reviews.jsonl
 ```
 
 The claim is now `CHALLENGED`, confirmed by you. `memfalsify init` prints the same line, and `memfalsify claims MEMORY.md` lists the IDs. With no file named, a file of review records stays out of the evidence. It applies only when you pass `--reviews`, and the command tells you when it sees one at the top of the evidence that you did not pass.
+
+A flag can also be wrong. If you read the passage and it does not bear on the claim, record that with `"relation": "unrelated"`. The report prints the line, ready to paste, under each flag. The passage stops being a candidate for that claim, the status comes from what remains, and the report says how many candidates were dismissed and by whom. A dismissal never marks a claim supported or challenged. If the file changes so that the quote is gone, the dismissal stops applying, the flag can come back, and `Skipped evidence` says so.
 
 ## Run it in your own repository
 

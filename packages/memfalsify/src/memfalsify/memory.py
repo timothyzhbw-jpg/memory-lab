@@ -118,6 +118,7 @@ def _expand_markup(raw: str, start: int, end: int, others: list[tuple[int, int]]
 
 
 _WRAP = re.compile(r"[ \t]*\n[ \t]*(?:>[ \t]*)*")
+_NO_SPACE = re.compile("[㐀-鿿　-〿＀-￯]")  # Chinese characters and punctuation
 
 
 def _unwrap(text: str, origin: list[int]) -> tuple[str, list[int]]:
@@ -127,7 +128,7 @@ def _unwrap(text: str, origin: list[int]) -> tuple[str, list[int]]:
     for match in _WRAP.finditer(text):
         out.append(text[last:match.start()])
         where += origin[last:match.start()]
-        if not (CJK.match(text[match.start() - 1:match.start()]) and CJK.match(text[match.end():match.end() + 1])):
+        if not (_NO_SPACE.match(text[match.start() - 1:match.start()]) and _NO_SPACE.match(text[match.end():match.end() + 1])):
             out.append(" ")
             where.append(origin[match.start()])
         last = match.end()
@@ -158,17 +159,19 @@ def is_fragment(text: str, position: int = 0) -> bool:
     Deliberately narrow, since a dropped claim is never checked: Chinese text always stays, and so does anything that
     reads as a sentence, such as ``Tests use pytest.``. What goes: markup with nothing else (a closing tag, a link
     definition), a label ending in a colon (``Run ty:``, ``When writing comments:``), and a short piece in lower case
-    with no word that says anything, cut from a longer sentence at a semicolon or a period (``time-based assertions;``).
+    with no number and no word that says anything, cut from a longer sentence at a semicolon or a period
+    (``time-based assertions;``). A whole list item stays even so: ``pnpm workspaces`` under ``Stack`` is a fact.
     """
     if CJK.search(text):
         return False
     if _LINK_DEFINITION.fullmatch(text) or len(features(_TAG.sub(" ", text))[0]) < 2:
         return True
     words = text.split()
-    if text.endswith(":") and not re.search(r"\d", text):
+    digit = re.search(r"\d", text) is not None
+    if text.endswith(":") and not digit:
         if len(words) <= 3 or (_LABEL_OPENS.match(text) and "," not in text and len(words) <= 12):
             return True
-    return ((position > 0 or text.endswith(";")) and len(words) <= 4 and text[0].islower()
+    return (position > 0 and len(words) <= 4 and text[0].islower() and not digit
             and not any(word.strip(".,;:()'\"").lower() in _SAYS for word in words))
 
 

@@ -50,7 +50,8 @@ options* holds:
   directory, common directory and object store must all be inside the root.
 - *Treat today as*: the reference date for old dates in the file (`--as-of`).
 - *Reviews file*: a `reviews.jsonl` of human-confirmed reviews. Its paths must point into the folder you compare
-  against.
+  against. A flagged card's Details hold the line that dismisses the flag (`"relation": "unrelated"`); paste it
+  into this file and the passage stops counting for that statement.
 - *How to compare*: only with `--allow-model-verifiers`. The `openai` verifier (OpenAI or any
   OpenAI-compatible endpoint) is not offered here yet: it needs a model name and a provider or base URL, and
   the page has no inputs for them. Run it with `memfalsify audit --verifier openai --openai-model ...` or

@@ -42,8 +42,8 @@ It does **not** catch:
   so that rule now fires rarely. A build that passes has not ruled much out.
 - **Facts the repository never states.** These are reported as NO EVIDENCE, which never fails the build.
 
-Every match is a *candidate*. Only a human review can confirm it, and the action does not read
-`reviews.jsonl` yet, even though the report's proposed actions mention it.
+Every match is a *candidate*. Only a human review can confirm or dismiss it, and the action does not read
+`reviews.jsonl` yet, even though the report's proposed actions and the line under each flag mention it.
 
 ## Usage
 

@@ -26,6 +26,7 @@ from typer.testing import CliRunner
 from conftest import EXAMPLES, requires_confinement, snapshot, write_text_exact
 from memcore import confinement_root, make_span, reading
 from memfalsify import ATTENTION, LexicalVerifier, VerifierError, audit, parse_memory
+from memfalsify.audit import dismissal_line
 from memfalsify.audit import EvidenceFinding
 from memlab_ui import create_server, i18n
 from memlab_ui import check as ui_check
@@ -104,6 +105,38 @@ def without_logo(page: str) -> str:
 
 def link(path, **params) -> str:
     return path + "?" + "&".join(f"{key}={urlquote(value, safe='')}" for key, value in params.items())
+
+
+# --- dismissals ---------------------------------------------------------------------------------------------
+
+@requires_confinement
+def test_a_flag_shows_the_line_that_dismisses_it_and_a_dismissal_is_counted(app, root):
+    shown = body(get(app, link("/check", file=MEMORY, evidence=EVIDENCE, as_of="2026-10-10")))
+    assert "To dismiss it, add to your reviews file" in shown
+    flagged = next(f for f in audit(root / MEMORY, root / EVIDENCE, as_of=date(2026, 10, 10)).findings
+                   if f.status == "candidate_counterevidence")
+    span = flagged.evidence[0].span
+    line = {"memory_id": flagged.memory_id, "relation": "unrelated", "path": span.path, "quote": span.quote,
+            "reviewer": "ada"}
+    write_text_exact(root / "memfalsify" / "dismissals.jsonl", json.dumps(line) + "\n")
+    assert html.unescape(dismissal_line(flagged.memory_id, span, "ada")) == json.dumps(line, ensure_ascii=False)
+    page = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, as_of="2026-10-10",
+                         reviews="memfalsify/dismissals.jsonl"))
+    assert page.status == 200
+    assert "1 passage was dismissed by a reviewer (ada)." in text(page)
+
+
+@requires_confinement
+def test_a_dismissal_that_no_longer_applies_is_listed(app, root):
+    flagged = next(f for f in audit(root / MEMORY, root / EVIDENCE, as_of=date(2026, 10, 10)).findings
+                   if f.status == "candidate_counterevidence")
+    line = {"memory_id": flagged.memory_id, "relation": "unrelated", "path": flagged.evidence[0].span.path,
+            "quote": "no longer in this file", "reviewer": "ada"}
+    write_text_exact(root / "memfalsify" / "dismissals.jsonl", json.dumps(line) + "\n")
+    page = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, as_of="2026-10-10",
+                         reviews="memfalsify/dismissals.jsonl"))
+    assert page.status == 200
+    assert "a review that dismissed a passage no longer applies" in text(page)
 
 
 # --- pages on the examples ---------------------------------------------------------------------------------

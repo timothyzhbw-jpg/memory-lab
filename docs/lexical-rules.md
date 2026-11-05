@@ -2,6 +2,22 @@
 
 `lexical` is the default verifier: offline, deterministic, no model. It reads one claim and one passage at a time and compares words. This page states its rules in full, so that you can tell what a flag means and when not to expect one. A flag means "read these two quotes". Only a person's review marks a claim challenged or supported.
 
+## What counts as a claim
+
+A memory file is read as Markdown, one block at a time, and each block is cut into sentences.
+
+- The lines of a paragraph or list item are read as one, and the claim's location is the line it starts on. A wrapped line goes on with the next when the line above stops mid-sentence: it is indented under its list item, ends in a comma or a small word, or is long enough to have been wrapped. Short lines with no marker and no period (`Project: acme` over `Language: Python`) stay on their own, and so does a line with a hard break.
+- A period does not end a sentence after `e.g.`, `i.e.`, `vs.`, `cf.` and the like, after `etc.` before more of the sentence, or in `no. 5`. The same goes for evidence passages.
+- A table row is one statement. A table's header and rule are not claims.
+- These are not claims: code blocks, comments, headings, lines of nothing but HTML tags, link definitions, and a label ending in a colon, which is three words or fewer (`Run ty:`), or a clause with no main part (`When writing comments:`, `For a full build from the repository root:`). A short piece in lower case, cut from a longer sentence, with no number and no verb from a short list (`time-based assertions;` after a semicolon) is not one either.
+- A sentence that links to a local `.md` file points at claims and is not one itself. A block that opens with such a link is an index entry, along with all of its text.
+
+The rules err towards keeping. Chinese text always stays, and so does anything that reads as a sentence, such as `Tests use pytest.` A bare fact in a list (`pnpm workspaces`) stays too. A claim needs two content words, as it always did, so `Python 3.12` alone is not one.
+
+A claim's ID comes from its text, so a re-wrapped paragraph keeps its IDs, while a fix to how a line is read gives it a new one. A review naming an old ID then stops the audit with `unknown memory_id`, or, for a dismissal, is listed under `Skipped evidence`.
+
+A heading above a list does not change how the items are read: `Use npm in this package.` under `## Do NOT` is compared as it is written, and the heading only shows next to it in the report. On the repositories measured, 3% of the claims sit under such a heading or lead-in, and the first sentence of an item is often negated while the next one is a plain statement (`Use an optional group.`), so reading a whole list as negated would be wrong as often as right.
+
 ## When it says a passage may contradict a claim
 
 The rules run in this order, and the first that fires gives the report's reason.

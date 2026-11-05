@@ -57,6 +57,7 @@ class Row(BaseModel):
     label: Literal["real", "not_real"]
     why: Why
     tier: Tier
+    claim_dropped: bool = False  # the labeled text is no longer read as a claim: a table header, a label, a closing tag
 
 
 def sha256(text: str) -> str:
@@ -124,6 +125,10 @@ def score_labeled(rows: list[Row], clones: Path) -> dict:
         count = by_rule[row.rule]
         count["labeled"] += 1
         count["labeled_real"] += row.label == "real"
+        if row.claim_dropped:  # nothing to flag: it counts like any pair that is no longer flagged
+            lost += [row] if row.label == "real" else []
+            count["no_longer_claims"] += 1
+            continue
         if claim is None or (quote is None and width <= MAX_LINE and not left_out_reason(row.source_path)):
             unresolved.append(row.id)
             continue
@@ -168,7 +173,8 @@ def flagged_pairs(rows: list[Row], clones: Path) -> dict:
 def to_markdown(rows: list[Row], result: dict, audits: dict | None, stale: list[str]) -> str:
     out = ["# MemFalsify on real repositories", "",
            f"Labeled pairs: {len(rows)} · commits that differ from the labeled ones: {len(stale)} · "
-           f"pairs not found in the clones: {len(result['unresolved'])}", "",
+           f"pairs not found in the clones: {len(result['unresolved'])} · "
+           f"pairs whose text is no longer a claim: {result['total'].get('no_longer_claims', 0)}", "",
            "| Rule when labeled | Labeled | Real | Flagged now | Real kept | Not real kept | Precision |",
            "|---|---|---|---|---|---|---|"]
     for rule, count in [*result["by_rule"].items(), ("all", result["total"])]:

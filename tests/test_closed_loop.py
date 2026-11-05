@@ -681,6 +681,32 @@ def test_markup_in_a_memory_line_is_quoted_with_the_whole_line(demo):
     demo.tool("orgmemory", "validate", str(demo.dataset))
 
 
+def test_a_wrapped_claim_is_found_from_the_line_it_starts_on(demo):
+    """MemFalsify reads the lines of a paragraph as one claim; `location` is the first, and the record quotes that line."""
+    first = "The cache uses **Redis 6** for sessions and it keeps them for as long as the login lasts, as the"
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache (approved-by: zhou)",
+                {"MEMORY.md": run_demo.memory(f"{first}\n  security review asked for."), **CACHE_DOCS})
+    records = demo.record(demo.verify("2026-10-02", "first"))
+    quotes = [r["quote"] for r in records if r["kind"] == "evidence" and r["source_kind"] == "memory_file"]
+    assert quotes == [f"- {first}"]
+    notes = [r["event"]["note"] for r in records if r["kind"] == "event" and r["event"]["action"] == "request"]
+    assert notes == ["Memory write at MEMORY.md:3: The cache uses Redis 6 for sessions and it keeps them for as long as "
+                     "the login lasts, as the security review asked for."]
+    demo.tool("orgmemory", "validate", str(demo.dataset))
+
+
+@pytest.mark.parametrize("lines, text, held", [
+    (["- One two", "  three four.", ""], "One two three four.", True),
+    (["> One two", "> three **four**.", ""], "One two three four.", True),
+    (["[One", "two](x.md) three.", ""], "One two three.", True),
+    (["一二三", "四五六。", ""], "一二三四五六。", True),
+    (["- One two", "", "  three four."], "One two three four.", False),
+    (["- One two", "  three"], "One two three four.", False),
+])
+def test_a_claim_across_lines_stops_at_the_end_of_its_block(lines, text, held):
+    assert to_events.holds(lines, text) is held
+
+
 @pytest.mark.parametrize("memory_file", ["agent/MEMORY.md", "agent\\MEMORY.md"])
 def test_a_line_from_a_linked_file_in_a_subdirectory_is_found(tmp_path, memory_file):
     """Reports hold str(Path), so on Windows the memory file is agent\\MEMORY.md."""

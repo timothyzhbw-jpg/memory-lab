@@ -78,7 +78,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/memory-lab-tutorial.XXXXXX")"
 
 ## 4. 记录一条确认
 
-一条确认是一行 JSON：`memory_id`、`relation`（`supports` 或 `contradicts`）、相对于证据目录的 `path`、从该文件逐字复制的 `quote`，以及 `reviewer`。`memfalsify claims` 会打印这些 id。这个块按原文选出限流那一条，核对引文确实在 `docs/api.md` 里，然后往 `reviews-tutorial.jsonl` 追加一行。
+一条确认是一行 JSON：`memory_id`、`relation`（`supports`、`contradicts` 或 `unrelated`）、相对于证据目录的 `path`、从该文件逐字复制的 `quote`，以及 `reviewer`。`memfalsify claims` 会打印这些 id。这个块按原文选出限流那一条，核对引文确实在 `docs/api.md` 里，然后往 `reviews-tutorial.jsonl` 追加一行。
 
 ```bash
 # exit 0
@@ -150,6 +150,30 @@ memfalsify audit "$WORK/memfalsify/MEMORY.md" \
   --strict \
   --output "$WORK/memfalsify-strict.md"
 ```
+
+标记也可能是错的，这时可以排除它。报告在每个标记下面都打印了一行 `"relation": "unrelated"` 的记录，意思是有人读过这段文字，它和这条记忆无关。假设你读了被拿来反驳“预发环境”那条记忆的事故记录，认为它和这条规则无关。下面这段从报告里取出打印的那一行，加到一个审核文件，再审计一次。
+
+```bash
+# exit 0
+(
+  set -euo pipefail
+  memfalsify audit "$WORK/memfalsify/MEMORY.md" \
+    --evidence "$WORK/memfalsify/evidence" \
+    --as-of 2026-10-10 \
+    --output "$WORK/memfalsify-flags.md"
+  grep -o '{"memory_id".*skipping the staging cluster.*}' "$WORK/memfalsify-flags.md" \
+    >> "$WORK/memfalsify/reviews-dismissed.jsonl"
+  memfalsify audit "$WORK/memfalsify/MEMORY.md" \
+    --evidence "$WORK/memfalsify/evidence" \
+    --reviews "$WORK/memfalsify/reviews-dismissed.jsonl" \
+    --as-of 2026-10-10 \
+    --output "$WORK/memfalsify-dismissed.md"
+  grep -F -q "Dismissed by a person: 1 candidate(s) (you: 1)" "$WORK/memfalsify-dismissed.md"
+  grep -F -q "dismissed by you" "$WORK/memfalsify-dismissed.md"
+)
+```
+
+这段文字不再是这条记忆的候选，状态由剩下的证据决定，报告会写明排除了多少条候选、由谁排除。排除永远不会把记忆标成 supported 或 challenged。如果证据文件变了、引文不在了，这条排除就不再生效，`Skipped evidence` 里会写明。确认类的审核更严格：它指向的引文或记忆不在了，审计会以退出码 2 停下。
 
 ## 5. 审计 CLAUDE.md 和 AGENTS.md 的改动
 

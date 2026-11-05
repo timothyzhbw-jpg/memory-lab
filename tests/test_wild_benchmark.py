@@ -28,7 +28,7 @@ def test_labels_hold_metadata_and_hashes_only():
     rows = [json.loads(line) for line in (WILD / "labels.jsonl").read_bytes().decode("utf-8").splitlines()]
     allowed = {"id", "repo", "sha", "memory_file", "location", "source_path", "source_line", "claim_sha256",
                "quote_sha256", "rule", "label", "why", "tier"}
-    assert rows and all(set(row) == allowed for row in rows)
+    assert rows and all(set(row) - {"claim_dropped"} == allowed for row in rows)
     for row in rows:
         assert re.fullmatch(r"[0-9a-f]{64}", row["claim_sha256"]) and re.fullmatch(r"[0-9a-f]{64}", row["quote_sha256"])
         for name in ("repo", "memory_file", "location", "source_path"):  # names, not sentences

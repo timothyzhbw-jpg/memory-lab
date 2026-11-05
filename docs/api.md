@@ -275,7 +275,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | API | Purpose |
 |---|---|
 | `memfalsify.ATTENTION` | Frozen set of statuses counted by strict audits: challenged, conflicted, candidate_counterevidence, disputed. |
-| `memfalsify.AuditReport` | Read-only audit result with findings, status counts, per-backend API usage (verifier_stats), skipped evidence, and limitations. |
+| `memfalsify.AuditReport` | Read-only audit result with findings, status counts, per-backend API usage (verifier_stats), skipped evidence, limitations, and dismissed: candidates a person dismissed, per reviewer (left out of the JSON when there are none). |
 | `memfalsify.AuditSet` | Result of auditing a directory: the files chosen, summed status counts, one AuditReport per file in order, and what the search for files passed over (not_searched). `memfalsify audit --format json` with no MEMORY argument prints this. |
 | `memfalsify.CascadeVerifier` | Construct with first, second, accept_at=0.8; escalate when first has insufficient confidence. judge_many asks first about every pair, then second about the unsure ones; usage() combines both backends. |
 | `memfalsify.Change` | Frozen comparison result: kind, old/new Claim, similarity, and moved flag. |
@@ -286,8 +286,8 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.CommitInfo` | Commit identity, timestamp, author, and subject for attribution. |
 | `memfalsify.DiffReport` | Revision comparison plus audit of added/changed claims; attention counts strict statuses. |
 | `memfalsify.DualVerifier` | Construct with first and second; disagreement yields disputed and keeps both opinions. judge_many asks each backend in one pass; usage() combines both backends. |
-| `memfalsify.EvidenceFinding` | Candidate or human-confirmed relation, rationale, opinions, and quoted span. |
-| `memfalsify.Finding` | One claim’s status, evidence, issues, proposed actions, and its file's frontmatter metadata. |
+| `memfalsify.EvidenceFinding` | Candidate or human-confirmed relation, rationale, opinions, and quoted span. The relation unrelated appears only in Finding.dismissed. |
+| `memfalsify.Finding` | One claim’s status, evidence, issues, proposed actions, its file's frontmatter metadata, and dismissed: the passages a person ruled out for it (left out of the JSON when there are none). |
 | `memfalsify.GitError` | HistoryError with sanitized summary plus underlying diagnostic message. |
 | `memfalsify.HistoryError` | ValueError for invalid or unavailable Git history operations. |
 | `memfalsify.HistoryReport` | Current and removed claim provenance, scanned commits, and scan limitations. |
@@ -301,7 +301,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.Proposal` | Suggested action and reason; replacement is always None. |
 | `memfalsify.Relation` | Literal type: supports, contradicts, unrelated, disputed. |
 | `memfalsify.RemovedClaim` | Removed claim version and the commit that removed it. |
-| `memfalsify.Review` | Human confirmation input: memory ID, relation, path, quote, reviewer, optional note. |
+| `memfalsify.Review` | What a person found on reading a passage: memory ID, relation (supports, contradicts, or unrelated, which dismisses a candidate and marks the claim neither way), path, quote, reviewer, optional note. |
 | `memfalsify.Revision` | Revision label, resolved commit (None for worktree), and files read. |
 | `memfalsify.Rollback` | Patch result: bytes or None plus a message; no patch is applied. |
 | `memfalsify.Skipped` | Evidence file path and reason it was skipped. |
@@ -320,7 +320,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.diff_to_markdown` | Render a DiffReport as Markdown. |
 | `memfalsify.history_to_markdown` | Render a HistoryReport as Markdown. |
 | `memfalsify.judge_all` | Judge (claim, passage) pairs in order: through the verifier's judge_many when it has one, else max_concurrency judge calls at a time. |
-| `memfalsify.load_reviews` | Validate review records and their verbatim quotes for a claim-ID mapping; with skipped=, review evidence excluded by the input path policy is recorded there instead of raising. |
+| `memfalsify.load_reviews` | Validate review records and their verbatim quotes for a claim-ID mapping; with skipped=, review evidence excluded by the input path policy is recorded there instead of raising, and so is a dismissal whose claim or quote is gone. |
 | `memfalsify.memory_diff` | Compare base with head, the worktree, or with staged=True the git index, and audit only added/changed claims against current evidence. |
 | `memfalsify.memory_history` | Attribute claims on the first-parent HEAD chain; max_commits defaults to 100. |
 | `memfalsify.parse_memory` | Return (deduplicated claims, files read); follow_links=True follows local Markdown links inside the memory directory. With skipped=, memory or linked files excluded by the input path policy are recorded there instead of read. |
