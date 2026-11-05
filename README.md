@@ -107,6 +107,8 @@ On the benchmark this finds 5 of 19 Chinese contradictions, against 11 of 29 Eng
 
 Independent of evidence, each memory is checked for `overgeneralization` (always, all, never…), `relative_time` without a date, `possibly_stale` dates, `inference_marker` (probably, seems…), `internal_conflict` with another memory, and `duplicate`. Internal conflicts use an index of normalized terms, so only claims that can lexically conflict are compared. The report is the same as comparing every pair.
 
+With `--evidence` and the memory file under that directory, or with no file named, `audit` also looks up the paths a memory names. A path that exists nowhere under the evidence root gets the issue `missing_reference`. This one is looked up, not guessed, and the claim keeps its status. `--strict` exits 1 on it, unless a person has confirmed that claim in the reviews file, and `--no-references` turns the check off. The [quick start](docs/quickstart.md#paths-that-exist-nowhere) says what counts as a path and what stays silent.
+
 Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
 Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `memfalsify discover` lists a repository's agent instruction files (below); `--format json`, `--format html` (one self-contained page, see [HTML reports](#html-reports)), `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
@@ -668,7 +670,8 @@ JSON keys, the other finding of the first run, are now rejected. Run it offline 
 
 The [GitHub Action](docs/github-action.md) audits explicitly named agent instruction files, or with
 `memory: auto` every one that `memfalsify discover` finds, against repository evidence and puts the report in
-the job summary. Its default strict check fails on possible counterevidence;
+the job summary. Its default strict check fails on possible counterevidence and, without `diff-base`, on a path an
+instruction names that exists nowhere in the evidence;
 unsupported claims and wording issues remain review leads. With `diff-base` (for example the pull request's base
 commit, and `fetch-depth: 0` on `actions/checkout`), it runs `memfalsify diff`, so a pull request is gated only on
 the claims it adds or changes. The same gate is available on a local commit through the
@@ -736,11 +739,12 @@ What changed in each package, version by version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
+[CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the checks a pull request passes and the Windows rules. Report security problems privately: see [SECURITY.md](SECURITY.md).
+
 Several AI agents develop this repository together. Roles, the gates a change passes before it reaches `main`, and the report and log formats are in [process/README.md](process/README.md).
 
 ```bash
-pip install pytest
-python -m pytest   # runs against packages/*/src, no install needed
+./scripts/setup-local.sh   # creates .venv, installs the packages, runs the tests
 ```
 
 Layout: `packages/memcore` (evidence integrity, JSONL), `packages/memfalsify`, `packages/orgmemory`, `skills/`, `examples/`, `tests/`. Contributions should include a minimal synthetic reproduction. Never commit private evidence or credentials.

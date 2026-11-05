@@ -22,9 +22,7 @@ git clone https://github.com/timothyzhbw-jpg/memory-lab && cd memory-lab
 source .venv/bin/activate
 ```
 
-The script creates `.venv`, installs the packages in editable mode with the model SDKs (`--minimal` leaves the SDKs out) and runs the tests. If `python3` is too old, name another interpreter: `PYTHON=python3.12 ./scripts/setup-local.sh`. For Windows, [docs/local-setup.md](docs/local-setup.md) has the same steps for PowerShell.
-
-CI also installs `cmarkgfm` and `setuptools>=77`. The tests that need them skip until you install them.
+The script creates `.venv`, installs the packages in editable mode with the model SDKs (`--minimal` leaves the SDKs out) and what the tests need, as CI does, and runs the tests. If `python3` is too old, name another interpreter: `PYTHON=python3.12 ./scripts/setup-local.sh`. For Windows, [docs/local-setup.md](docs/local-setup.md) has the same steps for PowerShell.
 
 ## Before you open a pull request
 

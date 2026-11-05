@@ -10,8 +10,9 @@ import importlib
 import random
 import subprocess
 import sys
+import threading
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -312,6 +313,26 @@ def test_below_answers_like_relative_to(tmp_path):
             assert below(path, base).parts == expected.parts and str(below(path, base)) == str(expected)
 
 
+def test_a_root_with_no_parts_is_not_a_prefix_of_everything():
+    with pytest.raises(ValueError):
+        below(PurePosixPath("/a/b"), PurePosixPath("."))
+    assert below(PurePosixPath("a/b"), PurePosixPath(".")).parts == ("a", "b")
+
+
+def test_a_negative_limit_keeps_the_same_passages_as_asking_about_everything(tmp_path):
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    write_text_exact(evidence / "notes.md", "Alpha beta gamma delta.\n\nAlpha beta.\n")
+    memory = tmp_path / "MEMORY.md"
+    write_text_exact(memory, "- Alpha beta gamma delta.\n")
+
+    def asked(verifier):
+        return audit(memory, evidence, verifier=verifier, min_coverage=0.5, max_judged=-1, as_of=AS_OF,
+                     follow_links=False).model_dump_json()
+
+    assert asked(LexicalVerifier()) == asked(AsksAboutEverything())
+
+
 # --- the collector -----------------------------------------------------------------------------------------------
 
 
@@ -346,6 +367,61 @@ def test_the_collector_stays_off_if_it_was_off():
         assert not gc.isenabled() and gc.get_freeze_count() == 0
     finally:
         gc.enable()
+
+
+def test_a_freeze_the_host_made_stays_the_hosts():
+    gc.freeze()
+    frozen = gc.get_freeze_count()
+    try:
+        with out_of_collection(list):
+            assert gc.isenabled() and gc.get_freeze_count() == frozen
+        assert gc.isenabled() and gc.get_freeze_count() == frozen
+    finally:
+        gc.unfreeze()
+
+
+def test_the_last_block_out_puts_things_back():
+    outer = out_of_collection(list)
+    inner = out_of_collection(list)
+    outer.__enter__()
+    inner.__enter__()
+    assert gc.isenabled()
+    inner.__exit__(None, None, None)
+    assert gc.isenabled() and gc.get_freeze_count() > 0, "the block still open stays frozen"
+    outer.__exit__(None, None, None)
+    assert gc.isenabled() and gc.get_freeze_count() == 0
+
+
+def test_a_block_building_in_another_thread_leaves_the_collector_as_it_found_it():
+    building, release, seen = threading.Event(), threading.Event(), []
+
+    def slow():
+        building.set()
+        release.wait(30)
+        return []
+
+    def other():
+        with out_of_collection(slow):
+            seen.append(gc.isenabled())
+
+    thread = threading.Thread(target=other)
+    with out_of_collection(list):
+        thread.start()
+        assert building.wait(30)
+        with out_of_collection(list):
+            assert not gc.isenabled(), "the other thread is still building"
+        release.set()
+        thread.join(30)
+    assert seen == [True] and gc.isenabled() and gc.get_freeze_count() == 0
+
+
+def test_only_short_tokens_stay_in_the_term_cache():
+    text_module._word.cache_clear()
+    features("short " + "x" * 65)
+    held = text_module._word.cache_info().currsize
+    features("x" * 66 + " another " + "y" * 200)
+    assert text_module._word.cache_info().currsize == held + 1
+    assert features("y" * 200)[0] == {text_module._term("y" * 200)}
 
 
 def test_an_audit_leaves_the_collector_as_it_found_it(built, tmp_path):

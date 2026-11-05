@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import gc
 import re
+import threading
 from bisect import bisect_left
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
@@ -203,22 +204,47 @@ def scan(root: Path, exclude: Iterable[str] = (),
 T = TypeVar("T")
 
 
+class _Collector:
+    """The state ``out_of_collection`` shares: the collector is one per process, and a web page runs audits at once."""
+
+    lock = threading.Lock()
+    holders = 0  # ``with`` blocks open
+    builders = 0  # of those, the ones still building
+    was_enabled = True
+    freezing = False  # False when something else had already frozen objects: those are not ours to thaw
+
+
 @contextmanager
 def out_of_collection(build: Callable[[], T]) -> Iterator[T]:
     """``build()``, kept out of the cycle collector's sight for the length of a ``with`` block.
 
     Passages hold no reference cycles, and on a large repository walking millions of them again and again, to free
     nothing, took a quarter of the audit. So the collector stays off while they are built, and then they are frozen:
-    it runs as usual for everything made after that, such as a model verifier's API client."""
-    enabled = gc.isenabled()
-    gc.disable()
+    it runs as usual for everything made after that, such as a model verifier's API client. With several blocks open
+    the last one out puts things back. If the host process froze objects itself, nothing here freezes or thaws, and
+    only the speed changes."""
+    state = _Collector
+    with state.lock:
+        if not state.holders:
+            state.freezing = gc.get_freeze_count() == 0
+        state.holders += 1
+        if not state.builders:
+            state.was_enabled = gc.isenabled()
+            gc.disable()
+        state.builders += 1
     try:
-        built = build()
-        gc.freeze()
-    finally:
-        if enabled:
-            gc.enable()
-    try:
+        try:
+            built = build()
+            if state.freezing:
+                gc.freeze()
+        finally:
+            with state.lock:
+                state.builders -= 1
+                if not state.builders and state.was_enabled:
+                    gc.enable()
         yield built
     finally:
-        gc.unfreeze()
+        with state.lock:
+            state.holders -= 1
+            if not state.holders and state.freezing:
+                gc.unfreeze()

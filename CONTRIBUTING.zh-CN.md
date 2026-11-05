@@ -22,9 +22,7 @@ git clone https://github.com/timothyzhbw-jpg/memory-lab && cd memory-lab
 source .venv/bin/activate
 ```
 
-脚本会创建 `.venv`，以可编辑模式安装各个包和模型 SDK（`--minimal` 不装这些 SDK），然后跑一遍测试。如果 `python3` 版本太旧，可以指定别的解释器：`PYTHON=python3.12 ./scripts/setup-local.sh`。Windows 上的 PowerShell 步骤在 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
-
-CI 还会安装 `cmarkgfm` 和 `setuptools>=77`。需要它们的测试在你安装之前会被跳过。
+脚本会创建 `.venv`，以可编辑模式安装各个包和模型 SDK（`--minimal` 不装这些 SDK），也装上测试需要的依赖（和 CI 一样），然后跑一遍测试。如果 `python3` 版本太旧，可以指定别的解释器：`PYTHON=python3.12 ./scripts/setup-local.sh`。Windows 上的 PowerShell 步骤在 [docs/local-setup.zh-CN.md](docs/local-setup.zh-CN.md)。
 
 ## 提 PR 之前
 

@@ -66,9 +66,10 @@ def component_skip_reason(relative: Path, *, directory: bool = False, instructio
 
 def below(path: Path, root: Path) -> PurePath:
     """``path.relative_to(root)``. An audit asks this several times per file, and pathlib builds every parent to
-    answer. When the parts differ pathlib still decides: they can differ in case on Windows, or it raises ValueError."""
+    answer. When the parts differ pathlib still decides: they can differ in case on Windows, or it raises ValueError.
+    So does a root with no parts, which an absolute path is not below."""
     parts, base = path.parts, root.parts
-    if parts[:len(base)] == base:
+    if base and parts[:len(base)] == base:
         return PurePath(*parts[len(base):])
     return path.relative_to(root)
 

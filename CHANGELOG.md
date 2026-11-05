@@ -19,6 +19,19 @@ Release 0.5 contains:
 
 ### Added
 
+- memfalsify: `memfalsify audit` reports a path a memory names that exists nowhere under the evidence root, as the new
+  issue kind `missing_reference` with the proposal `fix_reference`. The path is looked up, not guessed, and the claim
+  keeps its status. It runs with no file named, and with `--evidence` when the memory file sits under that directory;
+  `memfalsify diff` and the pre-commit hooks do not run it. `--strict` and the Action's `strict` fail on it, which
+  existing strict users will notice. A claim a person confirms as supported through `--reviews` no longer fails
+  `--strict` on the path and keeps the issue in the report; the Action does not read reviews. `--no-references` (Action
+  input `references: "false"`) turns the check off. Paths are only compared with names from a listing. Git is asked only
+  with `check-ignore --no-index` and `config --get`, with hooks and the file system monitor off. In a sparse checkout
+  the check reports nothing. See [docs/quickstart.md](docs/quickstart.md).
+- Repository: `SECURITY.md`, `CONTRIBUTING.md` and `CONTRIBUTING.zh-CN.md`, two issue forms (a bug report, and a false
+  flag or missed contradiction), a pull request template and a badge row at the top of both READMEs.
+  `tests/test_repo_face.py` keeps the Python badge equal to the CI matrix and the package classifiers, and the dogfood
+  command in `CONTRIBUTING.md` equal to the CI job.
 - memfalsify: `memfalsify init [DIR]` (default `memfalsify-demo`, `--lang en|zh`) writes a small offline demo:
   `MEMORY.md` with three claims, `evidence/` with two files and an empty `reviews.jsonl`. `memfalsify audit` inside it
   shows one possible contradiction with both quotes, one piece of supporting evidence and one unsupported claim. It
@@ -62,6 +75,15 @@ Release 0.5 contains:
 
 ### Changed
 
+- memfalsify: `memfalsify audit` is much faster on large repositories, and reports stay byte-identical. One run each on
+  public clones (Apple M4 Pro, with other jobs running): next.js `AGENTS.md` 1,197 s to 42 s, grafana `CLAUDE.md` 947 s
+  to 36 s, supabase `CLAUDE.md` 197 s to 18 s, mem0 `CLAUDE.md` 113 s to 4 s. n8n and bun `AGENTS.md`, which did not
+  finish in 900 s, now take 54 s and 70 s. Peak RSS falls too: supabase 4,015 MB to 1,138 MB, next.js 5,752 MB to
+  1,352 MB, grafana 9,664 MB to 2,026 MB. A claim now reads only the passages that can reach the threshold, through an
+  index from term to passages that keeps today's ordering. Passages build their evidence span on demand, and the
+  lexical verifier is no longer asked about pairs it must call unrelated. Claims with Chinese text gain less. See
+  `benchmarks/perf/README.md`, which also adds `run.py --evidence N`.
+- `scripts/setup-local.sh` installs `cmarkgfm` and `setuptools>=77`, as CI does, so a contributor runs the same tests.
 - memlab-core, memfalsify, orgmemory, memlab-mcp, memlab-ui: PyPI metadata (keywords, classifiers for Python 3.10 to
   3.13, and `Documentation`, `Repository` and `Issues` links), and READMEs that stand alone on PyPI, with an install
   line and a link in place of "the root README". memlab-mcp and memlab-ui declare macOS and Linux as their operating

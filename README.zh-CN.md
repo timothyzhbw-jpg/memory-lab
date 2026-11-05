@@ -657,7 +657,7 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
 
 [GitHub Action](docs/github-action.md)将明确列出的 Agent 指令文件（设为 `memory: auto` 时则是 `memfalsify discover`
 找到的全部指令文件）与仓库证据核对，并把报告放入任务摘要。
-默认严格模式在发现可能的反证时失败；无证据的记忆和措辞问题仍需人工审阅。
+默认严格模式在发现可能的反证时失败；不设 `diff-base` 时，指令里写到的路径在证据里哪里都找不到也会失败。无证据的记忆和措辞问题仍需人工审阅。
 设置 `diff-base`（例如 PR 的基准提交，并给 `actions/checkout` 加上 `fetch-depth: 0`）后，Action 改为运行
 `memfalsify diff`，PR 只会因为它新增或修改的记忆而失败。本地提交可以用
 [pre-commit 钩子](README.md#pre-commit) `memfalsify-diff` 和 `memfalsify-audit` 做同样的检查。
@@ -723,11 +723,12 @@ Action 只使用固定到提交 SHA 的 Action，并从带哈希校验的锁文�
 
 ## 开发
 
+环境准备、PR 要通过的检查和 Windows 规则见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。安全问题请私下报告，见 [SECURITY.md](SECURITY.md)。
+
 本仓库由多个 AI agent 协作开发。角色分工、改动进入 `main` 前要过的关卡，以及报告和日志格式，见 [process/README.zh-CN.md](process/README.zh-CN.md)。
 
 ```bash
-pip install pytest
-python -m pytest     # 直接针对 packages/*/src 运行，无需安装
+./scripts/setup-local.sh   # 创建 .venv，安装各个包，运行测试
 ```
 
 目录结构：`packages/memcore`（证据完整性、JSONL）、`packages/memfalsify`、`packages/orgmemory`、`skills/`、`examples/`、`tests/`。提交贡献时请附上最小的合成复现示例。不要提交私密证据或凭据。

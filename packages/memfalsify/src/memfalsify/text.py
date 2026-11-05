@@ -216,10 +216,7 @@ def _cjk_tokens(run: str) -> Iterator[str]:
                 yield piece[i:i + 3]
 
 
-# Bounded: audit text is untrusted. Tokens repeat a lot in a repository, so over nine lookups in ten are hits, and
-# passages that use a term share one string for it instead of keeping a copy each.
-@lru_cache(maxsize=1 << 16)
-def _word(token: str) -> str | None:
+def _term(token: str) -> str | None:
     """The term for a Latin-script token, or None for a stopword."""
     if len(token) == 1 and token.isupper():
         return token  # identifiers such as "Feature A"; lowercase "a" is a stopword
@@ -229,6 +226,13 @@ def _word(token: str) -> str | None:
     return None
 
 
+# Bounded: audit text is untrusted. Tokens repeat a lot in a repository, so over nine lookups in ten are hits, and
+# passages that use a term share one string for it instead of keeping a copy each. A long token rarely repeats, and
+# in a long-lived server the cache would hold on to it after the audit: ``_word`` is not asked about those.
+_word = lru_cache(maxsize=1 << 16)(_term)
+_LONGEST_CACHED = 64
+
+
 def _tokens(text: str) -> Iterator[tuple[bool, str]]:
     """Yield (is_number, token) in text order: stemmed content words, CJK n-grams and numbers."""
     for token in TOKEN.findall(normalize(text)):
@@ -236,7 +240,7 @@ def _tokens(text: str) -> Iterator[tuple[bool, str]]:
             yield True, token
         elif "㐀" <= token[0] <= "鿿":
             yield from ((False, piece) for piece in _cjk_tokens(token))
-        elif (word := _word(token)) is not None:
+        elif (word := _word(token) if len(token) <= _LONGEST_CACHED else _term(token)) is not None:
             yield False, word
 
 
@@ -282,7 +286,7 @@ def coverage_units(claim: str) -> tuple[list[int], dict[tuple[str, str], set[int
         if token[0].isdigit():
             continue
         if not CJK.match(token):
-            if (word := _word(token)) is not None:
+            if (word := _word(token) if len(token) <= _LONGEST_CACHED else _term(token)) is not None:
                 keys.setdefault(("word", word), set()).add(len(weights))
                 if word in english:
                     opposable.setdefault(word, set()).add(len(weights))
@@ -320,7 +324,7 @@ def char_coverage(claim: str, passage: str) -> float:
         if token[0].isdigit():
             continue
         if not CJK.match(token):
-            if (word := _word(token)) is not None:
+            if (word := _word(token) if len(token) <= _LONGEST_CACHED else _term(token)) is not None:
                 total += LATIN_WEIGHT
                 found += LATIN_WEIGHT * (word in passage_words or word == opposed)
             continue

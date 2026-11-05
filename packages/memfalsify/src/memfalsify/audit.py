@@ -688,7 +688,9 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     index = _PassageIndex(passages, targets) if targets else None
     # The lexical verifier calls a pair under ``related`` unrelated, and ``candidates`` drops that: no need to ask.
     # Most shortlisted pairs are such pairs. Asking about them took longer than everything else after the scan.
-    floor = max(min_coverage, verifier.related) if type(verifier) is LexicalVerifier else min_coverage
+    # A negative ``max_judged`` slices from the end of the list, so there the floor would change what is kept.
+    skip_unrelated = type(verifier) is LexicalVerifier and (max_judged is None or max_judged >= 0)
+    floor = max(min_coverage, verifier.related) if skip_unrelated else min_coverage
     picked = {claim.id: shortlist(claim, passages, floor, max_judged, index) for claim in targets}
     pairs = [(claim.text, passage.quote) for claim in targets for passage in picked[claim.id]]
     before = verifier_usage(verifier)

@@ -155,8 +155,6 @@ An acting lead ends its period with a section that lists what is done, what is s
 <why the change is needed and what it changes>
 
 Tests: <pytest summary line>        (review-fix and integration commits)
-
-Co-Authored-By: <model> <noreply@...>
 ```
 
 Security fixes start with `Security:` and say how the issue was found and reproduced.
