@@ -1,4 +1,5 @@
-"""memfalsify command line. Reads memory and evidence; writes only the report you ask for."""
+"""memfalsify command line. Reads memory and evidence; writes only what you ask for: a report, the demo ``init``
+makes, the files ``evidence from-git`` makes. Existing memory is never changed."""
 from __future__ import annotations
 
 import json

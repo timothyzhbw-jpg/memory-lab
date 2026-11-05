@@ -23,11 +23,14 @@ from memcore import locate_quote
 from memcore.display import one_line
 from memfalsify import AuditReport, AuditSet, __version__, audit_directory, claim_id
 from memfalsify import auditdir, demo, gitevidence, ownfiles
-from memfalsify.audit import ATTENTION
+from memfalsify.audit import ATTENTION, MODEL_NOTE
 from memfalsify.auditdir import select_memories
 from memfalsify.cli import app
 from memfalsify.corpus import is_report, scan
 from memfalsify.gitevidence import date_argument, file_names, parse_log, render
+from memfalsify.htmlreport import set_to_html
+from memfalsify.report import set_to_markdown
+from memfalsify.verify import Judgment, VerifierStats
 
 REPO = Path(__file__).resolve().parent.parent
 EXAMPLES = REPO / "examples"
@@ -1084,6 +1087,38 @@ def test_the_quick_start_blocks_marked_with_an_exit_code_run_in_order(tmp_path):
     assert "CHALLENGED" in proc.stdout
     commits = list((tmp_path / "demo" / "history" / "commits").iterdir())
     assert len(commits) == 1 and re.fullmatch(r"[0-9a-f]{12}\.md", commits[0].name)
+
+
+class CountingVerifier:
+    """A model verifier in shape: it reports requests, so reports show API usage per file."""
+    name = "fake-model"
+
+    def __init__(self):
+        self.requests = 0
+
+    def judge(self, claim: str, passage: str) -> Judgment:
+        self.requests += 1
+        return Judgment(verifier=self.name, relation="contradicts", rationale="the fake says so", confidence=0.9)
+
+    def usage(self) -> list[VerifierStats]:
+        return [VerifierStats(verifier=self.name, requests=self.requests, input_tokens=10 * self.requests)]
+
+
+def test_model_verifiers_work_across_files_with_usage_per_file(tmp_path, monkeypatch):
+    write(tmp_path, {"AGENTS.md": "- The public API allows 100 requests per minute.\n",
+                     "sub/CLAUDE.md": "- The billing service runs in Frankfurt.\n",
+                     "docs/api.md": "The public API allows 60 requests per minute.\n",
+                     "docs/billing.md": "The billing service runs in Dublin.\n"})
+    monkeypatch.chdir(tmp_path)
+    verifier = CountingVerifier()
+    result = audit_directory(Path("."), verifier=verifier, min_coverage=0.2, max_judged=8, max_concurrency=2)
+    assert result.verifier == "fake-model" and verifier.requests >= 2
+    stats = [report.verifier_stats[0].requests for report in result.reports]
+    assert sum(stats) == verifier.requests and all(stats)
+    markdown, page = set_to_markdown(result), set_to_html(result)
+    assert markdown.count("API usage of `fake-model`") == 2
+    assert page.count("fake-model</code>: ") == 2
+    assert MODEL_NOTE in markdown
 
 
 def test_auditdir_shares_one_evidence_scan(agent_tree, monkeypatch):

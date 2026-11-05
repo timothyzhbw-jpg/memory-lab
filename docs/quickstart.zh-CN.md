@@ -46,7 +46,7 @@ printf '%s\n' '{"memory_id": "m-c1b4957f", "relation": "contradicts", "path": "e
 memfalsify audit --reviews reviews.jsonl
 ```
 
-现在这条记忆是 `CHALLENGED`，由你确认。`memfalsify init` 会打印同样的一行，`memfalsify claims MEMORY.md` 会列出所有 ID。审核记录文件不算证据。它只在传了 `--reviews` 时才生效；如果看到了一个你没传的审核文件，命令会提醒你。
+现在这条记忆是 `CHALLENGED`，由你确认。`memfalsify init` 会打印同样的一行，`memfalsify claims MEMORY.md` 会列出所有 ID。不指定文件时，审核记录文件不算证据。它只在传了 `--reviews` 时才生效；如果在证据目录顶层看到了一个你没传的审核文件，命令会提醒你。
 
 ## 在你自己的仓库里运行
 
@@ -68,7 +68,7 @@ memfalsify audit
 
 多个文件共用一份报告，按路径排序：先是总数和文件表，然后每个文件一节。两个文件里相同的一条记忆只出现一次，另一处列为重复。只有一个文件时，Markdown 和 HTML 报告的版式与 `memfalsify audit FILE --evidence .` 相同。`--format json` 的结构不随文件数变化：一个对象，含 `files`、`summary` 和 `reports`，后者的每一项就是 `memfalsify audit FILE --format json` 打印的那种对象。`--strict` 的含义不变：任何文件里有记忆需要注意，就退出 1。
 
-指定文件，比如 `memfalsify audit CLAUDE.md`，和以前一样：只审计这个文件，除非传 `--evidence`，否则没有证据。
+指定文件，比如 `memfalsify audit CLAUDE.md`，和以前一样：只审计这个文件，除非传 `--evidence`，否则没有证据；并且只按证据扫描本身的规则跳过文件，所以 `--evidence` 里的审核文件或决策日志在这种用法下会被当作证据。
 
 ## 把 git 历史当作证据
 

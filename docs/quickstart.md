@@ -46,7 +46,7 @@ printf '%s\n' '{"memory_id": "m-c1b4957f", "relation": "contradicts", "path": "e
 memfalsify audit --reviews reviews.jsonl
 ```
 
-The claim is now `CHALLENGED`, confirmed by you. `memfalsify init` prints the same line, and `memfalsify claims MEMORY.md` lists the IDs. A file of review records never counts as evidence. It applies only when you pass `--reviews`, and the command tells you when it sees one you did not pass.
+The claim is now `CHALLENGED`, confirmed by you. `memfalsify init` prints the same line, and `memfalsify claims MEMORY.md` lists the IDs. With no file named, a file of review records stays out of the evidence. It applies only when you pass `--reviews`, and the command tells you when it sees one at the top of the evidence that you did not pass.
 
 ## Run it in your own repository
 
@@ -68,7 +68,7 @@ The report lists what it skipped. `--exclude GLOB` (repeatable) leaves files out
 
 Several files share one report, in path order: totals, a table of the files, then a section per file. A claim stated in two files appears once, with the other place listed as a duplicate. With one file, the Markdown and HTML reports have the same layout as `memfalsify audit FILE --evidence .`. With `--format json` the shape does not depend on the count: one object with `files`, `summary` and `reports`, a list of the same objects `memfalsify audit FILE --format json` prints. `--strict` means what it always means: exit 1 if any claim in any of the files needs attention.
 
-Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, and no evidence unless you pass `--evidence`.
+Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, no evidence unless you pass `--evidence`, and only the skips of the evidence scan, so a review file or decision log inside `--evidence` reads as evidence there.
 
 ## Use git history as evidence
 
