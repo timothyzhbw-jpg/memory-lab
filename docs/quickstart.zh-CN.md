@@ -64,6 +64,8 @@ memfalsify audit
 - MemFalsify 和 orgmemory 的报告、审核记录、决策日志都会被排除。
 - 每个文件的证据是除它自己和它链接的文件之外的全部内容。其他智能体文件也算在内，两个文件说法不一致时就是这样显现出来的。
 
+仓库很大时，报告会有几千行。`memfalsify audit --format brief` 只打印需要看一眼的记忆：记忆本身、最有力的反面引文及其文件和行号，以及为什么把这两句放在一起。退出码不变；`--format markdown` 或 `--format html` 能看到全部记忆和全部来源。
+
 报告会列出跳过了什么。`--exclude GLOB`（可重复）同时把文件排除在记忆文件的选择和证据之外：`memfalsify audit --exclude 'tests/fixtures/**' --exclude 'vendor/**'`。
 
 多个文件共用一份报告，按路径排序：先是总数和文件表，然后每个文件一节。两个文件里相同的一条记忆只出现一次，另一处列为重复。只有一个文件时，Markdown 和 HTML 报告的版式与 `memfalsify audit FILE --evidence .` 相同；如果搜索跳过了某个位置，报告会为它单列一节。`--format json` 的结构不随文件数变化：一个对象，含 `files`、`summary` 和 `reports`，后者的每一项就是 `memfalsify audit FILE --format json` 打印的那种对象。`--strict` 的含义不变：任何文件里有记忆需要注意，就退出 1。

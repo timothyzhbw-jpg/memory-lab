@@ -19,6 +19,9 @@ Release 0.5 contains:
 
 ### Added
 
+- memfalsify: `memfalsify audit --format brief`, a short view for the terminal: only the claims that need a look, each
+  with the claim, the strongest quote against it, its file and line, and why the two were paired. A long Markdown report
+  on a terminal mentions it on stderr. Other formats and exit codes stay as they were.
 - memfalsify: `memfalsify audit` reports a path a memory names that exists nowhere under the evidence root, as the new
   issue kind `missing_reference` with the proposal `fix_reference`. The path is looked up, not guessed, and the claim
   keeps its status. It runs with no file named, and with `--evidence` when the memory file sits under that directory;

@@ -64,6 +64,8 @@ The evidence is the current directory, or `--evidence DIR`. The rules are the on
 - MemFalsify's and orgmemory's reports, review records and decision logs are left out.
 - Each file's evidence is everything except that file and the files it links to. Your other agent files do count, which is how two files that disagree show up.
 
+On a large repository the report runs to thousands of lines. `memfalsify audit --format brief` prints only the claims that need a look: the claim, the strongest quote against it with its file and line, and why the two were paired. Exit codes are the same, and `--format markdown` or `--format html` has all the claims and every source.
+
 The report lists what it skipped. `--exclude GLOB` (repeatable) leaves files out of both the choice of memory files and the evidence: `memfalsify audit --exclude 'tests/fixtures/**' --exclude 'vendor/**'`.
 
 Several files share one report, in path order: totals, a table of the files, then a section per file. A claim stated in two files appears once, with the other place listed as a duplicate. With one file, the Markdown and HTML reports have the same layout as `memfalsify audit FILE --evidence .`, unless the search passed over a place, which then gets a section of its own. With `--format json` the shape does not depend on the count: one object with `files`, `summary` and `reports`, a list of the same objects `memfalsify audit FILE --format json` prints. `--strict` means what it always means: exit 1 if any claim in any of the files needs attention.

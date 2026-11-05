@@ -107,7 +107,7 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 
 `verify_counterevidence`、`add_absolute_date`、`narrow_scope` 这类操作只是建议，不会自动执行。`replacement` 字段永远是空的：MemFalsify 从不替你编写事实。
 
-其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`memfalsify discover` 列出仓库里各家 Agent 的指令文件（见下）；`--format json`、`--format html`（一个自包含的网页，见 [HTML 报告](#html-报告)）、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
+其他命令和选项：`memfalsify claims MEMORY.md` 列出每条记忆的 ID；`memfalsify discover` 列出仓库里各家 Agent 的指令文件（见下）；`--format brief`（给终端看：只列需要看一眼的记忆和两边的引文）、`--format json`、`--format html`（一个自包含的网页，见 [HTML 报告](#html-报告)）、`--output report.md`、`--strict`（有需要关注的记忆时退出码为 1，适合 CI）、`--stale-days`、`--no-follow-links`。
 
 #### 其他 Agent 的指令文件
 

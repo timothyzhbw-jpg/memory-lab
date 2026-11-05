@@ -22,6 +22,7 @@ from memcore.display import json_shield as _json_shield
 from . import jev, llm, openai_compat
 from .audit import AuditReport, AuditSet, audit, has_open_missing_reference, needs_attention
 from .auditdir import audit_directory
+from .brief import set_to_brief, to_brief
 from .demo import DEFAULT_DIRECTORY, FILES, create_demo, review_line
 from .discover import discover, discovery_to_markdown, same_file
 from .gitevidence import evidence_from_git
@@ -53,6 +54,14 @@ class ReportFormat(str, Enum):
     markdown = "markdown"
     json = "json"
     html = "html"
+
+
+class AuditFormat(str, Enum):
+    """`audit` also prints a short view for the terminal."""
+    markdown = "markdown"
+    json = "json"
+    html = "html"
+    brief = "brief"
 
 
 class DemoLanguage(str, Enum):
@@ -191,10 +200,13 @@ def _note(message: str) -> None:
     _echo_utf8(diagnostic_line(message) + "\n", err=True)
 
 
-def _render(fmt: ReportFormat, report, markdown: Callable[..., str], html: Callable[..., str]) -> str:
-    if fmt is ReportFormat.json:
+def _render(fmt: ReportFormat | AuditFormat, report, markdown: Callable[..., str], html: Callable[..., str],
+            brief: Callable[..., str] | None = None) -> str:
+    if fmt.value == "json":
         return report.model_dump_json(indent=2) + "\n"
-    return html(report) if fmt is ReportFormat.html else markdown(report)
+    if fmt.value == "brief" and brief:
+        return brief(report)
+    return html(report) if fmt.value == "html" else markdown(report)
 
 
 def _memory_paths(result: AuditSet) -> list[Path]:
@@ -216,26 +228,35 @@ def _note_missing_paths(reports: Iterable[AuditReport]) -> None:
                    "see missing_reference in the report", err=True)
 
 
-def _finish_directory(result: AuditSet, fmt: ReportFormat, output: Optional[Path], strict: bool) -> None:
+def _note_brief(fmt: AuditFormat, claims: int) -> None:
+    """A long report on a person's screen: say once that a short view exists."""
+    if fmt is AuditFormat.markdown and claims > _LONG_REPORT and _stdout_is_terminal():
+        typer.echo("tip: --format brief shows only the claims that need a look", err=True)
+
+
+def _finish_directory(result: AuditSet, fmt: AuditFormat, output: Optional[Path], strict: bool) -> None:
     """Output and exit code of ``audit`` with no MEMORY argument."""
     if not result.files:
         applied = " (--exclude applied)" if result.excluded else ""
         _fail(f"no memory or instruction file found in this directory{applied}; "
               "run `memfalsify init` to make a demo, or name a file: memfalsify audit FILE")
-    text = _render(fmt, result, set_to_markdown, set_to_html)
+    text = _render(fmt, result, set_to_markdown, set_to_html, set_to_brief)
     if output:
         _write(output, text.encode("utf-8"), _memory_paths(result))
     else:
-        _echo_utf8(_json_shield(text) if fmt is ReportFormat.json else text)
-    claims = sum(len(report.findings) for report in result.reports)
-    counts = ", ".join(f"{n} {LABELS[status].lower()}" for status, n in result.summary.items())
-    _note(f"note: {claims} claim(s) in {len(result.files)} file(s){': ' + counts if counts else ''}. "
-          "Nothing was changed. A flag means \"read the quotes\"; a person decides, in a reviews file.")
-    _note_missing_paths(result.reports)
+        _echo_utf8(_json_shield(text) if fmt is AuditFormat.json else text)
+    if fmt is not AuditFormat.brief:  # its last lines say the same
+        claims = sum(len(report.findings) for report in result.reports)
+        counts = ", ".join(f"{n} {LABELS[status].lower()}" for status, n in result.summary.items())
+        _note(f"note: {claims} claim(s) in {len(result.files)} file(s){': ' + counts if counts else ''}. "
+              "Nothing was changed. A flag means \"read the quotes\"; a person decides, in a reviews file.")
+        _note_brief(fmt, claims)
+        _note_missing_paths(result.reports)
     if strict and any(needs_attention(report) for report in result.reports):
         raise typer.Exit(1)
 
 
+_LONG_REPORT = 20
 AUDIT_HELP = """Audit a memory or instruction file and print an evidence-cited report with proposed (unapplied) actions.
 
 With no MEMORY: audit every instruction file `memfalsify discover` finds in the current directory, plus its \
@@ -272,6 +293,10 @@ FORMAT = typer.Option(Format.markdown, "--format", "-f")
 REPORT_FORMAT = typer.Option(
     ReportFormat.markdown, "--format", "-f",
     help="markdown, json, or html (one self-contained page: inline CSS, no scripts, nothing loaded)")
+AUDIT_FORMAT = typer.Option(
+    AuditFormat.markdown, "--format", "-f",
+    help="markdown, json, html (one self-contained page: inline CSS, no scripts, nothing loaded), or brief (for a "
+         "terminal: only the claims that need a look, with both quotes)")
 OUTPUT = typer.Option(None, "--output", "-o", help="Write the report here instead of stdout")
 AS_OF = typer.Option(None, help="Reference date YYYY-MM-DD for staleness (default: today)")
 STALE_DAYS = typer.Option(180, help="Dated claims older than this are flagged possibly_stale")
@@ -362,7 +387,7 @@ def audit_command(
     evidence: Optional[Path] = EVIDENCE,
     exclude: Optional[list[str]] = EXCLUDE,
     reviews: Optional[Path] = REVIEWS,
-    fmt: ReportFormat = REPORT_FORMAT,
+    fmt: AuditFormat = AUDIT_FORMAT,
     output: Optional[Path] = OUTPUT,
     as_of: Optional[str] = AS_OF,
     stale_days: int = STALE_DAYS,
@@ -408,15 +433,19 @@ def audit_command(
     if memory is None:
         _finish_directory(result, fmt, output, strict)
         return
-    text = _render(fmt, report, to_markdown, to_html)
+    text = _render(fmt, report, to_markdown, to_html, to_brief)
     if output:
         base = Path(memory).absolute().parent.resolve()
         _write(output, text.encode("utf-8"), (Path(memory), *(base / p for p in report.files_read)))
-    elif fmt is ReportFormat.html:
+    elif fmt is AuditFormat.html:
         _echo_exact(text)
+    elif fmt is AuditFormat.brief:
+        _echo_utf8(text)
     else:
-        _emit(text, fmt is ReportFormat.markdown)
-    _note_missing_paths([report])
+        _emit(text, fmt is AuditFormat.markdown)
+    _note_brief(fmt, len(report.findings))
+    if fmt is not AuditFormat.brief:
+        _note_missing_paths([report])
     if strict and needs_attention(report):
         raise typer.Exit(1)
 

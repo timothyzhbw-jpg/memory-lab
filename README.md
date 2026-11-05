@@ -111,7 +111,7 @@ With `--evidence` and the memory file under that directory, or with no file name
 
 Proposed actions such as `verify_counterevidence`, `add_absolute_date` and `narrow_scope` are suggestions only. The `replacement` field is always empty: MemFalsify never writes facts.
 
-Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `memfalsify discover` lists a repository's agent instruction files (below); `--format json`, `--format html` (one self-contained page, see [HTML reports](#html-reports)), `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
+Other commands and options: `memfalsify claims MEMORY.md` lists claim IDs; `memfalsify discover` lists a repository's agent instruction files (below); `--format brief` (for a terminal: only the claims that need a look, with both quotes), `--format json`, `--format html` (one self-contained page, see [HTML reports](#html-reports)), `--output report.md`, `--strict` (exit 1 when anything needs attention, for CI), `--stale-days`, and `--no-follow-links`.
 
 #### Instruction files of other agents
 
