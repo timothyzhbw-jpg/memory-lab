@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import subprocess
+import time
 
 import pytest
 
@@ -284,7 +285,7 @@ def test_a_short_real_claim_stays(line):
     "部署流程：", "常用命令：", "公开 API 的限流是每分钟 100 次请求。", "主数据库：PostgreSQL 16", "项目结构", "测试使用 pytest",
 ])
 def test_chinese_text_is_never_a_fragment(text):
-    assert not is_fragment(text) and not is_fragment(text, 3)
+    assert not is_fragment(text)
     assert texts(f"- {text}\n") == [text]
 
 
@@ -323,18 +324,35 @@ def test_a_chinese_table_header_goes_too():
     assert texts("| 名称 | 说明 |\n|---|---|\n| api | 公开接口 |\n") == ["| api | 公开接口 |"]
 
 
-def test_a_short_piece_cut_from_a_sentence_goes_but_not_a_short_sentence():
+def test_every_piece_between_semicolons_stays():
+    assert texts("Use TLS; encrypt backups; rotate credentials.\n") == ["Use TLS;", "encrypt backups;", "rotate credentials."]
+    assert texts("Never use eval; sanitize inputs; escape outputs.\n") == ["Never use eval;", "sanitize inputs;", "escape outputs."]
     assert texts("Avoid sleeps in tests; time-based assertions; retries with no limit; flaky ones.\n") == [
-        "Avoid sleeps in tests;", "flaky ones."]
-    assert texts("Avoid sleeps in tests; retries are capped at the client.\n") == [
-        "Avoid sleeps in tests;", "retries are capped at the client."]
-    assert texts("Run the checks first. They use pytest. tests live here. flaky ones.\n") == [
-        "Run the checks first.", "They use pytest.", "tests live here.", "flaky ones."]
-    assert texts("Bump the version; 3 files change;\n") == ["Bump the version;", "3 files change;"]
-    assert texts("The manifests are checked; tests/test_packaging.py checks them;\n") == [
-        "The manifests are checked;", "tests/test_packaging.py checks them;"]
-    assert texts("Bump the version; pnpm checks them; it stops the build.\n") == [
-        "Bump the version;", "pnpm checks them;", "it stops the build."]
+        "Avoid sleeps in tests;", "time-based assertions;", "retries with no limit;", "flaky ones."]
+
+
+@pytest.mark.parametrize("line", [
+    "Never use yarn:", "If tests fail do not merge:", "To deploy you must first get approval from security:",
+    "For production we always use blue green deploys:", "When the suite fails you should stop and ask:",
+])
+def test_an_instruction_that_ends_in_a_colon_stays(line):
+    assert texts(f"- {line}\n") == [line]
+
+
+@pytest.mark.parametrize("line", ["Run ty:", "When writing comments:", "For a full build from the repository root:",
+                                  "Before running your tests:"])
+def test_a_label_that_ends_in_a_colon_goes(line):
+    assert texts(f"- {line}\n") == []
+
+
+@pytest.mark.parametrize("line", ["Prefer <Link> over <a>.", "Use <Foo/> <Bar/>.", "Wrap it in <Provider>."])
+def test_an_instruction_that_names_a_tag_stays(line):
+    assert texts(f"- {line}\n") == [line]
+
+
+@pytest.mark.parametrize("line", [".env</Info>", "<b>Note</b>", "<br/> Note", "</div></section>"])
+def test_a_tag_with_one_word_or_nothing_goes(line):
+    assert texts(f"- {line}\n") == []
 
 
 def test_a_list_marker_read_as_a_sentence_does_not_make_the_next_part_a_piece():
@@ -345,6 +363,22 @@ def test_setext_headings_are_sections():
     markdown = "Style Guide\n===========\n\nTests use pytest.\n\nOther Things\n---\n\nDeploys go out on Friday.\n"
     assert [(c.text, c.section) for c in parse_text(markdown, "MEMORY.md")[0]] == [
         ("Tests use pytest.", "Style Guide"), ("Deploys go out on Friday.", "Other Things")]
+
+
+def test_sentences_above_a_dash_rule_stay_claims():
+    markdown = "All services must log in JSON format. Use structured logs for errors.\n---\nDeploys go out on Friday.\n"
+    assert texts(markdown) == ["All services must log in JSON format.", "Use structured logs for errors.",
+                               "Deploys go out on Friday."]
+    assert [c.section for c in parse_text("# A\n\nTests use pytest here.\n---\n", "M.md")[0]] == ["A"]
+
+
+@pytest.mark.parametrize("title", ["Why keep two copies?", "Ship it now!", "Other Things", "**Other Things**"])
+def test_a_title_above_a_dash_rule_is_a_title(title):
+    assert parse_text(f"{title}\n---\n\nTests use pytest here.\n", "M.md")[0][0].section == title
+
+
+def test_a_title_above_an_equals_rule_is_a_title_even_with_a_period():
+    assert parse_text("The manual.\n===\n\nTests use pytest here.\n", "M.md")[0][0].section == "The manual."
 
 
 def test_a_rule_after_a_list_is_a_rule():
@@ -403,6 +437,82 @@ def test_blocks_of_a_file_cover_the_lines_of_each_claim():
 ])
 def test_odd_input_only_costs_a_few_claims(hostile):
     parse_text(hostile, "MEMORY.md")
+
+
+@pytest.mark.parametrize("hostile", [
+    " " * 60_000 + "x|\n\nTests use pytest here.\n",  # the rule under a table header
+    "---" + " " * 60_000 + "x|\n\nTests use pytest here.\n",
+    "**aa bb.**\n" * 11_000,  # each sentence looked through every marker of its block
+    "[aa bb.](x.txt)\n" * 11_000,
+    "[" * 64_000 + "\n",
+    "[a](" * 16_000 + "\n",
+    "[[" * 32_000 + "\n",
+])
+def test_odd_input_takes_time_in_proportion_to_its_length(hostile):
+    started = time.perf_counter()
+    parse_text(hostile, "MEMORY.md")
+    assert time.perf_counter() - started < 10  # about a second now; 20 seconds or much more when it grew with the square
+
+
+def test_a_table_rule_still_reads_in_its_forms():
+    for rule in ("|---|---|", " | :---: | ---: | ", "--- | ---", "| --- |", "|---", "---|", ":--|--:", "  |  -  |  "):
+        assert [block.kind for block in blocks(["| a | b |", rule, "| c | d |"])] == ["row"], rule
+    for line in ("|-a-|", "| x |", "- | - x"):
+        assert len(blocks(["| a | b |", line, "| c | d |"])) > 1, line
+
+
+def test_a_long_image_address_is_still_markup():
+    picture = "data:image/png;base64," + "A" * 40_000
+    assert texts(f"The logo is ![the mark]({picture}) on every page.\n") == ["The logo is the mark on every page."]
+    assert texts(f"Read [the guide](https://example.test/{'a' * 1500}) before you start.\n") == ["Read the guide before you start."]
+
+
+def test_a_long_block_keeps_each_claim_on_its_own_line():
+    assert lines_of("**aa bb.**\n**cc dd.**\n**ee ff.**\n") == [("aa bb.", 1), ("cc dd.", 2), ("ee ff.", 3)]
+
+
+@pytest.mark.parametrize("wrapped", [
+    "The exception is a passage that states a key the claim binds and goes on:\nit is compared however little else it shares.",
+    "To turn tokens into money, use the current prices on the\n[Anthropic pricing\npage](https://example.test/pricing); Jev is apart.",
+    "The plugin starts the server with memlab-mcp --root\n`${CLAUDE_PROJECT_DIR}`.",
+    "The runtime requires Python\n3.12.",
+    "A setting is read at startup (see\nthe docs for what it does).",
+    "Run the suite with `pytest\n--cov` before you push.",
+])
+def test_a_rewrapped_sentence_keeps_its_id(wrapped):
+    one_line = " ".join(line.strip() for line in wrapped.split("\n"))
+    assert {c.id for c in parse_text(wrapped + "\n", "M.md")[0]} == {c.id for c in parse_text(one_line + "\n", "M.md")[0]}
+
+
+@pytest.mark.parametrize("markdown, claims", [
+    ("Run ty:\nty check is what runs here\n", ["ty check is what runs here"]),
+    ("Project: acme is the name of it\nLanguage: Python for the most part\n",
+     ["Project: acme is the name of it", "Language: Python for the most part"]),
+])
+def test_short_lines_with_no_period_stay_apart(markdown, claims):
+    assert texts(markdown) == claims
+
+
+def test_two_long_statements_with_no_period_stay_apart():
+    assert texts("Use the staging database for all integration tests by default\n"
+                 "Deployments happen from the main branch only\n") == [
+        "Use the staging database for all integration tests by default", "Deployments happen from the main branch only"]
+
+
+def test_a_capital_after_a_long_line_goes_on_when_a_period_is_ahead():
+    assert texts("We keep this long sentence going past the point where it had to wrap, on to\n"
+                 "Python and then one more line of the same\n"
+                 "sentence.\n") == [
+        "We keep this long sentence going past the point where it had to wrap, on to Python and then one more line of the "
+        "same sentence."]
+    assert texts("We keep this long sentence going past the point where it had to wrap and\n"
+                 "Python says the rest of it.\n") == [
+        "We keep this long sentence going past the point where it had to wrap and Python says the rest of it."]
+
+
+def test_chinese_lines_join_after_a_full_width_comma():
+    assert texts("部署生产环境之前，\n必须先运行全部测试。\n") == ["部署生产环境之前，必须先运行全部测试。"]
+    assert texts("先运行单元测试、\n集成测试和冒烟测试。\n") == ["先运行单元测试、集成测试和冒烟测试。"]
 
 
 # --- diff and history ------------------------------------------------------------------------------------------

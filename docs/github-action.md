@@ -18,11 +18,13 @@ counterevidence** when:
 - **opposing terms** appear on the same subject: approve/reject, enable/disable, allow/block, public/private,
   required/optional, supported/deprecated, and similar pairs.
 - **only one side negates** a word the other states plainly, on the same subject. A line that opens with *Do not* or
-  *Never* is an instruction, so it does not count.
-- **the source says it was removed**: everything the instruction names stands before *was removed*.
+  *Never* is an instruction, so only a line that says nearly the same without the *not* counts against it.
+- **the source says it was removed**: everything the instruction names stands before *was removed*, or the instruction
+  names all of what stands there and says more about it.
 
 Tests do not contradict an instruction by themselves. Changelogs and examples only do through a setting's stated value
-(a changelog also by saying something was removed), and source code only through a declared value. Vendored and
+(a changelog also by saying something was removed), and source code only through a declared value. A document under
+`tests/` or `specs/` counts like any other. Vendored and
 generated files and lines over 1,000 characters are not read; the report lists them. The
 [rules in full](lexical-rules.md) say more; [how they measure](../benchmarks/memfalsify/wild/README.md) on real
 repositories is written down too.

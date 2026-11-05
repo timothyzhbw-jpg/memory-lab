@@ -81,29 +81,42 @@ def _with_endings(text: str, replaced: list[str], ending: str) -> list[str]:
 
 
 def _restored(lines: list[str], place: Block, spans: list[tuple[int, int]], sentence: str, ending: str,
-              memory_id: str) -> list[str] | None:
+              memory_id: str, current_id: str) -> list[str] | None:
     """``lines`` with the old wording in those spans of ``place``, wrapped as it was or, when that no longer reads as the
-    same claim here (a quote's marker in a list, say), on one line. None if neither brings the claim back."""
-    for wording in dict.fromkeys((sentence, on_one_line(sentence))):
-        edited = place.raw
+    same claim here (a quote's marker in a list, say), on one line, or with the whole block on one line, since a shorter
+    wording can leave a neighbor's first line too short to read as wrapped. The first of these that leaves the other
+    claims as they are, or else the first that brings the claim back at all. None if none does."""
+    others = claim_ids("".join(lines)) - {current_id}
+
+    def edited(wording: str) -> str:
+        raw = place.raw
         for start, end in reversed(spans):
-            edited = edited[:start] + wording + edited[end:]
-        result = (lines[:place.first] + _with_endings(edited, lines[place.first:place.last + 1], ending)
+            raw = raw[:start] + wording + raw[end:]
+        return raw
+
+    fallback = None
+    for text in dict.fromkeys((edited(sentence), edited(on_one_line(sentence)), on_one_line(edited(sentence)))):
+        result = (lines[:place.first] + _with_endings(text, lines[place.first:place.last + 1], ending)
                   + lines[place.last + 1:])
-        if memory_id in claim_ids("".join(result)):
-            return result
-    return None
+        found = claim_ids("".join(result))
+        if memory_id in found:
+            if found - {current_id} == others | {memory_id}:
+                return result
+            fallback = fallback or result
+    return fallback
 
 
-def _with_claim(lines: list[str], at: int, pieces: list[str], ending: str, memory_id: str) -> list[str] | None:
-    """``lines`` with the removed claim's lines put back at index ``at``, with a blank line on a side only where the
-    file would otherwise read one of them as going on with its neighbor. None if no form brings it back alone."""
-    added = [piece + ending for piece in pieces]
+def _with_claim(lines: list[str], at: int, text: str, ending: str, memory_id: str) -> list[str] | None:
+    """``lines`` with the removed claim's lines put back at index ``at``, wrapped as they were or else on one line, with
+    a blank line on a side only where the file would otherwise read one of them as going on with its neighbor. None if no
+    form brings it back alone."""
     wanted = claim_ids("".join(lines)) | {memory_id}
-    for before, after in (([], []), ([ending], []), ([], [ending]), ([ending], [ending])):
-        result = lines[:at] + before + added + after + lines[at:]
-        if claim_ids("".join(result)) == wanted:
-            return result
+    for wording in dict.fromkeys((text, on_one_line(text))):
+        added = [piece + ending for piece in wording.split("\n")]
+        for before, after in (([], []), ([ending], []), ([], [ending]), ([ending], [ending])):
+            result = lines[:at] + before + added + after + lines[at:]
+            if claim_ids("".join(result)) == wanted:
+                return result
     return None
 
 
@@ -203,7 +216,7 @@ def rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool = 
             if not spans:
                 raise HistoryError(f"cannot locate {change.new.id} in {printable(path)}:{number}")
             seen.add((path, place.first))
-            restored = _restored(lines, place, spans, sentence, _ending(lines), change.old.id)
+            restored = _restored(lines, place, spans, sentence, _ending(lines), change.old.id, change.new.id)
             if restored is None:
                 raise HistoryError(f"cannot put {change.old.id} back in {printable(path)}:{number} as it was; "
                                    "edit it by hand")
@@ -219,7 +232,7 @@ def rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool = 
         at = _anchor(old, changes, gone, lines)
         if at == len(lines) and lines and not lines[-1].endswith("\n"):
             lines[-1] += _ending(lines)
-        restored = _with_claim(lines, at, text.split("\n"), _ending(lines), gone.id)
+        restored = _with_claim(lines, at, text, _ending(lines), gone.id)
         if restored is None:
             raise HistoryError(f"cannot re-add {gone.id} to {printable(gone.path)} so that it reads as it did; "
                                "edit it by hand")

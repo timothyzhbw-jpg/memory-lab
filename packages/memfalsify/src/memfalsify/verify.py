@@ -19,10 +19,10 @@ from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from .text import (CJK, char_coverage, clauses, features, has_cue, is_absolute, is_date, is_prohibition,
+from .text import (CJK, Quantity, char_coverage, clauses, features, has_cue, is_absolute, is_date, is_prohibition,
                    modality_conflict, named_conflict, negation,
-                   opposing_terms, plain_words, quantities, reached_terms, removed_terms, stated_terms, statements,
-                   units_differ)
+                   opposing_terms, plain_words, quantities, reached_terms, removal, same_release, says_removal, stated_terms,
+                   statements, units_differ)
 
 Relation = Literal["supports", "contradicts", "unrelated", "disputed"]
 NAMED_VALUE = "same setting"  # how a named-value contradiction's rationale starts; it outranks the other rules
@@ -187,7 +187,9 @@ MIN_SHARED = 2  # and they share at least this many terms
 NEGATION_SHARED = 3  # a negation is a small word: it takes more shared terms to tell that it is about the same thing
 OPPOSING_NEAR = 0.4  # an opposing word says more than a "not": the rest of the sentence may differ more
 NUMBERS_NEAR = 0.5  # a number next to the same word is evidence by itself, so the sentences may differ a little more
+PROHIBITION_NEAR = 0.8  # a line opening with ``Do not``: an instruction, so only its near opposite speaks against it
 REMOVED_TERMS = 4
+REMOVED_SUBJECT = 3  # terms before ``was removed`` that a claim has to name, when it says more about the thing
 
 
 def _near(one: str, other: str, least: int = MIN_SHARED, near: float = NEAR) -> bool:
@@ -200,27 +202,50 @@ def _near(one: str, other: str, least: int = MIN_SHARED, near: float = NEAR) -> 
     return len(words & others) >= least or bool(CJK.search(one + other))
 
 
+def _alike(one: str, other: str, opposed: tuple[str, str] = ("", "")) -> bool:
+    """The two say the same in the same terms, apart from the opposing pair. Then there is nothing else to tell them
+    apart, so a short statement is about one subject on however few terms: ``Telemetry is disabled.``"""
+    words, others = features(one)[0] - {opposed[0]}, features(other)[0] - {opposed[1]}
+    return bool(words) and words == others
+
+
 def opposed_on_same_subject(claim: str, passage: str) -> tuple[str, str] | None:
     """Opposing terms that stand as words, not parts of a name, in two sentences or clauses about the same subject."""
     for a, b in ((claim, passage), *((a, b) for a in clauses(claim) for b in clauses(passage))):
-        if (found := opposing_terms(plain_words(a), plain_words(b))) and _near(a, b, near=OPPOSING_NEAR):
+        if (found := opposing_terms(plain_words(a), plain_words(b))) and (_near(a, b, near=OPPOSING_NEAR)
+                                                                          or _alike(a, b, found)):
             return found
     return None
 
 
+def _scoped(one: Quantity, other: Quantity, claim: str, passage: str) -> bool:
+    """Each number's clause goes on with words the other text does not have, so each is about its own case: 2 spaces in
+    YAML files and 4 in Python files, 200 on success and 404 when the resource is missing. Not read in Chinese text, where
+    ``after`` holds lone characters, and no real repository has been measured."""
+    if CJK.search(claim + passage):
+        return False
+    return bool(one.after - features(passage)[0]) and bool(other.after - features(claim)[0])
+
+
 def number_conflict(claim: str, passage: str) -> tuple[list[str], list[str]] | None:
     """(claim numbers, source numbers) when two nearly identical sentences, or clauses, attach different numbers to
-    the same word. Numbers inside names, paths, references, dates and times, or bound to a key, do not count."""
+    the same word, and neither goes on to name a case of its own. Numbers inside names, paths, references, dates and
+    times, or bound to a key, do not count."""
     ours, theirs = quantities(claim), quantities(passage)
     if not ours or not theirs:
         return None
     values, others = {q.value for q in ours}, {q.value for q in theirs}
+
+    def has(value: str, among: set[str]) -> bool:
+        return value in among or any(same_release(value, other) for other in among)
+
     whole = _near(claim, passage, near=NUMBERS_NEAR)
     for one in ours:
         for other in theirs:
-            if (one.value not in others and other.value not in values and one.next_to & other.next_to
+            if (not has(one.value, others) and not has(other.value, values) and one.next_to & other.next_to
                     and is_date(one.value) == is_date(other.value)
-                    and (whole or _near(one.clause, other.clause, near=NUMBERS_NEAR))):
+                    and (whole or _near(one.clause, other.clause, near=NUMBERS_NEAR))
+                    and not _scoped(one, other, claim, passage)):
                 return [one.value], [other.value]
     return None
 
@@ -238,20 +263,27 @@ def unit_conflict(claim: str, passage: str) -> tuple[str, str] | None:
 
 
 def _negates(negated: str, plain: str) -> bool:
-    """A statement of ``negated`` reaches a word ``plain`` states without negation, and the two have one subject."""
-    if is_prohibition(negated):
+    """A statement of ``negated`` reaches a word ``plain`` states without negation, and the two have one subject. A line
+    opening with ``Do not`` is an instruction, which says little about a line that merely shares its words: only a line
+    that says the same without the ``not``, in words of its own and not just names or a label, speaks against it."""
+    prohibition = is_prohibition(negated)
+    if prohibition and plain.rstrip().endswith(":"):
         return False
     aside = frozenset().union(*map(reached_terms, statements(plain)))
-    words = stated_terms(plain) - aside
-    terms, _ = features(plain)
+    words = stated_terms(plain_words(plain) if prohibition else plain) - aside
+    shared, _ = features(plain)
     for statement in statements(negated):
         reached = reached_terms(statement)
         if not reached & words or reached & aside:
             continue
+        if prohibition:
+            if _near(statement, plain, near=PROHIBITION_NEAR):
+                return True
+            continue
         # One counterexample contradicts an absolute statement, however much else it says.
-        if is_absolute(plain) and coverage(plain, statement) >= NEAR and len(terms & features(statement)[0]) >= NEGATION_SHARED:
+        if is_absolute(plain) and coverage(plain, statement) >= NEAR and len(shared & features(statement)[0]) >= NEGATION_SHARED:
             return True
-        if any(_near(statement, part, NEGATION_SHARED) for part in (plain, *clauses(plain))):
+        if any(_near(statement, part, NEGATION_SHARED) or _alike(statement, part) for part in (plain, *clauses(plain))):
             return True
     return False
 
@@ -262,11 +294,16 @@ def negation_conflict(claim: str, passage: str) -> bool:
 
 
 def removal_conflict(claim: str, passage: str) -> bool:
-    """The source says what the claim names was removed: all the claim's terms stand before the words that say so."""
+    """The source says what the claim names is removed: all the claim's terms stand before the words that say so. Or it
+    was removed: then the terms before those words only have to be in the claim, which may say more about the thing."""
     words, _ = features(claim)
-    if len(words) < REMOVED_TERMS or removed_terms(claim):
+    if len(words) < REMOVED_TERMS or says_removal(words) or removal(claim)[0]:
         return False
-    return any(words <= removed_terms(part) for part in statements(passage))
+    for part in statements(passage):
+        before, gone = removal(part)
+        if words <= before or (gone and len(before) >= REMOVED_SUBJECT and before <= words):
+            return True
+    return False
 
 
 class LexicalVerifier:
@@ -290,10 +327,10 @@ class LexicalVerifier:
             return Judgment(relation="unrelated", rationale=f"term coverage {score:.2f}", verifier=self.name)
         cjk = bool(CJK.search(claim) or CJK.search(passage))
         opposed = opposing_terms(claim, passage)
-        terms = opposed if cjk else opposed and opposed_on_same_subject(claim, passage)
-        if terms:
+        opposing = opposed if cjk else opposed and opposed_on_same_subject(claim, passage)
+        if opposing:
             return Judgment(relation="contradicts", verifier=self.name,
-                            rationale=f"opposing terms: claim '{terms[0]}…' vs source '{terms[1]}…'")
+                            rationale=f"opposing terms: claim '{opposing[0]}…' vs source '{opposing[1]}…'")
         units = unit_conflict(claim, passage)
         if units:
             return Judgment(relation="contradicts", verifier=self.name,

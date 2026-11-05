@@ -77,10 +77,15 @@ def long_lines_note(count: int) -> str:
 
 _CODE_SUFFIXES = frozenset({".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".rs", ".go", ".java",
                             ".kt", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".sh", ".bash"})
-_TEST_DIRS = frozenset({"test", "tests", "__tests__", "testing", "spec", "specs", "e2e"})
+_DOCUMENT_SUFFIXES = frozenset({".md", ".mdx", ".mdc", ".markdown", ".rst"})
+_PROSE_SUFFIXES = _DOCUMENT_SUFFIXES | {".txt"}
+_TEST_DIRS = frozenset({"test", "tests", "__tests__"})  # its code and data show a case; a document in it says how things are
+_TEST_CODE_DIRS = frozenset({"testing", "spec", "specs", "e2e"})  # only code: a spec can as well be what everything follows
 _TEST_NAME = re.compile(r"^test_|_test\.|\.test\.|_spec\.|\.spec\.|^conftest\.py$")
 _CHANGELOG_DIRS = frozenset({"changelog", "changelogs"})
-_CHANGELOG_NAME = re.compile(r"^(?:changelog|changes|history|news|releases|release[-_]notes|breaking[-_]changes)\b")
+# ``CHANGELOG-v6.md``, ``release-notes-2.md``, and only just ``HISTORY.rst`` or ``NEWS``: docs/history-retention.md is a
+# document about retention.
+_CHANGELOG_NAME = re.compile(r"^(?:changelog|release[-_]notes|breaking[-_]changes)\b|^(?:changes|history|news|releases)(?:\.\w+)*$")
 _EXAMPLE_DIRS = frozenset({"example", "examples", "sample", "samples", "demo", "demos", "cookbook", "cookbooks"})
 _EXAMPLE_NAME = re.compile(r"^examples?\.")
 
@@ -94,16 +99,14 @@ def source_kind(relative: str) -> str | None:
     a case rather than states how things are."""
     *directories, name = PurePath(relative.lower()).parts
     folders = set(directories)
-    if folders & _TEST_DIRS or (_TEST_NAME.search(name) and is_code(name)):
+    if ((folders & _TEST_DIRS and PurePath(name).suffix not in _DOCUMENT_SUFFIXES)
+            or ((folders & _TEST_CODE_DIRS or _TEST_NAME.search(name)) and is_code(name))):
         return "test"
-    if folders & _CHANGELOG_DIRS or _CHANGELOG_NAME.search(name):
+    if (folders & _CHANGELOG_DIRS or _CHANGELOG_NAME.search(name)) and not is_code(name):  # history.py is code
         return "changelog"
     if folders & _EXAMPLE_DIRS or _EXAMPLE_NAME.search(name):
         return "example"
     return None
-
-
-_PROSE_SUFFIXES = frozenset({".md", ".mdx", ".mdc", ".markdown", ".rst", ".txt"})
 
 
 def as_read(name: str, text: str) -> str:

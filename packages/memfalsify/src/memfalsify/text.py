@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 from functools import lru_cache
+from itertools import islice
 from typing import NamedTuple
 
 STOPWORDS = frozenset("""
@@ -98,6 +99,7 @@ _MULTIPLIED = re.compile(r"(\d+(?:\.\d+)?)\s?(千万|百万|万|亿|千)(?![米�
 _HALF_AFTER = re.compile(rf"(\d+(?:\.\d+)?)({ZH_MEASURE})半")
 _HALF = re.compile(rf"(?<![上下前后大多一过减对折])半(?!年度)(?=个?{ZH_MEASURE})")  # 半年度: semi-annual
 _ZH_FULL_DATE = re.compile(r"(\d{4})\s?年\s?(\d{1,2})\s?月(?:\s?(\d{1,2})\s?[日号])?")
+_CJK_WRAP = re.compile(r"(?<=[㐀-鿿])[ \t]*\r?\n[ \t]*(?:>[ \t]*)*(?=[㐀-鿿])")
 
 
 def _number(value: Decimal) -> str:
@@ -180,11 +182,13 @@ def normalize(text: str) -> str:
     Chinese quantities are rewritten as Arabic numbers: quarters (``第四季度`` -> ``Q4``, as in English),
     numerals before a measure word (``三个月`` -> ``3个月``),
     multipliers (``1200万`` -> ``12000000``), percentages (``百分之十``, ``一成`` -> ``10%``), halves
-    (``半小时`` -> ``0.5小时``, ``一年半`` -> ``1.5年``) and dates (``2026年10月11日`` -> ``2026-10-11``).
+    (``半小时`` -> ``0.5小时``, ``一年半`` -> ``1.5年``) and dates (``2026年10月11日`` -> ``2026-10-11``). A line break
+    between two ideographs goes, with the indent or quote marker after it: Chinese takes no space, and a word can be split
+    there, as in a claim's lines joined by ``memory._unwrap``.
     """
     if not CJK.search(text):
         return fold_width(text)
-    text = fold_width(_THOUSANDS.sub("", text))
+    text = fold_width(_THOUSANDS.sub("", _CJK_WRAP.sub("", text)))
     text = _QUARTER.sub(lambda m: f"Q{zh_numeral(m.group(1)) if m.group(1) in ZH_DIGITS else m.group(1)}", text)
     text = _PERCENT.sub(_percent, text)
     text = _TENTHS.sub(lambda m: f"{zh_numeral(m.group(1)) * 10}%", text)
@@ -416,10 +420,12 @@ def opposing_terms(claim: str, passage: str) -> tuple[str, str] | None:
         for x, y in ((a, b), (b, a)):
             if x in claim_words and y in passage_words and x not in passage_words:
                 return x, y
-    for a, b in ANTONYMS_ZH:
-        for x, y in ((a, b), (b, a)):
-            if x in claim and y in passage and x not in passage:
-                return x, y
+    if CJK.search(claim) and CJK.search(passage):
+        claim, passage = normalize(claim), normalize(passage)  # 禁用 can be wrapped over two lines
+        for a, b in ANTONYMS_ZH:
+            for x, y in ((a, b), (b, a)):
+                if x in claim and y in passage and x not in passage:
+                    return x, y
     return None
 
 
@@ -538,24 +544,25 @@ def _content_terms(text: str) -> list[str]:
 
 _NO_VALUE = frozenset({"none", "null", "nil", "undefined"})
 _BOOLEAN = frozenset({"true", "false"})
-_NUMBER = re.compile(r"[-+]?(\d[\d_]*(?:,\d{3})*(?:\.\d+)?)([A-Za-z%]{0,3})")
+_NUMBER = re.compile(r"([-+]?\d[\d_]*(?:,\d{3})*(?:\.\d+)?)([A-Za-z%]{0,3})")
 _NAME = r"[A-Za-z_][\w.-]*"
 # A literal: quoted without spaces, a number with at most a short unit, a boolean, or a null (which means no value).
 _LITERAL = (r"(?P<value>\"[^\"\s{}$]{1,40}\"|'[^'\s{}$]{1,40}'|`[^`\s{}$]{1,40}`|[-+]?\d[\d_,.]{0,40}[A-Za-z%]{0,3}(?![\w-])|"
             r"(?:[Tt]rue|[Ff]alse|TRUE|FALSE|[Nn]one|null|nil|undefined)(?![\w-]))")
 _NUMERIC = r"(?P<value>[-+]?\d[\d_,.]{0,40}[A-Za-z%]{0,3}(?![\w-]))"
 _KEYED = rf"(?<![\w./@#-])(?P<quote>[`\"']?)(?P<key>{_NAME})(?P=quote)"
-DEFAULT, STATED, SET = "default", "stated", "set"
+DEFAULT, STATED, ENTRY, SET = "default", "stated", "entry", "set"
 _BINDINGS = tuple((kind, re.compile(pattern)) for kind, pattern in (
     # key (default: 100), `key` (optional, default `100`)
     (DEFAULT, _KEYED + r"\s*[(\[]\s*(?:[^()\[\]\n]{0,40}?[,;]\s*)?defaults?(?:\s+(?:is|to|of))?\s*[:=]?\s*" + _LITERAL),
-    # key: int = 180, key: float = Field(default=0.1, ...)
-    (DEFAULT, _KEYED + r"\s*:\s*[\w.\[\], |\"']{1,60}?\s*=\s*(?:\w*[Ff]ield\(\s*(?:\.\.\.\s*,\s*)?(?:default\s*=\s*)?)?"
+    # key: int = 180, key: float = Field(default=0.1, ...). The type starts on the first character that is not a space
+    # and takes in any more of them: no two ways to read a run of spaces, since a claim's or a line's can be very long.
+    (DEFAULT, _KEYED + r"\s*:\s*(?=\S)[\w.\[\], |\"'\s]{1,60}?=\s*(?:\w*[Ff]ield\(\s*(?:\.\.\.\s*,\s*)?(?:default\s*=\s*)?)?"
      + _LITERAL),
     # key defaults to 100
     (DEFAULT, _KEYED + r"\s+defaults?\s+(?:to|is)\s+" + _LITERAL),
     # key: 100, "key": 5
-    (STATED, _KEYED + r"\s*:(?!=)\s*" + _LITERAL),
+    (ENTRY, _KEYED + r"\s*:(?!=)\s*" + _LITERAL),
     # | key | 100 |, | key | int | 100 |
     (STATED, r"\|\s*" + _KEYED + r"\s*\|\s*(?:`?(?:int|float|str|string|bool|boolean|number)`?\s*\|\s*)?" + _LITERAL
      + r"\s*(?=\||$)"),
@@ -569,9 +576,12 @@ _BINDINGS = tuple((kind, re.compile(pattern)) for kind, pattern in (
 
 
 class Binding(NamedTuple):
-    kind: str  # DEFAULT, STATED, or SET: a value set in one place, which says nothing about a default
+    kind: str  # DEFAULT, STATED, ENTRY (``key: 100``, in code one object's field), or SET (one place, not a default)
     value: str  # compares by meaning
     written: str
+
+
+_MOST_BINDINGS = 8  # different ones of one key read from a text: named_conflict compares each with each
 
 
 def _is_key(name: str, quote: str) -> bool:
@@ -590,8 +600,8 @@ def _literal(raw: str) -> str | None:
     if low in _BOOLEAN:
         return low
     if number := _NUMBER.fullmatch(value):
-        digits = number.group(1).replace("_", "").replace(",", "")
-        return _number(Decimal(digits)) + number.group(2).lower()
+        amount = Decimal(number.group(1).replace("_", "").replace(",", ""))
+        return _number(abs(amount) if amount.is_zero() else amount) + number.group(2).lower()
     return low
 
 
@@ -612,16 +622,28 @@ def named_values(text: str) -> dict[str, tuple[Binding, ...]]:
                 written = match.group("value").strip("`\"' ").rstrip(".,")
                 key = match.group("key").rstrip(".-")
                 # MAX_STEPS = 100 declares a constant; it is not one assignment among others.
-                found.setdefault(key.lower(), []).append(Binding(STATED if kind == SET and key.isupper() else kind,
-                                                                 value, written))
+                binding = Binding(STATED if kind == SET and key.isupper() else kind, value, written)
+                bindings = found.setdefault(key.lower(), [])
+                if len(bindings) < _MOST_BINDINGS and binding not in bindings:
+                    bindings.append(binding)
     return {key: tuple(bindings) for key, bindings in found.items()}
+
+
+_SHORT_UNITS = {"m": "min", "d": "day"}  # a bound value's ``30m`` and ``7d``; beside a number in prose, ``m`` is often metres
+
+
+def _unit(written: str) -> str | None:
+    return _UNITS.get(written) or _SHORT_UNITS.get(written)
 
 
 def _differs(one: str, other: str) -> bool:
     """Whether two comparable values are different, as far as text can tell."""
     first, second = _NUMBER.fullmatch(one), _NUMBER.fullmatch(other)
     if first and second and first.group(2) and second.group(2) and first.group(2) != second.group(2):
-        return False  # 500ms and 1s: units the text does not convert
+        # 500ms and 1s: units the text does not convert. The same digits in another unit of that kind are another amount.
+        units = _unit(first.group(2)), _unit(second.group(2))
+        return (first.group(1) == second.group(1) and None not in units
+                and _UNIT_KINDS[units[0]] == _UNIT_KINDS[units[1]] and units[0] != units[1])
     if first and second:
         return first.group(1) != second.group(1)
     return one != other and not one.startswith(other + ".") and not other.startswith(one + ".")
@@ -634,16 +656,18 @@ class ValueConflict(NamedTuple):
     merely_set: bool  # a side only sets it somewhere, which says less than a statement of what it is
 
 
-def named_conflict(claim: str, passage: str, set_counts: bool = True) -> ValueConflict | None:
+def named_conflict(claim: str, passage: str, set_counts: bool = True, declared: bool = False) -> ValueConflict | None:
     """What differs when both texts bind the same key to different values.
 
     A value set somewhere (``key=100``, ``key = 100``, ``--flag 100``) is not compared with a stated default (``key
     (default: 3)``, ``key: int = 3``): setting 100 in one place says nothing about the default. Without ``set_counts``,
-    a value set somewhere is not compared at all."""
+    a value set somewhere is not compared at all. With ``declared``, for a passage in source code, nor is one of its
+    ``key: 100``: there that is a field of one object or call, as ``key=100`` is one assignment."""
     theirs = named_values(passage)
     for key, ours in named_values(claim).items():
         pairs = [(a, b) for a in ours for b in theirs.get(key, ())
-                 if {a.kind, b.kind} != {DEFAULT, SET} and (set_counts or SET not in (a.kind, b.kind))]
+                 if {a.kind, b.kind} != {DEFAULT, SET} and (set_counts or SET not in (a.kind, b.kind))
+                 and not (declared and b.kind == ENTRY)]
         if pairs and all(_differs(a.value, b.value) for a, b in pairs):
             return ValueConflict(key, pairs[0][0].written, pairs[0][1].written,
                                  all(SET in (a.kind, b.kind) for a, b in pairs))
@@ -653,12 +677,16 @@ def named_conflict(claim: str, passage: str, set_counts: bool = True) -> ValueCo
 # --- numbers -----------------------------------------------------------------------------------------
 
 # A number or date standing on its own: not part of a name, path, issue reference, time or port, and not the operand
-# of an operator (``lines.length + 1``).
-_QUANTITY = re.compile(r"(?<![A-Za-z0-9_.\-/@#:+%])(?<![-+*/] )(?<!== )(?<!!= )v?(\d{4}-\d{2}-\d{2}|\d+(?:\.\d+)*)"
+# of an operator (``lines.length + 1``). It may group its thousands (``1,000``) or be a release with a wildcard
+# (``18.x``), and a rate is a number too (``100/min``).
+_QUANTITY = re.compile(r"(?<![A-Za-z0-9_.\-/@#:+%])(?<![-+*/] )(?<!== )(?<!!= )v?"
+                       r"(\d{4}-\d{2}-\d{2}|(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)*(?:\.[xX](?![A-Za-z0-9_]))?)"
                        r"(?:%|[A-Za-z]{1,3}(?![A-Za-z0-9_]))?"
+                       r"(?:/(?:s|secs?|seconds?|mins?|minutes?|h|hrs?|hours?|d|days?|weeks?|mo|months?|y|yrs?|years?)(?![A-Za-z0-9_]))?"
                        r"(?![A-Za-z0-9_/:]|[.\-][A-Za-z0-9_])")
 _TERMINAL_ESCAPE = re.compile(r"(?:\x1b|\\u001b|\\x1b)\[[0-9;]*[A-Za-z]")  # raw, or as a report stores it
 _NEARBY = 80  # characters read on each side of a number to find the words next to it
+_AFTER = 200  # characters read after a number to find what its clause goes on to say
 # Units that measure the same thing; a sentence that keeps the digits and changes the unit changes the amount.
 _UNITS = {
     **dict.fromkeys(("ms", "msec", "millisecond", "milliseconds", "milisegundo", "milisegundos", "毫秒"), "ms"),
@@ -682,6 +710,7 @@ class Quantity(NamedTuple):
     written: str  # the number and its unit, as written
     next_to: frozenset[str]  # the content terms right next to it
     clause: str
+    after: frozenset[str]  # the content terms after it in its clause
 
 
 def is_date(value: str) -> bool:
@@ -689,12 +718,19 @@ def is_date(value: str) -> bool:
 
 
 def _quantity(digits: str) -> str:
-    """The number without zero padding: 0723 and 723, 2.0 and 2 are one value; 3.10 and 3.1 stay two."""
+    """The number without zero padding or grouping: 0723 and 723, 2.0 and 2, 1,000 and 1000 are one value; 3.10 and 3.1
+    stay two. A wildcard stays: 18.x is written with a lower-case x."""
     if is_date(digits):
         return digits
-    head, dot, rest = digits.partition(".")
+    head, dot, rest = digits.replace(",", "").lower().partition(".")
     head = head.lstrip("0") or "0"
     return head if not dot or set(rest) == {"0"} else f"{head}.{rest}"
+
+
+def same_release(one: str, other: str) -> bool:
+    """Whether a value with a wildcard takes in the other: 3.x and 3.12, 3.x and 3, but not 3.x and 2.x."""
+    return any(wild.endswith(".x") and (exact == wild[:-2] or exact.startswith(wild[:-1]))
+               for wild, exact in ((one, other), (other, one)))
 
 
 def _unbound(text: str) -> str:
@@ -719,9 +755,13 @@ def quantities(text: str) -> tuple[Quantity, ...]:
             word = _UNIT_AFTER.match(rest)
             unit = _UNITS.get(word.group(1).lower()) if word else None
             written = match.group(1) + word.group() if unit else match.group().strip()
+            past = match.end(1) + word.end() if unit else match.end()  # its unit is what it measures, not a case
             found.append(Quantity(_quantity(match.group(1)), unit, written,
-                                  frozenset(before[-1:] + _content_terms(rest)[:2]), part.strip()))
-    return tuple(found[:_MOST_PARTS])
+                                  frozenset(before[-1:] + _content_terms(rest)[:2]), part.strip(),
+                                  frozenset(_content_terms(part[past:past + _AFTER]))))
+            if len(found) == _MOST_PARTS:
+                return tuple(found)
+    return tuple(found)
 
 
 def units_differ(one: Quantity, other: Quantity) -> bool:
@@ -733,6 +773,8 @@ def units_differ(one: Quantity, other: Quantity) -> bool:
 # --- scoped negation ---------------------------------------------------------------------------------
 
 NEGATION_SCOPE = 3  # content words after a cue that it can reach
+_CUE_WINDOW = 200  # characters after a cue read to find them
+_MOST_CUES = 32  # cues read in one clause: more of them say nothing more, and a passage can hold thousands
 # As NEGATION_EN, less what is mostly code (``None``, ``not(...)``, ``is not None``) or names (``--no-cache``), plus
 # the contrasts that put a word aside just as well.
 _CUE = re.compile(r"(?<![-_./`])\b(?:not(?!\(|\s+(?:none|null|nil|undefined)\b)|no longer|no|never|nobody|nothing|neither|"
@@ -774,10 +816,10 @@ def reached_terms(text: str) -> frozenset[str]:
     reached: set[str] = set()
     plain: set[str] = set()
     for part in clauses(text):
-        cues = list(_CUE.finditer(part))
+        cues = list(islice(_CUE.finditer(part), _MOST_CUES))
         plain.update(_whole_terms(part[:cues[0].start()] if cues else part))
         for match in cues:
-            reached.update(_whole_terms(part[match.end():])[:NEGATION_SCOPE])
+            reached.update(_whole_terms(part[match.end():match.end() + _CUE_WINDOW])[:NEGATION_SCOPE])
     return frozenset(reached - plain)
 
 
@@ -796,10 +838,17 @@ def is_prohibition(text: str) -> bool:
     return bool(_PROHIBITION.match(text))
 
 
-_REMOVED = re.compile(r"\b(?:was|were|been)\s+(?:\w+\s+)?(?:removed|deleted|dropped|retired)\b", re.I)
+_REMOVED = re.compile(r"\b(?:is|are|was|were|been)\s+(?:\w+\s+)?(?:removed|deleted|dropped|retired)\b", re.I)
+_GONE = re.compile(r"\b(?:was|were|been)\s", re.I)  # ``is removed`` may also say what happens each time
+_REMOVAL_WORDS = frozenset(stem(word) for word in ("remove", "delete", "drop", "dropped", "retire"))
 
 
-def removed_terms(text: str) -> frozenset[str]:
-    """The content terms before a ``was removed`` (``were deleted``, ``was dropped``...) in ``text``."""
+def removal(text: str) -> tuple[frozenset[str], bool]:
+    """The content terms before a ``was removed`` (``is deleted``, ``were dropped``...) in ``text``, and whether that says
+    it is gone for good, in the past tense."""
     match = _REMOVED.search(text)
-    return features(text[:match.start()])[0] if match else frozenset()
+    return (features(text[:match.start()])[0], bool(_GONE.match(match.group()))) if match else (frozenset(), False)
+
+
+def says_removal(terms: frozenset[str]) -> bool:
+    return bool(terms & _REMOVAL_WORDS)

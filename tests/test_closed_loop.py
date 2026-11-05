@@ -708,6 +708,18 @@ def test_a_claim_across_lines_stops_at_the_end_of_its_block(lines, text, held):
     assert to_events.holds(lines, text) is held
 
 
+@pytest.mark.parametrize("lines, text, held", [
+    (["Use py test for the checks."], "Use pytest for the checks.", False),
+    (["Use pytest for the checks."], "Use py test for the checks.", False),
+    (["Use py", "test for the checks."], "Use pytest for the checks.", False),
+    (["Use py", "test for the checks."], "Use py test for the checks.", True),
+    (["Use  py   test for the checks."], "Use py test for the checks.", True),
+    (["一二", "三四。"], "一二三四。", True),
+])
+def test_different_words_do_not_read_as_equal_once_spaces_go(lines, text, held):
+    assert to_events.holds(lines, text) is held
+
+
 @pytest.mark.parametrize("memory_file", ["agent/MEMORY.md", "agent\\MEMORY.md"])
 def test_a_line_from_a_linked_file_in_a_subdirectory_is_found(tmp_path, memory_file):
     """Reports hold str(Path), so on Windows the memory file is agent\\MEMORY.md."""

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterator
 from itertools import chain
 from pathlib import Path
@@ -21,8 +22,10 @@ from .corpus import Skipped
 from .formats import MARKDOWN, MemoryFormat, Value, detect, frontmatter, metadata_of
 from .text import CJK, features, sentence_spans, whole_span
 
-LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
+# Bounded, so that a long run of ``[`` or ``[a](`` takes each start a short look and not the rest of the file. An image
+# as a data URL can be longer than any address, and it stops at the next ``[``, which it never holds.
+LINK = re.compile(r"!?\[([^\]]{0,1000})\]\((data:[^)\s\[]*|[^)\s]{1,2000})(?:\s+\"[^\"]{0,1000}\")?\)")
+WIKILINK = re.compile(r"\[\[([^\]]{1,1000})\]\]")
 EMPHASIS = re.compile(r"\*\*|__|`")
 CODE_SPAN = re.compile(r"`+[^`]*`+")
 # An ``@path.md`` import (Claude Code, Gemini CLI): at the start of a line or after whitespace, outside code spans.
@@ -93,21 +96,22 @@ def _strip(pattern: re.Pattern, text: str, origin: list[int], keep_group: int | 
     return "".join(out), where
 
 
-def _expand_markup(markup: list[tuple[int, int]], start: int, end: int,
-                   others: list[tuple[int, int]]) -> tuple[int, int]:
+def _expand_markup(markup: list[tuple[int, int]], start: int, end: int, neighbors: tuple[int, int]) -> tuple[int, int]:
     """Grow a content span to the link or emphasis that wraps it, and stop at a neighbor's content. ``markup`` is the
-    span of every link and emphasis marker, in order: going both ways, a long run of markers takes few passes.
+    span of every link and emphasis marker around it, in order: going both ways, a long run of markers takes few passes.
+    ``neighbors``: where the sentence before it ends, and where the one after it starts.
 
     A match that also overlaps or touches another sentence (``[A. B.](url)``, or ``****`` between two
     sentences) is left outside. Rollback substitutes this span, so taking the shared markup would keep
     the neighbor's URL or steal its marker.
     """
+    before, after = neighbors
     while True:
         grew = False
         for ms, me in chain(markup, reversed(markup)):
             if me != start and ms != end and not (ms < end and me > start):
                 continue
-            if any((ms < oe and me > os) or me == os or ms == oe for os, oe in others):
+            if ms <= before or me >= after:
                 continue
             new_s, new_e = min(start, ms), max(end, me)
             if new_s < start or new_e > end:
@@ -143,38 +147,29 @@ def on_one_line(raw: str) -> str:
     return _unwrap(raw, list(range(len(raw))))[0]
 
 
-# Words that make a short piece of a sentence read as saying something. Only such pieces are measured against them.
-_SAYS = frozenset("""
-is are was were be been am isn't aren't has have had do does did can cannot could may might must shall should will would
-use uses used run runs ran need needs require requires live lives call calls return returns add adds make makes get gets
-set sets keep keeps see go goes work works take takes read reads write writes put puts avoid prefer
-""".split())
 _TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 _LABEL_OPENS = re.compile(r"(?:when|while|before|after|if|for|to|in|on|with|once|or|and|then|here|examples?|note)\b", re.I)
+# What makes a line ending in a colon an instruction, however it opens: ``Never use yarn:``.
+_INSTRUCTS = re.compile(r"\b(?:must|shall|should|never|always|cannot|do not|don't|does not|doesn't)\b", re.I)
 
 
-def is_fragment(text: str, position: int = 0) -> bool:
-    """Whether a sentence of a block says nothing by itself. ``position``: how many sentences of the block precede it.
+def is_fragment(text: str) -> bool:
+    """Whether a sentence of a block says nothing by itself.
 
     Deliberately narrow, since a dropped claim is never checked: Chinese text always stays, and so does anything that
-    reads as a sentence, such as ``Tests use pytest.``. What goes: markup with nothing else (a closing tag, a link
-    definition), a label ending in a colon (``Run ty:``, ``When writing comments:``), and a short piece in lower case
-    between two semicolons with no number and no word that says anything (``time-based assertions;``). A name can open a
-    sentence in lower case (``tests/test_x.py checks them.``), and a whole list item stays even with no verb:
+    reads as a sentence, such as ``Tests use pytest.``, or an instruction that names a tag: ``Prefer <Link> over <a>.``
+    What goes: markup with nothing else (a closing tag, a tag around one word, a link definition) and a label ending in a
+    colon (``Run ty:``, ``When writing comments:``), unless it instructs. A whole list item stays even with no verb:
     ``pnpm workspaces`` under ``Stack`` is a fact.
     """
     if CJK.search(text):
         return False
-    if LINK_DEFINITION.fullmatch(text) or len(features(_TAG.sub(" ", text))[0]) < 2:
+    bare = features(_TAG.sub(" ", text))[0]
+    if LINK_DEFINITION.fullmatch(text) or not bare or (len(bare) == 1 and (text.startswith("<") or "</" in text)):
         return True
     words = text.split()
-    digit = re.search(r"\d", text) is not None
-    if text.endswith(":") and not digit:
-        if len(words) <= 3 or (_LABEL_OPENS.match(text) and "," not in text and len(words) <= 12):
-            return True
-    return (position > 0 and text.endswith(";") and len(words) <= 4 and text[0].islower() and not digit
-            and not re.search(r"[/._]", words[0]) and not any(word.endswith("s") for word in words[1:-1])
-            and not any(word.strip(".,;:()'\"").lower() in _SAYS for word in words))
+    return (text.endswith(":") and re.search(r"\d", text) is None and _INSTRUCTS.search(text) is None
+            and (len(words) <= 3 or (_LABEL_OPENS.match(text) is not None and "," not in text and len(words) <= 12)))
 
 
 def block_sentences(block: Block) -> list[tuple[str, int, int]]:
@@ -194,18 +189,22 @@ def sentences(raw: str, *, row: bool = False) -> list[tuple[str, int, int]]:
     cleaned, origin = _unwrap(cleaned, origin)
     found = []
     spans = [span for span in [whole_span(cleaned)] if span] if row else sentence_spans(cleaned)
-    position = 0  # claim-sized sentences so far: a list marker read as a sentence ("3.") is not one
     for start, end in spans:
         text = cleaned[start:end]
         words, _ = features(text)
-        if len(words) >= 2:
-            if not is_fragment(text, position):
-                found.append((text, origin[start], origin[end - 1] + 1))
-            position += 1
-    content = [(start, end) for _, start, end in found]
+        if len(words) >= 2 and not is_fragment(text):
+            found.append((text, origin[start], origin[end - 1] + 1))
     markup = sorted(match.span() for pattern in (LINK, WIKILINK, EMPHASIS) for match in pattern.finditer(raw)) if found else []
-    return [(text, *_expand_markup(markup, start, end, content[:i] + content[i + 1:]))
-            for i, (text, start, end) in enumerate(found)]
+    starts = [span[0] for span in markup]
+    expanded = []
+    for i, (text, start, end) in enumerate(found):
+        before = found[i - 1][2] if i else -1
+        after = found[i + 1][1] if i + 1 < len(found) else len(raw) + 1
+        # Sentences do not overlap, so what would reach past a neighbor reaches the neighbor: this one's own markup stands
+        # between the two, and the work over a whole block stays in proportion to its markup.
+        nearby = markup[bisect_right(starts, before):bisect_left(starts, after)]
+        expanded.append((text, *_expand_markup(nearby, start, end, (before, after))))
+    return expanded
 
 
 def normalize_memory(text: str) -> str:
@@ -226,9 +225,12 @@ def _read(lines: list[str], start: int, links: list[str]) -> Iterator[tuple[str,
         links.extend(targets)
         if targets and _is_index_entry(block.raw):
             continue
+        line, counted = block.first + 1, 0  # the sentences come in order, so a long block is counted through once
         for sentence, at, end in block_sentences(block):
+            line += block.raw.count("\n", counted, at)
+            counted = at
             if not (targets and _local_md_targets(block.raw[at:end])):  # that sentence points at claims
-                yield sentence, block.first + block.raw.count("\n", 0, at) + 1, section
+                yield sentence, line, section
 
 
 def parse_text(text: str, display: str, fmt: MemoryFormat = MARKDOWN) -> tuple[list[Claim], list[str]]:

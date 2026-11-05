@@ -109,6 +109,25 @@ def test_a_partial_quote_and_the_same_words_elsewhere_in_the_file_are_covered(tm
     assert status(run(root, dismissal("allows 60 requests"))) == "insufficient_evidence"
 
 
+def test_a_short_quote_dismisses_the_passage_it_is_in_and_no_other(tmp_path):
+    other = "The public API allows 70 requests per minute."
+    root = project(tmp_path, **{"api.md": f"{QUOTE}\n\n{other}\n"})
+    report = run(root, dismissal("The public API"))
+    assert [e.span.quote for e in report.findings[0].evidence] == [other]
+    assert status(report) == "candidate_counterevidence" and report.dismissed == {"ada": 1}
+
+
+def test_a_quote_that_runs_over_two_passages_dismisses_both(tmp_path):
+    other = "The public API allows 70 requests per minute."
+    root = project(tmp_path, **{"api.md": f"{QUOTE} {other}\n\nSome other text in between here.\n\n{other}\n"})
+    assert status(run(root, dismissal(f"{QUOTE} {other}"))) == "insufficient_evidence"
+
+
+def test_a_copy_of_a_dismissed_passage_in_another_file_stays(tmp_path):
+    root = project(tmp_path, **{"api.md": f"{QUOTE}\n", "billing.md": f"{QUOTE}\n"})
+    assert [e.span.path for e in run(root, dismissal()).findings[0].evidence] == ["billing.md"]
+
+
 def test_a_path_written_another_way_and_a_line_pasted_twice(tmp_path):
     root = project(tmp_path)
     report = run(root, dismissal(path="./api.md"), dismissal(path="./api.md"))

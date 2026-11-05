@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from bisect import bisect_left
+from itertools import takewhile
 from typing import Literal, NamedTuple
 
 from .formats import frontmatter
@@ -28,14 +29,17 @@ _BULLET = re.compile(r"[ \t]*[-*+](?:[ \t]+|$)")
 _ORDERED = re.compile(r"[ \t]*(\d{1,9})[.)](?:[ \t]+|$)")
 _RULE = re.compile(r"[ \t]*([-*_])[ \t]*(?:\1[ \t]*){2,}")
 _UNDERLINE = re.compile(r"[ \t]*(?:=+|-{2,})[ \t]*")
-_TABLE_RULE = re.compile(r"[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*")
+# Spaces only after a bar, never on both sides of an optional one: a long run of spaces has one way to be read.
+_TABLE_RULE = re.compile(r"[ \t]*(?:\|[ \t]*)?:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*(?:\|[ \t]*)?")
 _TAGS_ONLY = re.compile(r"[ \t]*(?:</?[A-Za-z][^<>]*>[ \t]*)+")
 _HEADING = re.compile(r"^\s*#{1,6}\s+(.*)")
 _BREAK_TAG = re.compile(r"<br\s*/?>$", re.I)
 _FINISHED = re.compile(r"[.!?;。！？；][\"')\]*_`]*$")
+_SENTENCE_ENDS = re.compile(r"[.;。；][\"')\]*_`]*$")  # a title can end in ``?`` or ``!``
 _ENDS_IN_URL = re.compile(r"(?<!\S)[a-z]+://\S+$")
 _KEYED = re.compile(r"[*_`]*[\w /-]{1,24}[*_`]*:[*_`]*\s")  # "Language: Python", each line a key of its own
 WRAP_WIDTH = 60  # columns: a line this long that stops mid-sentence was wrapped; a shorter one may be a line of its own
+MOST_WRAPPED = 12  # lines one sentence can go on over: past that, it is a log or a listing, which stays line by line
 
 
 def _width(text: str) -> int:
@@ -59,22 +63,33 @@ def _quote_end(line: str) -> int:
     return prefix.end() if prefix else 0
 
 
-def _is_wrapped(previous: str, line: str) -> bool:
+def _is_wrapped(previous: str, line: str, ahead: list[str] | None = None) -> bool:
     """Whether ``line`` goes on with the sentence of ``previous``. Markdown says always, but people also write short
-    lines with no marker and mean each on its own (``Project: foo`` over ``Language: Python``). A finished sentence is
-    cut at its period either way."""
+    lines with no marker and mean each on its own (``Project: foo`` over ``Language: Python``), and long ones with no
+    period (``ahead``: the lines after ``line``). A finished sentence is cut at its period either way."""
     if previous.endswith(("  ", "\\")) or _BREAK_TAG.search(previous[-16:]):  # a hard line break
         return False
     before = previous.strip()
     if _FINISHED.search(before):
         return True
-    if before.endswith(":") or _ENDS_IN_URL.search(before) or (_KEYED.match(before[:64]) and _KEYED.match(line.strip()[:64])):
+    if _ENDS_IN_URL.search(before) or (_KEYED.match(before[:64]) and _KEYED.match(line.strip()[:64])):
         return False
-    if before.endswith((",", "(", "-", "–", "—", "/")) or before.rsplit(None, 1)[-1].strip("*_`").lower() in STOPWORDS:
+    width = _width(before)
+    if before.endswith(":"):  # a label over its value, or a long sentence wrapped right there
+        return width >= WRAP_WIDTH
+    if before.endswith((",", "(", "-", "–", "—", "/", "，", "、", "（")) or before.rsplit(None, 1)[-1].strip("*_`").lower() in STOPWORDS:
+        return True
+    # Something open goes on, however short the line: a long URL or name was often all that moved to the next one.
+    if before.count("[") > before.count("]") or before.count("(") > before.count(")") or before.count("`") % 2:
+        return True
+    tail = line.strip()
+    if " " not in tail and _FINISHED.search(tail):  # one word and a period: the end of what the line above began
         return True
     opening = next((char for char in line if char.isalnum()), "")
-    width = _width(before)
-    return width >= WRAP_WIDTH or (width >= WRAP_WIDTH // 2 and (opening.islower() or opening.isdigit()))
+    if width >= WRAP_WIDTH:
+        # A capital after a long line is a new statement, unless a period somewhere ahead says these are sentences.
+        return not opening.isupper() or any(_FINISHED.search(next_line.rstrip()) for next_line in (line, *(ahead or ())))
+    return width >= WRAP_WIDTH // 2 and (opening.islower() or opening.isdigit())
 
 
 def blocks(lines: list[str], start: int = 0) -> list[Block]:
@@ -126,8 +141,12 @@ def blocks(lines: list[str], start: int = 0) -> list[Block]:
             found.append(Block(index, index, heading.group(1).strip(), "heading"))
             continue
         if first is not None and not (in_item or in_quote or cut) and _UNDERLINE.fullmatch(raw):  # a Setext heading
-            found.append(Block(first, index, " ".join(line.strip() for line in lines[first:index]), "heading"))
-            first, in_table, in_list = None, False, False
+            if "-" in raw and _SENTENCE_ENDS.search(lines[index - 1].rstrip()):  # sentences over a rule: not a title
+                close(index - 1)
+            else:
+                found.append(Block(first, index, " ".join(line.strip() for line in lines[first:index]), "heading"))
+                first = None
+            in_table = in_list = False
             continue
         if _RULE.fullmatch(content):
             close(index - 1)
@@ -163,7 +182,9 @@ def blocks(lines: list[str], start: int = 0) -> list[Block]:
         if first is not None:
             previous = lines[index - 1]
             if not ((cut > 0 and not in_quote) or LINK_DEFINITION.match(content.strip())) and (
-                    (in_item and indent >= offset) or _is_wrapped(previous[_quote_end(previous):], content)):
+                    (in_item and indent >= offset)
+                    or _is_wrapped(previous[_quote_end(previous):], content,
+                                   list(takewhile(str.strip, lines[index + 1:index + 1 + MOST_WRAPPED])))):
                 continue
             close(index - 1)
         elif indent >= 4 and not in_list and not cut:
@@ -181,9 +202,6 @@ def block_at(lines: list[str], number: int) -> Block | None:
         if block.first < number <= block.last + 1:
             return block
     return None
-
-
-MOST_WRAPPED = 12  # lines one sentence can go on over: past that, it is a log or a listing, which stays line by line
 
 
 def _joints(lines: list[str], block: Block) -> list[int]:

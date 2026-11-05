@@ -38,10 +38,12 @@ COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 APPROVED_BY = re.compile(r"\(approved-by: ([\w.@-]+(?: [\w.@-]+)*)\)\Z")
 RISK_STATUSES = {"challenged", "conflicted", "candidate_counterevidence", "disputed"}
 # The markup MemFalsify removes from a line before it reads claims out of it (memfalsify/memory.py).
-LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
+LINK = re.compile(r"!?\[([^\]]{0,1000})\]\((data:[^)\s\[]*|[^)\s]{1,2000})(?:\s+\"[^\"]{0,1000}\")?\)")
+WIKILINK = re.compile(r"\[\[([^\]]{1,1000})\]\]")
 EMPHASIS = re.compile(r"\*\*|__|`")
 QUOTE_MARKER = re.compile(r"^[ \t]*(?:>[ \t]*)+", re.MULTILINE)
+# The space a line break becomes, which MemFalsify leaves out between two Chinese characters.
+BETWEEN_IDEOGRAPHS = re.compile("(?<=[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]) (?=[\u3400-\u9fff\u3000-\u303f\uff00-\uffef])")
 
 
 class ConversionError(Exception):
@@ -96,8 +98,11 @@ def holds(lines: list[str], text: str) -> bool:
     reads the lines of a wrapped paragraph as one, with what continues it (indent, quote markers) read as one space."""
     if text in without_markup(lines[0]):
         return True
-    read = lambda raw: "".join(QUOTE_MARKER.sub("", without_markup(raw)).split())  # noqa: E731
-    start = read("\n".join(takewhile(str.strip, lines))).find("".join(text.split()))
+
+    def read(raw: str) -> str:
+        return BETWEEN_IDEOGRAPHS.sub("", " ".join(QUOTE_MARKER.sub("", without_markup(raw)).split()))
+
+    start = read("\n".join(takewhile(str.strip, lines))).find(read(text))
     return 0 <= start < len(read(lines[0]))  # it has to start on the line that `location` names
 
 

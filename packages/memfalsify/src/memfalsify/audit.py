@@ -225,22 +225,26 @@ def dismissal_line(memory_id: str, span: EvidenceSpan, reviewer: str = "you") ->
     return json_shield(json.dumps(record, ensure_ascii=False))
 
 
-def _dismisses(dismissal: EvidenceFinding, span: EvidenceSpan) -> bool:
-    """Whether a dismissal of a passage in this file covers this one: the passage it was located in, or the same words
-    elsewhere in the file, which ``locate_quote`` never reaches. In a transcript, a dismissal is of that one cue."""
-    if dismissal.span.start < span.end and span.start < dismissal.span.end:
-        return True
-    return dismissal.span.media is None and (dismissal.span.quote in span.quote or span.quote in dismissal.span.quote)
-
-
 def _not_dismissed(passages: list[Passage], dismissed: list[EvidenceFinding]) -> list[Passage]:
+    """``passages`` without what a person dismissed: the passage each dismissal's quote was located in, and, since
+    ``locate_quote`` only finds the first, that same passage word for word elsewhere in the file. A short quote does not
+    take every passage holding its words. In a transcript, a dismissal is of that one cue."""
     if not dismissed:
         return passages
-    by_path: dict[str, list[EvidenceFinding]] = defaultdict(list)
+    by_path: dict[str, list[EvidenceSpan]] = defaultdict(list)
     for dismissal in dismissed:
-        by_path[PurePosixPath(dismissal.span.path).as_posix()].append(dismissal)  # a review may say ./docs/a.md
+        by_path[PurePosixPath(dismissal.span.path).as_posix()].append(dismissal.span)  # a review may say ./docs/a.md
+    located: set[int] = set()
+    copies: set[tuple[str, str]] = set()
+    for passage in passages:
+        span = passage.span
+        for dismissal in by_path.get(span.path, ()):
+            if dismissal.start < span.end and span.start < dismissal.end:
+                located.add(id(passage))
+                if dismissal.media is None:
+                    copies.add((span.path, span.quote))
     return [passage for passage in passages
-            if not any(_dismisses(dismissal, passage.span) for dismissal in by_path.get(passage.span.path, ()))]
+            if id(passage) not in located and (passage.span.path, passage.span.quote) not in copies]
 
 
 def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
@@ -313,17 +317,19 @@ def weighed(judgment: Judgment, path: str, claim: str, passage: str) -> Judgment
 
     A test, changelog or example shows or records a case, so it does not contradict a claim by itself, unless a
     changelog or example names the same setting or a changelog says the thing was removed. In source code, only a
-    declared value counts: words and other numbers are control flow and error messages, and ``x = 5`` is one assignment
-    among others."""
+    declared value counts: words and other numbers are control flow and error messages, ``x = 5`` is one assignment
+    among others, and ``x: 5`` is one object's field or one call's argument."""
     if judgment.relation != "contradicts":
         return judgment
     why = judgment.rationale
     kind = source_kind(path)
+    declared = not is_code(path) or named_conflict(claim, passage, set_counts=False, declared=True) is not None
     if kind is None:
-        if not is_code(path) or named_conflict(claim, passage, set_counts=False):
+        if declared:
             return judgment
         kind = "source code"
-    elif (kind != "test" and why.startswith(NAMED_VALUE)) or (kind == "changelog" and why == REMOVED):
+    elif (kind == "example" and why.startswith(NAMED_VALUE) and declared) or (kind == "changelog" and (
+            why.startswith(NAMED_VALUE) or why == REMOVED)):
         return judgment
     return Judgment(relation="unrelated", verifier=judgment.verifier,
                     rationale=f"{kind}: not read as a contradiction by itself ({why})")

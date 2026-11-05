@@ -1,6 +1,8 @@
 """The lexical verifier's rules, one sentence each in docs/lexical-rules.md, and what the audit does with them."""
 import json
+import time
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -102,6 +104,40 @@ def test_conditions_and_comparisons_bind_nothing():
     assert named_values("max_steps != 3") == {}
 
 
+@pytest.mark.parametrize("claim, source", [
+    ("MAX_RETRIES: -1", "MAX_RETRIES: int = 1"),
+    ("`max_retries: -1` disables the limit.", "`max_retries: 1` disables the limit."),
+    ("offset_ms: -5", "offset_ms: 5"),
+])
+def test_a_negative_value_is_not_its_magnitude(claim, source):
+    assert judge(claim, source).relation == "contradicts"
+
+
+@pytest.mark.parametrize("claim, source", [("offset_ms: -5", "offset_ms: -5.0"), ("offset_ms: 5", "offset_ms: +5"),
+                                           ("offset_ms: 0", "offset_ms: -0")])
+def test_a_sign_that_changes_nothing(claim, source):
+    assert named_conflict(claim, source) is None
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("`max_size: 512MB` for uploads.", "`max_size: 512GB` for uploads."),
+    ("`session_timeout: 30m` in config.yaml.", "`session_timeout: 30s` in config.yaml."),
+    ("`max_size: 512MB` for uploads.", "`max_size: 512MiB` for uploads."),
+])
+def test_the_same_digits_in_another_unit_are_another_value(claim, source):
+    assert judge(claim, source).relation == "contradicts"
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("wait_time: 500ms", "wait_time: 1s"),  # units the text does not convert
+    ("max_size: 512MB", "max_size: 30s"),  # not the same kind of thing
+    ("max_size: 512MB", "max_size: 512"),  # one side names no unit
+    ("wait_time: 5h", "wait_time: 5x"),  # not a unit
+])
+def test_units_the_text_cannot_compare_stay_apart(claim, source):
+    assert named_conflict(claim, source) is None
+
+
 def test_another_key_is_another_setting():
     assert relation("read_timeout (default: 120): Timeout in seconds for each read",
                     "write_timeout: int = 60  # Timeout in seconds for each write") != "contradicts"
@@ -162,6 +198,50 @@ def test_a_number_bound_to_a_key_is_only_compared_by_key():
 def test_a_number_in_a_terminal_escape_does_not_hide():
     assert relation("The public API allows 100 requests per minute.",
                     "The public API allows \x1b[31m60 requests per minute.") == "contradicts"
+
+
+@pytest.mark.parametrize("claim, source, values", [
+    ("The build uses Node 18.x.", "The build uses Node 20.x.", "['18.x'] vs source ['20.x']"),
+    ("Runtime is Python 3.x only.", "Runtime is Python 2.x only.", "['3.x'] vs source ['2.x']"),
+    ("Rate limits are 100/min.", "Rate limits are 200/min.", "['100'] vs source ['200']"),
+    ("The limit is 1,000 requests per minute.", "The limit is 2,000 requests per minute.", "['1000'] vs source ['2000']"),
+    ("The limit is 1,000 requests per minute.", "The limit is 900 requests per minute.", "['1000'] vs source ['900']"),
+])
+def test_numbers_in_the_forms_people_write_them(claim, source, values):
+    assert judge(claim, source).rationale == f"different values: claim {values}"
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("The limit is 1,000 requests per minute.", "The limit is 1000 requests per minute."),
+    ("The build uses Node 18.x.", "The build uses Node 18.20."),
+    ("The build uses Node 18.x.", "The build uses Node 18."),
+    ("The build uses Node 18.20.", "The build uses Node 18.x today."),
+    ("Rate limits are 100/min.", "Rate limits are 100/min."),
+])
+def test_one_value_written_two_ways_is_no_conflict(claim, source):
+    assert relation(claim, source) != "contradicts"
+
+
+def test_what_only_looks_like_a_rate_or_a_wildcard_is_not_read_as_one():
+    assert {q.value for q in quantities("s3/bucket 4/s3 10/min/foo 24/7 2.xz 1.x_y 8 fields")} == {"8"}
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("Use 2 spaces for indentation in YAML files.", "Use 4 spaces for indentation in Python files."),
+    ("The API returns 200 on success.", "The API returns 404 when the resource is missing."),
+    ("The maximum upload size is 10 MB for images.", "The maximum upload size is 50 MB for videos."),
+])
+def test_two_numbers_each_with_a_case_of_its_own_do_not_conflict(claim, source):
+    assert relation(claim, source) != "contradicts"
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("Use 2 spaces for indentation in YAML files.", "Use 4 spaces for indentation in YAML files."),
+    ("The gateway timeout is 1500 ms.", "The gateway timeout is 30 seconds."),
+    ("The maximum upload size is 10 MB.", "The maximum upload size is 50 MB for videos."),
+])
+def test_a_case_named_on_one_side_only_still_conflicts(claim, source):
+    assert relation(claim, source) == "contradicts"
 
 
 # --- units -----------------------------------------------------------------------------------------------------
@@ -250,6 +330,105 @@ def test_hostile_text_gets_a_verdict(text):
     assert judge("disabled a b", text).relation in ("supports", "contradicts", "unrelated")
 
 
+SECONDS = 5  # far more than any of these takes now; each took 15 seconds or much more when it grew with the square
+
+
+@pytest.mark.parametrize("claim, passage", [
+    ("The cache holds " + "a_b=1 " * 3000, "The cache holds " + "a_b=2 " * 3000),  # each binding compared with each
+    ("The cache holds " + "".join(f"a_b={n} " for n in range(3000)), "The cache holds " + "".join(f"a_b={n + 5000} " for n in range(3000))),
+    ("The cache a_b:" + " " * 32_000 + "is large.", "The cache a_b: is large today."),  # key: type = value
+    ("The cache is not large.", "The cache a_b:" + " " * 32_000 + "is large."),
+    ("The cache is " + "not " * 12_000, "The cache is large."),  # what each cue reaches
+    ("The cache is large.", ("the cache is large " + "not " * 235 + "\n") * 12),
+])
+def test_hostile_text_takes_time_in_proportion_to_its_length(claim, passage):
+    started = time.perf_counter()
+    assert judge(claim, passage).relation in ("supports", "contradicts", "unrelated")
+    assert time.perf_counter() - started < SECONDS
+
+
+def test_one_key_keeps_only_a_few_bindings():
+    text = "".join(f"a_b={n} " for n in range(1000))
+    assert len(named_values(text)["a_b"]) == 8
+    assert named_values("a_b=1 " * 1000)["a_b"] == named_values("a_b=1")["a_b"]
+
+
+def test_many_lines_of_spaces_after_a_key_take_time_in_proportion_to_their_length(tmp_path):
+    write_tree(tmp_path, {"MEMORY.md": "- The cache is large for the a_b setting today.\n"})
+    write_tree(tmp_path / "evidence", {"a.md": "".join(f"a_b{n}:" + " " * 900 + "the cache is large for the a_b setting\n\n"
+                                                       for n in range(300))})
+    started = time.perf_counter()
+    audit(tmp_path / "MEMORY.md", tmp_path / "evidence")
+    assert time.perf_counter() - started < SECONDS
+
+
+def test_a_key_and_type_with_spaces_still_bind():
+    assert named_values("max_steps : int  = 5")["max_steps"][0].value == "5"
+    assert named_values("max_steps: Optional[int]\t= 5")["max_steps"][0].value == "5"
+    assert named_values("max_steps:\n  int = 5")["max_steps"][0].value == "5"
+
+
+@pytest.mark.parametrize("one, other, reason", [
+    ("Telemetry is disabled.", "Telemetry is enabled.", "opposing terms"),
+    ("Authentication is required.", "Authentication is optional.", "opposing terms"),
+    ("The repo is public.", "The repo is private.", "opposing terms"),
+    ("Redis is required.", "Redis is not required.", "same subject"),
+    ("We use Docker.", "We do not use Docker.", "same subject"),
+])
+def test_a_short_statement_and_its_opposite(one, other, reason):
+    assert judge(one, other).rationale.startswith(reason)
+    assert judge(other, one).rationale.startswith(reason)
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("Telemetry is disabled for this.", "Sentry is enabled for this."),  # another subject
+    ("Redis is required.", "Postgres is not required."),
+    ("We use Docker.", "We do not use Docker Compose."),
+])
+def test_a_short_statement_about_something_else_is_no_opposite(claim, source):
+    assert relation(claim, source) != "contradicts"
+
+
+def test_two_short_lines_of_one_file_that_oppose_each_other_conflict(tmp_path):
+    write_tree(tmp_path, {"CLAUDE.md": "- Telemetry is disabled.\n- Telemetry is enabled.\n"})
+    report = audit(tmp_path / "CLAUDE.md")
+    assert all("internal_conflict" in {issue.kind for issue in finding.issues} for finding in report.findings)
+
+
+@pytest.mark.parametrize("prohibition, plain", [
+    ("Do not use npm in this repository.", "Use npm in this repository."),
+    ("Never commit directly to main.", "Commit directly to main."),
+    ("Don't commit secrets to the repo.", "Commit secrets to the repo."),
+    ("Do not run database migrations in production.", "Run database migrations in production on Fridays."),
+    ("Never use `yarn` here.", "Use `yarn` here."),
+])
+def test_a_prohibition_and_its_opposite(prohibition, plain):
+    assert judge(prohibition, plain).rationale == "same subject, but only one side is negated"
+    assert judge(plain, prohibition).rationale == "same subject, but only one side is negated"
+
+
+@pytest.mark.parametrize("prohibition, plain", [
+    ("Do not use npm in this repository.", "Do not use npm in this repository."),
+    ("Do not use npm.", "Sessions use npm for caching and for building."),
+    ("Never commit directly to main.", "Reviews commit directly to the release branch from main."),
+    ("Never npm, never yarn.", "`npm` or `yarn`."),  # names and no statement
+    ("Never check only one of them.", "To check for one:"),  # a label and no statement
+    # The bar is strict on purpose. This one is a real conflict that it misses, and it is the same shape as an item of a
+    # "Do NOT" list against the prose it came from (Use npm or yarn in TypeScript packages), which was all it found on the
+    # measured repositories when the bar let it through.
+    ("Do not run migrations in production.", "Run migrations in production after every deploy."),
+])
+def test_a_prohibition_says_little_about_a_line_that_only_shares_its_words(prohibition, plain):
+    assert relation(prohibition, plain) != "contradicts"
+
+
+def test_a_prohibition_finds_its_opposite_in_a_small_repository(tmp_path):
+    write_tree(tmp_path, {"AGENTS.md": "- Do not use npm in this repository.\n",
+                          "CONTRIBUTING.md": "Use npm in this repository.\n"})
+    report = audit(tmp_path / "AGENTS.md", tmp_path)
+    assert report.findings[0].status == "candidate_counterevidence"
+
+
 def test_a_passage_the_rules_doubt_is_no_support_either():
     """What used to be a contradiction and no longer is must not turn into support."""
     for claim, passage in (("Do not use Redis for caching.", "Sessions use Redis for caching."),
@@ -273,6 +452,25 @@ def test_removal_is_about_what_stands_before_the_words():
     assert relation("Remove the old graph store backends.", "Old graph store backends were removed in v2.") != "contradicts"
 
 
+@pytest.mark.parametrize("claim, source", [
+    ("The legacy CSV importer handles uploads.", "The legacy CSV importer was removed in version 2."),  # says more about it
+    ("Legacy CSV importer plugin.", "The legacy CSV importer plugin is removed."),  # is, not only was
+    ("The legacy CSV importer plugin handles uploads.", "The legacy CSV importer plugin has been deleted."),
+])
+def test_a_source_says_the_thing_a_claim_talks_about_is_gone(claim, source):
+    assert judge(claim, source).rationale == "source says what the claim names was removed"
+
+
+@pytest.mark.parametrize("claim, source", [
+    ("The build temp file lives in the cache.", "The build temp file is removed after each run."),  # what happens each time
+    ("The legacy CSV importer was dropped from the docs.", "The legacy CSV importer was removed in version 2."),  # says so itself
+    ("We delete the legacy CSV importer soon.", "The legacy CSV importer was removed in version 2."),
+    ("The new importer handles CSV uploads.", "The old importer was removed in version 2."),
+])
+def test_a_removal_that_does_not_speak_against_the_claim(claim, source):
+    assert not judge(claim, source).rationale.startswith("source says")
+
+
 # --- what kind of file a passage is in -------------------------------------------------------------------------
 
 @pytest.mark.parametrize("path, kind", [
@@ -281,9 +479,31 @@ def test_removal_is_about_what_stands_before_the_words():
     ("docs/changelog/sdk.mdx", "changelog"), ("Releases.md", "changelog"), ("BREAKING_CHANGES.md", "changelog"),
     ("examples/blog/README.md", "example"), ("skills/references/examples.md", "example"), ("src/app.py", None),
     ("docs/api.md", None), ("releases/search.md", None), ("latest/contest.md", None), ("docs/test_plan.md", None),
+    # Code and data under tests/ show a case. A document there, or anything under a folder that only sounds like tests,
+    # says how things are: a spec is what the code has to follow.
+    ("tests/specs/a/__test__.jsonc", "test"), ("tests/data/a.toml", "test"), ("tests/a.txt", "test"), ("e2e/login.ts", "test"),
+    ("spec/models/a_spec.rb", "test"), ("testing/helpers.go", "test"),
+    ("tests/README.md", None), ("specs/rate-limits.md", None), ("spec/api.yaml", None), ("docs/testing/setup.md", None),
+    ("e2e/README.md", None),
+    # A file named just so is a changelog. One that goes on to name a subject is a document about it.
+    ("HISTORY.rst", "changelog"), ("NEWS", "changelog"), ("CHANGES.txt", "changelog"), ("docs/news.md", "changelog"),
+    ("release-notes-2.md", "changelog"), ("changelog.old.md", "changelog"),
+    ("docs/history-retention.md", None), ("docs/news-feed.md", None), ("docs/changes-to-retention.md", None),
+    ("docs/releases-process.md", None), ("src/history.py", None), ("scripts/changelog.ts", None),
 ])
 def test_source_kind(path, kind):
     assert source_kind(path) == kind
+
+
+@pytest.mark.parametrize("path", ["specs/rate-limits.md", "spec/api.yaml", "docs/testing/setup.md", "e2e/README.md",
+                                  "tests/README.md", "docs/history-retention.md", "docs/news-feed.md",
+                                  "docs/changes-to-retention.md", "docs/releases-process.md"])
+def test_an_authoritative_document_can_contradict_wherever_it_sits(tmp_path, path):
+    write_tree(tmp_path, {"MEMORY.md": "- The API rate limit is 100 requests per minute.\n"})
+    write_tree(tmp_path / "evidence", {path: "The API rate limit is 500 requests per minute.\n"})
+    report = audit(tmp_path / "MEMORY.md", tmp_path / "evidence")
+    assert report.findings[0].status == "candidate_counterevidence"
+    assert report.findings[0].evidence[0].rationale == "different values: claim ['100'] vs source ['500']"
 
 
 def contradiction(rationale):
@@ -297,13 +517,14 @@ def contradiction(rationale):
     ("src/a.py", "same setting x_y: claim 1 vs source 2", "contradicts"),
     ("CHANGELOG.md", "different values: claim ['1'] vs source ['2']", "unrelated"),
     ("examples/a.md", "same subject, but only one side is negated", "unrelated"),
-    ("tests/a.md", "opposing terms: claim 'a…' vs source 'b…'", "unrelated"),
+    ("tests/a.json", "opposing terms: claim 'a…' vs source 'b…'", "unrelated"),
+    ("tests/a.md", "opposing terms: claim 'a…' vs source 'b…'", "contradicts"),
     ("CHANGELOG.md", "source says what the claim names was removed", "contradicts"),
     ("examples/a.md", "source says what the claim names was removed", "unrelated"),
     ("docs/a.md", "same subject, but only one side is negated", "contradicts"),
 ])
 def test_weighed(path, rationale, relation_after):
-    assert weighed(contradiction(rationale), path, "x_y: 1", "x_y: 2").relation == relation_after
+    assert weighed(contradiction(rationale), path, "x_y: 1", "x_y: int = 2").relation == relation_after
 
 
 @pytest.mark.parametrize("rationale", ["opposing terms: claim 'a…' vs source 'b…'", "different units: a",
@@ -323,6 +544,31 @@ def test_in_source_code_a_value_must_be_declared(source, relation_after):  # by 
 
 def test_a_memory_line_that_only_sets_a_value_finds_nothing_in_code():
     assert weighed(judge('class_name = "a"', "class_name: 'b'"), "src/a.tsx", 'class_name = "a"', "class_name: 'b'").relation == "unrelated"
+
+
+@pytest.mark.parametrize("path, source, relation_after", [
+    # One object's field or one call's argument, as foo(key=5) is in Python.
+    ("src/a.ts", "retry({ maxRetries: 5 })", "unrelated"),
+    ("src/a.py", 'retry(**{"maxRetries": 5})', "unrelated"),
+    ("examples/a.ts", "retry({ maxRetries: 5 })", "unrelated"),
+    # A declaration, in code or an example of it, and anything in a document or a config file.
+    ("src/a.ts", "maxRetries: number = 5", "contradicts"),
+    ("src/a.py", "maxRetries: int = 5", "contradicts"),
+    ("src/a.ts", "// maxRetries (default: 5)", "contradicts"),
+    ("examples/a.ts", "maxRetries: number = 5", "contradicts"),
+    ("docs/a.md", "retry({ maxRetries: 5 })", "contradicts"),
+    ("config.yaml", "maxRetries: 5", "contradicts"),
+])
+def test_in_code_a_field_of_one_object_is_no_declared_value(path, source, relation_after):
+    claim = "`maxRetries` defaults to 3."
+    assert judge(claim, source).rationale.startswith("same setting maxretries: claim 3 vs source 5")
+    assert weighed(judge(claim, source), path, claim, source).relation == relation_after
+
+
+def test_a_call_site_in_code_leaves_no_flag_in_a_full_audit(tmp_path):
+    write_tree(tmp_path, {"MEMORY.md": "- `maxRetries` defaults to 3.\n"})
+    write_tree(tmp_path / "evidence", {"src/a.ts": "retry({ maxRetries: 5 })\n"})
+    assert audit(tmp_path / "MEMORY.md", tmp_path / "evidence").findings[0].status == "insufficient_evidence"
 
 
 def test_both_sides_negating_the_same_word_agree():
@@ -391,6 +637,28 @@ def test_scan_leaves_long_lines_out_and_says_how_many(tmp_path):
     assert [p.span.line for p in passages] == [1, 3, 5]
     assert all(text[p.span.start:p.span.end] == p.span.quote for p in passages)
     assert [(s.path, s.reason) for s in skipped] == [("notes.md", "long lines: 2 over 1,000 characters not read as passages")]
+
+
+def test_a_file_left_out_by_its_name_stays_out_wherever_the_root_is(tmp_path):
+    write_tree(tmp_path, {"patches/api.patch": "The rate limit is 100 requests per minute.\n"})
+    passages, skipped = scan(tmp_path / "patches")
+    assert passages == [] and [s.path for s in skipped] == ["api.patch"]
+
+
+DOCS = Path(__file__).resolve().parent.parent / "docs"
+WILD = DOCS.parent / "benchmarks" / "memfalsify" / "wild"
+
+
+@pytest.mark.parametrize("page, words", [
+    (DOCS / "lexical-rules.md", ["--evidence patches", "1,719", "794", "79 prose paragraphs"]),
+    (DOCS / "lexical-rules.zh-CN.md", ["--evidence patches", "1,719", "794", "79 个散文段落"]),
+    (WILD / "README.md", ["1,719", "794", "ruff's `AGENTS.md`"]),
+    (WILD / "README.zh-CN.md", ["1,719", "794", "ruff 的 `AGENTS.md`"]),
+])
+def test_the_pages_say_what_the_measurements_and_the_scan_say(page, words):
+    text = page.read_bytes().decode("utf-8")
+    assert all(word in text for word in words)
+    assert "a re-wrapped paragraph keeps its IDs" not in text and "重新折行的段落 ID 不变" not in text
 
 
 def test_a_file_named_by_a_review_still_reads(tmp_path):
