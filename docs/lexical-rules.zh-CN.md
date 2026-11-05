@@ -88,7 +88,7 @@ issue 和 pull request 编号（`#7326`）；名称、路径和版本号里的�
 
 ## 该多信任一个标记
 
-在 15 个公开仓库的智能体文件上，这些规则把被标记的配对从 1,371 对降到 50 对，被标记的记忆从 645 条降到 31 条；仍被标记的标注配对有 15 对，其中 9 对是真的（按否定的抽样比例换算后是 0.35）。`same subject, but only one side is negated` 是最弱的一类：在那里读下来没有一个是真的。[真实仓库基准](../benchmarks/memfalsify/wild/README.zh-CN.md) 给出了数字，也说明了它们可能怎样误导；[`benchmarks/memfalsify/RESULTS.md`](../benchmarks/memfalsify/RESULTS.md) 是合成用例的结果。
+在 15 个公开仓库的智能体文件上，这些规则把被标记的配对从 1,371 对降到 49 对，被标记的记忆从 645 条降到 30 条；仍被标记的标注配对有 16 对，其中 9 对是真的（按否定的抽样比例换算后是 0.33）。`same subject, but only one side is negated` 是最弱的一类：在那里读下来没有一个是真的。[真实仓库基准](../benchmarks/memfalsify/wild/README.zh-CN.md) 给出了数字，也说明了它们可能怎样误导；[`benchmarks/memfalsify/RESULTS.md`](../benchmarks/memfalsify/RESULTS.md) 是合成用例的结果。
 
 现在标记本来就少，所以一份干净的报告说明不了太多。这个验证器仍然会漏掉：
 

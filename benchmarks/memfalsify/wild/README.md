@@ -28,7 +28,7 @@ All labeling is by AI models, reviewed by the lead of the work, who is also an A
 
 The result is 11 real and 402 not real.
 
-The way claims are read changed after the labeling (wrapped lines are joined, abbreviations no longer cut a sentence, fragments are no longer claims), so the hashes were re-pointed at the text as it now reads. Of the 413 pairs, 72 name the longer claim that holds the labeled piece and 8 the longer passage, with the label kept. 19 pairs, all `not_real`, name text that is no longer a claim (a label, a table header, a closing tag) and carry `claim_dropped`: they count as no longer flagged. Nobody labeled the longer claims again, so a pair labeled on a fragment now stands for its whole sentence.
+The way text is read changed after the labeling (wrapped lines are joined in claims and in prose evidence, abbreviations no longer cut a sentence, fragments are no longer claims), so the hashes were re-pointed at the text as it now reads. Of the 413 pairs, 72 name the longer claim that holds the labeled piece and 26 the longer passage, with the label kept. 19 pairs, all `not_real`, name text that is no longer a claim (a label, a table header, a closing tag) and carry `claim_dropped`: they count as no longer flagged. Nobody labeled the longer claims again, so a pair labeled on a fragment now stands for its whole sentence.
 
 The rules were tuned on these repositories. A further set of repositories was kept out as a holdout, and is not part of these labels.
 
@@ -48,13 +48,13 @@ Measured on 2026-11-05, with the rules described in [the rules page](../../../do
 
 | | Before | Now |
 |---|---|---|
-| Flagged pairs in full audits | 1,371 | 50 (down 96.4%) |
-| Flagged claims in full audits | 645 | 31 |
+| Flagged pairs in full audits | 1,371 | 49 (down 96.4%) |
+| Flagged claims in full audits | 645 | 30 |
 | Of the 1,371 pairs, still flagged | 1,371 | 24 (down 98.2%) |
-| Labeled pairs flagged | 413 | 15 |
+| Labeled pairs flagged | 413 | 16 |
 | Real rows kept | 11 of 11 | 9 of 11 |
-| Precision on the labeled sample | 0.03 | 0.60 |
-| Precision scaled for the negation sample | 0.01 | 0.35 |
+| Precision on the labeled sample | 0.03 | 0.56 |
+| Precision scaled for the negation sample | 0.01 | 0.33 |
 
 By rule at labeling time, now:
 
@@ -62,11 +62,13 @@ By rule at labeling time, now:
 |---|---|---|---|---|---|---|
 | negation | 260 | 0 | 3 | 0 | 3 | 0.00 |
 | numbers | 70 | 10 | 9 | 8 | 1 | 0.89 |
-| opposing | 83 | 1 | 3 | 1 | 2 | 0.33 |
-| all | 413 | 11 | 15 | 9 | 6 | 0.60 |
+| opposing | 83 | 1 | 4 | 1 | 3 | 0.25 |
+| all | 413 | 11 | 16 | 9 | 7 | 0.56 |
 
 The two real rows lost are both pairs where the quoted source does not show the problem: one quotes the setting next to the one that disagrees (that claim is still flagged against the right line), and one quotes a list item whose heading, on an earlier line, says the items were removed (that claim is still flagged against another line). Every memory line behind a real row is still flagged.
 
-The full audits cover the 27 agent files of the 15 repositories, each against its own repository, and show at most three passages per claim, before and after. One of the 27, grafana's `AGENTS.md`, timed out before this work, so the 1,371 do not include it; it adds no flag now. Of the 50 pairs now flagged, 15 have a label (9 real), and 35 do not: 9 were among the 1,371 and 26 are new. By reason: `same setting` 22, `same subject` 19, `set differently` 3, `different values` 3, `opposing terms` 2, removal 1. The new pairs were read but not labeled. Most `same setting` ones point at the declaration the memory line disagrees with (`max_failures: int = 5`), which is the recall the old rules missed, and those are not counted in the 9 real rows above.
+The full audits cover the 27 agent files of the 15 repositories, each against its own repository, and show at most three passages per claim, before and after. One of the 27, grafana's `AGENTS.md`, timed out before this work, so the 1,371 do not include it; it adds no flag now. Of the 49 pairs now flagged, 15 have a label (8 real: two real rows were labeled on two pieces of one sentence, and now name one pair), and 34 do not: 9 were among the 1,371 and 25 are new. By reason: `same setting` 22, `same subject` 19, `set differently` 3, `opposing terms` 2, `different values` 2, removal 1. The new pairs were read but not labeled. Most `same setting` ones point at the declaration the memory line disagrees with (`max_failures: int = 5`), which is the recall the old rules missed, and those are not counted in the 9 real rows above.
+
+Reading wrapped evidence whole has a price and a gain. It adds one flagged row, not real, and costs 0.04 of precision on the sample, where the rows are few. Against that, a sentence wrapped in a memory line and wrapped again in a document now matches. Over the 25 agent files audited both before and after the change to how text is read (grafana's two timed out before it), claims went from 4,463 to 3,704, `NO EVIDENCE` from 3,474 to 2,966, `POSSIBLE SUPPORT` from 946 to 696 and `POSSIBLE COUNTEREVIDENCE` from 43 to 42. Most of the lost support was a fragment that matched by chance (`get closed.`); the labels say nothing about that part.
 
 The negation rule stays because synthetic cases state things like "deploys are never allowed on Fridays" and it finds them, but on these repositories it has no real row among the 260 sampled, and of the 19 flags it still gives none read as real. It did not reach usable precision here. Treat a `same subject, but only one side is negated` finding as weak; it ranks last in a report.
