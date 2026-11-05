@@ -71,6 +71,8 @@ _VERSIONED = re.compile(r"@[\w.^~-]*$")  # actions/checkout@v4, lodash/fp@4
 _DIGITS = re.compile(r"\d+")
 _VERSION_SEGMENT = re.compile(r"v\d+", re.IGNORECASE)  # api/v1/eval
 _PATH_TO = re.compile(r"(?:^|/)path/to(?:/|$)", re.IGNORECASE)  # test/path/to/test.ts
+# A source directory and a name that every project has: docs use src/app.py as an example of a path.
+_GENERIC_NAME = re.compile(r"^(?:app|main|index|utils?|helpers?|tests?|module|script|config)\.", re.IGNORECASE)
 # A segment that stands for something, not a name: nodes/YourService/, test_action_EventNameHere.py, snake_case.py
 _PLACEHOLDER_ANYWHERE = re.compile(
     r"^(?:foo|bar|baz|qux|quux|xxx+|yyy+|zzz+|nnn+|n+|x+|placeholder|snake_case|camelcase|pascalcase|kebab-case|"
@@ -218,6 +220,8 @@ def noise(ref: Reference) -> str | None:
     if first in GIT_NAMES:
         return "git name"
     if _PATH_TO.search(ref.path) or any(_placeholder(part, at == len(named) - 1) for at, part in enumerate(named)):
+        return "placeholder"
+    if len(named) == 2 and named[0] in SOURCE_DIRS and _GENERIC_NAME.match(named[1]):
         return "placeholder"
     if ref.bare:
         if len(named) == 2 and (named[0] not in SOURCE_DIRS or "remote" in ref.said):

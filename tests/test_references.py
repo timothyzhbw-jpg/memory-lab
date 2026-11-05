@@ -157,6 +157,8 @@ def test_a_sentence_that_starts_with_a_path_keeps_it(tmp_path):
     ("- Try `src/PROVIDER_NAME.py` and see what happens here.\n", "src/local.py"),
     ("- Move the old text to `docs/0.MINOR.x.md` at each release.\n", "docs/local.md"),
     ("- Try `src/your/path/thing.py` and see what happens here.\n", "src/local.py"),
+    ("- Run `/code-review src/app.py` to send the skill as your prompt.\n", "src/local.py"),
+    ("- Pass `tests/test.py` to the runner and read the output.\n", "tests/local.py"),
     ("- Run `go test ./src/myservice/` and see what happens here.\n", "src/local.py"),
     ("- Run `pytest tests/path/to/test.py` and read the output.\n", "tests/local.py"),
     ("- Try `src/<name>.py` and see what happens here.\n", "src/local.py"),
