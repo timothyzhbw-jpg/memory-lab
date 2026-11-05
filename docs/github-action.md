@@ -8,15 +8,24 @@ read-only: it never edits an instruction file or anything else in the workspace.
 
 ## What it catches, and what it does not
 
-The default verifier is `lexical`: offline, deterministic, and nothing leaves the runner. A passage is only
-compared with an instruction when it shares most of the instruction's terms (half to be considered, 60% to count
-as related). Within that, it reports **possible counterevidence** when:
+The default verifier is `lexical`: offline, deterministic, and nothing leaves the runner. It reports **possible
+counterevidence** when:
 
-- **numbers differ**: the instruction says the API limit is 100 requests per minute, `docs/api.md` says 60;
-  `PostgreSQL 15` against `PostgreSQL 16`.
-- **opposing terms** appear: approve/reject, enable/disable, allow/block, public/private, required/optional,
-  supported/deprecated, and similar pairs.
-- **only one side is negated**: one says *run X*, the other *never run X* (not, no, never, without, skip...).
+- **a setting has another value**: the instruction says `max_steps` defaults to 100, a line in the repository binds
+  `max_steps` to 500. This is the strongest signal, and these findings come first in the report.
+- **numbers or units differ in nearly the same sentence**: the instruction says the API limit is 100 requests per
+  minute, `docs/api.md` says 60; `PostgreSQL 15` against `PostgreSQL 16`; `2 minutes` against `2 seconds`.
+- **opposing terms** appear on the same subject: approve/reject, enable/disable, allow/block, public/private,
+  required/optional, supported/deprecated, and similar pairs.
+- **only one side negates** a word the other states plainly, on the same subject. A line that opens with *Do not* or
+  *Never* is an instruction, so it does not count.
+- **the source says it was removed**: everything the instruction names stands before *was removed*.
+
+Tests do not contradict an instruction by themselves. Changelogs and examples only do through a setting's value (a
+changelog also by saying something was removed), and source code only through values and numbers. Vendored and
+generated files and lines over 1,000 characters are not read; the report lists them. The
+[rules in full](lexical-rules.md) say more; [how they measure](../benchmarks/memfalsify/wild/README.md) on real
+repositories is written down too.
 
 It also flags **wording issues** in the instructions themselves. These are reported but never fail the build:
 absolute wording (*always*, *never*, *all*), relative time without a date (*next week*), dates older than
@@ -29,6 +38,8 @@ It does **not** catch:
   instructions against what the repository *says*, not what it *does*; linters and tests cover behavior.
 - **Paraphrases.** "Deploys go through staging" against "production releases skip the pre-prod cluster" share
   too few words. Model verifiers (below) judge paraphrases, within a bounded set of passages.
+- **Most negation.** Reading every *not* as a contradiction was wrong 99% of the time on real repositories, so that
+  rule now fires rarely. A build that passes has not ruled much out.
 - **Facts the repository never states.** These are reported as NO EVIDENCE, which never fails the build.
 
 Every match is a *candidate*. Only a human review can confirm it, and the action does not read

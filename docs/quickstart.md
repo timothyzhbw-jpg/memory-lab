@@ -33,7 +33,8 @@ memfalsify init demo && cd demo && memfalsify audit
 
 ## Read the report
 
-- The flags come from comparing words, so a flag means "read these two quotes", not "this is wrong". The comparison can miss a paraphrase and misread context. That is what `Verifier: lexical` in the header means; [model verifiers](local-setup.md) are optional.
+- The flags come from comparing words, so a flag means "read these two quotes", not "this is wrong". A flag needs the same setting with another value, or two nearly identical statements that differ; the comparison can still miss a paraphrase and misread context, so a report without flags has not ruled anything out. That is what `Verifier: lexical` in the header means ([the rules](lexical-rules.md)); [model verifiers](local-setup.md) are optional.
+- The scan skips vendored and generated files and lines over 1,000 characters, and lists them under `Skipped evidence`.
 - `m-c1b4957f` is the claim's ID, taken from its text. Editing a claim gives it a new ID, so an old review stops applying.
 - `Proposed actions` are suggestions. MemFalsify writes reports and proposals only; your memory files stay as they are.
 - The exit code is 0 whatever the report says, until you pass `--strict`: then it is 1 when a claim needs attention. It is 2 when the input cannot be used.
