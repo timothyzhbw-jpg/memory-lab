@@ -794,6 +794,14 @@ def test_a_cited_file_that_changed_under_the_same_head_is_refused(tmp_path):
         convert(tmp_path, findings=findings)
 
 
+def test_an_audit_with_no_file_named_gets_a_message_saying_what_to_run(tmp_path):
+    (tmp_path / "repo").mkdir(), (tmp_path / "dataset").mkdir()
+    audit, history = make_reports()
+    audit_set = {"tool": "memfalsify", "files": ["MEMORY.md"], "summary": {}, "reports": [audit]}
+    with pytest.raises(to_events.ConversionError, match="memfalsify audit MEMORY.md --format json"):
+        to_events.Converter(audit_set, history, "", tmp_path / "repo", tmp_path / "dataset")
+
+
 def test_reports_from_another_tool_are_refused(tmp_path):
     (tmp_path / "repo").mkdir(), (tmp_path / "dataset").mkdir()
     audit, history = make_reports()

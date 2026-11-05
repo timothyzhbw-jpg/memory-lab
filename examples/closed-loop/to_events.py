@@ -3,8 +3,8 @@
 
     to_events.py AUDIT_JSON HISTORY_JSON HISTORY_MD --repo REPO --dataset DATASET [--audited-at TIME]
 
-AUDIT_JSON is `memfalsify audit --format json`, HISTORY_JSON is `memfalsify history --format json` and HISTORY_MD
-is `memfalsify history`, all run from REPO. Each line printed is a JSON object for one real command:
+AUDIT_JSON is `memfalsify audit MEMORY.md --format json` (a run that names the file), HISTORY_JSON is
+`memfalsify history MEMORY.md --format json` and HISTORY_MD is `memfalsify history MEMORY.md`, all run from REPO. Each line printed is a JSON object for one real command:
 {"kind": "evidence", ...} for `orgmemory evidence add` and {"kind": "event", "event": {...}} for `orgmemory append`.
 docs/architecture.md has the field-by-field mapping.
 
@@ -104,6 +104,9 @@ class Converter:
                  audited_at: str | None = None) -> None:
         if audit.get("tool") != "memfalsify" or history.get("tool") != "memfalsify":
             raise ConversionError("the inputs are not MemFalsify reports")
+        if "reports" in audit and "findings" not in audit:
+            raise ConversionError("this audit ran with no file named, which prints several reports; "
+                                  "name the memory file: memfalsify audit MEMORY.md --format json")
         if not isinstance(history.get("head"), str) or not COMMIT.match(history["head"]):
             raise ConversionError("the history has no HEAD commit to cite; commit the memory first")
         self.audit, self.history, self.history_report = audit, history, history_report
@@ -272,9 +275,9 @@ def _ids(manifest: Path) -> set[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Convert MemFalsify reports into orgmemory records (JSON lines).")
-    parser.add_argument("audit", type=Path, help="memfalsify audit --format json")
-    parser.add_argument("history", type=Path, help="memfalsify history --format json")
-    parser.add_argument("history_report", type=Path, help="memfalsify history (Markdown)")
+    parser.add_argument("audit", type=Path, help="memfalsify audit MEMORY.md --format json")
+    parser.add_argument("history", type=Path, help="memfalsify history MEMORY.md --format json")
+    parser.add_argument("history_report", type=Path, help="memfalsify history MEMORY.md (Markdown)")
     parser.add_argument("--repo", type=Path, required=True, help="the directory the reports were made in")
     parser.add_argument("--dataset", type=Path, required=True, help="the orgmemory dataset directory")
     parser.add_argument("--audited-at", type=audit_time, help="when the audit ran, with a zone (default: the end of "

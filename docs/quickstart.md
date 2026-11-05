@@ -57,7 +57,7 @@ memfalsify audit
 
 The files come from `memfalsify discover` (`CLAUDE.md`, `AGENTS.md` and `GEMINI.md` at any depth; Cursor, Copilot, Windsurf and Devin rules where those agents look for them), plus a `MEMORY.md` at the top of the directory. A line on stderr says which ones were chosen. If there are none, the command exits with code 2 and suggests `memfalsify init`.
 
-The evidence is the current directory, or `--evidence DIR`. The rules are the ones the GitHub Action and the web page use:
+The evidence is the current directory, or `--evidence DIR`. The rules are the ones the web page uses:
 
 - Hidden files and folders, `node_modules/`, `__pycache__/` and `venv/` are not read. Files over 2 MB are not read either, and neither are files that are not UTF-8 text.
 - Media files count only through a transcript or OCR sidecar.

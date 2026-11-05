@@ -1,7 +1,7 @@
 """Audit a directory's memory and instruction files together: ``memfalsify audit`` with no MEMORY argument.
 
 The files are what ``discover`` lists plus a top-level ``MEMORY.md``. The evidence is scanned once and follows the
-Action's and the web page's rules: ``scan``'s skips, Memory Lab's own files left out, and each file's evidence
+web page's rules: ``scan``'s skips, Memory Lab's own files left out, and each file's evidence
 holding everything but that file and the files it links to. So agent files count as evidence for each other,
 which is how two files that disagree show up.
 

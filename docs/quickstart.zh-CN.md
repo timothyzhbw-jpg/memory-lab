@@ -57,7 +57,7 @@ memfalsify audit
 
 文件来自 `memfalsify discover`（任意深度的 `CLAUDE.md`、`AGENTS.md`、`GEMINI.md`，以及这些智能体约定位置上的 Cursor、Copilot、Windsurf 和 Devin 规则），再加上目录顶层的 `MEMORY.md`。stderr 上有一行说明选中了哪些文件。一个都没有时，命令以退出码 2 结束，并建议运行 `memfalsify init`。
 
-证据是当前目录，或 `--evidence DIR`。规则和 GitHub Action、网页用的一样：
+证据是当前目录，或 `--evidence DIR`。规则和网页用的一样：
 
 - 不读隐藏文件和隐藏文件夹，不读 `node_modules/`、`__pycache__/`、`venv/`。超过 2 MB 的文件和不是 UTF-8 文本的文件也不读。
 - 媒体文件只通过转录或 OCR 旁车文件算作证据。

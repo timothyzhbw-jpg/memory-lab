@@ -24,8 +24,8 @@ The [closed-loop demo](../examples/closed-loop/README.md) runs everything on thi
  Remember    a commit adds a line to MEMORY.md
     |
     v
- Verify      memfalsify audit --format json     finding: memory_id, text, location, status, evidence
-             memfalsify history --format json   claim: memory_id, text, location, introduced
+ Verify      memfalsify audit MEMORY.md --format json     finding: memory_id, text, location, status, evidence
+             memfalsify history MEMORY.md --format json   claim: memory_id, text, location, introduced
     |
     v
  Challenge   to_events.py
@@ -46,7 +46,7 @@ MemFalsify never writes a fact or edits memory: it writes reports and proposals.
 
 ### A memory write: two events per line
 
-From `memfalsify history --format json`, `claims[]`:
+From `memfalsify history MEMORY.md --format json`, `claims[]`:
 
 | History field | Event field | Rule |
 |---|---|---|
@@ -67,7 +67,7 @@ The approval is `approve` for the same reason a merged pull request is: [`github
 
 ### A finding: one event or none
 
-From `memfalsify audit --format json`, `findings[]`:
+From `memfalsify audit MEMORY.md --format json`, `findings[]`, a run that names the file:
 
 | Finding field | Event field | Rule |
 |---|---|---|

@@ -24,8 +24,8 @@ Agent 的 `MEMORY.md` 里多一行，它相信的东西就变了，所以这一�
  记住    一次提交把一行加进 MEMORY.md
   |
   v
- 验证    memfalsify audit --format json     finding：memory_id、text、location、status、evidence
-         memfalsify history --format json   claim：memory_id、text、location、introduced
+ 验证    memfalsify audit MEMORY.md --format json     finding：memory_id、text、location、status、evidence
+         memfalsify history MEMORY.md --format json   claim：memory_id、text、location、introduced
   |
   v
  质疑    to_events.py
@@ -46,7 +46,7 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 
 ### 一次记忆写入：每行两个事件
 
-来自 `memfalsify history --format json` 的 `claims[]`：
+来自 `memfalsify history MEMORY.md --format json` 的 `claims[]`：
 
 | history 字段 | 事件字段 | 规则 |
 |---|---|---|
@@ -67,7 +67,7 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 
 ### 一条发现：一个事件，或者没有
 
-来自 `memfalsify audit --format json` 的 `findings[]`：
+来自 `memfalsify audit MEMORY.md --format json` 的 `findings[]`（点名文件的运行）：
 
 | finding 字段 | 事件字段 | 规则 |
 |---|---|---|

@@ -25,7 +25,7 @@ Release 0.5 contains:
   refuses with exit 2, writing nothing, if a target exists. The templates ship in the wheel.
 - memfalsify: the MEMORY argument of `memfalsify audit` is now optional. Left out, the command takes every instruction
   file `memfalsify discover` finds in the current directory plus a top-level `MEMORY.md`, in path order, and compares
-  them with that directory or `--evidence`. The evidence follows the rules of the Action and the web page, which keep
+  them with that directory or `--evidence`. The evidence follows the rules of the web page, which keep
   Memory Lab's own files (review records, decision logs, generated reports) out of it. One line on stderr says which
   files were chosen. Several files share one Markdown or HTML report, and a claim stated in several files is reported
   once. `--format json` prints one `AuditSet` object at any file count. `--strict` keeps its meaning across the files.
