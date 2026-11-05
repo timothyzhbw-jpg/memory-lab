@@ -18,6 +18,7 @@ from memcore.paths import InputPathError, input_path
 from memcore.reading import ReadLimitError, available, read_input_bytes, take, walk_files
 from memcore.sidecar import LABELS, MEDIA_SUFFIXES
 
+from .blocks import unwrapped
 from .text import features, sentence_spans
 
 MEDIA = MEDIA_SUFFIXES
@@ -100,6 +101,15 @@ def source_kind(relative: str) -> str | None:
     if folders & _EXAMPLE_DIRS or _EXAMPLE_NAME.search(name):
         return "example"
     return None
+
+
+_PROSE_SUFFIXES = frozenset({".md", ".mdx", ".mdc", ".markdown", ".rst", ".txt"})
+
+
+def as_read(name: str, text: str) -> str:
+    """A file's text as passages are cut from it, at the same length, so offsets still point into the file. In prose, a
+    sentence wrapped over several lines is one passage, as it is in a memory file. Code and data stay line by line."""
+    return unwrapped(text) if PurePath(name).suffix.lower() in _PROSE_SUFFIXES else text
 
 
 def _matches(relative: str, patterns: list[str], directory: bool = False) -> bool:
@@ -223,7 +233,7 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 local.append(Skipped(path=relative, reason=long_lines_note(len(long_lines))))
             # Blanked with the same length, so the spans still point into the file as it is.
             readable = LONG_LINE.sub(lambda m: " " * len(m.group()), text) if long_lines else text
-            passages += [p for start, end in sentence_spans(readable)
+            passages += [p for start, end in sentence_spans(as_read(name, readable))
                          if (p := _passage(relative, digest, text, start, end))]
         covered = {media[name] for name in bound if name in media}
         skipped += [s for s in local if not (s.reason == NO_SIDECAR and s.path in covered)]

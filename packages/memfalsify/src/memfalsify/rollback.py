@@ -8,11 +8,12 @@ from pathlib import Path
 
 from memcore.reading import read_file_bytes
 
+from .blocks import Block, block_at, blocks
 from .corpus import ROLLBACK_HEADER
 from .gitstore import HistoryError, Objects, Snapshot, open_repository, printable
 from .history import Change, compare
 from .formats import frontmatter
-from .memory import Block, Claim, block_at, blocks, claim_id, claim_ids, on_one_line
+from .memory import Claim, block_sentences, claim_id, claim_ids, on_one_line
 
 CLAIM_ID = re.compile(r"m-[0-9a-f]{8}")
 LIST_MARKER = re.compile(r"^\s*(?:(?:>|[-*+]|\d+[.)]|\[[ xX]\])\s+)*")
@@ -57,7 +58,7 @@ def _patch(repo_path: str, before: list[str], after: list[str]) -> str:
 
 def _spans(block: Block, memory_id: str) -> list[tuple[int, int]]:
     """Raw spans (markup included) of the sentences in one block whose claim ID is ``memory_id``."""
-    return [(start, end) for text, start, end in block.sentences() if claim_id(text) == memory_id]
+    return [(start, end) for text, start, end in block_sentences(block) if claim_id(text) == memory_id]
 
 
 def _old_sentence(snapshot: Snapshot, claim: Claim) -> tuple[str, Block]:
@@ -213,7 +214,8 @@ def rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool = 
         lines = lines_of(gone.path)
         # A block holding only this claim comes back verbatim; otherwise the sentence alone, under the block's
         # list or quote marker.
-        text = old_block.raw if len(old_block.sentences()) == 1 else LIST_MARKER.match(old_block.raw).group() + sentence
+        alone = len(block_sentences(old_block)) == 1
+        text = old_block.raw if alone else LIST_MARKER.match(old_block.raw).group() + sentence
         at = _anchor(old, changes, gone, lines)
         if at == len(lines) and lines and not lines[-1].endswith("\n"):
             lines[-1] += _ending(lines)

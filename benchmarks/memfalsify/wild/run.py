@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 from memcore.display import report_text  # noqa: E402
 from memfalsify import LexicalVerifier, audit, parse_memory  # noqa: E402
 from memfalsify.audit import weighed  # noqa: E402
-from memfalsify.corpus import MAX_LINE, left_out_reason  # noqa: E402
+from memfalsify.corpus import MAX_LINE, as_read, left_out_reason  # noqa: E402
 from memfalsify.text import sentence_spans  # noqa: E402
 
 LABELS = Path(__file__).resolve().parent / "labels.jsonl"
@@ -102,7 +102,7 @@ def _quote(clone: Path, row: Row) -> tuple[str | None, int]:
         return None, 0
     lines = text.split("\n")
     width = len(lines[row.source_line - 1]) if row.source_line and row.source_line <= len(lines) else 0
-    for start, end in sentence_spans(text):
+    for start, end in sentence_spans(as_read(row.source_path, text)):
         if sha256(text[start:end]) == row.quote_sha256:
             return text[start:end], width
     return None, width

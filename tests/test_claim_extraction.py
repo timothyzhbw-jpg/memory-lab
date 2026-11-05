@@ -4,6 +4,7 @@ The texts are made up, in the shapes that came out of real agent files. The roll
 that claims read across lines survive files whose line structure changed between commits.
 """
 import json
+import re
 import shutil
 import subprocess
 
@@ -11,8 +12,11 @@ import pytest
 
 from conftest import write_text_exact
 from memfalsify import audit
+from memfalsify.blocks import unwrapped
+from memfalsify.corpus import as_read
 from memfalsify.history import compare, memory_diff, memory_history
 from memfalsify.memory import blocks, claim_id, is_fragment, parse_text, sentences
+from memfalsify.report import to_markdown
 from memfalsify.rollback import rollback_patch
 from memfalsify.text import sentence_spans
 
@@ -162,6 +166,88 @@ def test_raw_spans_cover_the_lines_with_their_markup():
     assert text == "The cache uses Redis through a client that was written long ago for the old queue."
     assert raw[start:end] == ("The cache uses **Redis** through a client that was written long ago for\n"
                               "  [the old queue](https://x.test).")
+
+
+# --- wrapped lines in evidence -----------------------------------------------------------------------------------
+
+STATED = ("Every pull request must link to an issue with the closing keyword, and that issue must carry the accepted\n"
+          "label before anyone reviews the change.")
+
+
+def evidence_project(tmp_path, evidence: str, name: str = "guide.md"):
+    (tmp_path / "evidence").mkdir()
+    write_text_exact(tmp_path / "evidence" / name, evidence)
+    return tmp_path / "evidence"
+
+
+def test_a_wrapped_claim_finds_the_same_sentence_wrapped_elsewhere_in_evidence(tmp_path):
+    evidence = evidence_project(tmp_path, "# Guide\n\n" + STATED.replace("accepted\n", "accepted\n  ") + "\n")
+    write_text_exact(tmp_path / "MEMORY.md", f"- {STATED.replace('the closing', 'the\n  closing')}\n")
+    [finding] = audit(tmp_path / "MEMORY.md", evidence).findings
+    assert finding.status == "candidate_support"
+    [item] = finding.evidence
+    assert item.span.line == 3 and "accepted\n  label" in item.span.quote
+    assert (evidence / "guide.md").read_text(encoding="utf-8")[item.span.start:item.span.end] == item.span.quote
+
+
+def test_a_wrapped_passage_can_contradict_a_claim(tmp_path):
+    evidence = evidence_project(tmp_path, "The public API allows 60 requests per minute for each key that we hand\n"
+                                          "out to customers on the paid plans.\n")
+    write_text_exact(tmp_path / "MEMORY.md", "The public API allows 100 requests per minute for each key that we hand out "
+                                             "to customers on the paid plans.\n")
+    [finding] = audit(tmp_path / "MEMORY.md", evidence).findings
+    assert finding.status == "candidate_counterevidence" and finding.evidence[0].span.line == 1
+
+
+@pytest.mark.parametrize("name", ["guide.md", "guide.MDX", "notes.txt", "guide.rst"])
+def test_prose_files_are_read_with_their_wrapped_lines(name):
+    assert as_read(name, STATED) == STATED.replace("\n", " ")
+
+
+@pytest.mark.parametrize("name", ["views.py", "app.ts", "config.json", "schema.yaml", "Makefile"])
+def test_code_and_data_stay_line_by_line(name):
+    assert as_read(name, STATED) == STATED
+
+
+@pytest.mark.parametrize("text", [
+    STATED, STATED.replace("\n", "\r\n") + "\r\n", "# Title\n\n- " + STATED + "\n- Next item here\n",
+    "```\ncode one that is long enough to count as a wrapped line if it were prose, and\ncode two\n```\n",
+    "| a | b |\n|---|---|\n| c | d |\n", "", "\n\n", "no newline",
+])
+def test_reading_keeps_every_offset(text):
+    read = unwrapped(text)
+    assert len(read) == len(text)
+    assert [line for line in read.split() if line] == [line for line in text.split() if line]
+
+
+def test_code_fences_and_table_rows_in_prose_are_not_joined():
+    fence = "```\ncode one that is long enough to count as a wrapped line if it were prose, and\ncode two\n```\n"
+    assert unwrapped(fence) == fence
+    table = "| a row that is long enough to count as a wrapped line if it were prose, and it ends |\n| next |\n"
+    assert unwrapped(table) == table
+
+
+def test_a_crlf_file_keeps_its_offsets_and_the_quote_keeps_its_bytes(tmp_path):
+    raw = STATED.replace("\n", "\r\n") + "\r\n"
+    evidence = evidence_project(tmp_path, raw)
+    write_text_exact(tmp_path / "MEMORY.md", " ".join(STATED.split()) + "\n")
+    [finding] = audit(tmp_path / "MEMORY.md", evidence).findings
+    assert finding.status == "candidate_support" and finding.evidence[0].span.quote == STATED.replace("\n", "\r\n")
+
+
+def test_a_wrapped_quote_shows_a_line_per_line_and_the_printed_line_is_exact(tmp_path):
+    raw = "The public API allows 60 requests per minute for each key that we hand\n    out to customers.\n"
+    evidence = evidence_project(tmp_path, raw)
+    write_text_exact(tmp_path / "MEMORY.md", "The public API allows 100 requests per minute for each key that we hand out "
+                                             "to customers.\n")
+    report = audit(tmp_path / "MEMORY.md", evidence)
+    markdown = to_markdown(report)
+    assert ("  > The public API allows 60 requests per minute for each key that we hand\n"
+            "  > out to customers.\n") in markdown
+    line = next(json.loads(item) for item in re.findall(r"(\{\"memory_id.*\})`$", markdown, re.MULTILINE))
+    assert line["quote"] == raw.rstrip("\n")
+    write_text_exact(tmp_path / "reviews.jsonl", json.dumps(line) + "\n")
+    assert audit(tmp_path / "MEMORY.md", evidence, tmp_path / "reviews.jsonl").findings[0].status == "insufficient_evidence"
 
 
 # --- fragments -------------------------------------------------------------------------------------------------

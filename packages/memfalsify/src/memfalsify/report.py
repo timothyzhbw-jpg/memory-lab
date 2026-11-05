@@ -48,9 +48,13 @@ def skipped_line(path: str, reason: str, show: Callable[[str], str] = _as_is) ->
     return f"- {code_span(path)}: {show(reason)}"
 
 
-def quote_lines(quote: str, show: Callable[[str], str] = _as_is, indent: str = "  ") -> list[str]:
-    """One literal blockquote line, including escaped cue line breaks."""
-    return [f"{indent}> {show(quote)}"]
+def quote_lines(quote: str, show: Callable[[str], str] = _as_is, indent: str = "  ", *, cue: bool = True) -> list[str]:
+    """One literal blockquote line, including escaped cue line breaks. A sentence wrapped in a text file (not a ``cue``)
+    gets a line per line, and a line that continues it shows without its indent: the exact bytes are in the JSON report
+    and in the line under a flag."""
+    if cue or "\n" not in quote:
+        return [f"{indent}> {show(quote)}"]
+    return [f"{indent}> {show(line.strip())}" for line in quote.split("\n")]
 
 
 def _code(text: str) -> str:
@@ -92,7 +96,7 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
             who = f"confirmed by {show(e.reviewer)}" if e.confirmed else "candidate, unconfirmed"
             out.append(f"- {show(e.relation)} ({who}) · {source(e.span, show)} · {show(e.rationale)}")
             out += [f"  - {show(o.verifier)}: {show(o.relation)} · {show(o.rationale)}" for o in e.opinions]
-            out += quote_lines(e.span.quote, show)
+            out += quote_lines(e.span.quote, show, cue=e.span.media is not None)
             if can_dismiss(e):
                 out.append(f"  - Does not bear on this claim? Add to reviews.jsonl: "
                            f"{code_span(dismissal_line(f.memory_id, e.span))}")
@@ -102,7 +106,7 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
         for e in f.dismissed:
             note = "" if e.rationale == DISMISSED else f" · {show(e.rationale)}"
             out.append(f"- dismissed by {show(e.reviewer)} · {source(e.span, show)}{note}")
-            out += quote_lines(e.span.quote, show)
+            out += quote_lines(e.span.quote, show, cue=e.span.media is not None)
         out.append("")
     if f.issues:
         out.append("**Issues**")
