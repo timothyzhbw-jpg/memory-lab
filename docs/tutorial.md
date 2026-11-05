@@ -2,7 +2,7 @@
 
 English | [中文](tutorial.zh-CN.md)
 
-About 15 minutes, from a checkout of this repository. You will install the CLIs, audit a `MEMORY.md` against evidence, record a review, audit a `CLAUDE.md` and `AGENTS.md` change with `memfalsify diff` in a throwaway git repository, check `history` and `rollback`, replay an organizational dataset, explain a subject, audit the decision process, convert the GitHub example captures with `orgmemory github convert`, and register the read-only MCP server.
+The [quick start](quickstart.md) gets you to a first report in two commands. This page takes about 15 minutes, from a checkout of this repository. You will install the CLIs, audit a `MEMORY.md` against evidence, record a review, audit a `CLAUDE.md` and `AGENTS.md` change with `memfalsify diff` in a throwaway git repository, check `history` and `rollback`, replay an organizational dataset, explain a subject, audit the decision process, convert the GitHub example captures with `orgmemory github convert`, and register the read-only MCP server.
 
 Run the blocks below from the repository root, in one terminal, in order. Later blocks use variables set by earlier ones. Every block is bash and starts with `# exit N`, the exit code of that block. `0` means the commands finished. `1` on a `--strict` run means the report found a claim or a decision that needs a person. `2` would mean a bad argument or unreadable input; none of these blocks expects `2`.
 

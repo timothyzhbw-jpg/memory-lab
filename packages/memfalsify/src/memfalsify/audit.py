@@ -95,7 +95,25 @@ class AuditReport(BaseModel):
     limitations: list[str]
 
 
-LEXICAL_NOTE = "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
+class AuditSet(BaseModel):
+    """``memfalsify audit`` with no MEMORY argument: one ``AuditReport`` per file, in ``files`` order.
+
+    ``summary`` adds up the reports. A claim stated in several of the files is reported once, under the first
+    file that states it, and lists the others in its duplicate issue."""
+    tool: str = "memfalsify"
+    version: str = __version__
+    mode: Literal["read_only"] = "read_only"
+    files: list[str]
+    evidence_root: str
+    excluded: list[str] = []
+    verifier: str
+    as_of: date
+    summary: dict[str, int]
+    reports: list[AuditReport]
+    not_searched: list[Skipped] = []  # places the search for memory files passed over, with the reason
+
+
+LEXICAL_NOTE ="Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
 MODEL_NOTE = ("Unconfirmed matches are model judgments on passages pre-selected by term overlap; "
               "passages that share too few terms with a memory are never judged, and models can be wrong.")
 MEDIA_NOTE = ("Transcript and OCR quotes show what a sidecar says about a media file, not what was said or shown; "
@@ -531,7 +549,6 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     of the evidence. The verifier gets every shortlisted (claim, passage) pair in one ``judge_all`` call."""
     verifier = verifier or LexicalVerifier()
     as_of = as_of or date.today()
-    by_id = {c.id: c for c in claims}
     selected = None if only is None else set(only)
     targets = [c for c in claims if selected is None or c.id in selected]
     root = Path(evidence_root).resolve() if evidence_root else None
@@ -543,6 +560,20 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     # When a selection is empty there is nothing to look up, so the evidence is not scanned.
     scanned = root is not None and (selected is None or bool(targets))
     passages, skipped = scan(root, exclude=exclude, memory_files=memory_paths) if scanned else ([], [])
+    return judge_passages(claims, targets, passages, skipped, memory_file=memory_file, files_read=files_read,
+                          evidence_root=evidence_root, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
+                          stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
+                          max_judged=max_judged, exclude=exclude, max_concurrency=max_concurrency)
+
+
+def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Passage], skipped: list[Skipped], *,
+                   memory_file: str, files_read: list[str], evidence_root: Path | None, root: Path | None,
+                   reviews: Path | None, verifier: Verifier, as_of: date, stale_days: int, max_candidates: int,
+                   min_coverage: float, max_judged: int | None, exclude: list[str], max_concurrency: int,
+                   conflict_index: _ConflictIndex | None = None) -> AuditReport:
+    """``audit_claims`` from the point where the evidence has been scanned. ``targets`` are the claims to report;
+    ``skipped`` receives what the reviews leave out. ``conflict_index``, over ``claims``, can be shared."""
+    by_id = {c.id: c for c in claims}
     if targets and root is not None and exclude and not passages:
         raise EvidenceError("no evidence passages indexed with --exclude; check the exclusion patterns")
     confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
@@ -552,7 +583,8 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
     judgments = iter(judge_all(verifier, pairs, max_concurrency))
     stats = usage_since(before, verifier_usage(verifier))
     findings = []
-    conflict_index = _ConflictIndex(claims) if targets else None
+    if conflict_index is None and targets:
+        conflict_index = _ConflictIndex(claims)
     for claim in targets:
         reviewed = confirmed.get(claim.id, [])
         judged = [(passage, next(judgments)) for passage in picked[claim.id]]

@@ -276,6 +276,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 |---|---|
 | `memfalsify.ATTENTION` | Frozen set of statuses counted by strict audits: challenged, conflicted, candidate_counterevidence, disputed. |
 | `memfalsify.AuditReport` | Read-only audit result with findings, status counts, per-backend API usage (verifier_stats), skipped evidence, and limitations. |
+| `memfalsify.AuditSet` | Result of auditing a directory: the files chosen, summed status counts, one AuditReport per file in order, and what the search for files passed over (not_searched). `memfalsify audit --format json` with no MEMORY argument prints this. |
 | `memfalsify.CascadeVerifier` | Construct with first, second, accept_at=0.8; escalate when first has insufficient confidence. judge_many asks first about every pair, then second about the unsure ones; usage() combines both backends. |
 | `memfalsify.Change` | Frozen comparison result: kind, old/new Claim, similarity, and moved flag. |
 | `memfalsify.Claim` | Parsed claim with stable ID, text, path, line, section, duplicate locations, and the frontmatter metadata its file's format documents (for example a Cursor rule's globs). |
@@ -311,6 +312,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.__version__` | Installed distribution version string. |
 | `memfalsify.audit` | Parse memory and audit it against optional evidence/reviews; never edits memory. max_concurrency bounds simultaneous verifier calls (default 1). |
 | `memfalsify.audit_claims` | Audit parsed claims; only= selects findings while review/conflict checks retain all claims. memory_paths are excluded from evidence. |
+| `memfalsify.audit_directory` | Audit every instruction file discovery finds in a directory plus its top-level MEMORY.md, against evidence_root (default: that directory), in path order; returns an AuditSet with no files when none exists. A claim stated in several files is reported once. Never edits memory. |
 | `memfalsify.audit_staged` | Audit every claim in the git index copy of a memory file (and its linked .md files, also from the index) against working-tree evidence; never edits memory. |
 | `memfalsify.claim_id` | Return the normalized-text memory ID. |
 | `memfalsify.compare` | Compare two Claim lists deterministically by ID, section, and term similarity. |
@@ -330,6 +332,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 ```python
 audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
 audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
+audit_directory(directory: Path=Path('.'), evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, progress: Callable[[str], None] | None=None) -> AuditSet
 audit_staged(memory_file: Path, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]

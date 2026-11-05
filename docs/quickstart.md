@@ -1,0 +1,113 @@
+# Quick start
+
+English | [中文](quickstart.zh-CN.md)
+
+From nothing to a first MemFalsify report takes two commands: one to install, one to make a demo and audit it. Everything here runs offline, with no API key. The [tutorial](tutorial.md) goes further: `diff`, `history`, `rollback` and the other tool in this repository.
+
+## 1. Install
+
+You need Python 3.10 or newer and git. From a checkout of this repository:
+
+```bash
+git clone https://github.com/timothyzhbw-jpg/memory-lab.git && cd memory-lab
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e packages/memcore -e packages/memfalsify
+```
+
+## 2. Audit the demo
+
+```bash
+# exit 0
+memfalsify init demo && cd demo && memfalsify audit
+```
+
+`init` writes a small project into a new directory: a `MEMORY.md` with three claims, `evidence/` with two files, and an empty `reviews.jsonl`. It refuses, with exit code 2 and nothing written, if any of those files already exists. `--lang zh` writes the same demo in Chinese.
+
+`audit` with no arguments takes the memory files in the current directory and compares them with everything else in it. The report shows three outcomes:
+
+| The report says | The claim | Why |
+|---|---|---|
+| `POSSIBLE COUNTEREVIDENCE` | The public API allows 100 requests per minute. | `evidence/api.md:3` says 60. Both quotes are shown, with the file's SHA-256. |
+| `POSSIBLE SUPPORT` | Database backups run nightly at 02:00 UTC. | `evidence/runbook.md:3` says the same thing. |
+| `NO EVIDENCE` | The design team prefers short release notes. | Nothing in the folder mentions it. That means unchecked, not wrong. |
+
+## Read the report
+
+- The flags come from comparing words, so a flag means "read these two quotes", not "this is wrong". The comparison can miss a paraphrase and misread context. That is what `Verifier: lexical` in the header means; [model verifiers](local-setup.md) are optional.
+- `m-c1b4957f` is the claim's ID, taken from its text. Editing a claim gives it a new ID, so an old review stops applying.
+- `Proposed actions` are suggestions. MemFalsify writes reports and proposals only; your memory files stay as they are.
+- The exit code is 0 whatever the report says, until you pass `--strict`: then it is 1 when a claim needs attention. It is 2 when the input cannot be used.
+
+Only a person can mark a claim supported or challenged, by recording a review. Add this line to `reviews.jsonl`:
+
+```bash
+# exit 0
+printf '%s\n' '{"memory_id": "m-c1b4957f", "relation": "contradicts", "path": "evidence/api.md", "quote": "The public API allows 60 requests per minute.", "reviewer": "you"}' >> reviews.jsonl
+memfalsify audit --reviews reviews.jsonl
+```
+
+The claim is now `CHALLENGED`, confirmed by you. `memfalsify init` prints the same line, and `memfalsify claims MEMORY.md` lists the IDs. A file of review records never counts as evidence. It applies only when you pass `--reviews`, and the command tells you when it sees one you did not pass.
+
+## Run it in your own repository
+
+```bash
+cd your-repository
+memfalsify audit
+```
+
+The files come from `memfalsify discover` (`CLAUDE.md`, `AGENTS.md` and `GEMINI.md` at any depth; Cursor, Copilot, Windsurf and Devin rules where those agents look for them), plus a `MEMORY.md` at the top of the directory. A line on stderr says which ones were chosen. If there are none, the command exits with code 2 and suggests `memfalsify init`.
+
+The evidence is the current directory, or `--evidence DIR`. The rules are the ones the GitHub Action and the web page use:
+
+- Hidden files and folders, `node_modules/`, `__pycache__/` and `venv/` are not read. Files over 2 MB are not read either, and neither are files that are not UTF-8 text.
+- Media files count only through a transcript or OCR sidecar.
+- MemFalsify's and orgmemory's reports, review records and decision logs are left out.
+- Each file's evidence is everything except that file and the files it links to. Your other agent files do count, which is how two files that disagree show up.
+
+The report lists what it skipped. `--exclude GLOB` (repeatable) leaves files out of both the choice of memory files and the evidence: `memfalsify audit --exclude 'tests/fixtures/**' --exclude 'vendor/**'`.
+
+Several files share one report, in path order: totals, a table of the files, then a section per file. A claim stated in two files appears once, with the other place listed as a duplicate. With one file, the Markdown and HTML reports have the same layout as `memfalsify audit FILE --evidence .`. With `--format json` the shape does not depend on the count: one object with `files`, `summary` and `reports`, a list of the same objects `memfalsify audit FILE --format json` prints. `--strict` means what it always means: exit 1 if any claim in any of the files needs attention.
+
+Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, and no evidence unless you pass `--evidence`.
+
+## Use git history as evidence
+
+Commit messages often record what was decided and why. This turns them into evidence files:
+
+```bash
+# exit 0
+git init -q history && cd history
+git -c user.name=you -c user.email=you@example.com commit -q --allow-empty -m "Lower the public API limit to 60 requests per minute"
+memfalsify evidence from-git --since 2026-01-01 --output commits --max-commits 100
+```
+
+Then compare against them with `memfalsify audit --evidence commits`. If `commits/` sits inside the project, a plain `memfalsify audit` reads it along with everything else.
+
+`--since` takes a date (`2026-01-31` means midnight UTC, `2026-01-31T12:00:00+02:00`, `'30 days ago'`), matched against the committer date, or a commit, tag or branch, meaning the commits after it up to `HEAD`. A value that looks like a date is read as a date, and a value that is neither a date nor a commit is refused.
+
+Each commit becomes one small Markdown file, named by its 12-digit hash (the full hash, if two selected commits share 12 digits). It starts with a fixed header, the short hash, the full hash and the author date, followed by the subject and body:
+
+```text
+# Commit 1a2b3c4d5e6f
+
+- Full hash: 1a2b3c4d5e6f...
+- Author date: 2026-11-04T10:00:00-06:00
+
+Lower the public API limit to 60 requests per minute
+```
+
+The same commits give the same bytes, so a re-run adds only what is new. Dates given in full do not depend on the machine; `'30 days ago'` depends on when you run it. The command writes only inside `--output` and only reads the repository. It refuses `--output` inside the git directory, and it stops with nothing written if a file there holds different content.
+
+A commit message is text from whoever wrote the commit, so it is a candidate source like any other. Control, bidi and zero-width characters in a message are stored as visible `\uXXXX` escapes, not raw and not removed (a joiner inside real text, as in Persian or an emoji sequence, stays):
+
+- A quote and its hash describe the evidence file, so the quote in a report is exact either way, and it matches what you see when you open the file. You can copy it into `reviews.jsonl` as it is.
+- Printing the file cannot drive your terminal.
+- Removing such characters would hide that they were there, and could turn the text into a word its author's bytes did not hold. The full hash leads to the original.
+
+Bytes that are not UTF-8 become U+FFFD, and a message over 256 KB is cut, with a note saying so. A character newer than your Python's Unicode tables is also stored as an escape, so that one rare case can differ between Python versions.
+
+A GitHub version, with pull request titles and bodies, is on the roadmap.
+
+## Windows
+
+The commands are the same. PowerShell 7 accepts `&&`; in Windows PowerShell 5, use `;`: `memfalsify init demo; cd demo; memfalsify audit`. To add the review line, paste it into `reviews.jsonl` with an editor. The `printf` command above is bash.

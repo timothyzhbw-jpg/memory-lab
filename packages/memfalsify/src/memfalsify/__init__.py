@@ -5,6 +5,7 @@ __version__ = "0.5.0"
 from .audit import (
     ATTENTION,
     AuditReport,
+    AuditSet,
     EvidenceFinding,
     Finding,
     Issue,
@@ -14,6 +15,9 @@ from .audit import (
     audit,
     audit_claims,
     load_reviews,
+)
+from .auditdir import (
+    audit_directory,
 )
 from .corpus import (
     Skipped,
@@ -81,6 +85,7 @@ from .verify import (
 __all__ = [
     "ATTENTION",
     "AuditReport",
+    "AuditSet",
     "CascadeVerifier",
     "Change",
     "Claim",
@@ -116,6 +121,7 @@ __all__ = [
     "__version__",
     "audit",
     "audit_claims",
+    "audit_directory",
     "audit_staged",
     "claim_id",
     "compare",
