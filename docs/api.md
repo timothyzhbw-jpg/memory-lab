@@ -291,7 +291,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.GitError` | HistoryError with sanitized summary plus underlying diagnostic message. |
 | `memfalsify.HistoryError` | ValueError for invalid or unavailable Git history operations. |
 | `memfalsify.HistoryReport` | Current and removed claim provenance, scanned commits, and scan limitations. |
-| `memfalsify.Issue` | Wording, time, conflict, or duplicate issue with kind and detail. |
+| `memfalsify.Issue` | Wording, time, conflict, duplicate or missing-path issue with kind and detail. |
 | `memfalsify.JevVerifier` | Construct with model, optional SDK client, threshold=0.5; imports typesafe_sdk only at construction. usage() reports its requests and tokens. |
 | `memfalsify.Judgment` | Relation, rationale, verifier name, optional confidence, and nested opinions. |
 | `memfalsify.LLMVerifier` | Construct with model, optional client, effort="low", fallbacks=None, and keyword-only batch=False (Message Batches API), progress and sleep; imports anthropic only at construction. Caches its prompt prefix; judge_many and usage() serve audits. |
@@ -310,9 +310,9 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.VerifierError` | RuntimeError for unavailable SDKs, credentials, or failed model judgments. |
 | `memfalsify.VerifierStats` | API usage of one model backend: requests, batched requests, input and output tokens, and prompt-cache writes and reads (None without caching). |
 | `memfalsify.__version__` | Installed distribution version string. |
-| `memfalsify.audit` | Parse memory and audit it against optional evidence/reviews; never edits memory. max_concurrency bounds simultaneous verifier calls (default 1). |
+| `memfalsify.audit` | Parse memory and audit it against optional evidence/reviews; never edits memory. max_concurrency bounds simultaneous verifier calls (default 1). check_references (default True) adds missing_reference issues when the memory file sits under evidence_root. |
 | `memfalsify.audit_claims` | Audit parsed claims; only= selects findings while review/conflict checks retain all claims. memory_paths are excluded from evidence. |
-| `memfalsify.audit_directory` | Audit every instruction file discovery finds in a directory plus its top-level MEMORY.md, against evidence_root (default: that directory), in path order; returns an AuditSet with no files when none exists. A claim stated in several files is reported once. Never edits memory. |
+| `memfalsify.audit_directory` | Audit every instruction file discovery finds in a directory plus its top-level MEMORY.md, against evidence_root (default: that directory), in path order; returns an AuditSet with no files when none exists. A claim stated in several files is reported once. check_references: see audit. Never edits memory. |
 | `memfalsify.audit_staged` | Audit every claim in the git index copy of a memory file (and its linked .md files, also from the index) against working-tree evidence; never edits memory. |
 | `memfalsify.claim_id` | Return the normalized-text memory ID. |
 | `memfalsify.compare` | Compare two Claim lists deterministically by ID, section, and term similarity. |
@@ -330,9 +330,9 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.to_markdown` | Render an AuditReport as Markdown; scrub=True also removes terminal and bidi controls from quoted memory and evidence text. |
 
 ```python
-audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1) -> AuditReport
+audit(memory_file: Path, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, check_references: bool=True) -> AuditReport
 audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str], memory_paths: Iterable[Path], evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), only: Iterable[str] | None=None, max_concurrency: int=1) -> AuditReport
-audit_directory(directory: Path=Path('.'), evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, progress: Callable[[str], None] | None=None) -> AuditSet
+audit_directory(directory: Path=Path('.'), evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, follow_links: bool=True, max_candidates: int=3, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=(), max_concurrency: int=1, progress: Callable[[str], None] | None=None, check_references: bool=True) -> AuditSet
 audit_staged(memory_file: Path, *, follow_links: bool=True, evidence_root: Path | None=None, reviews: Path | None=None, verifier: Verifier | None=None, as_of: date | None=None, stale_days: int=180, min_coverage: float=0.5, max_judged: int | None=None, exclude: Iterable[str]=()) -> AuditReport
 claim_id(text: str) -> str
 compare(base: list[Claim], head: list[Claim]) -> list[Change]

@@ -173,7 +173,8 @@ The CLI leaves `--strict` off and, without `--evidence`, has nothing to contradi
 | `memory` | `CLAUDE.md AGENTS.md` | Files to audit, separated by spaces or newlines. Quote a path that contains spaces, shell-style: `CLAUDE.md "docs/agent notes.md"`. Missing files are skipped; if none exists, the action emits a notice and succeeds. `auto` (alone) audits every instruction file `memfalsify discover` finds (see above). |
 | `evidence` | `.` | Evidence directory, relative to the workspace. |
 | `exclude` | none | Globs to leave out of the evidence, one per line (see Exclusions); with `memory: auto`, also out of discovery. |
-| `strict` | `"true"` | Fail when any instruction is challenged, conflicted, disputed or has possible counterevidence. |
+| `strict` | `"true"` | Fail when any instruction is challenged, conflicted, disputed, has possible counterevidence or (without `diff-base`) names a path that exists nowhere in the evidence. |
+| `references` | `"true"` | Report paths an instruction names that exist nowhere in the evidence (`missing_reference`; see the [quick start](quickstart.md)). `"false"` turns this off, and it is the way out of one false report here, since the action does not read reviews. Not used with `diff-base`. |
 | `verifier` | `lexical` | `lexical`, `llm`, `jev`, `dual`, `cascade` or `openai` (see Model verifiers). |
 | `openai-model` | none | `verifier: openai`: the model, as the provider names it. Required with that verifier; there is no default. |
 | `provider` | `openai` | `verifier: openai`: preset base URL and key variable: `openai`, `grok`, `deepseek`, `gemini` or `ollama`. |
@@ -195,7 +196,7 @@ an unquoted backslash escapes the next character, even on Windows.
 | Output | Meaning |
 |---|---|
 | `report` | Path of the Markdown report under `$RUNNER_TEMP` (the same text is in the job summary). With several files, their reports are concatenated. |
-| `attention` | Number of instructions (with `diff-base`: of added or changed instructions) that are challenged, conflicted, disputed or have possible counterevidence. |
+| `attention` | Number of instructions (with `diff-base`: of added or changed instructions) that are challenged, conflicted, disputed or have possible counterevidence, plus, without `diff-base`, those naming a path that exists nowhere in the evidence (`missing_reference`; see the [quick start](quickstart.md)). |
 
 - With `strict: "true"`, the step fails (exit 1) when `attention` is above zero. NO EVIDENCE, POSSIBLE SUPPORT
   and wording issues never fail it.

@@ -21,7 +21,7 @@ from pathlib import Path
 
 from memcore.display import one_line, report_text
 from memcore.paths import InputPathError, input_path
-from memfalsify import ATTENTION, AuditReport
+from memfalsify import AuditReport
 from memfalsify.cli import app
 from memfalsify.corpus import DIFF_HEADER, REPORT_HEADER
 from memfalsify import DiffReport, HistoryError, diff_to_markdown, resolve_commit
@@ -29,6 +29,7 @@ from memfalsify import to_markdown
 from memfalsify.discover import discover
 from memfalsify.gitstore import code_span
 from memfalsify.openai_compat import FORMATS, Provider, check_base_url, check_key_env
+from memfalsify.report import attention_count
 
 ERROR = 2
 SUMMARY_LIMIT = 1_000_000  # GitHub rejects step summaries over 1 MiB.
@@ -192,6 +193,10 @@ def main(env: dict[str, str] | None = None) -> int:
     if strict not in ("true", "false"):
         annotate("error", "the strict input must be true or false")
         return ERROR
+    references = env.get("MEMFALSIFY_REFERENCES", "true").strip().lower()
+    if references not in ("true", "false"):
+        annotate("error", "the references input must be true or false")
+        return ERROR
     if problem := openai_problem(env):
         annotate("error", problem)
         return ERROR
@@ -238,6 +243,8 @@ def main(env: dict[str, str] | None = None) -> int:
         json_path = out_dir / f"report-{index}.json"
         json_path.unlink(missing_ok=True)
         args = [*command, "--no-follow-links", "--format=json", f"--output={json_path}", *options(env)]
+        if references == "false" and not base:  # `memfalsify diff` does not look paths up
+            args.append("--no-references")
         code = run_cli(args + (["--strict"] if strict == "true" else []) + ["--", memory])
         if code not in ((0, 1) if strict == "true" else (0,)) or not json_path.is_file():
             annotate("error", f"memfalsify could not audit {memory} (exit code {code}); see the step log")
@@ -256,7 +263,7 @@ def main(env: dict[str, str] | None = None) -> int:
             report = AuditReport.model_validate_json(text)
             _posix_report_paths(report)
             json_path.write_bytes((report.model_dump_json(indent=2) + "\n").encode("utf-8"))
-            count = sum(n for status, n in report.summary.items() if status in ATTENTION)
+            count = attention_count(report)
             total, what = len(report.findings), "memories"
             sections.append(to_markdown(report))
         attention += count
@@ -268,7 +275,7 @@ def main(env: dict[str, str] | None = None) -> int:
     if attention:
         annotate("error" if 1 in codes else "warning",
                  f"{attention} {'memory needs' if attention == 1 else 'memories need'} attention (challenged, "
-                 "conflicted, disputed or possible counterevidence); see the job summary")
+                 "conflicted, disputed, possible counterevidence or a path that exists nowhere); see the job summary")
     return 1 if 1 in codes else 0
 
 

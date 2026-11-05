@@ -20,7 +20,7 @@ from memcore.terminal import diagnostic_line
 from memcore.display import json_shield as _json_shield
 
 from . import jev, llm, openai_compat
-from .audit import ATTENTION, AuditSet, audit
+from .audit import AuditReport, AuditSet, audit, has_open_missing_reference, needs_attention
 from .auditdir import audit_directory
 from .demo import DEFAULT_DIRECTORY, FILES, create_demo, review_line
 from .discover import discover, discovery_to_markdown, same_file
@@ -207,6 +207,15 @@ def _memory_paths(result: AuditSet) -> list[Path]:
     return [Path(name) for name in names]
 
 
+def _note_missing_paths(reports: Iterable[AuditReport]) -> None:
+    """The status table does not count these, so a note says why ``--strict`` may fail with nothing red in it."""
+    count = sum(has_open_missing_reference(finding) for report in reports for finding in report.findings)
+    if count:
+        # Text, not bytes: only digits come from the report, and the Action reads stderr through a text stream.
+        typer.echo(f"note: {count} claim(s) name a path that exists nowhere under the evidence root; "
+                   "see missing_reference in the report", err=True)
+
+
 def _finish_directory(result: AuditSet, fmt: ReportFormat, output: Optional[Path], strict: bool) -> None:
     """Output and exit code of ``audit`` with no MEMORY argument."""
     if not result.files:
@@ -222,7 +231,8 @@ def _finish_directory(result: AuditSet, fmt: ReportFormat, output: Optional[Path
     counts = ", ".join(f"{n} {LABELS[status].lower()}" for status, n in result.summary.items())
     _note(f"note: {claims} claim(s) in {len(result.files)} file(s){': ' + counts if counts else ''}. "
           "Nothing was changed. A flag means \"read the quotes\"; a person decides, in a reviews file.")
-    if strict and any(ATTENTION & report.summary.keys() for report in result.reports):
+    _note_missing_paths(result.reports)
+    if strict and any(needs_attention(report) for report in result.reports):
         raise typer.Exit(1)
 
 
@@ -357,7 +367,13 @@ def audit_command(
     as_of: Optional[str] = AS_OF,
     stale_days: int = STALE_DAYS,
     follow_links: bool = FOLLOW_LINKS,
-    strict: bool = typer.Option(False, help="Exit 1 if any memory is challenged, conflicted or has counterevidence"),
+    strict: bool = typer.Option(False, help="Exit 1 if any memory is challenged, conflicted, has counterevidence or "
+                                            "names a path that exists nowhere under the evidence root, unless a review "
+                                            "confirms that memory"),
+    references: bool = typer.Option(
+        True, "--references/--no-references",
+        help="Report paths the memory names that exist nowhere under the evidence root (missing_reference). Needs "
+             "--evidence with the memory file under it, or no MEMORY argument; otherwise nothing is checked"),
     verifier: VerifierChoice = VERIFIER,
     llm_model: str = LLM_MODEL,
     jev_model: str = JEV_MODEL,
@@ -381,11 +397,11 @@ def audit_command(
             result = audit_directory(Path("."), evidence, reviews, verifier=judge, as_of=reference,
                                      stale_days=stale_days, follow_links=follow_links, exclude=exclude or (),
                                      max_concurrency=concurrency(verifier, max_concurrency), progress=_note,
-                                     **preselection(verifier, min_coverage, max_judged))
+                                     check_references=references, **preselection(verifier, min_coverage, max_judged))
         else:
             report = audit(memory, evidence, reviews, verifier=judge, as_of=reference, stale_days=stale_days,
                            follow_links=follow_links, exclude=exclude or (),
-                           max_concurrency=concurrency(verifier, max_concurrency),
+                           max_concurrency=concurrency(verifier, max_concurrency), check_references=references,
                            **preselection(verifier, min_coverage, max_judged))
     except (ValidationError, ValueError, OSError, VerifierError) as exc:
         _fail(str(exc))
@@ -400,7 +416,8 @@ def audit_command(
         _echo_exact(text)
     else:
         _emit(text, fmt is ReportFormat.markdown)
-    if strict and ATTENTION & report.summary.keys():
+    _note_missing_paths([report])
+    if strict and needs_attention(report):
         raise typer.Exit(1)
 
 

@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from memcore import EvidenceError
 from memcore.paths import InputPathError, input_path
 
-from .audit import NOTHING_LEFT, SEVERITY, AuditReport, AuditSet, _ConflictIndex, judge_passages
+from .audit import NOTHING_LEFT, SEVERITY, AuditReport, AuditSet, _ConflictIndex, add_missing_references, judge_passages
 from .corpus import Passage, Skipped, _matches, out_of_collection, scan
 from .discover import discover
 from .memory import Claim, parse_memory
@@ -69,8 +69,10 @@ def _note(files: list[str], evidence: str, passed_over: list[Skipped]) -> str:
 
 def _in_directory(prefix: PurePosixPath, claim: Claim) -> Claim:
     """A claim whose path and duplicate locations are relative to the audited directory, not its own file's."""
-    return claim.model_copy(update={"path": (prefix / claim.path).as_posix(),
-                                    "also_at": [(prefix / at).as_posix() for at in claim.also_at]})
+    moved = claim.model_copy(update={"path": (prefix / claim.path).as_posix(),
+                                     "also_at": [(prefix / at).as_posix() for at in claim.also_at]})
+    moved._raw_copies = [((prefix / stated_at).as_posix(), raw) for stated_at, raw in claim._raw_copies]
+    return moved
 
 
 def _combine(parsed: list[tuple[str, list[Claim]]]) -> tuple[list[Claim], dict[str, str]]:
@@ -86,6 +88,7 @@ def _combine(parsed: list[tuple[str, list[Claim]]]) -> tuple[list[Claim], dict[s
             combined[claim.id] = claim
             owner[claim.id] = name
             continue
+        kept._absorb_raw(claim)
         for location in (claim.location, *claim.also_at):
             if location != kept.location and location not in kept.also_at:
                 kept.also_at.append(location)
@@ -117,10 +120,11 @@ def audit_directory(directory: Path = Path("."), evidence_root: Path | None = No
                     verifier: Verifier | None = None, as_of: date | None = None, stale_days: int = 180,
                     follow_links: bool = True, max_candidates: int = 3, min_coverage: float = 0.5,
                     max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1,
-                    progress: Callable[[str], None] | None = None) -> AuditSet:
+                    progress: Callable[[str], None] | None = None, check_references: bool = True) -> AuditSet:
     """Audit every memory and instruction file of ``directory`` (see ``select_memories``) against ``evidence_root``,
     by default ``directory`` itself. With no such file, the result has no ``files``. ``progress`` receives one line
-    saying which files were chosen. A file that cannot be read raises ``ValueError`` naming it."""
+    saying which files were chosen. A file that cannot be read raises ``ValueError`` naming it. ``check_references``:
+    see ``audit``; the files must sit under ``evidence_root``."""
     directory = Path(directory)
     exclude = [p.strip() for p in exclude if p.strip()]
     evidence = Path(evidence_root) if evidence_root is not None else directory
@@ -181,6 +185,8 @@ def audit_directory(directory: Path = Path("."), evidence_root: Path | None = No
                 evidence_root=evidence, root=root, reviews=reviews, verifier=verifier, as_of=as_of,
                 stale_days=stale_days, max_candidates=max_candidates, min_coverage=min_coverage,
                 max_judged=max_judged, exclude=exclude, max_concurrency=max_concurrency, conflict_index=conflicts))
+    if check_references:
+        add_missing_references(reports, claims, directory, root)
     totals = Counter()
     for report in reports:
         totals.update(report.summary)

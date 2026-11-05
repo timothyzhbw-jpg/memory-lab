@@ -15,7 +15,7 @@ MCP 服务器需要 POSIX 的 `O_NOFOLLOW` 和相对于目录文件描述符打�
 | 工具 | 参数 | 返回 |
 |---|---|---|
 | `memfalsify_claims` | `memory_file` | MemFalsify 拆出的记忆，一个 JSON 数组（`memory_id`、`location`、`text`；文件带有文档规定的 frontmatter 时还有 `metadata`，例如 Cursor 规则的 `globs`）。`memfalsify claims` 把同样的对象按 JSONL 逐行打印。 |
-| `memfalsify_audit` | `memory_file`，可选 `evidence_dir`、`exclude`（相对 `evidence_dir` 的 fnmatch 通配，必须同时提供 `evidence_dir`）、`reviews_file`、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 审计报告。和同一批文件上的 `memfalsify audit` 是同一份文档。 |
+| `memfalsify_audit` | `memory_file`，可选 `evidence_dir`、`exclude`（相对 `evidence_dir` 的 fnmatch 通配，必须同时提供 `evidence_dir`）、`reviews_file`、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 审计报告。和同一批文件上的 `memfalsify audit` 是同一份文档，只有一点不同：服务器从不运行 git，所以判断 `missing_reference` 时用一小份构建目录名单代替 git 的忽略规则，也发现不了稀疏检出（sparse checkout）。 |
 | `memfalsify_diff` | `memory_file`、`base`，可选 `head`（默认工作区）、`evidence_dir`、`exclude`（与审计相同的通配，必须同时提供 `evidence_dir`）、`reviews_file`（必须同时提供 `evidence_dir`）、`verifier`、`as_of`（`YYYY-MM-DD`）、`format`（`markdown` 或 `json`） | 和 `memfalsify diff` 相同的报告：比较 `base` 与 `head` 之间新增、修改（旧到新）、删除和未变的记忆，只审计新增和修改的，证据按当前目录读取。不会检出任何文件，也不写文件。没有 `strict`。 |
 | `memfalsify_history` | `memory_file`，可选 `max_commits`（不小于 1 的整数，默认 100）、`format`（`markdown` 或 `json`） | 和 `memfalsify history` 相同的报告。每条当前记忆给出引入它的提交和在 HEAD 第一父提交链上最后修改它的提交，并包含工作区里尚未提交的修改；同时列出扫描范围内被删除的记忆及删除时间。浅克隆里最老的提交如果仍记录着没有取到的父提交，历史就是不完整的。浅克隆如果已经包含根提交（提交对象没有 `parent` 行），则算完整历史。 |
 | `memfalsify_rollback` | `memory_file`、`claim`（形如 `m-1a2b3c4d` 的 ID）、`to` | `memfalsify rollback` 会打印的补丁文本：把该记忆恢复成 `to` 时的措辞（包括只包住这一条记忆的标记，例如它原来的链接目标），或把已删除的记忆重新加回去。如果措辞已经相同，则返回一句说明而不是补丁。文本只返回，不写入、不应用。 |

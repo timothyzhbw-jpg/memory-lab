@@ -6,7 +6,7 @@ from collections.abc import Callable
 from memcore import EvidenceSpan
 from memcore.display import report_text, table_code
 
-from .audit import ATTENTION, AuditReport, AuditSet, Finding
+from .audit import ATTENTION, AuditReport, AuditSet, Finding, has_open_missing_reference
 from .corpus import REPORT_HEADER
 from .formats import Value
 from .gitstore import code_span, show_text
@@ -135,7 +135,9 @@ def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
 
 
 def attention_count(report: AuditReport) -> int:
-    return sum(n for status, n in report.summary.items() if status in ATTENTION)
+    """Claims ``--strict`` fails on: by status, plus those that only name a path existing nowhere."""
+    return (sum(n for status, n in report.summary.items() if status in ATTENTION)
+            + sum(f.status not in ATTENTION and has_open_missing_reference(f) for f in report.findings))
 
 
 def set_to_markdown(result: AuditSet) -> str:

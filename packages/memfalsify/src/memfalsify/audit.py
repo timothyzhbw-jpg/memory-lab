@@ -18,6 +18,7 @@ from . import __version__
 from .corpus import Passage, Skipped, out_of_collection, scan
 from .formats import Value
 from .memory import Claim, parse_memory
+from .references import KIND as MISSING_REFERENCE, detail as reference_detail, missing_references
 from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, CJK, HEDGE, RELATIVE_TIME, coverage_units,
                    explicit_dates, features, has_negation, normalize)
 from .verify import (Judgment, LexicalVerifier, Verifier, VerifierStats, coverage, judge_all, usage_since,
@@ -56,7 +57,7 @@ class EvidenceFinding(BaseModel):
 
 class Issue(BaseModel):
     kind: Literal["overgeneralization", "relative_time", "possibly_stale", "inference_marker",
-                  "internal_conflict", "duplicate"]
+                  "internal_conflict", "duplicate", "missing_reference"]
     detail: str
 
 
@@ -571,16 +572,59 @@ ISSUE_PROPOSALS = {
     "inference_marker": ("label_as_inference", "Keep it explicitly marked as an inference, or verify it."),
     "internal_conflict": ("resolve_internal_conflict", "Two memories disagree; at most one can stay as written."),
     "duplicate": ("deduplicate", "Keep one copy so future edits cannot diverge."),
+    MISSING_REFERENCE: ("fix_reference", "Correct the path, restore the file or remove the mention; an agent that "
+                                         "follows it finds nothing."),
 }
+
+
+def needs_attention(report: AuditReport) -> bool:
+    """What ``--strict`` fails on: a status in ``ATTENTION``, or a path that exists nowhere on an unconfirmed claim."""
+    return bool(ATTENTION & report.summary.keys()) or any(has_open_missing_reference(f) for f in report.findings)
+
+
+def has_open_missing_reference(finding: Finding) -> bool:
+    """A path that exists nowhere, on a claim no person has confirmed. A claim reviewed as supported keeps the issue in
+    the report, but a person decides, in the reviews file, as for every other flag: one false report needs a way out
+    short of turning the whole check off."""
+    return finding.status != "supported" and any(issue.kind == MISSING_REFERENCE for issue in finding.issues)
+
+
+def _relative_to(path: Path, root: Path) -> str | None:
+    """``path`` as a POSIX path relative to ``root``, "" for the root itself; None if it is not under ``root``."""
+    try:
+        relative = path.resolve().relative_to(root)
+    except (ValueError, OSError, RuntimeError):
+        return None
+    return "" if relative == Path(".") else relative.as_posix()
+
+
+def add_missing_references(reports: Iterable[AuditReport], claims: list[Claim], directory: Path, root: Path) -> None:
+    """Add a ``missing_reference`` issue and its proposal to each finding that names a path existing nowhere under
+    ``root``. ``Claim.path`` is relative to ``directory``. A directory outside the root has nothing to check against:
+    the reports then say nothing about paths. The status does not change: missing evidence and a missing path are
+    different things."""
+    prefix = _relative_to(directory, root)
+    found = {} if prefix is None else missing_references(claims, root, prefix)
+    if not found:
+        return
+    action, reason = ISSUE_PROPOSALS[MISSING_REFERENCE]
+    for report in reports:
+        for finding in report.findings:
+            if written := found.get(finding.memory_id):
+                finding.issues += [Issue(kind=MISSING_REFERENCE, detail=reference_detail(path)) for path in written]
+                if not any(proposal.action == action for proposal in finding.proposals):
+                    finding.proposals.append(Proposal(action=action, reason=reason))
 
 
 def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | None = None,
           verifier: Verifier | None = None, as_of: date | None = None, stale_days: int = 180,
           follow_links: bool = True, max_candidates: int = 3, min_coverage: float = 0.5,
-          max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1) -> AuditReport:
+          max_judged: int | None = None, exclude: Iterable[str] = (), max_concurrency: int = 1,
+          check_references: bool = True) -> AuditReport:
     """Audit every claim. ``min_coverage`` and ``max_judged`` bound which passages the verifier sees;
     ``exclude`` globs (relative to the evidence root) keep files out of the evidence; up to ``max_concurrency``
-    verifier calls run at once."""
+    verifier calls run at once. With ``check_references`` and an ``evidence_root`` the memory file sits under, paths
+    the memory names that exist nowhere under that root get a ``missing_reference`` issue."""
     skipped = []
     claims, files = parse_memory(memory_file, follow_links=follow_links, skipped=skipped)
     base = Path(memory_file).absolute().parent.resolve()
@@ -591,6 +635,8 @@ def audit(memory_file: Path, evidence_root: Path | None = None, reviews: Path | 
                           max_concurrency=max_concurrency)
     # Keep the report schema stable; identify memory exclusions explicitly in the reason.
     report.skipped_evidence[:0] = [s.model_copy(update={"reason": "memory skipped: " + s.reason}) for s in skipped]
+    if check_references and evidence_root is not None:
+        add_missing_references([report], claims, base, Path(evidence_root).resolve())
     return report
 
 
