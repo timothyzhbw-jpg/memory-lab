@@ -71,7 +71,7 @@ The report lists what it skipped. `--exclude GLOB` (repeatable) leaves files out
 
 Several files share one report, in path order: totals, a table of the files, then a section per file. A claim stated in two files appears once, with the other place listed as a duplicate. With one file, the Markdown and HTML reports have the same layout as `memfalsify audit FILE --evidence .`, unless the search passed over a place, which then gets a section of its own. With `--format json` the shape does not depend on the count: one object with `files`, `summary` and `reports`, a list of the same objects `memfalsify audit FILE --format json` prints. `--strict` means what it always means: exit 1 if any claim in any of the files needs attention.
 
-Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, no evidence unless you pass `--evidence`, and only the skips of the evidence scan, so a review file or decision log inside `--evidence` reads as evidence there.
+Naming a file, as in `memfalsify audit CLAUDE.md`, works as it always has: only that file, no evidence unless you pass `--evidence`, and only the skips of the evidence scan, so a review file or decision log inside `--evidence` reads as evidence there, except the file you pass with `--reviews`.
 
 ## Use git history as evidence
 

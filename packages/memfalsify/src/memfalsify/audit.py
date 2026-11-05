@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
@@ -225,11 +225,9 @@ def dismissal_line(memory_id: str, span: EvidenceSpan, reviewer: str = "you") ->
 
 
 def _dismisses(dismissal: EvidenceFinding, span: EvidenceSpan) -> bool:
-    """Whether a dismissal covers this passage: the passage it was located in, or the same words elsewhere in the file,
-    which ``locate_quote`` never reaches. A cue named by its locator is only that cue."""
-    if dismissal.span.path != span.path:
-        return False
-    if _overlaps(dismissal.span, span):
+    """Whether a dismissal of a passage in this file covers this one: the passage it was located in, or the same words
+    elsewhere in the file, which ``locate_quote`` never reaches. In a transcript, a dismissal is of that one cue."""
+    if dismissal.span.start < span.end and span.start < dismissal.span.end:
         return True
     return dismissal.span.media is None and (dismissal.span.quote in span.quote or span.quote in dismissal.span.quote)
 
@@ -237,7 +235,11 @@ def _dismisses(dismissal: EvidenceFinding, span: EvidenceSpan) -> bool:
 def _not_dismissed(passages: list[Passage], dismissed: list[EvidenceFinding]) -> list[Passage]:
     if not dismissed:
         return passages
-    return [passage for passage in passages if not any(_dismisses(d, passage.span) for d in dismissed)]
+    by_path: dict[str, list[EvidenceFinding]] = defaultdict(list)
+    for dismissal in dismissed:
+        by_path[PurePosixPath(dismissal.span.path).as_posix()].append(dismissal)  # a review may say ./docs/a.md
+    return [passage for passage in passages
+            if not any(_dismisses(dismissal, passage.span) for dismissal in by_path.get(passage.span.path, ()))]
 
 
 def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
@@ -726,7 +728,9 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     by_id = {c.id: c for c in claims}
     reviewed_by_id = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
     confirmed = {key: [e for e in found if e.relation != "unrelated"] for key, found in reviewed_by_id.items()}
-    dismissed = {key: [e for e in found if e.relation == "unrelated"] for key, found in reviewed_by_id.items()}
+    # The same line pasted twice is one dismissal.
+    dismissed = {key: list({(e.reviewer, e.span.path, e.span.start): e for e in found
+                            if e.relation == "unrelated"}.values()) for key, found in reviewed_by_id.items()}
     # A dismissed passage is out before anything is chosen, so it costs no model call and the next one takes its place.
     picked = {claim.id: shortlist(claim, _not_dismissed(passages, dismissed.get(claim.id, [])), min_coverage, max_judged)
               for claim in targets}

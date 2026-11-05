@@ -103,6 +103,13 @@ def test_short_lines_with_no_marker_stay_on_their_own():
     assert lines_of(markdown) == [("Project: acme", 1), ("Language: Python 3.12", 2), ("Tests: pytest", 3)]
 
 
+def test_long_lines_that_each_start_with_a_key_stay_on_their_own():
+    markdown = ("Project: a description of the project that runs on for more than sixty columns here\n"
+                "**Language**: Python\n")
+    assert texts(markdown) == ["Project: a description of the project that runs on for more than sixty columns here",
+                               "Language: Python"]
+
+
 def test_a_hard_line_break_is_kept():
     long = "This line is long enough that it would otherwise read as one that was wrapped"
     assert texts(f"{long}  \nThe next one stands alone\n") == [long, "The next one stands alone"]

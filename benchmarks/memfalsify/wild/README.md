@@ -28,6 +28,8 @@ All labeling is by AI models, reviewed by the lead of the work, who is also an A
 
 The result is 11 real and 402 not real.
 
+The way claims are read changed after the labeling (wrapped lines are joined, abbreviations no longer cut a sentence, fragments are no longer claims), so the hashes were re-pointed at the text as it now reads. Of the 413 pairs, 72 name the longer claim that holds the labeled piece and 8 the longer passage, with the label kept. 19 pairs, all `not_real`, name text that is no longer a claim (a label, a table header, a closing tag) and carry `claim_dropped`: they count as no longer flagged. Nobody labeled the longer claims again, so a pair labeled on a fragment now stands for its whole sentence.
+
 The rules were tuned on these repositories. A further set of repositories was kept out as a holdout, and is not part of these labels.
 
 ## How it can mislead

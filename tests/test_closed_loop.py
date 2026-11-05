@@ -702,6 +702,7 @@ def test_a_wrapped_claim_is_found_from_the_line_it_starts_on(demo):
     (["一二三", "四五六。", ""], "一二三四五六。", True),
     (["- One two", "", "  three four."], "One two three four.", False),
     (["- One two", "  three"], "One two three four.", False),
+    (["- Something else", "- One two", "  three four."], "One two three four.", False),
 ])
 def test_a_claim_across_lines_stops_at_the_end_of_its_block(lines, text, held):
     assert to_events.holds(lines, text) is held

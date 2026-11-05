@@ -225,6 +225,7 @@ _HARD_BREAK = re.compile(r"(?:[ ]{2,}|\\|<br\s*/?>)$", re.I)
 _FINISHED = re.compile(r"[.!?;。！？；][\"')\]*_`]*$")
 _LAST_WORD = re.compile(r"([A-Za-z']+)[*_`]*$")
 _ENDS_IN_URL = re.compile(r"(?<!\S)[a-z]+://\S+$")
+_KEYED = re.compile(r"[*_`]*[\w /-]{1,24}[*_`]*:[*_`]*\s")  # "Language: Python", each line a key of its own
 WRAP_WIDTH = 60  # columns: a line this long that stops mid-sentence was wrapped; a shorter one may be a line of its own
 
 
@@ -258,7 +259,7 @@ def _is_wrapped(previous: str, line: str) -> bool:
     before = previous.strip()
     if _FINISHED.search(before):
         return True
-    if before.endswith(":") or _ENDS_IN_URL.search(before):
+    if before.endswith(":") or _ENDS_IN_URL.search(before) or (_KEYED.match(before) and _KEYED.match(line.strip())):
         return False
     word = _LAST_WORD.search(before)
     if before.endswith((",", "(", "-", "–", "—", "/")) or (word and word.group(1).lower() in STOPWORDS):

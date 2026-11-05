@@ -109,6 +109,12 @@ def test_a_partial_quote_and_the_same_words_elsewhere_in_the_file_are_covered(tm
     assert status(run(root, dismissal("allows 60 requests"))) == "insufficient_evidence"
 
 
+def test_a_path_written_another_way_and_a_line_pasted_twice(tmp_path):
+    root = project(tmp_path)
+    report = run(root, dismissal(path="./api.md"), dismissal(path="./api.md"))
+    assert status(report) == "insufficient_evidence" and report.dismissed == {"ada": 1}
+
+
 def test_a_dismissal_of_a_support_candidate_works_the_same(tmp_path):
     root = project(tmp_path, **{"api.md": f"{CLAIM}\n"})
     assert status(run(root)) == "candidate_support"

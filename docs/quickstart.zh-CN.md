@@ -71,7 +71,7 @@ memfalsify audit
 
 多个文件共用一份报告，按路径排序：先是总数和文件表，然后每个文件一节。两个文件里相同的一条记忆只出现一次，另一处列为重复。只有一个文件时，Markdown 和 HTML 报告的版式与 `memfalsify audit FILE --evidence .` 相同；如果搜索跳过了某个位置，报告会为它单列一节。`--format json` 的结构不随文件数变化：一个对象，含 `files`、`summary` 和 `reports`，后者的每一项就是 `memfalsify audit FILE --format json` 打印的那种对象。`--strict` 的含义不变：任何文件里有记忆需要注意，就退出 1。
 
-指定文件，比如 `memfalsify audit CLAUDE.md`，和以前一样：只审计这个文件，除非传 `--evidence`，否则没有证据；并且只按证据扫描本身的规则跳过文件，所以 `--evidence` 里的审核文件或决策日志在这种用法下会被当作证据。
+指定文件，比如 `memfalsify audit CLAUDE.md`，和以前一样：只审计这个文件，除非传 `--evidence`，否则没有证据；并且只按证据扫描本身的规则跳过文件，所以 `--evidence` 里的审核文件或决策日志在这种用法下会被当作证据，用 `--reviews` 传入的那个文件除外。
 
 ## 把 git 历史当作证据
 

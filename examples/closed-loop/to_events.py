@@ -96,8 +96,9 @@ def holds(lines: list[str], text: str) -> bool:
     reads the lines of a wrapped paragraph as one, with what continues it (indent, quote markers) read as one space."""
     if text in without_markup(lines[0]):
         return True
-    block = "\n".join(takewhile(str.strip, lines))
-    return "".join(text.split()) in "".join(QUOTE_MARKER.sub("", without_markup(block)).split())
+    read = lambda raw: "".join(QUOTE_MARKER.sub("", without_markup(raw)).split())  # noqa: E731
+    start = read("\n".join(takewhile(str.strip, lines))).find("".join(text.split()))
+    return 0 <= start < len(read(lines[0]))  # it has to start on the line that `location` names
 
 
 def introduced_line(report: str, memory_id: str, commit: str) -> str:
