@@ -48,7 +48,7 @@ jobs:
         run: >-
           uv pip install --system --resolution lowest-direct
           -e packages/memcore -e "packages/memfalsify[all]" -e packages/orgmemory -e packages/memlab-mcp -e packages/memlab-ui
-          "pytest>=8" "tomli; python_version < '3.11'"
+          "pytest>=8" "tomli>=2; python_version < '3.11'"
       - name: Show the resolved versions
         run: uv pip freeze --system
       - name: Test

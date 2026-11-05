@@ -1387,21 +1387,27 @@ def test_a_rev_list_that_misbehaves_is_a_clean_error(tmp_path, script, message):
 
 
 def zero_file_index(monkeypatch) -> None:
-    real = os.stat
+    """Some filesystems report no file index. Only same_file sees this: a stat result rebuilt from its tuple loses
+    the fields the standard library reads on Windows, so other callers keep the real one."""
+    class NoFileIndex:
+        def __getattr__(self, name):
+            return getattr(os, name)
 
-    def stat(path, *args, **kwargs):
-        fields = list(real(path, *args, **kwargs))
-        fields[1] = fields[2] = 0  # st_ino, st_dev: some filesystems report no file index
-        return os.stat_result(tuple(fields))
+        def stat(self, path, *args, **kwargs):
+            fields = list(os.stat(path, *args, **kwargs))
+            fields[1] = fields[2] = 0  # st_ino, st_dev
+            return os.stat_result(tuple(fields))
 
-    monkeypatch.setattr(os, "stat", stat)
+    # memfalsify.discover the attribute is the function; the module is in sys.modules
+    monkeypatch.setattr(sys.modules["memfalsify.discover"], "os", NoFileIndex())
 
 
 def test_a_zero_file_index_does_not_make_every_output_a_memory_file(tmp_path, monkeypatch):
     write(tmp_path, {"MEMORY.md": "- The nightly export stops at midnight on Sundays.\n", "report.md": "old\n"})
     monkeypatch.chdir(tmp_path)
     zero_file_index(monkeypatch)
-    assert audit_here("--output", "report.md").exit_code == 0
+    written = audit_here("--output", "report.md")
+    assert written.exit_code == 0, written.output
     assert audit_here("--output", "MEMORY.md").exit_code == 2
 
 
