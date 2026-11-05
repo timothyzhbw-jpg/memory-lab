@@ -411,6 +411,10 @@ def test_markup_in_a_path_stays_text_in_every_report(tmp_path):
     "`a/b.py` " * 20_000,
     "[x](a/b.py) " * 20_000,
     "src/" * 50_000,
+    "[" * 200_000,
+    "[](a" * 60_000,
+    "`" + ":" * 200_000 + "!`",
+    "in the " * 40_000,
 ])
 def test_a_hostile_line_costs_little(text):
     assert isinstance(references_in(text), list)

@@ -61,7 +61,7 @@ MIME_ALWAYS = frozenset({"application", "multipart"})
 MIME_BARE = frozenset({"audio", "font", "image", "message", "model", "text", "video"})
 
 _CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)([^`]+)\1(?!`)")
-_LINK_TARGET = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+_LINK_TARGET = re.compile(r"!?\[[^\]\[]*\]\(([^)\s]{1,400})(?:\s+\"[^\"]*\")?\)")  # bounded: a line can be hostile
 # Where in a file, added to its path by habit: src/a.py:12, src/a.py:12:3, src/a.py:12-20, src/a.py#L12, a.py::test_b
 _POSITION = re.compile(r"(?:::[\w.:\[\]-]+|:\d+(?:[:-]\d+)*|#[\w.-]*)$")
 _DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -142,8 +142,10 @@ def _key(name: str) -> str:
 
 def parse_reference(text: str, said: frozenset[str] = frozenset(), foreign: bool = False) -> Reference | None:
     """``text`` as a relative path, or None if it does not read as one."""
+    if len(text) > MAX_PATH:
+        return None
     written = _POSITION.sub("", text.strip()).rstrip(".,;:。，；：、")
-    if (not written or len(written) > MAX_PATH or "\x00" in written or "://" in written or _DRIVE.match(written)
+    if (not written or "\x00" in written or "://" in written or _DRIVE.match(written)
             or written[0] in "/~-@\\" or written.startswith("...")):
         return None
     candidate = written
