@@ -159,3 +159,14 @@ def test_the_holdout_labels_hold_metadata_and_hashes_only():
     assert raw.endswith(b"\n") and b"\r" not in raw
     assert all(set(json.loads(line)) <= set(wild.Row.model_fields) for line in raw.decode("utf-8").splitlines())
     assert not {row.repo for row in rows} & {row.repo for row in wild.load_labels()}
+
+
+def test_the_sampled_labels_are_scaled_however_their_path_is_written(monkeypatch, tmp_path):
+    """Negation was sampled in labels.jsonl alone, and a relative path names the same file."""
+    seen = []
+    monkeypatch.setattr(wild, "score_labeled", lambda rows, clones, population=None: seen.append(population) or {
+        "by_rule": {}, "total": {}, "precision": None, "scaled_precision": None, "kept": [], "real_lost": [], "unresolved": []})
+    monkeypatch.chdir(wild.LABELS.parent)
+    for labels, expected in (("labels.jsonl", wild.POPULATION), (str(wild.LABELS), wild.POPULATION), ("labels-holdout.jsonl", None)):
+        assert runner.invoke(wild.app, ["--clones", str(tmp_path), "--labels", labels, "--no-audit"]).exit_code == 0
+        assert seen.pop() == expected

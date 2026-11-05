@@ -215,7 +215,7 @@ def main(clones: Optional[Path] = typer.Option(None, help="Directory holding <ow
         raise typer.Exit(2)
     commits = {row.repo: row.sha for row in rows}
     stale = sorted(repo for repo, sha in commits.items() if head(clone_of(clones, repo)) != sha)
-    result = score_labeled(rows, clones, POPULATION if labels == LABELS else None)
+    result = score_labeled(rows, clones, POPULATION if labels.resolve() == LABELS else None)
     audits = None if no_audit else flagged_pairs(rows, clones)
     typer.echo(to_markdown(rows, result, audits, stale).encode("utf-8"), nl=False)
     if json_out is not None:
