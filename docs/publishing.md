@@ -5,7 +5,7 @@ English | [中文](publishing.zh-CN.md)
 Publishing is one manual workflow, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml). It uses PyPI
 [Trusted Publishing](https://docs.pypi.org/trusted-publishers/): PyPI trusts this repository's workflow directly, so
 no password or API token is stored anywhere. Steps 1 to 3 are done once, by the repository owner, because they need
-his PyPI account. Step 4 is the button.
+his PyPI account. After that, each release is one press of the button in step 4.
 
 ## Before you start: the name `memory-lab`
 
@@ -18,9 +18,9 @@ no `memorylab`, so a dry run there succeeds and says nothing about this.
 
 Pick one before step 3:
 
-- **Publish five packages and leave `memory-lab` out.** Choose `stop-after: memlab-ui` in step 4. Nothing else
-  changes. The install line becomes `pip install memfalsify orgmemory`, and `memlab-ui` and `memlab-mcp` install by
-  their own names.
+- **Publish five packages and leave `memory-lab` out.** Stop after round 5 in step 3, and choose
+  `stop-after: memlab-ui` for later releases. Nothing else changes. The install line becomes
+  `pip install memfalsify orgmemory`, and `memlab-ui` and `memlab-mcp` install by their own names.
 - **Rename the meta-distribution.** `memlab` has no collision as of 2026-11-04. Change `name` in
   `packages/memory-lab/pyproject.toml`, then the name in that directory's README, `scripts/dists.py`,
   `scripts/rehearse_install.py`, `publish.yml`, this page and `tests/test_packaging.py`;
@@ -47,38 +47,52 @@ Open <https://github.com/timothyzhbw-jpg/memory-lab/settings/environments> and p
    the list of built files first.
 4. Press **Save protection rules**.
 
-## 3. Pending publishers on PyPI
+## 3. First publication: six rounds (once)
 
-A pending publisher tells PyPI that this workflow may create the project on its first upload. Open
-<https://pypi.org/manage/account/publishing/>, go to **Add a new pending publisher**, and choose the **GitHub** tab.
-Fill in the form once per project and press **Add**:
+A pending publisher tells PyPI that this workflow may create a project on its first upload. PyPI holds one pending
+publisher per combination of owner, repository, workflow and environment, and all six projects share one combination.
+So you add one, use it, and only then add the next: it becomes a normal publisher when used, and that one publisher
+then serves every project it created.
 
-| Field | Value |
-|---|---|
-| Project Name | the project, from the rounds below |
-| Owner | `timothyzhbw-jpg` |
-| Repository name | `memory-lab` |
-| Workflow name | `publish.yml` |
-| Environment name | `pypi` |
+For each round below:
 
-PyPI allows three pending publishers per account at a time, and each one stops counting once it has been used. So the
-first publication takes two rounds:
+1. Open <https://pypi.org/manage/account/publishing/>, go to **Add a new pending publisher** and choose the **GitHub**
+   tab. Fill in the form and press **Add**:
 
-- Round 1, now: `memlab-core`, `memfalsify`, `orgmemory`.
-- Round 2, after the first run in step 4: `memlab-mcp`, `memlab-ui`, `memory-lab` (see the note on that name above).
+   | Field | Value |
+   |---|---|
+   | Project Name | the project of this round |
+   | Owner | `timothyzhbw-jpg` |
+   | Repository name | `memory-lab` |
+   | Workflow name | `publish.yml` |
+   | Environment name | `pypi` |
 
-A pending publisher does not reserve the name, so go on to step 4 in the same sitting.
+2. Press the button (step 4) with `stop-after` set to that same project.
+3. Wait for the run to turn green. Packages from earlier rounds are skipped, because a version already on the index is
+   skipped and never replaced.
+
+| Round | Project Name | stop-after |
+|---|---|---|
+| 1 | `memlab-core` | `memlab-core` |
+| 2 | `memfalsify` | `memfalsify` |
+| 3 | `orgmemory` | `orgmemory` |
+| 4 | `memlab-mcp` | `memlab-mcp` |
+| 5 | `memlab-ui` | `memlab-ui` |
+| 6 | `memory-lab` | `memory-lab` |
+
+Round 6 needs the decision above about that name. A pending publisher does not reserve a name, so go straight from
+adding it to pressing the button.
 
 ## 4. The button
 
 Open <https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/publish.yml> and press **Run workflow**.
 
-| Field | First run | Second run (after round 2) | Later releases |
-|---|---|---|---|
-| Use workflow from | `main` | `main` | `main` |
-| confirm | the version in `packages/memory-lab/pyproject.toml` | the same | the new version there |
-| target | `pypi` | `pypi` | `pypi` |
-| stop-after | `orgmemory` | `memory-lab`, or `memlab-ui` if you left that name out | `memory-lab` |
+| Field | Value |
+|---|---|
+| Use workflow from | `main` |
+| confirm | the version in `packages/memory-lab/pyproject.toml` |
+| target | `pypi` |
+| stop-after | during step 3, the project of the round. Later, `memory-lab`, or `memlab-ui` while that name is left out |
 
 Press the green **Run workflow**. The run then does this:
 
@@ -88,9 +102,6 @@ Press the green **Run workflow**. The run then does this:
 2. If you added a required reviewer, press **Review deployments**, then **Approve and deploy**.
 3. **Upload to PyPI** uploads in dependency order: `memlab-core`, `memfalsify`, `orgmemory`, `memlab-mcp`, `memlab-ui`,
    `memory-lab`, stopping after the package you chose.
-
-After the first run, add round 2 and press the button again. The three packages from the first run are skipped,
-because a version already on the index is skipped and never replaced.
 
 ## 5. Check the result
 
@@ -126,10 +137,9 @@ attestations end to end. It does not show whether PyPI will accept a name.
 1. Create an account and 2FA at <https://test.pypi.org/account/register/>.
 2. Create a second GitHub environment named `testpypi`, as in step 2, leaving out the branch rule so that you can
    rehearse from a branch.
-3. Add the pending publishers at <https://test.pypi.org/manage/account/publishing/>: the same fields and rounds as
-   step 3, with Environment name `testpypi`.
-4. Press the button with `target: testpypi`. The first run also takes `stop-after: orgmemory`.
-5. Install from it:
+3. Go through the rounds of step 3 at <https://test.pypi.org/manage/account/publishing/>, with Environment name
+   `testpypi`, and press the button with `target: testpypi`.
+4. Install from it:
 
 ```bash
 python3 -m venv /tmp/memlab-testpypi
@@ -145,7 +155,8 @@ TestPyPI keeps versions too: a second run of the same version is skipped, so try
    of [CHANGELOG.md](../CHANGELOG.md)). `memory-lab` gets a new version every release, because its version names the
    release.
 2. Merge to `main` and wait for CI.
-3. Press the button with the new version, `target: pypi` and `stop-after: memory-lab`.
+3. Press the button with the new version, `target: pypi` and `stop-after: memory-lab`. There is no form to fill in:
+   the publisher from step 3 serves all the projects.
 
 ## When something goes wrong
 
@@ -153,8 +164,10 @@ TestPyPI keeps versions too: a second run of the same version is skipped, so try
 |---|---|
 | `the confirm input differs from the built memory-lab version` | You typed another version, or `main` holds a different one. Nothing was uploaded. The message names the built version. |
 | `target pypi works from main only` | **Use workflow from** pointed at another branch or tag. Nothing was uploaded. |
-| `invalid-publisher` in an upload step | PyPI has no publisher matching this run. Compare the four values in step 3 for that package with the claims the step prints, or add the package's publisher if its round has not come yet. |
 | `This project name is too similar to an existing project` on the PyPI form | See [the name `memory-lab`](#before-you-start-the-name-memory-lab). |
+| `already been registered for a different project name` on the PyPI form | The previous round's pending publisher has not been used yet. Press the button for it first, or delete it on the same page. |
+| `Non-user identities cannot create new projects` in an upload step | The run reached a project whose pending publisher you have not added yet, usually because `stop-after` was left past the current round. Everything before that step is fine. Add the next publisher, or lower `stop-after`, and press again. |
+| `invalid-publisher` in an upload step | PyPI has no publisher matching this run. Compare the four values you entered in step 3 with the claims the step prints. |
 | A run stops halfway | The packages before that step are on PyPI and stay there. Fix the cause and press the button again: they are skipped. |
 | A published version is broken | Files on PyPI cannot be replaced or reused. Use **Yank** on the release's page in the project's settings on PyPI, fix it, and publish a new version. |
 

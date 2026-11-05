@@ -22,14 +22,17 @@ on:
           - testpypi
           - pypi
       stop-after:
-        description: "Upload in dependency order and stop after this package. The first run needs orgmemory: see docs/publishing.md."
+        description: "Upload in dependency order and stop after this package. The first publication goes one package per run: see docs/publishing.md."
         required: true
         type: choice
         default: memory-lab
         options:
           - memory-lab
           - memlab-ui
+          - memlab-mcp
           - orgmemory
+          - memfalsify
+          - memlab-core
 
 # A second press waits for the first to finish, so two runs never upload at once.
 concurrency:
@@ -96,23 +99,25 @@ jobs:
           packages-dir: dist/memlab-core
           skip-existing: true
       - name: memfalsify
+        if: inputs.stop-after != 'memlab-core'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist/memfalsify
           skip-existing: true
       - name: orgmemory
+        if: inputs.stop-after != 'memlab-core' && inputs.stop-after != 'memfalsify'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist/orgmemory
           skip-existing: true
       - name: memlab-mcp
-        if: inputs.stop-after != 'orgmemory'
+        if: inputs.stop-after == 'memlab-mcp' || inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist/memlab-mcp
           skip-existing: true
       - name: memlab-ui
-        if: inputs.stop-after != 'orgmemory'
+        if: inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist/memlab-ui
@@ -144,26 +149,28 @@ jobs:
           packages-dir: dist/memlab-core
           skip-existing: true
       - name: memfalsify
+        if: inputs.stop-after != 'memlab-core'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/memfalsify
           skip-existing: true
       - name: orgmemory
+        if: inputs.stop-after != 'memlab-core' && inputs.stop-after != 'memfalsify'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/orgmemory
           skip-existing: true
       - name: memlab-mcp
-        if: inputs.stop-after != 'orgmemory'
+        if: inputs.stop-after == 'memlab-mcp' || inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/memlab-mcp
           skip-existing: true
       - name: memlab-ui
-        if: inputs.stop-after != 'orgmemory'
+        if: inputs.stop-after == 'memlab-ui' || inputs.stop-after == 'memory-lab'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/

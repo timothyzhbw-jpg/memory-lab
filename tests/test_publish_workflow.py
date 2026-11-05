@@ -75,9 +75,7 @@ def test_every_input_must_be_chosen_and_the_default_uploads_nothing():
     target = _block(inputs, "target", 6)
     assert "default: build-only" in target and re.findall(r"- ([\w-]+)$", target, re.MULTILINE) == \
         ["build-only", "testpypi", "pypi"]
-    stop = _block(inputs, "stop-after", 6)
-    assert "default: memory-lab" in stop and re.findall(r"- ([\w-]+)$", stop, re.MULTILINE) == \
-        ["memory-lab", "memlab-ui", "orgmemory"]
+    assert "default: memory-lab" in _block(inputs, "stop-after", 6)
 
 
 def test_uploads_run_only_on_the_right_target_after_the_build():
@@ -193,11 +191,21 @@ def test_the_two_upload_jobs_upload_the_same_things():
     assert steps.count("skip-existing: true") == len(dists.PACKAGES)
 
 
-def test_stop_after_leaves_exactly_the_packages_it_names():
-    steps = re.findall(r"- name: ([\w-]+)\n(?: +if: ([^\n]+)\n)? +uses: pypa", _jobs()["publish"])
-    assert steps == [("memlab-core", ""), ("memfalsify", ""), ("orgmemory", ""),
-                     ("memlab-mcp", "inputs.stop-after != 'orgmemory'"), ("memlab-ui", "inputs.stop-after != 'orgmemory'"),
-                     ("memory-lab", "inputs.stop-after == 'memory-lab'")]
+@pytest.mark.parametrize("job", ["publish", "dry-run"])
+def test_stop_after_uploads_up_to_the_package_it_names(job):
+    """The first publication goes one package per run (docs/publishing.md), so every package must be a stopping point."""
+    steps = re.findall(r"- name: ([\w-]+)\n(?: +if: ([^\n]+)\n)? +uses: pypa", _jobs()[job])
+    order = list(dists.PACKAGES)
+    assert [name for name, _ in steps] == order
+    inputs = _block(_block(_block(CODE, "on", 0), "workflow_dispatch", 2), "inputs", 4)
+    assert sorted(re.findall(r"- ([\w-]+)$", _block(inputs, "stop-after", 6), re.MULTILINE)) == sorted(order)
+    for index, choice in enumerate(order):
+        ran = []
+        for name, condition in steps:
+            python = condition.replace("&&", "and").replace("||", "or").replace("inputs.stop-after", repr(choice))
+            if not condition or eval(python):  # only string comparisons, from this repository's own workflow
+                ran.append(name)
+        assert ran == order[:index + 1], choice
 
 
 # --- scripts/dists.py check ----------------------------------------------------------------------------------
@@ -408,10 +416,13 @@ def test_publishing_docs_spell_out_what_the_owner_types(name):
     text = (ROOT / name).read_text(encoding="utf-8")
     for needed in ("timothyzhbw-jpg", "`memory-lab`", "`publish.yml`", "`pypi`", "`testpypi`", "stop-after",
                    "https://pypi.org/manage/account/publishing/", "https://pypi.org/account/register/",
-                   "https://test.pypi.org/manage/account/publishing/", "memorylab"):
+                   "https://test.pypi.org/manage/account/publishing/", "memorylab",
+                   # PyPI's own messages for the two things that stop a first publication
+                   "too similar to an existing project", "already been registered for a different project name",
+                   "Non-user identities cannot create new projects"):
         assert needed in text, needed
-    for package in dists.PACKAGES:
-        assert f"`{package}`" in text, package
+    rounds = re.findall(r"^\| \d \| `([\w-]+)` \| `([\w-]+)` \|$", text, re.MULTILINE)
+    assert rounds == [(package, package) for package in dists.PACKAGES]  # one package per round, in upload order
     assert "docs/publishing" in WORKFLOW
 
 

@@ -4,7 +4,7 @@
 
 发布只有一个手动运行的工作流：[`.github/workflows/publish.yml`](../.github/workflows/publish.yml)。它使用 PyPI 的
 [Trusted Publishing](https://docs.pypi.org/trusted-publishers/)：PyPI 直接信任本仓库的这个工作流，所以任何地方都不存密码或
-API token。第 1 到 3 步只需做一次，必须由仓库所有者本人来做，因为要用他的 PyPI 账号。第 4 步就是那个按钮。
+API token。第 1 到 3 步只需做一次，必须由仓库所有者本人来做，因为要用他的 PyPI 账号。之后每次发布只需点一次第 4 步的按钮。
 
 ## 开始之前：`memory-lab` 这个名字
 
@@ -16,7 +16,7 @@ PyPI 判断新名字时，会先去掉 `-`、`_`、`.`，再把 `l` 和 `i` 当�
 
 第 3 步之前，从下面选一个：
 
-- **发布五个包，先不发 `memory-lab`。** 第 4 步选 `stop-after: memlab-ui`，其他都不用改。安装命令变成
+- **发布五个包，先不发 `memory-lab`。** 第 3 步做到第 5 轮为止，以后的发布选 `stop-after: memlab-ui`，其他都不用改。安装命令变成
   `pip install memfalsify orgmemory`，`memlab-ui` 和 `memlab-mcp` 用各自的名字安装。
 - **给这个元包改名。** 截至 2026-11-04，`memlab` 没有冲突。先改 `packages/memory-lab/pyproject.toml` 里的 `name`，再改
   该目录的 README、`scripts/dists.py`、`scripts/rehearse_install.py`、`publish.yml`、本文和 `tests/test_packaging.py` 里的名字；
@@ -38,37 +38,48 @@ PyPI 判断新名字时，会先去掉 `-`、`_`、`.`，再把 `l` 和 `i` 当�
 3. 可选：勾选 **Required reviewers** 并添加你自己。这样每次上传都会等你批准，你可以先看一眼构建出的文件列表。
 4. 点 **Save protection rules**。
 
-## 3. 在 PyPI 上添加 pending publisher
+## 3. 第一次发布：六轮（一次）
 
-pending publisher 的意思是：告诉 PyPI，这个工作流第一次上传时可以创建这个项目。打开
-<https://pypi.org/manage/account/publishing/>，找到 **Add a new pending publisher**，选 **GitHub** 标签页。每个项目填一次表单，
-然后点 **Add**：
+pending publisher 的意思是：告诉 PyPI，这个工作流第一次上传时可以创建这个项目。对于同一组 owner、repository、workflow、environment，
+PyPI 只保留一个 pending publisher，而这六个项目用的正是同一组。所以要添加一个、用掉一个，再添加下一个：它被用过之后会变成普通的
+publisher，这个 publisher 之后为它创建过的所有项目服务。
 
-| 字段 | 填写 |
-|---|---|
-| Project Name | 项目名，见下面的两轮 |
-| Owner | `timothyzhbw-jpg` |
-| Repository name | `memory-lab` |
-| Workflow name | `publish.yml` |
-| Environment name | `pypi` |
+下面每一轮都这样做：
 
-PyPI 规定每个账号同时最多有三个 pending publisher，用过一次之后就不再占名额。所以第一次发布要分两轮：
+1. 打开 <https://pypi.org/manage/account/publishing/>，找到 **Add a new pending publisher**，选 **GitHub** 标签页。填好表单，点 **Add**：
 
-- 第一轮，现在添加：`memlab-core`、`memfalsify`、`orgmemory`。
-- 第二轮，第 4 步第一次运行之后添加：`memlab-mcp`、`memlab-ui`、`memory-lab`（这个名字见上面的说明）。
+   | 字段 | 填写 |
+   |---|---|
+   | Project Name | 这一轮的项目 |
+   | Owner | `timothyzhbw-jpg` |
+   | Repository name | `memory-lab` |
+   | Workflow name | `publish.yml` |
+   | Environment name | `pypi` |
 
-pending publisher 不会替你保留名字，所以添加之后请接着做第 4 步。
+2. 点按钮（第 4 步），`stop-after` 选同一个项目。
+3. 等运行变绿。前几轮已经发布的包会被跳过：索引上已有的版本只会跳过，绝不会被替换。
+
+| 轮次 | Project Name | stop-after |
+|---|---|---|
+| 1 | `memlab-core` | `memlab-core` |
+| 2 | `memfalsify` | `memfalsify` |
+| 3 | `orgmemory` | `orgmemory` |
+| 4 | `memlab-mcp` | `memlab-mcp` |
+| 5 | `memlab-ui` | `memlab-ui` |
+| 6 | `memory-lab` | `memory-lab` |
+
+第 6 轮要先决定上面说的名字问题。pending publisher 不会替你保留名字，所以添加之后请马上点按钮。
 
 ## 4. 那个按钮
 
 打开 <https://github.com/timothyzhbw-jpg/memory-lab/actions/workflows/publish.yml>，点 **Run workflow**。
 
-| 字段 | 第一次运行 | 第二次运行（第二轮之后） | 以后的发布 |
-|---|---|---|---|
-| Use workflow from | `main` | `main` | `main` |
-| confirm | `packages/memory-lab/pyproject.toml` 里的版本号 | 同上 | 那里的新版本号 |
-| target | `pypi` | `pypi` | `pypi` |
-| stop-after | `orgmemory` | `memory-lab`；如果不发这个名字，选 `memlab-ui` | `memory-lab` |
+| 字段 | 填写 |
+|---|---|
+| Use workflow from | `main` |
+| confirm | `packages/memory-lab/pyproject.toml` 里的版本号 |
+| target | `pypi` |
+| stop-after | 第 3 步期间选这一轮的项目。以后选 `memory-lab`；不发这个名字时选 `memlab-ui` |
 
 点绿色的 **Run workflow**。之后会发生这些事：
 
@@ -77,8 +88,6 @@ pending publisher 不会替你保留名字，所以添加之后请接着做第 4
    SHA-256。
 2. 如果你加了 required reviewer，点 **Review deployments**，再点 **Approve and deploy**。
 3. **Upload to PyPI** 按依赖顺序上传：`memlab-core`、`memfalsify`、`orgmemory`、`memlab-mcp`、`memlab-ui`、`memory-lab`，到你选的那个包为止。
-
-第一次运行之后，添加第二轮，再点一次按钮。第一次已经发布的三个包会被跳过：索引上已有的版本只会跳过，绝不会被替换。
 
 ## 5. 检查结果
 
@@ -110,9 +119,8 @@ CI 每次推送都会运行它（`packaging` 任务）。
 
 1. 在 <https://test.pypi.org/account/register/> 注册账号并开启 2FA。
 2. 按第 2 步再建一个名为 `testpypi` 的 GitHub environment，不加分支规则，这样可以从分支试运行。
-3. 在 <https://test.pypi.org/manage/account/publishing/> 添加 pending publisher：字段和分轮与第 3 步相同，Environment name 填 `testpypi`。
-4. 选 `target: testpypi` 点按钮。第一次运行同样选 `stop-after: orgmemory`。
-5. 从那里安装：
+3. 在 <https://test.pypi.org/manage/account/publishing/> 按第 3 步走完各轮，Environment name 填 `testpypi`，点按钮时选 `target: testpypi`。
+4. 从那里安装：
 
 ```bash
 python3 -m venv /tmp/memlab-testpypi
@@ -127,7 +135,7 @@ TestPyPI 同样保留版本：同一个版本第二次运行会被跳过，所�
 1. 给有改动的包升版本，并调整包之间的版本约束（每个约束只允许一个 minor 版本，见 [CHANGELOG.md](../CHANGELOG.md) 开头）。`memory-lab` 每次发布都要升版本，
    因为它的版本号就是这次发布的编号。
 2. 合并到 `main`，等 CI 通过。
-3. 填新版本号，选 `target: pypi` 和 `stop-after: memory-lab`，点按钮。
+3. 填新版本号，选 `target: pypi` 和 `stop-after: memory-lab`，点按钮。不用再填表单：第 3 步的 publisher 为所有项目服务。
 
 ## 出问题时
 
@@ -135,8 +143,10 @@ TestPyPI 同样保留版本：同一个版本第二次运行会被跳过，所�
 |---|---|
 | `the confirm input differs from the built memory-lab version` | 你填了别的版本，或者 `main` 上是另一个版本。什么都没有上传。提示里写着构建出的版本。 |
 | `target pypi works from main only` | **Use workflow from** 选了其他分支或标签。什么都没有上传。 |
-| 上传步骤出现 `invalid-publisher` | PyPI 找不到与这次运行匹配的 publisher。把这个包在第 3 步填的四个值与该步骤打印的 claims 对比；如果它的那一轮还没到，就先添加它的 publisher。 |
 | PyPI 表单显示 `This project name is too similar to an existing project` | 见[这个名字的说明](#开始之前memory-lab-这个名字)。 |
+| PyPI 表单显示 `already been registered for a different project name` | 上一轮的 pending publisher 还没有用过。先为它点一次按钮，或者在同一页面删除它。 |
+| 上传步骤出现 `Non-user identities cannot create new projects` | 运行走到了一个你还没有添加 pending publisher 的项目，通常是 `stop-after` 超过了当前这一轮。这一步之前的都没问题。添加下一个 publisher，或者调低 `stop-after`，再点一次按钮。 |
+| 上传步骤出现 `invalid-publisher` | PyPI 找不到与这次运行匹配的 publisher。把你在第 3 步填的四个值与该步骤打印的 claims 对比。 |
 | 运行中途停了 | 那一步之前的包已经在 PyPI 上，并且会一直留在那里。解决问题后再点一次按钮，它们会被跳过。 |
 | 发布的版本有问题 | PyPI 上的文件不能替换，也不能重复使用。在 PyPI 项目设置里该版本的页面上使用 **Yank**，修好之后发布一个新版本。 |
 

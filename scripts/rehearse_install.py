@@ -11,7 +11,9 @@ keeps what is installed and fetches the third-party dependencies, its report pro
 the index, and ``pip check`` proves the pins hold. Last it runs each command's ``--help`` and an audit of a small file,
 outside the checkout and with PYTHONPATH cleared. It prints how long each step took.
 
-Needs network access to the package index. CI runs it (the ``packaging`` job in .github/workflows/ci.yml).
+Needs network access to the package index. CI runs it (the ``packaging`` job in .github/workflows/ci.yml). Start it
+with Python 3.11 or newer, because the locked tools have no macOS wheel for 3.10; ``--python`` still rehearses the
+install itself on any supported version.
 """
 from __future__ import annotations
 
