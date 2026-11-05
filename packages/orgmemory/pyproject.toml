@@ -9,10 +9,28 @@ description = "Verified Organizational Memory: replay decisions under explicit a
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
+keywords = ["organizational-memory", "decision-log", "provenance", "authority", "adr", "event-replay"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
 dependencies = ["memlab-core>=0.4,<0.5", "pydantic>=2.12", "typer>=0.17.5"]
 
 [project.urls]
 Homepage = "https://github.com/timothyzhbw-jpg/memory-lab"
+Documentation = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/docs/tutorial.md"
+Repository = "https://github.com/timothyzhbw-jpg/memory-lab"
+Issues = "https://github.com/timothyzhbw-jpg/memory-lab/issues"
 Changelog = "https://github.com/timothyzhbw-jpg/memory-lab/blob/main/CHANGELOG.md"
 
 [project.scripts]

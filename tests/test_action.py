@@ -169,7 +169,7 @@ def test_action_errors_exit_2(tmp_path, monkeypatch, runner_env, override):
     assert action.main(env) == 2
 
 
-@pytest.mark.parametrize("path", ["action.yml", ".github/workflows/ci.yml"])
+@pytest.mark.parametrize("path", ["action.yml", ".github/workflows/ci.yml", ".github/workflows/publish.yml"])
 def test_no_expressions_inside_run_scripts(path):
     """Inputs reach scripts through env: only; ${{ }} inside run: would allow script injection."""
     in_run, indent = False, 0
@@ -449,7 +449,7 @@ def requirements_of(name):
     return found
 
 
-@pytest.mark.parametrize("path", ["action.yml", ".github/workflows/ci.yml"])
+@pytest.mark.parametrize("path", ["action.yml", ".github/workflows/ci.yml", ".github/workflows/publish.yml"])
 def test_third_party_actions_are_pinned_to_commit_shas(path):
     lines = uses_lines(path)
     assert lines

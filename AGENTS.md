@@ -5,6 +5,7 @@ Monorepo with three Python packages (Python 3.10+):
 - `packages/memcore` — shared evidence core (models, JSONL store, retrieval)
 - `packages/memfalsify` — `memfalsify` CLI: audits a `MEMORY.md` against an evidence directory. Verifier backends: `verify.py` (lexical, `DualVerifier`, `CascadeVerifier`), `llm.py` (Claude, extra `[llm]`), `jev.py` (TypeSafe AI's Jev judgment model via `typesafe-sdk`, extra `[jev]`), `openai_compat.py` (any OpenAI-compatible Chat Completions API: OpenAI, Grok, DeepSeek, Gemini, Ollama; extra `[openai]`)
 - `packages/orgmemory` — `orgmemory` CLI: event replay, permissions, state machine, decision provenance
+- `packages/memory-lab` — meta-distribution holding no modules: it installs memfalsify and orgmemory, with the extras `ui`, `mcp`, `llm`, `jev`, `openai` and `all`. PyPI publishing is a manual workflow: see `docs/publishing.md`
 
 Skills live in `skills/`, example inputs and generated reports in `examples/`. The Claude Code plugin manifests are `.claude-plugin/marketplace.json` and `skills/.claude-plugin/plugin.json`; `tests/test_packaging_agents.py` checks them.
 

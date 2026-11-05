@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate the hash-pinned requirement files the GitHub Action installs from (action/requirements/*.txt).
+# Regenerate the hash-pinned requirement files the GitHub Action installs from (action/requirements/*.txt),
+# and the one the publish workflow's build tools come from (scripts/publish-requirements.txt).
 # Usage: scripts/update-action-lock.sh            re-lock, keeping the versions already pinned
 #        scripts/update-action-lock.sh --upgrade  re-resolve every dependency to its newest release
 # Needs uv and network access to PyPI. Review the diff before committing: a lock file is only as
@@ -16,3 +17,6 @@ for set in lexical llm jev openai all; do
     --custom-compile-command "scripts/update-action-lock.sh" \
     "$@" "action/requirements/$set.in" -o "action/requirements/$set.txt"
 done
+uv pip compile --universal --python-version 3.10 --generate-hashes \
+  --custom-compile-command "scripts/update-action-lock.sh" \
+  "$@" scripts/publish-requirements.in -o scripts/publish-requirements.txt
