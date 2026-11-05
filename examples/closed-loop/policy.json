@@ -1,0 +1,19 @@
+{
+  "actors": {
+    "zhou": ["memory_steward"],
+    "lin": ["engineer"],
+    "wu": ["account_manager"],
+    "agent-7": ["agent"],
+    "memfalsify": ["auditor"]
+  },
+  "permissions": {
+    "request": ["agent", "account_manager", "engineer", "memory_steward"],
+    "reconsider": ["engineer", "memory_steward"],
+    "raise_risk": ["auditor", "engineer", "memory_steward"],
+    "dependency": ["engineer", "memory_steward"],
+    "comment": ["auditor", "agent", "account_manager", "engineer", "memory_steward"],
+    "approve": ["memory_steward"],
+    "reject": ["memory_steward"],
+    "revoke": ["memory_steward"]
+  }
+}
