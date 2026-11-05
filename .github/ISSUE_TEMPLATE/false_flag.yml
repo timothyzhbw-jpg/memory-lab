@@ -1,0 +1,73 @@
+name: False flag or missed contradiction
+description: An audit flagged a claim that is fine, or passed over one it should have flagged.
+labels: ["false-flag"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        中文用户可以直接用中文填写。Feel free to write in Chinese.
+
+        **This tracker is public, and what you write here stays public. Do not paste private text:** no internal documents, customer data, private memory files, or names you are not free to share, and never a credential. If the text is private, rewrite it as a small made-up example and run the audit on that to confirm it still shows the problem. Text from a public repository is fine, and a link to the commit helps.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which is it
+      options:
+        - False flag (the report flagged a claim that is fine)
+        - Missed contradiction (the report should have flagged this claim)
+    validations:
+      required: true
+  - type: textarea
+    id: claim
+    attributes:
+      label: The claim
+      description: The line from the memory or instruction file, exactly as written, with its file and line number.
+      placeholder: "MEMORY.md:3  The public API allows 100 requests per minute."
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: The quoted source
+      description: For a false flag, the evidence line the report quoted. For a missed contradiction, the line that disagrees with the claim. Exactly as written, with its file and line number.
+      placeholder: "evidence/api.md:3  The public API allows 60 requests per minute."
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: What the report said
+      description: The status and the reason, copied from the report. For a missed contradiction, the status the claim got.
+      placeholder: "POSSIBLE COUNTEREVIDENCE: contradicts (candidate, unconfirmed), different values: claim ['100'] vs source ['60']"
+    validations:
+      required: true
+  - type: textarea
+    id: truth
+    attributes:
+      label: What is true
+      description: Whether the claim and the source really agree, and how you know.
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command and verifier
+      description: The command you ran. If you chose a model verifier, name the model too.
+      placeholder: memfalsify audit MEMORY.md --evidence docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`pip list` shows it. From a checkout, add the commit (`git rev-parse --short HEAD`)."
+      placeholder: memfalsify 0.5.0, commit 91c0647
+    validations:
+      required: true
+  - type: checkboxes
+    id: public-safe
+    attributes:
+      label: Before you submit
+      options:
+        - label: Everything above is made up, comes from a public source, or is text I am free to make public.
+          required: true
