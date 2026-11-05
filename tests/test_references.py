@@ -771,6 +771,15 @@ def test_no_argument_mode_with_outside_evidence_makes_no_check(tmp_path, monkeyp
     assert "missing_reference" not in set_to_markdown(result)
 
 
+def test_no_argument_mode_below_the_evidence_root_is_checked(tmp_path, monkeypatch):
+    tree(tmp_path, "project/src/here.py", "shared/here.md")
+    write_text_exact(tmp_path / "project" / "AGENTS.md", MISSING_LINE + "- See `shared/lost.md` for this.\n")
+    monkeypatch.chdir(tmp_path / "project")
+    result = audit_directory(Path("."), tmp_path, as_of=AS_OF)
+    assert [i.detail.split("'")[1] for r in result.reports for f in r.findings for i in f.issues] == [
+        "src/gone.py", "shared/lost.md"]
+
+
 def test_no_argument_mode_walks_once(tmp_path, monkeypatch):
     tree(tmp_path, "src/here.py", "packages/web/src/here.ts")
     write_text_exact(tmp_path / "AGENTS.md", MISSING_LINE)
