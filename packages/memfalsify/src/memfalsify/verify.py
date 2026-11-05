@@ -281,11 +281,11 @@ class LexicalVerifier:
 
     def judge(self, claim: str, passage: str) -> Judgment:
         named = named_conflict(claim, passage)
-        if named:
+        score = coverage(claim, passage)
+        if named and (not named.merely_set or score >= self.related):
             reason = SET_VALUES if named.merely_set else NAMED_VALUE
             return Judgment(relation="contradicts", verifier=self.name,
                             rationale=f"{reason} {named.key}: claim {named.claim} vs source {named.source}")
-        score = coverage(claim, passage)
         if score < self.related:
             return Judgment(relation="unrelated", rationale=f"term coverage {score:.2f}", verifier=self.name)
         cjk = bool(CJK.search(claim) or CJK.search(passage))

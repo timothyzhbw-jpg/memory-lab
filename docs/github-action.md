@@ -21,8 +21,8 @@ counterevidence** when:
   *Never* is an instruction, so it does not count.
 - **the source says it was removed**: everything the instruction names stands before *was removed*.
 
-Tests do not contradict an instruction by themselves. Changelogs and examples only do through a setting's value (a
-changelog also by saying something was removed), and source code only through values and numbers. Vendored and
+Tests do not contradict an instruction by themselves. Changelogs and examples only do through a setting's stated value
+(a changelog also by saying something was removed), and source code only through a declared value. Vendored and
 generated files and lines over 1,000 characters are not read; the report lists them. The
 [rules in full](lexical-rules.md) say more; [how they measure](../benchmarks/memfalsify/wild/README.md) on real
 repositories is written down too.
@@ -38,8 +38,8 @@ It does **not** catch:
   instructions against what the repository *says*, not what it *does*; linters and tests cover behavior.
 - **Paraphrases.** "Deploys go through staging" against "production releases skip the pre-prod cluster" share
   too few words. Model verifiers (below) judge paraphrases, within a bounded set of passages.
-- **Most negation.** Reading every *not* as a contradiction was wrong 99% of the time on real repositories, so that
-  rule now fires rarely. A build that passes has not ruled much out.
+- **Most negation.** Reading every *not* as a contradiction was wrong on all 260 pairs sampled from real repositories,
+  so that rule now fires rarely. A build that passes has not ruled much out.
 - **Facts the repository never states.** These are reported as NO EVIDENCE, which never fails the build.
 
 Every match is a *candidate*. Only a human review can confirm it, and the action does not read

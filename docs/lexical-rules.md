@@ -24,7 +24,7 @@ A passage also has to share most of the claim's terms to be looked at (half of t
 - A key looks like an identifier: `snake_case`, `kebab-case`, `camelCase`, `dotted.name`, a `--flag`, or a name in backticks. Keys match exactly or ignoring case. `Note: 3 things` binds nothing.
 - These forms bind a key: `key: 100`, `key = 100`, `key=100`, `key (default: 100)`, `key: int = 180`, `key: float = Field(default=0.1, ...)`, `key defaults to 100`, `` `key` is 100 ``, `"key": 5`, `| key | 100 |`, `--flag 100`.
 - Values are numbers, booleans and short quoted strings. `None` and `null` mean no value here. `100`, `100.0` and `1_000` compare as numbers. `500ms` and `1s` are left alone, since their units are not converted.
-- A value set somewhere (`key=100`, `key = 100`, `--flag 100`) is not compared with a stated default (`key (default: 3)`, `key: int = 3`). Passing 100 in one call says nothing about the default. Against anything else a value that is merely set counts for less: that reason ranks low, needs a file that is no test, example, changelog or source code, and the passage has to share the claim's terms like any other.
+- A value set somewhere (`key=100`, `key = 100`, `--flag 100`) is not compared with a stated default (`key (default: 3)`, `key: int = 3`). Passing 100 in one call says nothing about the default. Against anything else a value that is merely set counts for less: that reason ranks low, needs a file that is no test, example, changelog or source code, and the passage has to count as related.
 
 ### Same subject
 
@@ -32,7 +32,7 @@ Two texts are about the same subject when each covers enough of the other's cont
 
 For a negation, a cue only reaches the next three terms of its clause, and a name such as `--no-cache` or `not_found` is no cue. Both sides negating the same word is agreement. `Do not ...`, `Never ...` and `Skip ...` at the start of a line are instructions, not statements about how things are, so they contradict nothing. A statement with `always`, `every` or `never` in the middle is contradicted by one counterexample, so there the source only has to cover the claim.
 
-Opposing words are states: approve/reject, enable/disable, allow/block, include/exclude, public/private, required/optional, supported/deprecated, pass/fail, true/false, increase/decrease. Add/remove, start/stop and open/close are not on the list, since they happen in turn.
+Opposing words are states, such as approve/reject, enable/disable, allow/block, include/exclude, public/private, required/optional, supported/deprecated, pass/fail, true/false and increase/decrease. Add/remove, start/stop and open/close are not on the list, since they happen in turn.
 
 ### Numbers that do not count
 
@@ -47,8 +47,8 @@ Text with CJK characters keeps its own per-clause negation, opposing terms and m
 | File | What it can contradict with |
 |---|---|
 | Tests (`tests/`, `test_*.py`, `*.test.ts`, ...) | Nothing. A test shows one case. |
-| Changelogs (`CHANGELOG*`, `changelog/`, `Releases.md`, ...) | Named values, and saying something was removed. A changelog records the past. |
-| Examples (`examples/`, `demos/`, `examples.md`, ...) | Named values. |
+| Changelogs (`CHANGELOG*`, `changelog/`, `Releases.md`, ...) | A stated value (`same setting`), and saying something was removed. A changelog records the past. |
+| Examples (`examples/`, `demos/`, `examples.md`, ...) | A stated value (`same setting`). |
 | Source code (`.py`, `.ts`, `.rs`, `.go`, ...) | Declared values only (`x: int = 5`, `X = 5`). `x = 5` is one assignment among others, and words and other numbers in code are mostly control flow and error messages. |
 | Everything else | All the rules. |
 
@@ -76,6 +76,6 @@ Flags are rare by design now, so a clean report says little. The verifier still 
 
 - Paraphrases, and anything stated in other words. "Requires Python 3.9" and `requires-python = ">=3.10"` share no key.
 - A list of removed items under a heading that says so: each line is read on its own.
-- Most negation in code and in instructions. The rule that read every `not` as a contradiction was wrong 99% of the time on real repositories, so it now fires rarely.
+- Most negation in code and in instructions. The rule that read every `not` as a contradiction was wrong on all 260 pairs sampled from real repositories, so it now fires rarely.
 
 For those, use a [model verifier](local-setup.md).

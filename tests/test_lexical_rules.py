@@ -49,6 +49,11 @@ def test_a_value_set_somewhere_counts_against_a_plain_statement(source):
     assert judge("max_steps: 100", source).rationale == "set differently max_steps: claim 100 vs source 500"
 
 
+def test_a_value_merely_set_needs_the_rest_of_the_line_too():
+    assert relation("Wrap it in a <span className='hidden'> for screen readers.", "<div className='wide'>Plans</div>") != "contradicts"
+    assert relation("max_steps: 100", "max_steps = 500 in the agent settings") == "contradicts"
+
+
 def test_a_flag_is_a_key():
     assert relation("Run with --workers 4", "Run with --workers=8") == "contradicts"
     assert "workers" in named_values("--workers 4")

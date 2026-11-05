@@ -24,7 +24,7 @@
 - 键要长得像标识符：`snake_case`、`kebab-case`、`camelCase`、`dotted.name`、`--flag`，或写在反引号里的名称。键按原样匹配，或忽略大小写匹配。`Note: 3 things` 不绑定任何东西。
 - 这些写法会绑定键：`key: 100`、`key = 100`、`key=100`、`key (default: 100)`、`key: int = 180`、`key: float = Field(default=0.1, ...)`、`key defaults to 100`、`` `key` is 100 ``、`"key": 5`、`| key | 100 |`、`--flag 100`。
 - 值可以是数字、布尔值和带引号的短字符串。`None` 和 `null` 表示这里没有值。`100`、`100.0`、`1_000` 按数字比较。`500ms` 和 `1s` 不比较，因为单位不做换算。
-- 在某处设置的值（`key=100`、`key = 100`、`--flag 100`）不和声明的默认值（`key (default: 3)`、`key: int = 3`）比较。一次调用传 100，说明不了默认值是多少。和其他写法比较时，只是设置的值分量也轻一些：这个理由排得靠后，来源不能是测试、示例、变更日志或源代码，证据也要像其他配对一样共享记忆的词。
+- 在某处设置的值（`key=100`、`key = 100`、`--flag 100`）不和声明的默认值（`key (default: 3)`、`key: int = 3`）比较。一次调用传 100，说明不了默认值是多少。和其他写法比较时，只是设置的值分量也轻一些：这个理由排得靠后，来源不能是测试、示例、变更日志或源代码，证据也要算得上相关。
 
 ### 主题相同
 
@@ -32,7 +32,7 @@
 
 否定词只管到它所在分句后面的三个词，`--no-cache`、`not_found` 这样的名称不算否定词。两边否定同一个词算一致。行首的 `Do not ...`、`Never ...` 和 `Skip ...` 是指令，不是对现状的陈述，所以不会构成矛盾。句中带 `always`、`every` 或 `never` 的陈述，一个反例就能反驳，所以只要求证据覆盖记忆。
 
-相反词指的是状态：approve/reject、enable/disable、allow/block、include/exclude、public/private、required/optional、supported/deprecated、pass/fail、true/false、increase/decrease。add/remove、start/stop、open/close 不在其中，因为它们是先后发生的动作。
+相反词指的是状态，比如 approve/reject、enable/disable、allow/block、include/exclude、public/private、required/optional、supported/deprecated、pass/fail、true/false、increase/decrease。add/remove、start/stop、open/close 不在其中，因为它们是先后发生的动作。
 
 ### 不算数的数字
 
@@ -47,8 +47,8 @@ issue 和 pull request 编号（`#7326`）；名称、路径和版本号里的�
 | 文件 | 能构成矛盾的规则 |
 |---|---|
 | 测试（`tests/`、`test_*.py`、`*.test.ts` 等） | 都不能。测试只展示一个情形。 |
-| 变更日志（`CHANGELOG*`、`changelog/`、`Releases.md` 等） | 具名的值，以及说明某物已被移除。变更日志记录的是过去。 |
-| 示例（`examples/`、`demos/`、`examples.md` 等） | 具名的值。 |
+| 变更日志（`CHANGELOG*`、`changelog/`、`Releases.md` 等） | 声明的值（`same setting`），以及说明某物已被移除。变更日志记录的是过去。 |
+| 示例（`examples/`、`demos/`、`examples.md` 等） | 声明的值（`same setting`）。 |
 | 源代码（`.py`、`.ts`、`.rs`、`.go` 等） | 只有声明的值（`x: int = 5`、`X = 5`）。`x = 5` 只是众多赋值之一，代码里的词语和其他数字大多是控制流和错误信息。 |
 | 其他文件 | 全部规则。 |
 
@@ -76,6 +76,6 @@ issue 和 pull request 编号（`#7326`）；名称、路径和版本号里的�
 
 - 换一种说法的表述。“Requires Python 3.9” 和 `requires-python = ">=3.10"` 没有共同的键。
 - 标题写明已移除、下面逐行列出的条目：每一行是单独读的。
-- 代码和指令里的大部分否定。把每个 `not` 都当成矛盾的旧规则，在真实仓库上 99% 都是错的，所以它现在很少触发。
+- 代码和指令里的大部分否定。把每个 `not` 都当成矛盾的旧规则，在真实仓库抽样的 260 对上全都错了，所以它现在很少触发。
 
 这些情况请用[模型验证器](local-setup.zh-CN.md)。
