@@ -1,6 +1,7 @@
 """``missing_reference``: a path the memory names that exists nowhere. Real cases in a temporary tree, one for each kind
 of noise a scan of real agent files turned up, and for each way an existing file could read as missing."""
 import importlib.util
+import itertools
 import json
 import os
 import shlex
@@ -288,6 +289,13 @@ def test_a_directory_the_walk_does_not_enter_is_recognized_in_any_case(tmp_path)
     tree(tmp_path, "src/.cache/parser.py", "src/real.py")
     assert flagged(tmp_path, "- The parser is `src/.CACHE/parser.py` for now.\n") == []
     assert flagged(tmp_path, "- The parser is `src/NODE_MODULES/parser.py` for now.\n") == []
+
+
+def test_a_directory_the_walk_does_not_enter_cannot_vouch_for_a_short_path(tmp_path):
+    # The quick start says so: a dependency's src/parser.py is not this project's.
+    tree(tmp_path, "src/keep.txt", "node_modules/pkg/src/parser.py", ".yarn/patches/lodash.patch", "patches/keep.txt")
+    assert flagged(tmp_path, "- The parser is `src/parser.py` for now.\n") == ["src/parser.py"]
+    assert flagged(tmp_path, "- The patch is `patches/lodash.patch` for now.\n") == ["patches/lodash.patch"]
 
 
 def test_the_first_segment_must_match_its_case(tmp_path):
@@ -910,7 +918,7 @@ def test_asking_again_stops_when_every_path_was_refused(tmp_path, monkeypatch):
 
 def test_the_time_limit_covers_all_the_asking(tmp_path, monkeypatch):
     calls = _git_answers_the_probe_only(monkeypatch)
-    clock = iter(range(1000))
+    clock = itertools.count()
     monkeypatch.setattr(references_module.time, "monotonic", lambda: float(next(clock)))
     monkeypatch.setattr(references_module, "GIT_SECONDS", 5)
     assert git_ignored(tmp_path, [f"a/{at}" for at in range(500)]) is None
@@ -948,6 +956,13 @@ def test_a_negated_ignore_pattern_says_not_ignored(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     write_text_exact(tmp_path / ".gitignore", "*.log\n!keep.log\n")
     assert git_ignored(tmp_path, ["a.log", "keep.log", "other.txt"]) == {"a.log"}
+
+
+@needs_git
+def test_only_the_paths_asked_about_come_back(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    write_text_exact(tmp_path / ".gitignore", "*\n")
+    assert git_ignored(tmp_path, ["a/b.py"]) == {"a/b.py"}
 
 
 def _sparse_repository(root: Path) -> None:

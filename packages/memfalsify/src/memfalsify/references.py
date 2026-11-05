@@ -477,11 +477,11 @@ def git_ignored(root: Path, paths: Iterable[str]) -> set[str] | None:
         fields = done.stdout.split(b"\0")
         # Four fields each: source, line number, pattern, path. A pattern that starts with ! says not ignored.
         answers = list(zip(fields[2::4], fields[3::4]))
-        ignored |= {path[2:].decode("utf-8", "surrogateescape") for pattern, path in answers
+        ignored |= {path[2:].decode("utf-8", "surrogateescape") for pattern, path in answers[1:]
                     if pattern and not pattern.startswith(b"!")}
         if done.returncode not in (0, 1) and not answers:
             return None
-        names = names[len(answers):]  # the probe stands in for the one git refused, if it did
+        names = names[len(answers):]  # past the names answered (all answers but the probe's) and the one git refused
         if done.returncode in (0, 1) or not names:
             return ignored
 
