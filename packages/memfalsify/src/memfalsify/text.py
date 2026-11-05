@@ -597,8 +597,15 @@ def _differs(one: str, other: str) -> bool:
     return one != other and not one.startswith(other + ".") and not other.startswith(one + ".")
 
 
-def named_conflict(claim: str, passage: str, set_counts: bool = True) -> tuple[str, str, str] | None:
-    """(key, claim value, source value) when both texts bind the same key to different values.
+class ValueConflict(NamedTuple):
+    key: str
+    claim: str
+    source: str
+    both_set: bool  # both sides merely set it, which says less than a statement of what it is
+
+
+def named_conflict(claim: str, passage: str, set_counts: bool = True) -> ValueConflict | None:
+    """What differs when both texts bind the same key to different values.
 
     A value set somewhere (``key=100``, ``key = 100``, ``--flag 100``) is not compared with a stated default (``key
     (default: 3)``, ``key: int = 3``): setting 100 in one place says nothing about the default. Without ``set_counts``,
@@ -608,7 +615,8 @@ def named_conflict(claim: str, passage: str, set_counts: bool = True) -> tuple[s
         pairs = [(a, b) for a in ours for b in theirs.get(key, ())
                  if {a.kind, b.kind} != {DEFAULT, SET} and (set_counts or b.kind != SET)]
         if pairs and all(_differs(a.value, b.value) for a, b in pairs):
-            return key, pairs[0][0].written, pairs[0][1].written
+            return ValueConflict(key, pairs[0][0].written, pairs[0][1].written,
+                                 all(a.kind == SET and b.kind == SET for a, b in pairs))
     return None
 
 

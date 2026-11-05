@@ -49,6 +49,15 @@ def test_a_flag_is_a_key():
     assert "workers" in named_values("--workers 4")
 
 
+@pytest.mark.parametrize("claim, source", [("timeout_ms = 100", "timeout_ms = 200"), ("timeout_ms=100", "timeout_ms=200"),
+                                           ("--timeout-ms 100", "--timeout-ms 200")])
+def test_two_values_that_are_merely_set_say_less(claim, source):
+    assert judge(claim, source).rationale == f"set differently {named_conflict(claim, source).key}: claim 100 vs source 200"
+    assert weighed(judge(claim, source), "docs/a.toml", claim, source).relation == "contradicts"
+    assert weighed(judge(claim, source), "examples/a.md", claim, source).relation == "unrelated"
+    assert weighed(judge(claim, source), "src/a.py", claim, source).relation == "unrelated"
+
+
 @pytest.mark.parametrize("claim, source", [
     ("max_steps: 100", "max_steps: 100"),
     ("max_steps: 100", "max_steps: 100.0"),
@@ -260,7 +269,7 @@ def test_removal_is_about_what_stands_before_the_words():
     ("conftest.py", "test"), ("CHANGELOG.md", "changelog"), ("packages/web/CHANGELOG-v6.md", "changelog"),
     ("docs/changelog/sdk.mdx", "changelog"), ("Releases.md", "changelog"), ("BREAKING_CHANGES.md", "changelog"),
     ("examples/blog/README.md", "example"), ("skills/references/examples.md", "example"), ("src/app.py", None),
-    ("docs/api.md", None), ("releases/search.md", None), ("latest/contest.md", None),
+    ("docs/api.md", None), ("releases/search.md", None), ("latest/contest.md", None), ("docs/test_plan.md", None),
 ])
 def test_source_kind(path, kind):
     assert source_kind(path) == kind
@@ -274,18 +283,22 @@ def contradiction(rationale):
     ("tests/test_a.py", "same setting x_y: claim 1 vs source 2", "unrelated"),
     ("CHANGELOG.md", "same setting x_y: claim 1 vs source 2", "contradicts"),
     ("examples/a.md", "same setting x_y: claim 1 vs source 2", "contradicts"),
+    ("src/a.py", "same setting x_y: claim 1 vs source 2", "contradicts"),
     ("CHANGELOG.md", "different values: claim ['1'] vs source ['2']", "unrelated"),
     ("examples/a.md", "same subject, but only one side is negated", "unrelated"),
     ("tests/a.md", "opposing terms: claim 'a…' vs source 'b…'", "unrelated"),
     ("CHANGELOG.md", "source says what the claim names was removed", "contradicts"),
     ("examples/a.md", "source says what the claim names was removed", "unrelated"),
-    ("src/a.py", "opposing terms: claim 'a…' vs source 'b…'", "unrelated"),
-    ("src/a.py", "same subject, but only one side is negated", "unrelated"),
-    ("src/a.py", "different values: claim ['1'] vs source ['2']", "contradicts"),
     ("docs/a.md", "same subject, but only one side is negated", "contradicts"),
 ])
 def test_weighed(path, rationale, relation_after):
     assert weighed(contradiction(rationale), path, "x_y: 1", "x_y: 2").relation == relation_after
+
+
+@pytest.mark.parametrize("rationale", ["opposing terms: claim 'a…' vs source 'b…'", "different units: a",
+                                       "same subject, but only one side is negated", "different values: a"])
+def test_in_source_code_only_a_declared_value_counts(rationale):
+    assert weighed(contradiction(rationale), "src/a.py", "A claim", "if not x: return 5").relation == "unrelated"
 
 
 @pytest.mark.parametrize("source, relation_after", [("retry_limit: int = 5", "contradicts"), ("RETRY_LIMIT = 5", "contradicts"),
@@ -415,7 +428,8 @@ def test_the_strongest_reason_comes_first(tmp_path):
 
 def test_strength_ranks_only_what_it_knows():
     ranks = [strength(text) for text in ("same setting x: claim 1 vs source 2", "different units: a", "different values: a",
-                                         "source says what the claim names was removed", "opposing terms: a",
+                                         "source says what the claim names was removed", "set differently x: claim 1 vs source 2",
+                                         "opposing terms: a",
                                          "opposite modality: a", "same subject, but only one side is negated",
                                          "a model's words")]
     assert ranks == sorted(ranks) and len(set(ranks)) == len(ranks)

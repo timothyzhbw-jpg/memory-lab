@@ -74,6 +74,8 @@ def long_lines_note(count: int) -> str:
     return f"long lines: {count} over {MAX_LINE:,} characters not read as passages"
 
 
+_CODE_SUFFIXES = frozenset({".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".rs", ".go", ".java",
+                            ".kt", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".sh", ".bash"})
 _TEST_DIRS = frozenset({"test", "tests", "__tests__", "testing", "spec", "specs", "e2e"})
 _TEST_NAME = re.compile(r"^test_|_test\.|\.test\.|_spec\.|\.spec\.|^conftest\.py$")
 _CHANGELOG_DIRS = frozenset({"changelog", "changelogs"})
@@ -82,26 +84,22 @@ _EXAMPLE_DIRS = frozenset({"example", "examples", "sample", "samples", "demo", "
 _EXAMPLE_NAME = re.compile(r"^examples?\.")
 
 
+def is_code(relative: str) -> bool:
+    return PurePath(relative).suffix.lower() in _CODE_SUFFIXES
+
+
 def source_kind(relative: str) -> str | None:
     """``test``, ``changelog`` or ``example`` when the path says the file is one of those: text that shows or records
     a case rather than states how things are."""
     *directories, name = PurePath(relative.lower()).parts
     folders = set(directories)
-    if folders & _TEST_DIRS or _TEST_NAME.search(name):
+    if folders & _TEST_DIRS or (_TEST_NAME.search(name) and is_code(name)):
         return "test"
     if folders & _CHANGELOG_DIRS or _CHANGELOG_NAME.search(name):
         return "changelog"
     if folders & _EXAMPLE_DIRS or _EXAMPLE_NAME.search(name):
         return "example"
     return None
-
-
-_CODE_SUFFIXES = frozenset({".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".rs", ".go", ".java",
-                            ".kt", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".sh", ".bash"})
-
-
-def is_code(relative: str) -> bool:
-    return PurePath(relative).suffix.lower() in _CODE_SUFFIXES
 
 
 def _matches(relative: str, patterns: list[str], directory: bool = False) -> bool:

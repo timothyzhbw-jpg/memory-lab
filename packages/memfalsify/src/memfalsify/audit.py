@@ -20,7 +20,7 @@ from .formats import Value
 from .memory import Claim, parse_memory
 from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, CJK, HEDGE, RELATIVE_TIME, coverage_units,
                    explicit_dates, features, has_negation, named_conflict, named_values, normalize)
-from .verify import (NAMED_VALUE, REASONS, REMOVED, WORDING, Judgment, LexicalVerifier, Verifier, VerifierStats, coverage,
+from .verify import (NAMED_VALUE, REASONS, REMOVED, Judgment, LexicalVerifier, Verifier, VerifierStats, coverage,
                      judge_all, strength, usage_since, verifier_usage)
 
 Status = Literal["challenged", "conflicted", "candidate_counterevidence", "disputed",
@@ -176,8 +176,8 @@ def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
 
 
 def naming_passages(claims: list[Claim], passages: list[Passage]) -> dict[str, list[Passage]]:
-    """For each claim that binds a key, the passages that bind the same key to a different value, however little else
-    they share: ``max_steps: int = 500`` says nothing about the rest of a long description of ``max_steps``."""
+    """For each claim that binds a key, the passages that state another value for it, however little else they share:
+    ``max_steps: int = 500`` says nothing about the rest of a long description of ``max_steps``."""
     keys = {claim.id: list(named_values(claim.text)) for claim in claims}
     terms = {key: features(key)[0] for names in keys.values() for key in names}
     wanted = frozenset().union(*terms.values()) if terms else frozenset()
@@ -197,7 +197,7 @@ def naming_passages(claims: list[Claim], passages: list[Passage]) -> dict[str, l
         picked = sorted(chosen)
         # Within read_limits, these comparisons draw from the comparison budget, as in ``shortlist``.
         naming = [passages[at] for at in picked[:take("comparisons", len(picked))]
-                  if named_conflict(claim.text, passages[at].span.quote)]
+                  if named_conflict(claim.text, passages[at].span.quote, set_counts=False)]
         if naming:
             found[claim.id] = naming
     return found
@@ -227,19 +227,15 @@ def weighed(judgment: Judgment, path: str, claim: str, passage: str) -> Judgment
     """A lexical contradiction, once the file it comes from is known.
 
     A test, changelog or example shows or records a case, so it does not contradict a claim by itself, unless a
-    changelog or example names the same setting or a changelog says the thing was removed. In source code, opposing
-    words and negation are control flow and error messages, and ``x = 5`` is one assignment among others, so they do
-    not count either."""
+    changelog or example names the same setting or a changelog says the thing was removed. In source code, only a
+    declared value counts: words and other numbers are control flow and error messages, and ``x = 5`` is one assignment
+    among others."""
     if judgment.relation != "contradicts":
         return judgment
-
-    def assigned() -> bool:
-        return named_conflict(claim, passage, set_counts=False) is None
-
     why = judgment.rationale
     kind = source_kind(path)
     if kind is None:
-        if not is_code(path) or not (why.startswith(WORDING) or (why.startswith(NAMED_VALUE) and assigned())):
+        if not is_code(path) or named_conflict(claim, passage, set_counts=False):
             return judgment
         kind = "source code"
     elif (kind != "test" and why.startswith(NAMED_VALUE)) or (kind == "changelog" and why == REMOVED):
@@ -674,7 +670,7 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     # Within a status, the strongest reason first; a stable sort keeps file order after that.
     findings.sort(key=lambda f: (SEVERITY.index(f.status), min((_rank(e, verifier.name) for e in f.evidence),
                                                                default=len(REASONS))))
-    summary ={s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
+    summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
     media = any(p.span.media for p in passages) or any(e.span.media for f in findings for e in f.evidence)
     return AuditReport(memory_file=memory_file, files_read=files_read,
                        evidence_root=str(evidence_root) if evidence_root else None, excluded=exclude,

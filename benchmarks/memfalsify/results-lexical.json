@@ -9,7 +9,7 @@
   "cost": {
     "judge_calls": 255,
     "escalations": null,
-    "seconds": 0.114
+    "seconds": 0.146
   },
   "metrics": {
     "claims": 202,

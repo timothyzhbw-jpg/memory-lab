@@ -53,6 +53,7 @@ ADVICE = {
 }
 WHY = (
     ("same setting", "Both name the same setting, with different values."),
+    ("set differently", "Both name the same setting, with different values."),
     ("opposing terms", "They use opposite words."),
     ("different units", "The same number, with a different unit."),
     ("different values", "The numbers are different."),
@@ -315,7 +316,7 @@ def marks(e: EvidenceFinding, claim: str, verifier: str) -> tuple[list, list]:
         return _prefix_ranges(claim, found[1]), _prefix_ranges(source, found[2])
     if found := re.match(r"opposite modality: claim '(.+?)' vs source '(.+?)'", why):
         return _phrase_ranges(claim, found[1]), _phrase_ranges(source, found[2])
-    if found := re.match(r"same setting (.+?): claim (.+?) vs source (.+)$", why):
+    if found := re.match(r"(?:same setting|set differently) (.+?): claim (.+?) vs source (.+)$", why):
         return (_phrase_ranges(claim, found[1]) + _phrase_ranges(claim, found[2]),
                 _phrase_ranges(source, found[1]) + _phrase_ranges(source, found[3]))
     if why.startswith(("different values", "different units")):

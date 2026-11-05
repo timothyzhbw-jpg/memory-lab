@@ -713,7 +713,7 @@ def test_message_constants_are_all_translated():
               ui_decisions.CHANGE, ui_decisions.FINDING, ui_home.STEPS, ui_home.CARDS, ui_pages.NAV]
     keys = {"attention", "fine", "grey", "approved", "rejected", "waiting", "home", "check", "decisions",
             "opposing terms", "different values", "opposite modality", "same subject, but only one side is negated",
-            "same setting", "different units", "source says what the claim names was removed"}
+            "same setting", "set differently", "different units", "source says what the claim names was removed"}
     for table in tables:
         for entry in (table.values() if isinstance(table, dict) else table):
             for value in (entry if isinstance(entry, tuple) else (entry,)):
@@ -1248,6 +1248,7 @@ def test_served_caps_connections_and_the_time_for_headers(root, loopback, monkey
 # --- the stricter lexical reasons ------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("reason", ["same setting max_steps: claim 100 vs source 500",
+                                    "set differently max_steps: claim 100 vs source 500",
                                     "different units: claim 2 minutes vs source 2 seconds",
                                     "source says what the claim names was removed"])
 def test_each_lexical_reason_has_words_on_the_page(reason):
