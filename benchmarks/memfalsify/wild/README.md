@@ -21,7 +21,7 @@ It reports, for the code you have: per labeling-time rule, how many labeled pair
 
 All labeling is by AI models, reviewed by the lead of the work, who is also an AI session. No person labeled anything. Keep that in mind when reading the numbers.
 
-1. Audits of 14 projects' agent files with the verifier as it was before this work gave 1,371 unique (claim, source) contradiction pairs: 1,218 from "only one side is negated", 83 from opposing terms, 70 from different values.
+1. Audits of 15 projects' agent files with the verifier as it was before this work gave 1,371 unique (claim, source) contradiction pairs, from 14 of the projects: 1,218 from "only one side is negated", 83 from opposing terms, 70 from different values.
 2. The sample is every opposing and every numbers pair, plus negation capped at 25 per repository and 260 in all, in a fixed order: 413 pairs.
 3. Two models labeled each pair independently, Claude and then Codex (OpenAI), each reading the source around the line in the clone. Neither saw the other's labels. `real` means the memory line and the source cannot both be true about the same thing; everything else is `not_real`, with a reason.
 4. They disagreed on 2 of 413 pairs, both where Claude said `real` and Codex said `not_real`. Both went to `not_real` on adjudication.
@@ -46,7 +46,9 @@ Measured on 2026-11-05, with the rules described in [the rules page](../../../do
 
 | | Before | Now |
 |---|---|---|
-| Flagged pairs among the 1,371 | 1,371 | 25 (down 98.2%) |
+| Flagged pairs in full audits | 1,371 | 50 (down 96.4%) |
+| Flagged claims in full audits | 645 | 31 |
+| Of the 1,371 pairs, still flagged | 1,371 | 24 (down 98.2%) |
 | Labeled pairs flagged | 413 | 15 |
 | Real rows kept | 11 of 11 | 9 of 11 |
 | Precision on the labeled sample | 0.03 | 0.60 |
@@ -63,6 +65,6 @@ By rule at labeling time, now:
 
 The two real rows lost are both pairs where the quoted source does not show the problem: one quotes the setting next to the one that disagrees (that claim is still flagged against the right line), and one quotes a list item whose heading, on an earlier line, says the items were removed (that claim is still flagged against another line). Every memory line behind a real row is still flagged.
 
-{{AUDITS}}
+The full audits cover the 27 agent files of the 15 repositories, each against its own repository, and show at most three passages per claim, before and after. One of the 27, grafana's `AGENTS.md`, timed out before this work, so the 1,371 do not include it; it adds no flag now. Of the 50 pairs now flagged, 15 have a label (9 real), and 35 do not: 9 were among the 1,371 and 26 are new. By reason: `same setting` 22, `same subject` 19, `set differently` 3, `different values` 3, `opposing terms` 2, removal 1. The new pairs were read but not labeled. Most `same setting` ones point at the declaration the memory line disagrees with (`max_failures: int = 5`), which is the recall the old rules missed, and those are not counted in the 9 real rows above.
 
-The negation rule stays because synthetic cases and small repositories state things like "deploys are never allowed on Fridays", but on these repositories it has 0 real rows in 260 sampled, and its remaining flags are not real. Treat a `same subject, but only one side is negated` finding as weak.
+The negation rule stays because synthetic cases state things like "deploys are never allowed on Fridays" and it finds them, but on these repositories it has no real row among the 260 sampled, and of the 19 flags it still gives none read as real. It did not reach usable precision here. Treat a `same subject, but only one side is negated` finding as weak; it ranks last in a report.
