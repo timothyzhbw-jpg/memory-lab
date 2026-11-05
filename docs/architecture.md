@@ -18,7 +18,7 @@ The [closed-loop demo](../examples/closed-loop/README.md) runs everything on thi
 | **Verify** | Is the line backed by evidence? | `audit` compares each claim with the evidence and reports a status with cited quotes | Takes no part |
 | **Challenge** | A finding becomes a question for the organization | The report and its proposed actions, which only a person applies | A `raise_risk` or `comment` event; `audit` and `explain` show who asked, who approved, and whether they were allowed |
 | **Resolve** | Someone with the permission decides | `reviews.jsonl` lets a person confirm or dismiss the evidence | `approve`, `reject` or `revoke` by that person; the same action from anyone else is recorded and ignored |
-| **Evolve** | A person edits the memory, and the line gets a new ID | `diff` and `history` show the change; `rollback` prints a patch for a person to apply | The new line is a new subject; the old one keeps its decision; `changes` and `export` report them |
+| **Evolve** | A person edits the memory. A change to the words gives the line a new ID; a change of case or whitespace keeps it | `diff` and `history` show the change; `rollback` prints a patch for a person to apply | The new line is a new subject; the old one keeps its decision; `changes` and `export` report them |
 
 ```text
  Remember    a commit adds a line to MEMORY.md
@@ -51,15 +51,17 @@ From `memfalsify history --format json`, `claims[]`:
 | History field | Event field | Rule |
 |---|---|---|
 | `memory_id` | `subject` | `memory:<memory_id>` |
-| `memory_id` | `id` | `write-request-<memory_id>` and `write-approve-<memory_id>` |
+| `memory_id`, `introduced.commit` | `id` | `write-request-<memory_id>-<commit>` and `write-approve-<memory_id>-<commit>`, with the first 12 characters of the commit. A line removed and landed again has a new commit, so it gets new events on its old subject; after a decision, replay reads that as a reconsideration |
 | `introduced.author` | `actor` of the `request` | Who proposed the line |
-| `introduced.subject` | `actor` of the `approve` | The name in a final `(approved-by: NAME)`. With no such name, the author: landing a line with no other approval is approving it yourself |
+| `introduced.subject` | `actor` of the `approve` | The name in a final `(approved-by: NAME)`: words of letters, digits, `.`, `_`, `@` and `-` in any script, with one space between words. With no such name, the author: landing a line with no other approval is approving it yourself. An `approved-by:` that does not fit leaves the author as the approver, and the script says so on stderr |
 | `introduced.date` | `timestamp` of both | The commit's author date |
 | `location`, `text` | `note` of the `request` | `Memory write at <location>: <text>` |
 | `replaced.memory_id` | `note` of the `request` | Adds `(edits <memory_id>)` when the line replaced an earlier one |
-| `location`, `introduced` | `evidence_ids` of both | `<memory_id>-line` quotes the memory line; `<memory_id>-introduced` quotes the claim's `Introduced` line in the Markdown history |
+| `location`, `introduced` | `evidence_ids` of both | `<memory_id>-<head>-line` quotes the memory line; `<memory_id>-<commit>-introduced` quotes the claim's `Introduced` line in the Markdown history |
 
-A line with no commit to name (older than the scan, or uncommitted) gets no write events, and the script says so on stderr.
+A line older than the scan has no commit to name: it gets no write events, and the script says so on stderr.
+
+Every file a record cites has to be the file at the history's `head`, so that `git:<head>:<path>` is true. The script compares the two with `git cat-file`, line endings aside, and stops at any difference: an uncommitted line, an edited or untracked evidence file, a report older than the memory. Commit, then run the audit and history again. The line at `location` also has to hold the claim once its markup is removed, the way MemFalsify removes it.
 
 The approval is `approve` for the same reason a merged pull request is: [`github_map.py`](../packages/orgmemory/src/orgmemory/github_map.py) maps a GitHub merge to `approve`.
 
@@ -70,12 +72,12 @@ From `memfalsify audit --format json`, `findings[]`:
 | Finding field | Event field | Rule |
 |---|---|---|
 | `memory_id` | `subject` | `memory:<memory_id>` |
-| `memory_id`, `status` | `id` | `finding-<status>-<memory_id>`, so a later audit with the same result adds nothing |
+| `memory_id`, `status` | `id` | `finding-<status>-<memory_id>`, so a later audit with the same result adds nothing, evidence records included |
 | `status` | `action` | The table below |
 | `evidence[].reviewer` | `actor` | The first reviewer who confirmed the evidence; otherwise `memfalsify`, which `policy.json` gives a role that may raise risks and comment |
 | `status`, `location`, `text` | `note` | `<status> at <location>: <text>` |
 | `evidence[].span` | `evidence_ids` | One evidence record per span, supporting spans left out unless the status is `conflicted`. For `insufficient_evidence`, which has no span, the record quotes the memory line |
-| report `as_of` | `timestamp` | The end of that day in UTC, because the report holds only a date |
+| report `as_of` | `timestamp` | `--audited-at` when you give it; otherwise the end of that day in UTC, because the report holds only a date. If the commit that introduced the line is later, its time. See [Limits](#limits) |
 
 | Status | Action | Why |
 |---|---|---|
@@ -89,18 +91,20 @@ From `memfalsify audit --format json`, `findings[]`:
 
 No finding becomes `approve`, `reject` or `revoke`. Those stay with a person who holds the permission.
 
+A confirmed contradiction from a reviewer the policy gives no role is judged like any other event: it is recorded and ignored, so the subject has no risk on it and `orgmemory audit` reports an `unauthorized_attempts` finding, while an unreviewed candidate from `memfalsify` does leave a risk. Give your reviewers a role that may raise risks.
+
 ### An evidence record
 
 From `span` in a finding, for `orgmemory evidence add`:
 
 | Field | Option | Rule |
 |---|---|---|
-| `span.path`, report `evidence_root` | `--path` | The file is copied to `sources/<head>/<path>` in the dataset, after its bytes are checked against `span.sha256` |
+| `span.path`, report `evidence_root` | `--path` | The file is copied to `sources/<head>/<path>` in the dataset, after its bytes are checked against `span.sha256` and the file at `head`. `--evidence .` is fine: the root is then the repository |
 | `span.quote` | `--quote` | Unchanged; orgmemory hashes the copy and finds the quote again |
-| `span.sha256`, `span.start` | `--id` | `<memory_id>-<first 8 of the hash>-<start>` |
+| `span.sha256`, `span.quote` | `--id` | `<memory_id>-<first 8 of the hash>-<start>`, where `start` is the first occurrence of the quote: the range `orgmemory evidence add` records |
 | history `head` | `--source-uri` | `git:<head>:<path>` |
 | fixed | `--source-kind` | `evidence_file`, `memory_file` or `memory_history` |
-| report `as_of` | `--captured-at` | The same time as the event |
+| report `as_of` | `--captured-at` | `--audited-at`, or the end of that day in UTC |
 
 ### One line, worked through
 
@@ -113,8 +117,8 @@ The audit reports (trimmed):
 The history names the commit: author `agent-7`, subject `Remember the API rate limit (approved-by: wu)`. Three events result:
 
 ```json
-{"id": "write-request-m-9efe3be5", "timestamp": "2026-10-07T09:00:00Z", "actor": "agent-7", "action": "request", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-line", "m-9efe3be5-introduced"], "note": "Memory write at MEMORY.md:5: The public API rate limit is 100 requests per minute."}
-{"id": "write-approve-m-9efe3be5", "timestamp": "2026-10-07T09:00:00Z", "actor": "wu", "action": "approve", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-line", "m-9efe3be5-introduced"]}
+{"id": "write-request-m-9efe3be5-7ed0c4c7f4b1", "timestamp": "2026-10-07T09:00:00Z", "actor": "agent-7", "action": "request", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-b17a3549d0ee-line", "m-9efe3be5-7ed0c4c7f4b1-introduced"], "note": "Memory write at MEMORY.md:5: The public API rate limit is 100 requests per minute."}
+{"id": "write-approve-m-9efe3be5-7ed0c4c7f4b1", "timestamp": "2026-10-07T09:00:00Z", "actor": "wu", "action": "approve", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-b17a3549d0ee-line", "m-9efe3be5-7ed0c4c7f4b1-introduced"]}
 {"id": "finding-candidate_counterevidence-m-9efe3be5", "timestamp": "2026-10-10T23:59:59Z", "actor": "memfalsify", "action": "raise_risk", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-f5a6a83d-14"], "note": "candidate_counterevidence at MEMORY.md:5: The public API rate limit is 100 requests per minute."}
 ```
 
@@ -147,7 +151,7 @@ The code supports this:
 The costs of this decision:
 
 - **Permissions are per action, not per kind of subject.** In one log, whoever may approve a memory write may also approve a product decision. The demo keeps memory writes in a dataset of their own, with its own policy.
-- **The link between an edited line and its earlier version is only text.** An edit gives the line a new `memory_id` and so a new subject; the old ID appears in the `note` of the new `request`, and replay does not read it.
+- **The link between an edited line and its earlier version is only text.** An edit to the words gives the line a new `memory_id` and so a new subject; the old ID appears in the `note` of the new `request`, and replay does not read it. A change of case or whitespace keeps the `memory_id`, so the line stays the same subject with the same author: the change shows in the history's `last_changed` and adds no event.
 - **`to_events.py` is an example you copy and own.** A test runs it against the real CLIs in this repository; in your own setup, its upkeep falls to you.
 
 What would change this decision:
@@ -162,4 +166,7 @@ What would change this decision:
 - **Candidates are leads.** With the default lexical verifier, `candidate_counterevidence` means the words suggest a contradiction. Only a person's review makes a memory `challenged`, and a `raise_risk` from `memfalsify` is a question for a person.
 - **History has edges.** `memfalsify history` follows the first-parent line, so a change merged with a merge commit is attributed to that commit, and a line older than `--max-commits` has no author to name.
 - **A risk stays on record.** The log has no event that resolves a risk, so one remains listed after the line is rejected or corrected.
+- **An audit has a date, and replay orders by time.** The default timestamp is the end of the `as_of` day in UTC, so a decision made that same day sorts before the finding, and `orgmemory audit` reads it as a risk raised after the approval, which says the facts moved when the approver may have read the audit first. Pass `--audited-at` with the real time, with its zone, when someone may decide on the day of the audit. The demo decides on a later day.
+- **A removal leaves no event.** The conversion reads the current claims, so a removed line keeps its last state in orgmemory until it lands again. Rewriting history gives lines new commits, and those read as new landings.
+- **A cited range is the first occurrence.** `orgmemory evidence add` finds a quote by searching the file. When a sentence appears twice, the record points at the first. When one commit lands several lines, each `-introduced` record points at the first claim's `Introduced` line, which quotes the same text. The quote and the hash stay true; the line a reader lands on can be an earlier one.
 - **Not exercised here.** The demo's evidence is plain text. Transcript and OCR evidence goes through the same commands, but the demo does not cover it.

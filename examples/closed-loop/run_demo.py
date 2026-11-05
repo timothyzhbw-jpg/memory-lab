@@ -128,21 +128,22 @@ class Demo:
         """A real CLI, with the interpreter that runs this script."""
         return self._python(f"{name} {args[0]}", "-m", name, *args)
 
-    def verify(self, as_of: str, round_name: str) -> dict[str, Path]:
+    def verify(self, as_of: str, round_name: str, *audit_options: str, evidence: str = "docs") -> dict[str, Path]:
         """Audit and history, as JSON for the script and Markdown for a reader. Returns the paths."""
         paths = {"audit": self.reports / f"audit-{round_name}.json",
                  "history": self.reports / f"history-{round_name}.json",
                  "history_md": self.reports / f"history-{round_name}.md"}
-        self.tool("memfalsify", "audit", "MEMORY.md", "--evidence", "docs", "--as-of", as_of, "--format", "json",
-                  "--output", str(paths["audit"]))
+        self.tool("memfalsify", "audit", "MEMORY.md", "--evidence", evidence, "--as-of", as_of, "--format", "json",
+                  "--output", str(paths["audit"]), *audit_options)
         paths["history"].write_bytes(self.tool("memfalsify", "history", "MEMORY.md", "--format", "json"))
         paths["history_md"].write_bytes(self.tool("memfalsify", "history", "MEMORY.md"))
         return paths
 
-    def record(self, paths: dict[str, Path]) -> list[dict]:
+    def record(self, paths: dict[str, Path], *options: str) -> list[dict]:
         """to_events.py, then one real orgmemory command per record."""
         output = self._python("to_events.py", str(HERE / "to_events.py"), str(paths["audit"]), str(paths["history"]),
-                              str(paths["history_md"]), "--repo", str(self.repo), "--dataset", str(self.dataset))
+                              str(paths["history_md"]), "--repo", str(self.repo), "--dataset", str(self.dataset),
+                              *options)
         records = [json.loads(line) for line in output.decode("ascii").splitlines()]
         for record in records:
             if record["kind"] == "evidence":

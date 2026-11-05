@@ -19,6 +19,7 @@ import pytest
 
 import windows_newlines
 from conftest import EXAMPLES, snapshot, write_text_exact
+from memfalsify import memory as memory_module
 from memfalsify.audit import SEVERITY
 from orgmemory.models import DECISIONS
 
@@ -41,6 +42,13 @@ def load(name: str):
 
 run_demo = load("run_demo")
 to_events = load("to_events")
+
+
+@pytest.fixture(autouse=True)
+def no_git_location(monkeypatch):
+    """to_events.py runs git with the environment it is given, and a git hook running pytest sets these."""
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def child_env(**extra: str) -> dict[str, str]:
@@ -73,6 +81,16 @@ def loop(tmp_path_factory, request):
     work = root / "work"
     proc = subprocess.run([sys.executable, str(DEMO / "run_demo.py"), "--work", str(work)], env=env, capture_output=True)
     return proc, work
+
+
+@pytest.fixture
+def demo(tmp_path, monkeypatch):
+    """The demo's own repository, real commands and policy, with an empty log: for a story other than the demo's."""
+    monkeypatch.setenv("PYTHONPATH", PACKAGE_PATHS)
+    created = run_demo.Demo(tmp_path / "work")
+    shutil.copyfile(DEMO / "policy.json", created.dataset / "policy.json")
+    write_text_exact(created.dataset / "events.jsonl", "")
+    return created
 
 
 def org_json(work: Path, *args: str) -> dict:
@@ -142,7 +160,7 @@ def test_a_decision_and_a_correction_close_the_loop(loop):
     assert after[corrected]["current_status"] == "approved"
     assert after[export]["current_status"] == "proposed"
     events = [json.loads(line) for line in (work / "dataset" / "events.jsonl").read_bytes().splitlines()]
-    [write] = [e for e in events if e["id"] == f"write-request-{corrected.removeprefix('memory:')}"]
+    [write] = [e for e in events if e["id"].startswith(f"write-request-{corrected.removeprefix('memory:')}-")]
     assert f"(edits {rate_limit.removeprefix('memory:')})" in write["note"]
 
 
@@ -186,6 +204,273 @@ def test_the_work_directory_goes_through_no_symlink(tmp_path, make_symlink):
     shutil.rmtree(default.parent)
 
 
+# --- stories the demo does not tell, through the real CLIs ------------------------------------------------------
+
+CACHE = "The cache uses Redis 6."
+CACHE_DOCS = {"docs/cache.md": "# Cache\n\nThe cache uses Redis 7.\n"}
+
+
+def state_of(demo, memory: str) -> dict:
+    return json.loads(demo.tool("orgmemory", "replay", str(demo.dataset), "--format", "json"))["states"][f"memory:{memory}"]
+
+
+def findings_of(paths: dict) -> dict:
+    return {f["text"]: f for f in json.loads(paths["audit"].read_bytes())["findings"]}
+
+
+def head_of(demo) -> str:
+    return git(demo.repo, "rev-parse", "HEAD").decode("ascii").strip()
+
+
+def decide(demo, memory: str, action: str, timestamp: str, actor: str = "zhou") -> None:
+    demo.append({"id": f"decide-{action}-{memory}", "timestamp": timestamp, "actor": actor, "action": action,
+                 "subject": f"memory:{memory}", "evidence_ids": [f"{memory}-{head_of(demo)[:12]}-line"]})
+
+
+def refuses(demo, paths: dict, capfdbinary, file_name: str) -> None:
+    """to_events.py stops, prints no record, and keeps no copy of the file that is not at the commit."""
+    arguments = [str(paths["audit"]), str(paths["history"]), str(paths["history_md"]),
+                 "--repo", str(demo.repo), "--dataset", str(demo.dataset)]
+    assert to_events.main(arguments) == 2
+    captured = capfdbinary.readouterr()
+    assert captured.out == b"" and b"differs from the commit" in captured.err
+    assert list(demo.dataset.rglob(file_name)) == []
+
+
+def test_a_rejected_line_removed_and_landed_again_is_a_new_request(demo):
+    """After a removal, orgmemory has to know about the second landing, or it keeps answering from the first."""
+    demo.commit("agent-7", "2026-10-01T09:00:00+00:00", "Remember the cache (approved-by: wu)",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    first = demo.verify("2026-10-02", "first")
+    assert {e["event"]["action"] for e in demo.record(first) if e["kind"] == "event"} >= {"request", "approve"}
+    memory = findings_of(first)[CACHE]["memory_id"]
+    decide(demo, memory, "reject", "2026-10-03T09:00:00+00:00")
+    assert state_of(demo, memory)["reconsideration_requested"] is False
+
+    demo.commit("lin", "2026-10-04T09:00:00+00:00", "Remove the cache line", {"MEMORY.md": run_demo.memory()})
+    assert demo.record(demo.verify("2026-10-05", "second")) == []
+    demo.commit("agent-7", "2026-10-06T09:00:00+00:00", "Put the cache line back (approved-by: wu)",
+                {"MEMORY.md": run_demo.memory(CACHE)})
+    commit = head_of(demo)
+    records = demo.record(demo.verify("2026-10-07", "third"))
+    events = [r["event"] for r in records if r["kind"] == "event"]
+    assert [(e["id"], e["actor"], e["action"]) for e in events] == [
+        (f"write-request-{memory}-{commit[:12]}", "agent-7", "request"),
+        (f"write-approve-{memory}-{commit[:12]}", "wu", "approve")]
+    quotes = [r["quote"] for r in records if r["kind"] == "evidence"]
+    assert any("Put the cache line back" in quote for quote in quotes)
+
+    state = state_of(demo, memory)
+    assert state["current_status"] == "rejected"
+    assert state["reconsideration_requested"] is True
+    assert state["pending_approval"] == ["memory_steward"]
+    assert [change["actor"] for change in state["pending_changes"]] == ["wu"]
+    demo.tool("orgmemory", "validate", str(demo.dataset))
+    assert demo.record(demo.verify("2026-10-07", "third-again")) == []
+
+
+def test_an_approved_line_removed_and_landed_again_asks_for_a_decision_again(demo):
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache (approved-by: zhou)",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    first = demo.verify("2026-10-02", "first")
+    demo.record(first)
+    memory = findings_of(first)[CACHE]["memory_id"]
+    assert state_of(demo, memory)["current_status"] == "approved"
+    demo.commit("lin", "2026-10-03T09:00:00+00:00", "Remove the cache line", {"MEMORY.md": run_demo.memory()})
+    demo.commit("agent-7", "2026-10-04T09:00:00+00:00", "Put the cache line back (approved-by: wu)",
+                {"MEMORY.md": run_demo.memory(CACHE)})
+    demo.record(demo.verify("2026-10-05", "second"))
+    state = state_of(demo, memory)
+    assert state["current_status"] == "approved"  # zhou's decision stands, and wu's approval changes nothing
+    assert state["reconsideration_requested"] is True and state["pending_approval"] == ["memory_steward"]
+    assert [change["actor"] for change in state["pending_changes"]] == ["wu"]
+
+
+def test_a_case_only_edit_keeps_the_id_and_adds_no_event(demo):
+    """What docs/architecture.md says of an edit: only a change to the words makes a new subject."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache (approved-by: zhou)",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    first = demo.verify("2026-10-02", "first")
+    demo.record(first)
+    demo.commit("wu", "2026-10-03T09:00:00+00:00", "Shout", {"MEMORY.md": run_demo.memory(CACHE.upper())})
+    second = demo.verify("2026-10-04", "second")
+    assert demo.record(second) == []
+    assert {c["memory_id"] for c in json.loads(second["history"].read_bytes())["claims"]} == {
+        findings_of(first)[CACHE]["memory_id"]}
+
+
+def test_reports_older_than_the_memory_are_refused(demo, capfdbinary):
+    """The stale report: old claims, a file that has moved on, and a line that must not be cited for them."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    old = demo.verify("2026-10-02", "old")
+    write_text_exact(demo.repo / "MEMORY.md", run_demo.memory("The queue depth stays below 40 items."))
+    refuses(demo, old, capfdbinary, "MEMORY.md")
+    demo.commit("lin", "2026-10-03T09:00:00+00:00", "Remember the queue", {})
+    refuses(demo, old, capfdbinary, "MEMORY.md")
+
+
+def test_an_uncommitted_memory_line_is_refused(demo, capfdbinary):
+    """Fresh reports on a dirty tree: the bytes would be filed under a commit that does not hold them."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    write_text_exact(demo.repo / "MEMORY.md", run_demo.memory(CACHE, "The queue depth stays below 40 items."))
+    refuses(demo, demo.verify("2026-10-02", "dirty"), capfdbinary, "MEMORY.md")
+
+
+@pytest.mark.parametrize("tracked", [True, False], ids=["changed", "untracked"])
+def test_evidence_that_is_not_at_head_is_refused(demo, capfdbinary, tracked):
+    """The audit's hash matches, since it read the same working tree. The file is still not at the commit."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **(CACHE_DOCS if tracked else {})})
+    (demo.repo / "docs").mkdir(exist_ok=True)
+    write_text_exact(demo.repo / "docs" / "cache.md", "# Cache\n\nThe cache uses Redis 8.\n")
+    paths = demo.verify("2026-10-02", "dirty")
+    assert findings_of(paths)[CACHE]["status"] == "candidate_counterevidence"
+    refuses(demo, paths, capfdbinary, "cache.md")
+
+
+def test_crlf_from_git_in_the_working_tree_is_not_a_change(demo):
+    """core.autocrlf on Windows: the blob has LF, and the audit hashed CRLF. The stored bytes are what it hashed."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    for name in ("MEMORY.md", "docs/cache.md"):
+        (demo.repo / name).write_bytes((demo.repo / name).read_bytes().replace(b"\n", b"\r\n"))
+    records = demo.record(demo.verify("2026-10-02", "crlf"))
+    assert any(r["kind"] == "evidence" and r["path"].endswith("docs/cache.md") for r in records)
+    demo.tool("orgmemory", "validate", str(demo.dataset))
+
+
+def test_a_finding_never_sorts_before_the_commit_it_is_about(demo):
+    """An evening commit behind UTC, audited that evening: the end of the as_of day in UTC is before the commit."""
+    demo.commit("lin", "2026-11-04T18:30:00-06:00", "Remember the cache (approved-by: zhou)",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    paths = demo.verify("2026-11-04", "evening")
+    records = demo.record(paths)
+    memory = findings_of(paths)[CACHE]["memory_id"]
+    [risk] = [r["event"] for r in records if r["kind"] == "event" and r["event"]["action"] == "raise_risk"]
+    assert risk["timestamp"] == "2026-11-04T18:30:00-06:00"
+    report = json.loads(demo.tool("orgmemory", "audit", str(demo.dataset), "--format", "json"))
+    [finding_] = [f for f in report["findings"] if f["kind"] == "risk_after_approval"]
+    assert finding_["subject"] == f"memory:{memory}" and finding_["severity"] == "high"
+    assert "after the approval by zhou" in finding_["detail"]
+
+
+def test_another_lines_commit_date_leaves_a_finding_where_it_was(tmp_path):
+    """Author dates are text anyone can write. A date far ahead moves its own line's finding, and only that one."""
+    reports = [claim("m-00000001"), {**claim("m-00000002"), "introduced": {**claim("m-00000002")["introduced"],
+                                                                           "date": "2099-01-01T00:00:00+00:00"}}]
+    findings = [finding("m-00000001", "insufficient_evidence"), finding("m-00000002", "insufficient_evidence")]
+    events = events_of(convert(tmp_path, findings=findings, claims=reports,
+                               report=history_report("m-00000001", "m-00000002")))
+    times = {e["subject"]: e["timestamp"] for e in events if e["action"] == "comment"}
+    assert times == {"memory:m-00000001": "2026-10-10T23:59:59+00:00", "memory:m-00000002": "2099-01-01T00:00:00+00:00"}
+
+
+@pytest.mark.parametrize(("options", "severity"), [((), "high"), (("--audited-at=2026-11-04T14:00:00+00:00",), "medium")],
+                         ids=["default", "audited-at"])
+def test_audited_at_puts_a_same_day_decision_after_the_finding(demo, options, severity):
+    """zhou reads the audit at 14:00 and approves at 15:00. Only the audit's real time can say which came first."""
+    demo.commit("agent-7", "2026-11-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    paths = demo.verify("2026-11-04", "morning")
+    demo.record(paths, *options)
+    memory = findings_of(paths)[CACHE]["memory_id"]
+    decide(demo, memory, "approve", "2026-11-04T15:00:00+00:00")
+    report = json.loads(demo.tool("orgmemory", "audit", str(demo.dataset), "--format", "json"))
+    [finding_] = [f for f in report["findings"] if f["kind"] == "risk_after_approval"]
+    assert finding_["severity"] == severity
+
+
+@pytest.mark.parametrize("value", ["2026-11-04", "2026-11-04T14:00:00", "yesterday"])
+def test_audited_at_needs_a_time_with_a_zone(tmp_path, capfdbinary, value):
+    audit, history = make_reports()
+    arguments = save_reports(tmp_path, audit, history, "")
+    with pytest.raises(SystemExit) as stopped:
+        to_events.main([*arguments, "--repo", str(tmp_path), "--dataset", str(tmp_path), f"--audited-at={value}"])
+    assert stopped.value.code == 2 and b"with a zone" in capfdbinary.readouterr().err
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\u0085"], ids=["U+2028", "U+2029", "U+0085"])
+def test_a_line_separator_in_a_memory_line_leaves_later_conversions_working(demo, separator):
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(f"The cache{separator} uses Redis 6."), **CACHE_DOCS})
+    assert demo.record(demo.verify("2026-10-02", "first"))
+    assert separator.encode("utf-8") in (demo.dataset / "events.jsonl").read_bytes()
+    assert demo.record(demo.verify("2026-10-02", "again")) == []
+    demo.commit("lin", "2026-10-03T09:00:00+00:00", "Remember the queue", {
+        "MEMORY.md": run_demo.memory(f"The cache{separator} uses Redis 6.", "The queue depth stays below 40 items.")})
+    events = [r["event"] for r in demo.record(demo.verify("2026-10-04", "later")) if r["kind"] == "event"]
+    assert "The queue depth stays below 40 items." in events[0]["note"]
+
+
+def test_an_audit_of_the_whole_repository_converts(demo):
+    """`--evidence .` is what the README, the skill and the dogfood job show."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), "cache.md": "# Cache\n\nThe cache uses Redis 7.\n"})
+    paths = demo.verify("2026-10-02", "whole", evidence=".")
+    assert json.loads(paths["audit"].read_bytes())["evidence_root"] == "."
+    records = demo.record(paths)
+    head = json.loads(paths["history"].read_bytes())["head"][:12]
+    [cited] = [r for r in records if r["kind"] == "evidence" and r["source_kind"] == "evidence_file"]
+    assert (cited["path"], cited["source_uri"]) == (f"sources/{head}/cache.md", f"git:{head}:cache.md")
+    demo.tool("orgmemory", "validate", str(demo.dataset))
+
+
+def test_a_sentence_cited_twice_is_one_record_whose_id_agrees_with_it(demo):
+    """`orgmemory evidence add` finds the first occurrence, so an id built on the second would disagree with it."""
+    sentence = "The cache uses Redis 7."
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache", {
+        "MEMORY.md": run_demo.memory(CACHE),
+        "docs/cache.md": f"# Old plan\n\n{sentence}\n\n# Current plan\n\n{sentence}\n"})
+    paths = demo.verify("2026-10-02", "twice")
+    spans = [e["span"] for e in findings_of(paths)[CACHE]["evidence"]]
+    assert len({span["start"] for span in spans}) == 2
+    records = demo.record(paths)
+    [risk] = [r["event"] for r in records if r["kind"] == "event" and r["event"]["action"] == "raise_risk"]
+    [cited] = risk["evidence_ids"]
+    stored = [json.loads(line) for line in (demo.dataset / "evidence.jsonl").read_bytes().split(b"\n") if line]
+    [record] = [entry for entry in stored if entry["id"] == cited]
+    assert cited.endswith(f"-{record['start']}") and record["start"] == min(span["start"] for span in spans)
+
+
+def test_a_later_audit_with_the_same_status_adds_nothing(demo):
+    """The docs move from Redis 7 to Redis 8. The event stands, so a new record would be one that nothing cites."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    assert demo.record(demo.verify("2026-10-02", "first"))
+    demo.commit("lin", "2026-10-03T09:00:00+00:00", "Move the docs on",
+                {"docs/cache.md": "# Cache\n\nThe cache uses Redis 8.\n"})
+    assert demo.record(demo.verify("2026-10-04", "second")) == []
+
+
+def test_a_confirmed_contradiction_from_a_reviewer_with_no_role_is_an_ignored_attempt(demo):
+    """The rule docs/architecture.md states: such a reviewer's risk is recorded and ignored."""
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache",
+                {"MEMORY.md": run_demo.memory(CACHE), **CACHE_DOCS})
+    memory = findings_of(demo.verify("2026-10-02", "plain"))[CACHE]["memory_id"]
+    write_text_exact(demo.work / "reviews.jsonl", json.dumps({
+        "memory_id": memory, "path": "cache.md", "quote": "The cache uses Redis 7.", "relation": "contradicts",
+        "reviewer": "stranger"}) + "\n")
+    paths = demo.verify("2026-10-02", "reviewed", "--reviews", str(demo.work / "reviews.jsonl"))
+    assert findings_of(paths)[CACHE]["status"] == "challenged"
+    demo.record(paths)
+    assert state_of(demo, memory)["risks"] == []
+    report = json.loads(demo.tool("orgmemory", "audit", str(demo.dataset), "--format", "json"))
+    assert "stranger" in {f["actor"] for f in report["findings"] if f["kind"] == "unauthorized_attempts"}
+
+
+def test_a_subject_with_an_approved_by_and_no_clean_name_is_noted(tmp_path, capfdbinary):
+    repo, dataset = tmp_path / "repo", tmp_path / "dataset"
+    repo.mkdir(), dataset.mkdir()
+    write_text_exact(repo / "MEMORY.md", "- The cache uses Redis.\n")
+    audit, history = make_reports([], [claim("m-00000001", subject="Remember the cache (approved-by: zhou) ")],
+                                  commit_all(repo))
+    arguments = save_reports(tmp_path, audit, history, history_report("m-00000001"))
+    assert to_events.main([*arguments, "--repo", str(repo), "--dataset", str(dataset)]) == 0
+    assert b"note: the commit subject of m-00000001" in capfdbinary.readouterr().err
+
+
 # --- hostile text --------------------------------------------------------------------------------------------
 
 def assert_inert(output: bytes) -> None:
@@ -227,7 +512,7 @@ def test_the_converter_prints_ascii_json_only(tmp_path, capfdbinary):
     repo.mkdir(), dataset.mkdir()
     text = "::error::The c\u00e4che\x1b[2J uses \u202eRedis."
     write_text_exact(repo / "MEMORY.md", f"- {text}\n")
-    audit, history = make_reports(findings=[finding("m-00000000", "insufficient_evidence", text)], claims=[])
+    audit, history = make_reports([finding("m-00000000", "insufficient_evidence", text)], [], commit_all(repo))
     arguments = save_reports(tmp_path, audit, history, "")
     assert to_events.main([*arguments, "--repo", str(repo), "--dataset", str(dataset)]) == 0
     output = capfdbinary.readouterr().out
@@ -249,10 +534,26 @@ def span_entry(relation: str = "contradicts", reviewer: str | None = None, data:
                      "quote": quote}}
 
 
-def make_reports(findings=(), claims=()) -> tuple[dict, dict]:
+def make_reports(findings=(), claims=(), head: str = "a" * 40) -> tuple[dict, dict]:
     return ({"tool": "memfalsify", "as_of": "2026-10-10", "memory_file": "MEMORY.md", "evidence_root": "docs",
              "findings": list(findings)},
-            {"tool": "memfalsify", "head": "a" * 40, "claims": list(claims)})
+            {"tool": "memfalsify", "head": head, "claims": list(claims)})
+
+
+def git(repo: Path, *args: str) -> bytes:
+    options = ("-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", "-c", "user.name=test",
+               "-c", "user.email=test@example.com")
+    return subprocess.run([shutil.which("git"), "-C", str(repo), *options, *args], check=True, capture_output=True,
+                          env=run_demo.clean_environment(repo.parent)).stdout
+
+
+def commit_all(repo: Path) -> str:
+    """A real repository holding the files under ``repo``: a cited file must be at HEAD. Returns HEAD."""
+    git(repo, "init", "-q")
+    if git(repo, "status", "--porcelain"):
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "Add the files")
+    return git(repo, "rev-parse", "HEAD").decode("ascii").strip()
 
 
 def save_reports(root: Path, audit: dict, history: dict, report: str) -> list[str]:
@@ -278,7 +579,7 @@ def convert(tmp_path: Path, findings=(), claims=(), report: str = "") -> list[di
     dataset.mkdir(exist_ok=True)
     write_text_exact(repo / "MEMORY.md", "- The cache uses Redis.\n")
     write_text_exact(repo / "docs" / "cache.md", "The cache uses Valkey.\n")
-    audit, history = make_reports(findings, claims)
+    audit, history = make_reports(findings, claims, commit_all(repo))
     return to_events.Converter(audit, history, report, repo, dataset).convert()
 
 
@@ -323,15 +624,18 @@ def test_an_evidence_record_keeps_the_span_of_the_finding(tmp_path):
     entry = span_entry()
     records = convert(tmp_path, findings=[finding("m-00000001", "candidate_counterevidence", evidence=[entry])])
     [evidence] = [r for r in records if r["kind"] == "evidence"]
+    head = commit_all(tmp_path / "repo")[:12]
     assert evidence["quote"] == entry["span"]["quote"]
-    assert evidence["path"] == "sources/aaaaaaaaaaaa/docs/cache.md"
-    assert evidence["source_uri"] == "git:aaaaaaaaaaaa:docs/cache.md"
+    assert evidence["path"] == f"sources/{head}/docs/cache.md"
+    assert evidence["source_uri"] == f"git:{head}:docs/cache.md"
     assert (tmp_path / "dataset" / evidence["path"]).read_bytes() == (tmp_path / "repo" / "docs" / "cache.md").read_bytes()
     assert events_of(records)[0]["evidence_ids"] == [evidence["id"]]
 
 
 @pytest.mark.parametrize(("subject", "approver"), [
     ("Remember the cache (approved-by: zhou)", "zhou"),
+    ("Remember the cache (approved-by: Bowen Zhang)", "Bowen Zhang"),
+    ("Remember the cache (approved-by: \u5468\u4f1f)", "\u5468\u4f1f"),
     ("Remember the cache", "lin"),
     ("Remember (approved-by: zhou) the cache", "lin"),
     ("Remember the cache (approved-by: zhou\\u001b)", "lin"),
@@ -343,7 +647,9 @@ def test_only_a_clean_name_at_the_end_of_the_subject_is_an_approver(tmp_path, su
     assert (request["action"], request["actor"]) == ("request", "lin")
     assert (approve["action"], approve["actor"]) == ("approve", approver)
     assert request["timestamp"] == approve["timestamp"] == "2026-10-05T09:00:00+00:00"
-    assert request["evidence_ids"] == approve["evidence_ids"] == ["m-00000001-line", "m-00000001-introduced"]
+    head = commit_all(tmp_path / "repo")[:12]
+    assert request["evidence_ids"] == approve["evidence_ids"] == [f"m-00000001-{head}-line",
+                                                                  "m-00000001-bbbbbbbbbbbb-introduced"]
 
 
 @pytest.mark.parametrize("introduced", [None, {"commit": None, "date": None, "author": None, "subject": "uncommitted"}])
@@ -353,22 +659,55 @@ def test_a_line_with_no_commit_to_name_gets_no_write_events(tmp_path, introduced
     assert [e["action"] for e in events_of(records)] == ["comment"]
 
 
-def test_markup_in_a_memory_line_is_quoted_with_the_whole_line(tmp_path):
-    records = convert(tmp_path, findings=[finding("m-00000001", "insufficient_evidence", text="The cache uses Valkey.")])
-    assert [r["quote"] for r in records if r["kind"] == "evidence"] == ["- The cache uses Redis."]
+def test_a_line_that_does_not_hold_the_claim_is_refused(tmp_path):
+    """The whole-line quote is for markup. An unrelated line must not become evidence for the claim."""
+    with pytest.raises(to_events.ConversionError, match="does not hold the claim"):
+        convert(tmp_path, findings=[finding("m-00000001", "insufficient_evidence", text="The cache uses Valkey.")])
 
 
-def test_a_line_from_a_linked_file_in_a_subdirectory_is_found(tmp_path):
+def test_the_markup_rules_are_memfalsifys():
+    assert (to_events.LINK.pattern, to_events.WIKILINK.pattern, to_events.EMPHASIS.pattern) == (
+        memory_module.LINK.pattern, memory_module.WIKILINK.pattern, memory_module.EMPHASIS.pattern)
+
+
+def test_markup_in_a_memory_line_is_quoted_with_the_whole_line(demo):
+    """Real markup through the real CLIs: the claim text is in no file, so the record quotes the line it came from."""
+    line = "**The cache** uses `Redis 6` and [the queue](https://example.com) stays [[small]] today."
+    demo.commit("lin", "2026-10-01T09:00:00+00:00", "Remember the cache (approved-by: zhou)",
+                {"MEMORY.md": run_demo.memory(line), **CACHE_DOCS})
+    records = demo.record(demo.verify("2026-10-02", "first"))
+    quotes = [r["quote"] for r in records if r["kind"] == "evidence" and r["source_kind"] == "memory_file"]
+    assert quotes == [f"- {line}"]
+    demo.tool("orgmemory", "validate", str(demo.dataset))
+
+
+@pytest.mark.parametrize("memory_file", ["agent/MEMORY.md", "agent\\MEMORY.md"])
+def test_a_line_from_a_linked_file_in_a_subdirectory_is_found(tmp_path, memory_file):
+    """Reports hold str(Path), so on Windows the memory file is agent\\MEMORY.md."""
     repo, dataset = tmp_path / "repo", tmp_path / "dataset"
     (repo / "agent").mkdir(parents=True)
     dataset.mkdir()
     write_text_exact(repo / "agent" / "notes.md", "# Notes\n\n- The cache uses Redis.\n")
-    audit, history = make_reports([finding("m-00000001", "insufficient_evidence", location="notes.md:3")])
-    audit["memory_file"] = "agent/MEMORY.md"
+    write_text_exact(repo / "notes.md", "- Another file at the top, with another line.\n")
+    head = commit_all(repo)
+    audit, history = make_reports([finding("m-00000001", "insufficient_evidence", location="notes.md:3")], [], head)
+    audit["memory_file"] = memory_file
     [evidence, _] = to_events.Converter(audit, history, "", repo, dataset).convert()
-    assert evidence["path"] == "sources/aaaaaaaaaaaa/agent/notes.md"
-    assert evidence["source_uri"] == "git:aaaaaaaaaaaa:agent/notes.md"
+    assert evidence["path"] == f"sources/{head[:12]}/agent/notes.md"
+    assert evidence["source_uri"] == f"git:{head[:12]}:agent/notes.md"
     assert evidence["quote"] == "The cache uses Redis."
+
+
+def test_an_evidence_root_with_windows_separators_is_found(tmp_path):
+    repo, dataset = tmp_path / "repo", tmp_path / "dataset"
+    (repo / "docs" / "sub").mkdir(parents=True)
+    dataset.mkdir()
+    write_text_exact(repo / "docs" / "sub" / "cache.md", "The cache uses Valkey.\n")
+    audit, history = make_reports([finding("m-00000001", "candidate_counterevidence", evidence=[span_entry()])], [],
+                                  commit_all(repo))
+    audit["evidence_root"] = "docs\\sub"
+    [evidence, _] = to_events.Converter(audit, history, "", repo, dataset).convert()
+    assert evidence["path"].endswith("/docs/sub/cache.md")
 
 
 def test_records_already_in_the_dataset_are_left_out(tmp_path):
@@ -388,6 +727,20 @@ def bad_input_cases():
     yield "memory path", {"findings": [finding("m-00000001", "insufficient_evidence", location=f"../{secret}:1")]}
     yield "absolute memory path", {"findings": [finding("m-00000001", "insufficient_evidence", location=f"/{secret}:1")]}
     yield "windows path", {"findings": [finding("m-00000001", "insufficient_evidence", location=f"C:\\{secret}:1")]}
+    yield "windows traversal", {"findings": [finding("m-00000001", "insufficient_evidence",
+                                                     location=f"..\\..\\{secret}:1")]}
+    yield "windows rooted path", {"findings": [finding("m-00000001", "insufficient_evidence",
+                                                       location=f"\\{secret}:1")]}
+    yield "evidence path that is only a dot", {"findings": [finding("m-00000001", "candidate_counterevidence",
+                                                                    evidence=[span_entry(path=".")])]}
+    yield "evidence root that goes up", {"findings": [finding("m-00000001", "candidate_counterevidence",
+                                                              evidence=[span_entry()])], "evidence_root": ".."}
+    yield "commit id", {"claims": [claim("m-00000001", commit=secret)]}
+    yield "quote that is not in the file", {"findings": [finding("m-00000001", "candidate_counterevidence", evidence=[
+        {**span_entry(), "span": {**span_entry()["span"], "quote": f"Not in the file {secret}."}}])]}
+    yield "an audit date that is no date", {"findings": [], "as_of": secret}
+    yield "introduced line of another commit", {"claims": [claim("m-00000001", commit="c" * 40)],
+                                                "report": history_report("m-00000001")}
     yield "line number", {"findings": [finding("m-00000001", "insufficient_evidence", location="MEMORY.md:99")]}
     yield "evidence path", {"findings": [finding("m-00000001", "candidate_counterevidence", evidence=[
         span_entry(path=f"../../{secret}")])]}
@@ -405,12 +758,19 @@ def test_bad_input_stops_the_conversion_and_the_message_holds_none_of_it(tmp_pat
     dataset.mkdir()
     write_text_exact(repo / "MEMORY.md", "- The cache uses Redis.\n")
     write_text_exact(repo / "docs" / "cache.md", "The cache uses Valkey.\n")
-    audit, history = make_reports(case.get("findings", ()), case.get("claims", ()))
+    audit, history = make_reports(case.get("findings", ()), case.get("claims", ()), commit_all(repo))
+    audit.update({key: case[key] for key in ("as_of", "evidence_root") if key in case})
     arguments = save_reports(tmp_path, audit, history, case.get("report", ""))
     assert to_events.main([*arguments, "--repo", str(repo), "--dataset", str(dataset)]) == 2
     captured = capfdbinary.readouterr()
     assert captured.out == b"" and captured.err.startswith(b"error: ")
     assert b"hostile" not in captured.err and b"\x1b" not in captured.err
+
+
+@pytest.mark.parametrize("path", ["../x", "a/../../x", "/x", "..\\..\\x", "a\\..\\..\\x", "\\x", "C:x", "C:\\x", ".", ""])
+def test_a_path_that_leaves_on_either_os_is_refused(path):
+    with pytest.raises(to_events.ConversionError, match="outside the repository"):
+        to_events.checked_path(path)
 
 
 def test_a_symlink_out_of_the_repository_is_refused(tmp_path, make_symlink):
@@ -428,7 +788,7 @@ def test_a_symlink_out_of_the_repository_is_refused(tmp_path, make_symlink):
 def test_a_cited_file_that_changed_under_the_same_head_is_refused(tmp_path):
     findings = [finding("m-00000001", "insufficient_evidence")]
     convert(tmp_path, findings=findings)
-    stored = tmp_path / "dataset" / "sources" / "aaaaaaaaaaaa" / "MEMORY.md"
+    stored = tmp_path / "dataset" / "sources" / commit_all(tmp_path / "repo")[:12] / "MEMORY.md"
     write_text_exact(stored, "- Some other memory.\n")
     with pytest.raises(to_events.ConversionError, match="changed without a new commit"):
         convert(tmp_path, findings=findings)
@@ -440,6 +800,41 @@ def test_reports_from_another_tool_are_refused(tmp_path):
     for bad_audit, bad_history in (({**audit, "tool": "orgmemory"}, history), (audit, {**history, "head": None})):
         with pytest.raises(to_events.ConversionError):
             to_events.Converter(bad_audit, bad_history, "", tmp_path / "repo", tmp_path / "dataset")
+
+
+@pytest.mark.parametrize("head", ["../../../../", "..", "a" * 39, "A" * 40, "a" * 40 + "\n", "a" * 41, 7, ["a" * 40]],
+                         ids=["up four", "up one", "short", "upper case", "newline", "long", "number", "list"])
+def test_a_forged_head_is_refused_and_writes_nothing(tmp_path, head):
+    root = tmp_path / "a" / "b" / "c"
+    repo, dataset = root / "repo", root / "e1" / "dataset"
+    repo.mkdir(parents=True), dataset.mkdir(parents=True)
+    write_text_exact(repo / "MEMORY.md", "- The cache uses Redis.\n")
+    commit_all(repo)
+    audit, history = make_reports([finding("m-00000001", "insufficient_evidence")], [], head)
+    arguments = save_reports(tmp_path, audit, history, "")
+    before = {path for path in tmp_path.rglob("*") if ".git" not in path.parts}
+    assert to_events.main([*arguments, "--repo", str(repo), "--dataset", str(dataset)]) == 2
+    assert {path for path in tmp_path.rglob("*") if ".git" not in path.parts} == before
+
+
+def test_a_full_length_head_of_either_hash_is_accepted(tmp_path):
+    (tmp_path / "repo").mkdir(), (tmp_path / "dataset").mkdir()
+    for head in ("a" * 40, "b" * 64):
+        audit, history = make_reports([], [], head)
+        assert to_events.Converter(audit, history, "", tmp_path / "repo", tmp_path / "dataset").head == head[:12]
+
+
+def test_a_symlink_under_the_sources_is_refused_and_nothing_is_written_through_it(tmp_path, make_symlink):
+    repo, dataset, outside = tmp_path / "repo", tmp_path / "dataset", tmp_path / "outside"
+    repo.mkdir(), dataset.mkdir(), outside.mkdir()
+    write_text_exact(repo / "MEMORY.md", "- The cache uses Redis.\n")
+    head = commit_all(repo)
+    (dataset / "sources").mkdir()
+    make_symlink(dataset / "sources" / head[:12], outside, directory=True)
+    audit, history = make_reports([finding("m-00000001", "insufficient_evidence")], [], head)
+    with pytest.raises(to_events.ConversionError, match="outside the dataset"):
+        to_events.Converter(audit, history, "", repo, dataset).convert()
+    assert list(outside.iterdir()) == []
 
 
 # --- what the docs promise -----------------------------------------------------------------------------------

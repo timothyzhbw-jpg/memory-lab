@@ -48,7 +48,7 @@ memfalsify history MEMORY.md --format json
 
 ```text
 orgmemory evidence add DATASET --id=... --path=... --quote=... --source-uri=... --source-kind=... --captured-at=...
-orgmemory append DATASET --event='{"id": "write-approve-m-9efe3be5", "actor": "wu", "action": "approve", ...}'
+orgmemory append DATASET --event='{"id": "write-approve-m-9efe3be5-7ed0c4c7f4b1", "actor": "wu", "action": "approve", ...}'
 orgmemory audit DATASET --as-of 2026-10-11T00:00:00+00:00
 orgmemory explain DATASET memory:m-9efe3be5
 ```
@@ -56,7 +56,7 @@ orgmemory explain DATASET memory:m-9efe3be5
 [审计](expected/3-orgmemory-audit.md)报告 `wu` 有一次被策略忽略的批准。[`explain`](expected/4-orgmemory-explain.md) 显示速率限制这一行是 `proposed`，仍在等 `memory_steward` 批准，风险留在记录里，还有这一行：
 
 ```text
-- `write-approve-m-9efe3be5`: wu tried to approve; actor roles ['account_manager'] may not approve
+- `write-approve-m-9efe3be5-7ed0c4c7f4b1`: wu tried to approve; actor roles ['account_manager'] may not approve
 ```
 
 **4. 裁决。** `zhou` 有权限，读了 `docs/api.md` 后否决这一行。脚本替 `zhou` 再执行一次 `orgmemory append`，因为两个工具都不作决定。[`explain`](expected/5-orgmemory-explain-resolved.md) 现在显示 `rejected`，由 `zhou` 决定，并引用文档原文。
@@ -76,4 +76,4 @@ orgmemory explain DATASET memory:m-9efe3be5
 
 ## 局限
 
-git 作者名和 `(approved-by: NAME)` 都是任何人都能写的文字，所以 orgmemory 检查的是所写名字的角色，不是这个人真的做过。`(approved-by: NAME)` 只是代替你们团队记录批准的方式；可以修改 `to_events.py` 里的 `APPROVED_BY` 来适配。词法验证器的发现是留给人阅读的候选。完整列表见 [docs/architecture.zh-CN.md](../../docs/architecture.zh-CN.md#局限)。
+git 作者名和 `(approved-by: NAME)` 都是任何人都能写的文字，所以 orgmemory 检查的是所写名字的角色，不是这个人真的做过。`(approved-by: NAME)` 只是代替你们团队记录批准的方式；可以修改 `to_events.py` 里的 `APPROVED_BY` 来适配。词法验证器的发现是留给人阅读的候选。`to_events.py` 只引用 history 的 HEAD 里有的内容，所以要先提交，遇到未提交的改动它会停下。审计报告里只有日期，如果有人可能在审计当天作决定，请加上 `--audited-at`；演示是在之后的日子作决定的。完整列表见 [docs/architecture.zh-CN.md](../../docs/architecture.zh-CN.md#局限)。

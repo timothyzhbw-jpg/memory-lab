@@ -18,7 +18,7 @@ Agent 的 `MEMORY.md` 里多一行，它相信的东西就变了，所以这一�
 | **验证** | 这一行有证据支撑吗？ | `audit` 把每条声明和证据对照，报告状态并引用原文 | 不参与 |
 | **质疑** | 一条发现变成抛给组织的问题 | 报告和其中的建议操作，只有人才会去执行 | 一个 `raise_risk` 或 `comment` 事件；`audit` 和 `explain` 显示谁提议、谁批准、有没有权限 |
 | **裁决** | 有权限的人作决定 | 人可以用 `reviews.jsonl` 确认或否定证据 | 这个人的 `approve`、`reject` 或 `revoke`；别人做同样的动作只会被记录并忽略 |
-| **演进** | 人修改记忆，这一行得到新 ID | `diff` 和 `history` 显示变化；`rollback` 打印补丁，由人决定是否应用 | 新的一行是新议题；旧议题保留它的决定；`changes` 和 `export` 报告这些内容 |
+| **演进** | 人修改记忆。改动文字，这一行得到新 ID；只改大小写或空白，ID 不变 | `diff` 和 `history` 显示变化；`rollback` 打印补丁，由人决定是否应用 | 新的一行是新议题；旧议题保留它的决定；`changes` 和 `export` 报告这些内容 |
 
 ```text
  记住    一次提交把一行加进 MEMORY.md
@@ -51,15 +51,17 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 | history 字段 | 事件字段 | 规则 |
 |---|---|---|
 | `memory_id` | `subject` | `memory:<memory_id>` |
-| `memory_id` | `id` | `write-request-<memory_id>` 和 `write-approve-<memory_id>` |
+| `memory_id`、`introduced.commit` | `id` | `write-request-<memory_id>-<commit>` 和 `write-approve-<memory_id>-<commit>`，取提交 ID 的前 12 个字符。一行被删掉后又合入，提交不同，所以在原议题上产生新事件；如果已经有过决定，回放把它看作一次复议 |
 | `introduced.author` | `request` 的 `actor` | 提议这一行的人 |
-| `introduced.subject` | `approve` 的 `actor` | 标题末尾 `(approved-by: NAME)` 里的名字。没有这个名字就是作者本人：没有别人批准就把一行合入，等于自己批准了自己 |
+| `introduced.subject` | `approve` 的 `actor` | 标题末尾 `(approved-by: NAME)` 里的名字：由任意文字的字母、数字以及 `.`、`_`、`@`、`-` 组成，词之间一个空格。没有这个名字就是作者本人：没有别人批准就把一行合入，等于自己批准了自己。写了 `approved-by:` 但不符合这个格式时，批准人仍是作者，脚本会在 stderr 上说明 |
 | `introduced.date` | 两个事件的 `timestamp` | 提交的作者时间 |
 | `location`、`text` | `request` 的 `note` | `Memory write at <location>: <text>` |
 | `replaced.memory_id` | `request` 的 `note` | 这一行替换了更早的版本时，加上 `(edits <memory_id>)` |
-| `location`、`introduced` | 两个事件的 `evidence_ids` | `<memory_id>-line` 引用记忆里的这一行；`<memory_id>-introduced` 引用 Markdown 版 history 里这条声明的 `Introduced` 行 |
+| `location`、`introduced` | 两个事件的 `evidence_ids` | `<memory_id>-<head>-line` 引用记忆里的这一行；`<memory_id>-<commit>-introduced` 引用 Markdown 版 history 里这条声明的 `Introduced` 行 |
 
-没有提交可以指认的行（比扫描范围更早，或还没提交）不产生写入事件，脚本会在 stderr 上说明。
+比扫描范围更早的行没有提交可以指认：它不产生写入事件，脚本会在 stderr 上说明。
+
+记录引用的每个文件都必须就是 history 的 `head` 里的那个文件，这样 `git:<head>:<path>` 才是真的。脚本用 `git cat-file` 比较两者（不计行尾差异），有任何不同就停下：还没提交的行、改过或未跟踪的证据文件、比记忆更旧的报告。先提交，再重新运行 audit 和 history。此外，`location` 指向的那一行，按 MemFalsify 的方式去掉标记之后，必须包含这条声明。
 
 批准记成 `approve`，和合并一个 pull request 记成 `approve` 是同一个道理：[`github_map.py`](../packages/orgmemory/src/orgmemory/github_map.py) 把 GitHub 的合并映射成 `approve`。
 
@@ -70,12 +72,12 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 | finding 字段 | 事件字段 | 规则 |
 |---|---|---|
 | `memory_id` | `subject` | `memory:<memory_id>` |
-| `memory_id`、`status` | `id` | `finding-<status>-<memory_id>`，所以之后结果相同的审计不会再添加 |
+| `memory_id`、`status` | `id` | `finding-<status>-<memory_id>`，所以之后结果相同的审计不会再添加，证据记录也一样 |
 | `status` | `action` | 见下表 |
 | `evidence[].reviewer` | `actor` | 第一个确认证据的审阅人；否则是 `memfalsify`，`policy.json` 给它一个可以提出风险和评论的角色 |
 | `status`、`location`、`text` | `note` | `<status> at <location>: <text>` |
 | `evidence[].span` | `evidence_ids` | 每个 span 一条证据记录，支持性的 span 除非状态是 `conflicted` 否则不计。`insufficient_evidence` 没有 span，记录引用记忆里的这一行 |
-| 报告的 `as_of` | `timestamp` | 当天结束时刻（UTC），因为报告里只有日期 |
+| 报告的 `as_of` | `timestamp` | 给了 `--audited-at` 就用它；否则是当天结束时刻（UTC），因为报告里只有日期。如果引入这一行的提交更晚，就用提交的时间。见[局限](#局限) |
 
 | 状态 | 动作 | 原因 |
 |---|---|---|
@@ -89,18 +91,20 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 
 没有哪条发现会变成 `approve`、`reject` 或 `revoke`。这些留给有权限的人。
 
+策略没有给角色的审阅人确认了相反证据，这个事件和其他事件一样受检查：被记录并忽略，所以这个议题上没有风险，`orgmemory audit` 报告一条 `unauthorized_attempts`；而 `memfalsify` 提出的未经审阅的候选反而会留下风险。请给审阅人一个可以提出风险的角色。
+
 ### 一条证据记录
 
 来自 finding 里的 `span`，交给 `orgmemory evidence add`：
 
 | 字段 | 选项 | 规则 |
 |---|---|---|
-| `span.path`、报告的 `evidence_root` | `--path` | 先核对文件字节和 `span.sha256`，再复制到数据集的 `sources/<head>/<path>` |
+| `span.path`、报告的 `evidence_root` | `--path` | 先核对文件字节和 `span.sha256`，并和 `head` 里的文件比较，再复制到数据集的 `sources/<head>/<path>`。可以用 `--evidence .`：这时根目录就是仓库 |
 | `span.quote` | `--quote` | 原样不变；orgmemory 对副本重新计算哈希并重新定位引文 |
-| `span.sha256`、`span.start` | `--id` | `<memory_id>-<哈希前 8 位>-<start>` |
+| `span.sha256`、`span.quote` | `--id` | `<memory_id>-<哈希前 8 位>-<start>`，`start` 是引文第一次出现的位置，也就是 `orgmemory evidence add` 记录的范围 |
 | history 的 `head` | `--source-uri` | `git:<head>:<path>` |
 | 固定值 | `--source-kind` | `evidence_file`、`memory_file` 或 `memory_history` |
-| 报告的 `as_of` | `--captured-at` | 和事件时间相同 |
+| 报告的 `as_of` | `--captured-at` | `--audited-at`，或者当天结束时刻（UTC） |
 
 ### 走一遍一行的完整过程
 
@@ -113,8 +117,8 @@ MemFalsify 从不写入事实，也从不修改记忆：它只写报告和建议
 history 指出了提交：作者 `agent-7`，标题 `Remember the API rate limit (approved-by: wu)`。于是得到三个事件：
 
 ```json
-{"id": "write-request-m-9efe3be5", "timestamp": "2026-10-07T09:00:00Z", "actor": "agent-7", "action": "request", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-line", "m-9efe3be5-introduced"], "note": "Memory write at MEMORY.md:5: The public API rate limit is 100 requests per minute."}
-{"id": "write-approve-m-9efe3be5", "timestamp": "2026-10-07T09:00:00Z", "actor": "wu", "action": "approve", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-line", "m-9efe3be5-introduced"]}
+{"id": "write-request-m-9efe3be5-7ed0c4c7f4b1", "timestamp": "2026-10-07T09:00:00Z", "actor": "agent-7", "action": "request", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-b17a3549d0ee-line", "m-9efe3be5-7ed0c4c7f4b1-introduced"], "note": "Memory write at MEMORY.md:5: The public API rate limit is 100 requests per minute."}
+{"id": "write-approve-m-9efe3be5-7ed0c4c7f4b1", "timestamp": "2026-10-07T09:00:00Z", "actor": "wu", "action": "approve", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-b17a3549d0ee-line", "m-9efe3be5-7ed0c4c7f4b1-introduced"]}
 {"id": "finding-candidate_counterevidence-m-9efe3be5", "timestamp": "2026-10-10T23:59:59Z", "actor": "memfalsify", "action": "raise_risk", "subject": "memory:m-9efe3be5", "evidence_ids": ["m-9efe3be5-f5a6a83d-14"], "note": "candidate_counterevidence at MEMORY.md:5: The public API rate limit is 100 requests per minute."}
 ```
 
@@ -147,7 +151,7 @@ history 指出了提交：作者 `agent-7`，标题 `Remember the API rate limit
 这个决定的代价：
 
 - **权限按动作划分，不按议题种类划分。** 同一份日志里，能批准记忆写入的人也能批准产品决策。演示把记忆写入放在单独的数据集里，用单独的策略。
-- **被修改的行和它早先版本之间的联系只是一段文字。** 修改会让这一行得到新的 `memory_id`，也就成了新议题；旧 ID 写在新 `request` 的 `note` 里，回放不读它。
+- **被修改的行和它早先版本之间的联系只是一段文字。** 改动文字会让这一行得到新的 `memory_id`，也就成了新议题；旧 ID 写在新 `request` 的 `note` 里，回放不读它。只改大小写或空白，`memory_id` 不变，这一行还是原来的议题、原来的作者：这次改动只出现在 history 的 `last_changed` 里，不增加事件。
 - **`to_events.py` 是示例，不是有人维护的包。** 有测试用真实的命令行工具运行它，但你要把它复制到自己的环境里，由自己负责。
 
 什么情况会改变这个决定：
@@ -162,4 +166,7 @@ history 指出了提交：作者 `agent-7`，标题 `Remember the API rate limit
 - **候选只是线索。** 用默认的词法验证器时，`candidate_counterevidence` 表示字面上看起来矛盾。只有人的审阅才能把记忆标成 `challenged`，`memfalsify` 提出的 `raise_risk` 是留给人的问题。
 - **历史有边界。** `memfalsify history` 沿第一父提交走，所以合并提交带来的改动算在合并提交头上；比 `--max-commits` 更早的行没有作者可以指认。
 - **风险会一直留在记录里。** 日志没有解除风险的事件，所以这一行被否决或改正之后，风险仍然列着。
+- **审计只有日期，回放却按时间排序。** 默认时间是 `as_of` 当天结束时刻（UTC），所以当天作出的决定排在发现之前，`orgmemory audit` 会把它读成批准之后才提出的风险，也就是说事实变了，而批准人可能其实先看过审计。如果有人可能在审计当天作决定，请用 `--audited-at` 给出真实时间，并带上时区。演示是在之后的日子作决定的。
+- **删除不产生事件。** 转换只读当前的声明，所以被删掉的行在 orgmemory 里保持最后的状态，直到它再次合入。改写历史会让这些行得到新的提交，看起来就像重新合入。
+- **引用范围是第一次出现的位置。** `orgmemory evidence add` 靠搜索文件定位引文。同一句话出现两次时，记录指向第一次。一个提交带来多行时，每条 `-introduced` 记录都指向第一条声明的 `Introduced` 行，引文相同。引文和哈希依然是真的，只是读者看到的那一行可能靠前。
 - **这里没有覆盖的。** 演示的证据都是纯文本。转录和 OCR 证据走同样的命令，但演示没有覆盖。

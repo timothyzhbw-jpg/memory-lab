@@ -48,7 +48,7 @@ Reports: [audit](expected/1-memfalsify-audit.md), [history](expected/2-memfalsif
 
 ```text
 orgmemory evidence add DATASET --id=... --path=... --quote=... --source-uri=... --source-kind=... --captured-at=...
-orgmemory append DATASET --event='{"id": "write-approve-m-9efe3be5", "actor": "wu", "action": "approve", ...}'
+orgmemory append DATASET --event='{"id": "write-approve-m-9efe3be5-7ed0c4c7f4b1", "actor": "wu", "action": "approve", ...}'
 orgmemory audit DATASET --as-of 2026-10-11T00:00:00+00:00
 orgmemory explain DATASET memory:m-9efe3be5
 ```
@@ -56,7 +56,7 @@ orgmemory explain DATASET memory:m-9efe3be5
 The [audit](expected/3-orgmemory-audit.md) says `wu` made one approval the policy ignored. [`explain`](expected/4-orgmemory-explain.md) shows the rate limit line as `proposed`, with the approval still pending from `memory_steward`, the risk on record, and this line:
 
 ```text
-- `write-approve-m-9efe3be5`: wu tried to approve; actor roles ['account_manager'] may not approve
+- `write-approve-m-9efe3be5-7ed0c4c7f4b1`: wu tried to approve; actor roles ['account_manager'] may not approve
 ```
 
 **4. Resolve.** `zhou` holds the permission, reads `docs/api.md` and rejects the line. The script plays `zhou` with one more `orgmemory append`, because neither tool decides anything. [`explain`](expected/5-orgmemory-explain-resolved.md) now shows `rejected`, by `zhou`, with the quote from the docs.
@@ -76,4 +76,4 @@ The [audit](expected/3-orgmemory-audit.md) says `wu` made one approval the polic
 
 ## Limits
 
-A git author name and an `(approved-by: NAME)` are text that anyone can write, so orgmemory checks the role of the name it is given, not that this person acted. `(approved-by: NAME)` stands in for however your team records approval; change `APPROVED_BY` in `to_events.py` to fit. The lexical verifier's findings are candidates for a person to read. [docs/architecture.md](../../docs/architecture.md#limits) has the full list.
+A git author name and an `(approved-by: NAME)` are text that anyone can write, so orgmemory checks the role of the name it is given, not that this person acted. `(approved-by: NAME)` stands in for however your team records approval; change `APPROVED_BY` in `to_events.py` to fit. The lexical verifier's findings are candidates for a person to read. `to_events.py` cites only what the history's HEAD holds, so commit first, and it stops at an uncommitted change. An audit report holds a date, so pass `--audited-at` when someone may decide on the day of the audit; the demo decides on a later day. [docs/architecture.md](../../docs/architecture.md#limits) has the full list.

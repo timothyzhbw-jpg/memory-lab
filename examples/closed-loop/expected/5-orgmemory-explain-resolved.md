@@ -21,8 +21,8 @@ unauthorized_change_attempts: []
 
 | Time | Event | Actor | Action | Outcome | Status |
 |---|---|---|---|---|---|
-| 2026-10-07T09:00:00+00:00 | `write-request-m-9efe3be5` | agent-7 (agent) | request | applied | proposed → proposed |
-| 2026-10-07T09:00:00+00:00 | `write-approve-m-9efe3be5` | wu (account_manager) | approve | unauthorized | proposed → proposed |
+| 2026-10-07T09:00:00+00:00 | `write-request-m-9efe3be5-7ed0c4c7f4b1` | agent-7 (agent) | request | applied | proposed → proposed |
+| 2026-10-07T09:00:00+00:00 | `write-approve-m-9efe3be5-7ed0c4c7f4b1` | wu (account_manager) | approve | unauthorized | proposed → proposed |
 | 2026-10-10T23:59:59+00:00 | `finding-candidate_counterevidence-m-9efe3be5` | memfalsify (auditor) | raise_risk | applied | proposed → proposed |
 | 2026-10-11T10:00:00+00:00 | `resolve-reject-m-9efe3be5` | zhou (memory_steward) | reject | applied | proposed → rejected |
 
