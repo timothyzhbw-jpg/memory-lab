@@ -247,24 +247,24 @@ def test_only_an_unsettled_flag_gets_the_line(tmp_path):
     "The public API allows 60 ``requests`` per `minute`.",
     "The public API allows 60 requests per minute \\ and more.",
     'The public API allows 60 "requests" per minute.',
-    "The public API‮ allows 60 requests per minute.",
-    "The public API​ allows 60 requests per minute.",
+    "The public API\u202e allows 60 requests per minute.",
+    "The public API\u200b allows 60 requests per minute.",
     "公开 API allows 60 requests per minute.",
 ])
 def test_the_printed_line_reads_back_as_the_exact_quote(tmp_path, quote):
     span = make_span("api.md", "0" * 64, quote, 0, len(quote))
     line = dismissal_line(LIMIT, span)
     assert json.loads(line)["quote"] == quote
-    assert "‮" not in line and "​" not in line
+    assert "\u202e" not in line and "\u200b" not in line
 
 
 def test_a_quote_with_odd_characters_can_be_dismissed_from_the_report(tmp_path):
-    quote = "The public `API`‮ allows 60 requests per minute."
+    quote = "The public `API`\u202e allows 60 requests per minute."
     root = project(tmp_path, **{"api.md": f"{quote}\n"})
     report = run(root)
     assert status(report) == "candidate_counterevidence"
     [line] = printed_lines(to_markdown(report))
-    assert "‮" not in line
+    assert "\u202e" not in line
     path = root / "pasted.jsonl"
     write_text_exact(path, line + "\n")
     assert status(audit(root / "MEMORY.md", root / "evidence", path)) == "insufficient_evidence"
