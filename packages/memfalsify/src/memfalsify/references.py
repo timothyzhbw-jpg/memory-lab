@@ -112,7 +112,7 @@ _OTHER_REPO_AFTER = re.compile(r"^[\s*_)]*(?:in|from|at)\s+(?:the\s+)?[\w.-]+/[\
 _NEAR = 80  # characters around a path that can say whose it is
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=16)
 def _said(raw: str) -> frozenset[str]:
     """Which of ``_LINE_WORDS`` a raw line uses. Once per line: a hostile line can hold very many paths."""
     prose = _CODE_SPAN.sub(" ", raw)
@@ -142,7 +142,7 @@ def _key(name: str) -> str:
 
 def parse_reference(text: str, said: frozenset[str] = frozenset(), foreign: bool = False) -> Reference | None:
     """``text`` as a relative path, or None if it does not read as one."""
-    written = _POSITION.sub("", text.strip()).rstrip(".,;。，；、")
+    written = _POSITION.sub("", text.strip()).rstrip(".,;:。，；：、")
     if (not written or len(written) > MAX_PATH or "\x00" in written or "://" in written or _DRIVE.match(written)
             or written[0] in "/~-@\\" or written.startswith("...")):
         return None
