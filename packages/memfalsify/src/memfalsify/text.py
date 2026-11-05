@@ -216,9 +216,9 @@ def _cjk_tokens(run: str) -> Iterator[str]:
                 yield piece[i:i + 3]
 
 
-# Bounded: audit text is untrusted. Tokens repeat a lot in a repository, so nearly every lookup is a hit, and
+# Bounded: audit text is untrusted. Tokens repeat a lot in a repository, so over nine lookups in ten are hits, and
 # passages that use a term share one string for it instead of keeping a copy each.
-@lru_cache(maxsize=1 << 18)
+@lru_cache(maxsize=1 << 16)
 def _word(token: str) -> str | None:
     """The term for a Latin-script token, or None for a stopword."""
     if len(token) == 1 and token.isupper():

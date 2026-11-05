@@ -8,6 +8,8 @@ from __future__ import annotations
 import gc
 import importlib
 import random
+import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -445,6 +447,13 @@ def test_an_audit_scans_and_indexes_once(built, tmp_path, monkeypatch):
     monkeypatch.setattr(audit_module, "_PassageIndex", index_once)
     audit(tmp_path / "MEMORY.md", evidence, as_of=AS_OF, follow_links=False)
     assert counts == {"scan": 1, "index": 1}
+
+
+def test_the_large_repository_benchmark_runs():
+    script = Path(__file__).resolve().parent.parent / "benchmarks" / "perf" / "run.py"
+    run = subprocess.run([sys.executable, str(script), "--evidence", "400"], capture_output=True, text=True, check=True)
+    assert run.stdout.split()[:4] == ["passages", "claims", "audit_s", "peak_rss_mb"]
+    assert run.stdout.split()[4:6] == ["400", "200"]
 
 
 def test_text_without_non_ascii_characters_is_left_as_it_is():
