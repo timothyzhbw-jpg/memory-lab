@@ -1369,3 +1369,8 @@ def test_a_hostile_block_takes_time_in_proportion_to_its_length(raw):
     for start, end in zip(every, every[1:]):
         references_in(raw, start, end, lines=lines)
     assert time.perf_counter() - started < BUDGET_SECONDS
+
+
+def test_a_code_span_inside_a_prohibition_reads_as_one_space(tmp_path):
+    tree(tmp_path, "src/here.py")
+    assert flagged(tmp_path, "Do not `git add` or commit `src/secrets.py`.\n") == []

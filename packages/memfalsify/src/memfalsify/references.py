@@ -139,9 +139,13 @@ _OUTPUT_FLAGS = frozenset({"-o", "--output", "--out", "--outfile", "--out-file",
 _PROBE = "memfalsify-probe"  # a name git can always answer about
 
 
+_BLANKED = "\x00"  # the rest of a code span: one space reads, and the offsets stay
+
+
 def _said(prose: str) -> frozenset[str]:
     """Which of ``_LINE_WORDS`` a piece of text uses, with its code spans blanked."""
-    return frozenset(name for name, words in _LINE_WORDS.items() if words.search(prose))
+    words_only = prose.replace(_BLANKED, "")
+    return frozenset(name for name, words in _LINE_WORDS.items() if words.search(words_only))
 
 
 @dataclass(frozen=True)
@@ -238,7 +242,7 @@ def _made_by_command(words: list[str]) -> set[str]:
 class _Block(NamedTuple):
     offsets: list[int]
     references: list[Reference]
-    prose: str  # the block with its code spans blanked, at the same length: a slice cannot show half a span as words
+    prose: str  # the block with its code spans blanked at the same length, so a slice cannot show half a span as words
     wrapped: bool
 
 
@@ -254,7 +258,7 @@ def _line_references(raw: str) -> _Block:
     trailing slash, and not what the command makes. The whole block at once, since a sentence can end inside a
     command. A path takes the words of the lines it stands on; ``references_in`` adds those of its own sentence."""
     newlines = [match.start() for match in re.finditer("\n", raw)]
-    prose = _CODE_SPAN.sub(lambda match: " " * len(match.group()), raw)
+    prose = _CODE_SPAN.sub(lambda match: " " + _BLANKED * (len(match.group()) - 1), raw)
     said_on: dict[tuple[int, int], frozenset[str]] = {}
 
     def said(at: int, past: int) -> frozenset[str]:
