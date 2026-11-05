@@ -83,7 +83,7 @@ The check runs with `memfalsify audit` and no file named, and with `memfalsify a
 How to read it:
 
 - The claim keeps its status. Missing evidence and a missing path are different things, so the status table does not count this issue. A line on stderr gives the count.
-- `--strict` exits 1 on it, and the GitHub Action counts it in `attention`: a claim that sends an agent to a file that is not there needs attention. `--no-references` turns the check off.
+- `--strict` exits 1 on it, and the GitHub Action counts it in `attention`: a claim that sends an agent to a file that is not there needs attention. If the file is generated, add it to `.gitignore`. `--no-references` turns the check off.
 - Read the line before you change it. The path may have moved (search for its last part), or the mention may have gone stale. `Proposed actions` only suggests; your files stay as they are.
 
 A path counts as named when it is in inline code, is the target of a link, or is a word in an inline command that has an extension or a trailing slash. It is reported only if all of this holds:
@@ -94,7 +94,7 @@ A path counts as named when it is in inline code, is the target of a link, or is
 - Nothing on its way is a link to a directory or an empty directory (a submodule that was not fetched), and it stays inside the root. A path that leaves the root is not judged, and no file outside is opened: the check only compares names from a listing.
 - It does not read as something else: a placeholder (`nodes/YourService/`, `src/foo.py`, `docs/NNN-title.md`), a remote name (`actions/checkout`), a MIME type, a branch name, or an API route. Its line does not say it is gone, yet to be made or someone else's (`Prettier's src/main/core.js`).
 
-So a missing path is a strong sign, not proof: a file another tool writes under an unignored name still gets flagged. Fenced code blocks, plain words outside inline code and lines that hold only `.md` links are not read for paths.
+So a missing path is a strong sign, not proof: a file another tool writes under an unignored name still gets flagged. Fenced code blocks, plain words outside inline code and lines with a link to a `.md` file are not read for paths, since those lines hold no claim to attach the issue to.
 
 ## Use git history as evidence
 

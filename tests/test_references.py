@@ -170,6 +170,8 @@ def test_a_sentence_that_starts_with_a_path_keeps_it(tmp_path):
     ("- Matches `src/*.py` and nothing more than that.\n", "src/local.py"),
     ("- Matches `src/**` and nothing more than that.\n", "src/local.py"),
     ("- Use `src/...` and nothing more than that.\n", "src/local.py"),
+    ("- Use `src/templates/...yaml` and nothing more than that.\n", "src/local.py"),
+    ("- One file per release, `src/vYYYY_MM_DD.py` in that folder.\n", "src/local.py"),
     ("- It runs at `24/7` and it costs `1/2` as much.\n", "24/local.txt"),
     ("- Lint with `src/rules/` globs.\n```\nsrc/gone.py in a fence is not a claim\n```\n", "src/rules/local.txt"),
     # API routes and other names

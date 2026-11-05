@@ -82,7 +82,8 @@ _PLACEHOLDER_PART = re.compile(
     r"|[-_](?:example|here|foo|bar|baz)$"  # file_here, name-example
     r"|(?:Here|Example|Foo)(?:Name)?$"  # EventNameHere, HereName
     r"|^Here[A-Z]"
-    r"|N{3,}|X{3,}|(?:^|[-_.])[xX]{2,}(?:$|[-_.])")  # 0001-NNN, ADR-XXX, test_xx
+    r"|N{3,}|X{3,}|(?:^|[-_.])[xX]{2,}(?:$|[-_.])"  # 0001-NNN, ADR-XXX, test_xx
+    r"|YYYY|yyyy")  # vYYYY_MM_DD.py
 _PLACEHOLDER_WORD = re.compile(r"(?:^|[-_.])(?:NAME|FILE|PATH|MODULE|COMPONENT|SERVICE|PROVIDER|PACKAGE|FEATURE|PLUGIN|"
                                r"DIR|TYPE|ID|VERSION|MAJOR|MINOR|PATCH)(?:$|[-_.])")  # PLUGIN_NAME, 0.MINOR.x.md
 # Words on the line, outside code spans, that change what a path means there.
@@ -195,8 +196,8 @@ def noise(ref: Reference) -> str | None:
     named = [part for part in parts if part != ".."]
     if len(named) < 2:
         return "one segment"
-    if "..." in parts or any(not part.strip(".") for part in named):
-        return "ellipsis"
+    if "..." in ref.path:
+        return "ellipsis"  # src/..., chart/templates/...yaml
     if any(part in NOT_ENTERED for part in parts):
         return "not entered"
     if all(_DIGITS.fullmatch(part) for part in named):
