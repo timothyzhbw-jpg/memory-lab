@@ -32,12 +32,13 @@ NO_SIDECAR = "media file: no usable transcript (.vtt, .srt) or OCR sidecar (.ocr
 MAX_BYTES = 2_000_000
 BUDGET_SKIPPED = "not read: the read budget for this request is used up"
 REPORT_HEADER = "# MemFalsify audit report"
+BRIEF_HEADER = "# MemFalsify audit brief"
 DIFF_HEADER = "# MemFalsify diff report"
 HISTORY_HEADER = "# MemFalsify claim history"
 ROLLBACK_HEADER = "# MemFalsify rollback patch"
 DISCOVER_HEADER = "# MemFalsify instruction files"
 # Anything MemFalsify prints is about memory; none of it may count as evidence for that memory.
-OUTPUT_HEADERS = (REPORT_HEADER, DIFF_HEADER, HISTORY_HEADER, ROLLBACK_HEADER, DISCOVER_HEADER)
+OUTPUT_HEADERS = (REPORT_HEADER, BRIEF_HEADER, DIFF_HEADER, HISTORY_HEADER, ROLLBACK_HEADER, DISCOVER_HEADER)
 # HTML reports start with a doctype and name MemFalsify as their generator at the top of <head>.
 HTML_GENERATOR = "memfalsify"
 HTML_MARKER = f'<meta name="generator" content="{HTML_GENERATOR}">'

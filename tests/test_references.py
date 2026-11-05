@@ -1317,3 +1317,29 @@ def test_a_wrapped_sentence_names_its_path_on_any_of_its_lines(tmp_path):
     by_text = {f.text: [i.kind for i in f.issues] for f in report.findings}
     assert by_text == {"The parser is quick and small, and it lives in src/gone.py for now.": ["missing_reference"],
                        "The renderer is in src/here.py as usual.": []}
+
+
+def test_a_sentence_that_says_gone_speaks_for_itself_alone(tmp_path):
+    tree(tmp_path, "src/here.py")
+    write_text_exact(tmp_path / "AGENTS.md", "The old parser was removed.\nThe parser lives in `src/parser.py`.\n")
+    report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
+    assert {f.text: [i.kind for i in f.issues] for f in report.findings} == {
+        "The old parser was removed.": [], "The parser lives in src/parser.py.": ["missing_reference"]}
+
+
+def test_a_wrapped_sentence_that_says_gone_speaks_for_all_its_lines(tmp_path):
+    tree(tmp_path, "src/here.py")
+    assert flagged(tmp_path, "The parser was removed, and it used to live\nin `src/parser.py` for a while.\n") == []
+
+
+def test_a_line_break_in_a_code_span_reads_as_a_space(tmp_path):
+    tree(tmp_path, "data/raw files/a.csv", "files/keep.txt")
+    assert flagged(tmp_path, "Load `data/raw\nfiles/a.csv` for the fixtures.\n") == []
+
+
+def test_a_word_of_a_command_goes_to_the_sentence_it_stands_in(tmp_path):
+    tree(tmp_path, "src/here.py")
+    write_text_exact(tmp_path / "AGENTS.md", "The command is `echo ready;\npython src/parser.py` for validation.\n")
+    report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
+    assert {f.text: [i.kind for i in f.issues] for f in report.findings} == {
+        "The command is echo ready;": [], "python src/parser.py for validation.": ["missing_reference"]}

@@ -31,7 +31,7 @@ import time
 import unicodedata
 from bisect import bisect_left
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from itertools import dropwhile
 from pathlib import Path
@@ -66,6 +66,8 @@ MIME_ALWAYS = frozenset({"application", "multipart"})
 MIME_BARE = frozenset({"audio", "font", "image", "message", "model", "text", "video"})
 
 _CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)([^`]+)\1(?!`)")
+_WORD_OF_CODE = re.compile(r"\S+")
+_BREAK_IN_CODE = re.compile(r"[ \t]*\n[ \t]*(?:>[ \t]*)*")
 _LINK_TARGET = re.compile(r"!?\[[^\]\[]*\]\(([^)\s]{1,400})(?:\s+\"[^\"]*\")?\)")  # bounded: a line can be hostile
 # Where in a file, added to its path by habit: src/a.py:12, src/a.py:12:3, src/a.py:12-20, src/a.py#L12, a.py::test_b
 _POSITION = re.compile(r"(?:::[\w.:\[\]-]+|:\d+(?:[:-]\d+)*|#[\w.-]*)$")
@@ -137,7 +139,7 @@ _PROBE = "memfalsify-probe"  # a name git can always answer about
 
 
 def _said(raw: str) -> frozenset[str]:
-    """Which of ``_LINE_WORDS`` a raw line uses."""
+    """Which of ``_LINE_WORDS`` a piece of raw text uses."""
     prose = _CODE_SPAN.sub(" ", raw)
     return frozenset(name for name, words in _LINE_WORDS.items() if words.search(prose))
 
@@ -234,11 +236,19 @@ def _made_by_command(words: list[str]) -> set[str]:
 
 
 def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
-    """Every path a raw line writes in inline code or as a link target, in order, and the offset each starts at.
+    """Every path a raw block writes in inline code or as a link target, in order, and the offset each starts at.
     Inside a code span of several words (a command), only words that say they are paths count: an extension or a
-    trailing slash, and not what the command makes. The whole line at once, since a sentence can end inside a
-    command."""
-    said = _said(raw)
+    trailing slash, and not what the command makes. The whole block at once, since a sentence can end inside a
+    command. A path takes the words of the lines it stands on; ``references_in`` adds those of its own sentence."""
+    newlines = [match.start() for match in re.finditer("\n", raw)]
+    said_on: dict[tuple[int, int], frozenset[str]] = {}
+
+    def said(at: int, past: int) -> frozenset[str]:
+        first, last = bisect_left(newlines, at), bisect_left(newlines, past)
+        lines = (newlines[first - 1] + 1 if first else 0, newlines[last] if last < len(newlines) else len(raw))
+        if lines not in said_on:
+            said_on[lines] = _said(raw[lines[0]:lines[1]])
+        return said_on[lines]
 
     def foreign(match: re.Match) -> bool:
         at, past = match.span()
@@ -246,16 +256,19 @@ def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
 
     found: list[tuple[int, Reference]] = []
     for match in _CODE_SPAN.finditer(raw):
-        words = match.group(2).split()
-        whose = foreign(match)
+        code, whose, says = match.group(2), foreign(match), said(*match.span())
+        placed = [(match.start(2) + word.start(), word.group()) for word in _WORD_OF_CODE.finditer(code)]
+        words = [word for _, word in placed]
         if len(words) == 1:
-            parsed = [parse_reference(words[0], said, whose)]
+            parsed = [(match.start(), parse_reference(words[0], says, whose))]
         else:
-            whole, made = _whole_span(match.group(2)), _made_by_command(words)
-            parsed = [parse_reference(word, said, whose, whole) for word in words if word.rstrip(";") not in made]
-        found += [(match.start(), ref) for ref in parsed if ref is not None and (len(words) == 1 or not ref.bare)]
+            # A line break in a code span reads as a space, whatever continues the block after it.
+            whole = _whole_span(_BREAK_IN_CODE.sub(" ", code) if "\n" in code else code)
+            made = _made_by_command(words)
+            parsed = [(at, parse_reference(word, says, whose, whole)) for at, word in placed if word.rstrip(";") not in made]
+        found += [(at, ref) for at, ref in parsed if ref is not None and (len(words) == 1 or not ref.bare)]
     for match in _LINK_TARGET.finditer(raw):
-        if ref := parse_reference(match.group(1).split("#")[0], said, foreign(match)):
+        if ref := parse_reference(match.group(1).split("#")[0], said(*match.span()), foreign(match)):
             found.append((match.start(), ref))
     found.sort(key=lambda item: item[0])
     return [at for at, _ in found], [ref for _, ref in found]
@@ -272,7 +285,10 @@ def references_in(raw: str, start: int = 0, end: int | None = None,
             lines[raw] = parsed
     offsets, references = parsed
     high = len(offsets) if end is None else bisect_left(offsets, end)
-    return list({(ref.written, ref.whole): ref for ref in references[bisect_left(offsets, start):high]}.values())
+    chosen = references[bisect_left(offsets, start):high]
+    if chosen and "\n" in raw and (own := _said(raw[start:end])):  # a wrapped sentence says it on another line
+        chosen = [replace(ref, said=ref.said | own) for ref in chosen]
+    return list({(ref.written, ref.whole): ref for ref in chosen}.values())
 
 
 def _placeholder(segment: str, last: bool) -> bool:

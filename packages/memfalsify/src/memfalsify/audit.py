@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer
 from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
 from memcore.display import json_shield
 from memcore.paths import InputPathError, input_path
-from memcore.reading import confined_reads, confinement_root, confinement_supported, take
+from memcore.reading import confined_reads, confinement_root, confinement_supported, current_read_limits, take
 
 from . import __version__
 from .corpus import Passage, Skipped, is_code, out_of_collection, scan, source_kind
@@ -852,9 +852,11 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     # Under ``related`` the lexical verifier calls a pair unrelated, and ``candidates`` drops that: no need to ask. Most
     # shortlisted pairs are such pairs, and asking about them took longer than everything else after the scan. The one
     # exception is a pair naming the same setting, which ``naming_passages`` finds however little else it shares. It
-    # does not run with ``max_judged``, so there the floor would change what is kept.
+    # does not run with ``max_judged``, and within read_limits the shortlist can use up the comparisons it would draw
+    # on, so in those two cases the floor would change what is kept.
     nominate = verifier.name == _LEXICAL.name and max_judged is None
-    floor = max(min_coverage, verifier.related) if nominate and type(verifier) is LexicalVerifier else min_coverage
+    floored = nominate and type(verifier) is LexicalVerifier and current_read_limits() is None
+    floor = max(min_coverage, verifier.related) if floored else min_coverage
     picked = {}
     for claim in targets:
         # A dismissed passage is out before anything is chosen, so it costs no model call and the next one takes its place.

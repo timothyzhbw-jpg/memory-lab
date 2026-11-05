@@ -573,3 +573,12 @@ def test_a_setting_named_far_under_the_floor_is_flagged(tmp_path):
     assert coverage(claim, "max_steps: int = 500,") < 0.5
     report = audit(root / "MEMORY.md", root / "evidence", as_of=AS_OF)
     assert report.findings[0].evidence[0].rationale == "same setting max_steps: claim 100 vs source 500"
+
+
+def test_a_comparison_budget_keeps_what_naming_would_have_found(tmp_path):
+    """Within a budget the shortlist can use it up, so ``naming_passages`` cannot recover what a floor left out."""
+    claim, passage = "`max_steps` (default: 100) caps every agent run.", "`max_steps` (default: 500)."
+    root = _named_project(tmp_path, claim, "a.md", passage)
+    with read_limits(items={"comparisons": 1}):
+        report = audit(root / "MEMORY.md", root / "evidence", as_of=AS_OF)
+    assert report.findings[0].status == "candidate_counterevidence"

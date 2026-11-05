@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from memfalsify import claim_id
 from memfalsify.brief import FOOTER, _clip
 from memfalsify.cli import app
+from memfalsify.corpus import BRIEF_HEADER, is_report
 
 
 def _project(tmp_path: Path, memory: str, **evidence: str) -> Path:
@@ -36,7 +37,8 @@ def test_a_flag_shows_both_quotes_and_nothing_else(tmp_path):
     result = _audit(str(root / "MEMORY.md"), "--evidence", str(root))
     assert result.exit_code == 0
     lines = _lines(result)
-    assert lines[0].endswith("MEMORY.md: 1 possible counterevidence, 1 no evidence, 1 possible support")
+    assert lines[0] == BRIEF_HEADER
+    assert lines[1].endswith("MEMORY.md: 1 possible counterevidence, 1 no evidence, 1 possible support")
     assert "  memory  MEMORY.md:1" in lines and "          The public API allows 100 requests per minute." in lines
     assert "  source  api.md:1" in lines and "          The public API allows 60 requests per minute." in lines
     assert any(line.startswith("  why     ") for line in lines)
@@ -79,7 +81,7 @@ def test_a_path_that_exists_nowhere_is_a_flag_of_its_own(tmp_path):
     assert any(line.startswith("MISSING PATH · ") for line in lines)
     assert any(line.startswith("  path    'src/gone.py' is named here") for line in lines)
     assert "1 of 1 claim(s) need a look." in lines
-    assert "naming a missing path" in lines[0]
+    assert "naming a missing path" in lines[1]
 
 
 def test_hostile_text_stays_on_its_line():
@@ -112,11 +114,11 @@ def test_no_file_named_lists_the_files_and_one_file_reads_like_its_own_report(tm
                     api="The public API allows 60 requests per minute.\n")
     monkeypatch.chdir(root)
     one = _audit()
-    assert _lines(one)[0] == "MEMORY.md: 1 possible counterevidence"
+    assert _lines(one)[1] == "MEMORY.md: 1 possible counterevidence"
     write_text_exact(root / "AGENTS.md", "- Backups run nightly.\n")
     several = _audit()
     lines = _lines(several)
-    assert lines[0].startswith("2 file(s): ")
+    assert lines[1].startswith("2 file(s): ")
     assert any(line.startswith("== MEMORY.md: ") for line in lines) and any(line.startswith("== AGENTS.md: ") for line in lines)
     assert "1 of 2 claim(s) need a look." in lines
 
@@ -147,3 +149,14 @@ def test_what_a_person_dismissed_is_counted(tmp_path):
     assert result.exit_code == 0
     assert "Nothing flagged in 1 claim(s). 1 have no evidence, which means unchecked, not wrong. " \
            "1 candidate(s) dismissed by a person." in _lines(result)
+
+
+def test_a_saved_brief_is_no_evidence_for_the_next_audit(tmp_path):
+    claim = "The public API allows 100 requests per minute."
+    root = _project(tmp_path, f"- {claim}\n", api="The public API allows 60 requests per minute.\n")
+    result = _audit(str(root / "MEMORY.md"), "--evidence", str(root))
+    assert is_report(result.stdout)
+    (root / "api.md").unlink()
+    write_text_exact(root / "old-brief.txt", result.stdout)
+    again = _audit(str(root / "MEMORY.md"), "--evidence", str(root))
+    assert "old-brief.txt" not in again.stdout and "POSSIBLE COUNTEREVIDENCE" not in again.stdout

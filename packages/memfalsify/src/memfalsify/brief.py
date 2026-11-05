@@ -7,6 +7,7 @@ from __future__ import annotations
 from memcore.terminal import diagnostic_line
 
 from .audit import ATTENTION, MISSING_REFERENCE, AuditReport, AuditSet, EvidenceFinding, Finding, has_open_missing_reference
+from .corpus import BRIEF_HEADER
 from .report import LABELS
 
 _WIDTH = 90  # with the 10 characters of indent, a line fits in 100
@@ -76,7 +77,7 @@ def _missing_paths(findings: list[Finding]) -> int:
 
 def to_brief(report: AuditReport) -> str:
     flagged = [finding for finding in report.findings if _flagged(finding)]
-    out = [f"{diagnostic_line(report.memory_file)}: {_summary(report.summary, _missing_paths(report.findings))}", ""]
+    out = [BRIEF_HEADER, f"{diagnostic_line(report.memory_file)}: {_summary(report.summary, _missing_paths(report.findings))}", ""]
     for finding in flagged:
         out += _finding(finding)
     out += _closing(len(report.findings), len(flagged), report.summary, report.dismissed)
@@ -88,7 +89,7 @@ def set_to_brief(result: AuditSet) -> str:
     if len(result.reports) == 1:
         return to_brief(result.reports[0])
     findings = [finding for report in result.reports for finding in report.findings]
-    out = [f"{len(result.files)} file(s): {_summary(result.summary, _missing_paths(findings))}", ""]
+    out = [BRIEF_HEADER, f"{len(result.files)} file(s): {_summary(result.summary, _missing_paths(findings))}", ""]
     for report in result.reports:
         flagged = [finding for finding in report.findings if _flagged(finding)]
         out.append(f"== {diagnostic_line(report.memory_file)}: {_summary(report.summary, _missing_paths(report.findings))}")
