@@ -38,6 +38,12 @@ class Claim(BaseModel):
     # (the raw line, then where in it this claim's markup starts and ends). The text above has its markup removed, and
     # ``references`` needs the code spans. Private, so reports, IDs and the JSON shape do not change.
     _raw: tuple[str, int, int] | None = PrivateAttr(default=None)
+    _raw_copies: list[tuple[str, int, int]] = PrivateAttr(default_factory=list)  # of later copies, merged into this
+
+    def _absorb_raw(self, copy: Claim) -> None:
+        """Keep the raw lines of a copy of this claim: only one of them may write a path in code."""
+        if copy._raw is not None:
+            self._raw_copies += [copy._raw, *copy._raw_copies]
 
     @property
     def location(self) -> str:
@@ -175,6 +181,7 @@ def merge_duplicates(claims: list[Claim]) -> list[Claim]:
     for claim in claims:
         if claim.id in unique:
             unique[claim.id].also_at.append(claim.location)
+            unique[claim.id]._absorb_raw(claim)
         else:
             unique[claim.id] = claim
     return list(unique.values())

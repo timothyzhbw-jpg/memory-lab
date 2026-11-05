@@ -86,6 +86,7 @@ def _combine(parsed: list[tuple[str, list[Claim]]]) -> tuple[list[Claim], dict[s
             combined[claim.id] = claim
             owner[claim.id] = name
             continue
+        kept._absorb_raw(claim)
         for location in (claim.location, *claim.also_at):
             if location != kept.location and location not in kept.also_at:
                 kept.also_at.append(location)

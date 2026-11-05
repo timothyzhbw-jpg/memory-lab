@@ -26,6 +26,7 @@ import re
 import shutil
 import subprocess
 import unicodedata
+from bisect import bisect_left
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -113,9 +114,8 @@ _OTHER_REPO_AFTER = re.compile(r"^[\s*_)]*(?:in|from|at)\s+(?:the\s+)?[\w.-]+/[\
 _NEAR = 80  # characters around a path that can say whose it is
 
 
-@lru_cache(maxsize=16)
 def _said(raw: str) -> frozenset[str]:
-    """Which of ``_LINE_WORDS`` a raw line uses. Once per line: a hostile line can hold very many paths."""
+    """Which of ``_LINE_WORDS`` a raw line uses."""
     prose = _CODE_SPAN.sub(" ", raw)
     return frozenset(name for name, words in _LINE_WORDS.items() if words.search(prose))
 
@@ -161,26 +161,36 @@ def parse_reference(text: str, said: frozenset[str] = frozenset(), foreign: bool
     return None if path in (".", "..") else Reference(written, path, candidate.endswith("/"), said, foreign)
 
 
-def references_in(raw: str, start: int = 0, end: int | None = None) -> list[Reference]:
-    """The paths ``raw[start:end]`` writes in inline code or as link targets, each once, in order. Inside a code span
-    of several words (a command), only words that say they are paths count: an extension or a trailing slash."""
-    end = len(raw) if end is None else end
+@lru_cache(maxsize=16)
+def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
+    """Every path a raw line writes in inline code or as a link target, in order, and the offset each starts at.
+    Inside a code span of several words (a command), only words that say they are paths count: an extension or a
+    trailing slash. The whole line at once, since a sentence can end inside a command, and once per line, since a
+    hostile line can hold very many paths."""
     said = _said(raw)
 
     def foreign(match: re.Match) -> bool:
         at, past = match.span()
         return bool(_POSSESSIVE.search(raw, max(0, at - _NEAR), at) or _OTHER_REPO_AFTER.match(raw[past:past + _NEAR]))
 
-    found = []
-    for match in _CODE_SPAN.finditer(raw, start, end):
+    found: list[tuple[int, Reference]] = []
+    for match in _CODE_SPAN.finditer(raw):
         words = match.group(2).split()
         whose = foreign(match)
         parsed = [parse_reference(word, said, whose) for word in words]
-        found += [ref for ref in parsed if ref is not None and (len(words) == 1 or not ref.bare)]
-    for match in _LINK_TARGET.finditer(raw, start, end):
+        found += [(match.start(), ref) for ref in parsed if ref is not None and (len(words) == 1 or not ref.bare)]
+    for match in _LINK_TARGET.finditer(raw):
         if ref := parse_reference(match.group(1).split("#")[0], said, foreign(match)):
-            found.append(ref)
-    return list({ref.written: ref for ref in found}.values())
+            found.append((match.start(), ref))
+    found.sort(key=lambda item: item[0])
+    return [at for at, _ in found], [ref for _, ref in found]
+
+
+def references_in(raw: str, start: int = 0, end: int | None = None) -> list[Reference]:
+    """The paths that start in ``raw[start:end]``, each once, in order."""
+    offsets, references = _line_references(raw)
+    high = len(offsets) if end is None else bisect_left(offsets, end)
+    return list({ref.written: ref for ref in references[bisect_left(offsets, start):high]}.values())
 
 
 def _placeholder(segment: str, last: bool) -> bool:
@@ -379,7 +389,8 @@ def missing_references(claims: Iterable[Claim], root: Path, prefix: str = "") ->
     """{claim ID: the paths it names that exist nowhere under ``root``, as written}, in the claims' order.
 
     ``root`` is resolved. ``prefix`` is the directory ``Claim.path`` is relative to, as a POSIX path relative to
-    ``root``. A claim parsed by anything but ``parse_text`` has no raw line, and so no paths."""
+    ``root``. A claim parsed by anything but ``parse_text`` has no raw line, and so no paths. A claim stated several
+    times is read in each place, since only one may have its path in code, but judged from its first place."""
     if current_read_limits() is not None:
         return {}  # a budgeted run has no walk to spare, and a cut-off walk would call existing files missing
     questions: list[_Question] = []
@@ -388,11 +399,12 @@ def missing_references(claims: Iterable[Claim], root: Path, prefix: str = "") ->
         if claim._raw is None:
             continue
         anchors = _anchors(claim, prefix)
-        for ref in references_in(*claim._raw):
-            path = None if noise(ref) else _from_root(ref, anchors)
-            if path is not None:
-                questions.append(_Question(claim.id, ref, path, anchors))
-                wanted |= _wanted_names(path)
+        for source in (claim._raw, *claim._raw_copies):
+            for ref in references_in(*source):
+                path = None if noise(ref) else _from_root(ref, anchors)
+                if path is not None:
+                    questions.append(_Question(claim.id, ref, path, anchors))
+                    wanted |= _wanted_names(path)
     if not questions:
         return {}
     tree = walk_tree(root, wanted)

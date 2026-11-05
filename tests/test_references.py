@@ -90,6 +90,7 @@ def test_an_existing_path_is_not_flagged(tmp_path):
     ("- Read `src/gone.py` and `src/gone.py` again for details.\n", ["src/gone.py"]),
     ("| Parser | `src/gone.py` |\n", ["src/gone.py"]),
     ("- `src/gone.py`\n", ["src/gone.py"]),
+    ("- Run `python src/gone.py; echo done` for the details.\n", ["src/gone.py"]),
     ("Read `src/gone.py`.\n", ["src/gone.py"]),
     ("- Read ``src/gone.py`` for the details.\n", ["src/gone.py"]),
 ])
@@ -104,6 +105,13 @@ def test_each_sentence_answers_for_its_own_paths(tmp_path):
     report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
     by_text = {f.text: [i.kind for i in f.issues] for f in report.findings}
     assert by_text == {"The parser is quick and small.": [], "It lives in src/gone.py now.": ["missing_reference"]}
+
+
+def test_a_path_in_a_span_two_sentences_share_goes_to_the_sentence_it_starts_in(tmp_path):
+    tree(tmp_path, "src/here.py")
+    write_text_exact(tmp_path / "AGENTS.md", "- First run `python src/gone.py; echo done` and then stop there.\n")
+    report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
+    assert sum(i.kind == "missing_reference" for f in report.findings for i in f.issues) == 1
 
 
 def test_a_sentence_that_starts_with_a_path_keeps_it(tmp_path):
@@ -791,6 +799,21 @@ def test_no_argument_mode_walks_once(tmp_path, monkeypatch):
     monkeypatch.setattr(references_module, "walk_tree", lambda *a: walks.append(a) or real(*a))
     audit_directory(Path("."), as_of=AS_OF)
     assert len(walks) == 1
+
+
+@pytest.mark.parametrize("first, second", [
+    ("- The parser lives in src/gone.py for now.\n", "- The parser lives in `src/gone.py` for now.\n"),
+    ("- The parser lives in `src/gone.py` for now.\n", "- The parser lives in src/gone.py for now.\n"),
+])
+def test_a_claim_stated_twice_is_read_in_both_places(tmp_path, monkeypatch, first, second):
+    tree(tmp_path, "src/here.py")
+    assert flagged(tmp_path, first + second) == ["src/gone.py"]
+    write_text_exact(tmp_path / "AGENTS.md", first)
+    write_text_exact(tmp_path / "CLAUDE.md", second)
+    monkeypatch.chdir(tmp_path)
+    result = audit_directory(Path("."), as_of=AS_OF)
+    assert set_to_markdown(result).count("missing_reference") == 1
+    assert runner.invoke(app, ["audit", "--strict", "--as-of", "2026-11-04"]).exit_code == 1
 
 
 def test_a_claim_in_two_files_is_reported_once(tmp_path, monkeypatch):
