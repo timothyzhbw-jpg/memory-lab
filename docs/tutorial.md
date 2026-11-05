@@ -78,7 +78,7 @@ Open `$WORK/memfalsify-report.md`. The memory claims the public API allows 100 r
 
 ## 4. Record a review
 
-A review is one JSON object per line: `memory_id`, `relation` (`supports` or `contradicts`), `path` relative to the evidence directory, a `quote` copied verbatim from that file, and a `reviewer`. `memfalsify claims` prints the ids. The block selects the rate-limit claim by its text, checks that the quote is really in `docs/api.md`, and appends one line to `reviews-tutorial.jsonl`.
+A review is one JSON object per line: `memory_id`, `relation` (`supports`, `contradicts` or `unrelated`), `path` relative to the evidence directory, a `quote` copied verbatim from that file, and a `reviewer`. `memfalsify claims` prints the ids. The block selects the rate-limit claim by its text, checks that the quote is really in `docs/api.md`, and appends one line to `reviews-tutorial.jsonl`.
 
 ```bash
 # exit 0
@@ -150,6 +150,30 @@ memfalsify audit "$WORK/memfalsify/MEMORY.md" \
   --strict \
   --output "$WORK/memfalsify-strict.md"
 ```
+
+A flag can also be wrong, and then you dismiss it. The report prints a line for that under each flag, with `"relation": "unrelated"`: a person read this passage and it does not bear on the claim. Say you read the incident note quoted against the staging claim and decide it says nothing about the rule. The block takes the printed line from the report, adds it to a reviews file and audits again.
+
+```bash
+# exit 0
+(
+  set -euo pipefail
+  memfalsify audit "$WORK/memfalsify/MEMORY.md" \
+    --evidence "$WORK/memfalsify/evidence" \
+    --as-of 2026-10-10 \
+    --output "$WORK/memfalsify-flags.md"
+  grep -o '{"memory_id".*skipping the staging cluster.*}' "$WORK/memfalsify-flags.md" \
+    >> "$WORK/memfalsify/reviews-dismissed.jsonl"
+  memfalsify audit "$WORK/memfalsify/MEMORY.md" \
+    --evidence "$WORK/memfalsify/evidence" \
+    --reviews "$WORK/memfalsify/reviews-dismissed.jsonl" \
+    --as-of 2026-10-10 \
+    --output "$WORK/memfalsify-dismissed.md"
+  grep -F -q "Dismissed by a person: 1 candidate(s) (you: 1)" "$WORK/memfalsify-dismissed.md"
+  grep -F -q "dismissed by you" "$WORK/memfalsify-dismissed.md"
+)
+```
+
+That passage is no longer a candidate for that claim, so the status comes from what remains, and the report says how many candidates were dismissed and by whom. A dismissal never marks a claim supported or challenged. If the evidence file changes so that the quote is gone, the dismissal stops applying and `Skipped evidence` says so. A review that confirms something is stricter: a quote or a claim it names that is gone stops the audit with exit 2.
 
 ## 5. Audit a CLAUDE.md and AGENTS.md change
 

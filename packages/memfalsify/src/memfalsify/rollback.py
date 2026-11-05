@@ -8,14 +8,15 @@ from pathlib import Path
 
 from memcore.reading import read_file_bytes
 
+from .blocks import Block, block_at, blocks
 from .corpus import ROLLBACK_HEADER
 from .gitstore import HistoryError, Objects, Snapshot, open_repository, printable
 from .history import Change, compare
-from .memory import Claim, claim_id, sentences
+from .formats import frontmatter
+from .memory import Claim, block_sentences, claim_id, claim_ids, on_one_line
 
 CLAIM_ID = re.compile(r"m-[0-9a-f]{8}")
 LIST_MARKER = re.compile(r"^\s*(?:(?:>|[-*+]|\d+[.)]|\[[ xX]\])\s+)*")
-HEADING = re.compile(r"^\s*#{1,6}\s+(.*)")
 
 
 def _lines(text: str, where: str) -> list[str]:
@@ -55,24 +56,74 @@ def _patch(repo_path: str, before: list[str], after: list[str]) -> str:
     return "".join(out)
 
 
-def _spans(body: str, memory_id: str) -> list[tuple[int, int]]:
-    """Raw spans (markup included) of the sentences in one line whose claim ID is ``memory_id``."""
-    return [(start, end) for text, start, end in sentences(body) if claim_id(text) == memory_id]
+def _spans(block: Block, memory_id: str) -> list[tuple[int, int]]:
+    """Raw spans (markup included) of the sentences in one block whose claim ID is ``memory_id``."""
+    return [(start, end) for text, start, end in block_sentences(block) if claim_id(text) == memory_id]
 
 
-def _old_sentence(snapshot: Snapshot, claim: Claim) -> tuple[str, str]:
-    """(the raw sentence with its markup, its whole raw line) of ``claim`` in ``snapshot``."""
-    raw = snapshot.texts[claim.path].split("\n")[claim.line - 1]
-    spans = _spans(raw, claim.id)
+def _old_sentence(snapshot: Snapshot, claim: Claim) -> tuple[str, Block]:
+    """(the raw sentence with its markup, its whole block) of ``claim`` in ``snapshot``. A wrapped sentence keeps its
+    line breaks."""
+    block = block_at(snapshot.texts[claim.path].split("\n"), claim.line)
+    spans = _spans(block, claim.id) if block else []
     if not spans:
         raise HistoryError(f"cannot locate {claim.id} in {printable(claim.path)}:{claim.line}")
-    return raw[spans[0][0]:spans[0][1]], raw
+    return block.raw[spans[0][0]:spans[0][1]], block
+
+
+def _with_endings(text: str, replaced: list[str], ending: str) -> list[str]:
+    """``text``, the new form of the block that was ``replaced``, as lines with endings: those it had where they still
+    fit, and the block's last ending on its last line, which may be none at the end of a file."""
+    pieces = text.split("\n")
+    endings = [line[len(_body(line)):] for line in replaced]
+    return [piece + (endings[-1] if at == len(pieces) - 1 else endings[at] if at < len(endings) - 1 else ending)
+            for at, piece in enumerate(pieces)]
+
+
+def _restored(lines: list[str], place: Block, spans: list[tuple[int, int]], sentence: str, ending: str,
+              memory_id: str, current_id: str) -> list[str] | None:
+    """``lines`` with the old wording in those spans of ``place``, wrapped as it was or, when that no longer reads as the
+    same claim here (a quote's marker in a list, say), on one line, or with the whole block on one line, since a shorter
+    wording can leave a neighbor's first line too short to read as wrapped. The first of these that leaves the other
+    claims as they are, or else the first that brings the claim back at all. None if none does."""
+    others = claim_ids("".join(lines)) - {current_id}
+
+    def edited(wording: str) -> str:
+        raw = place.raw
+        for start, end in reversed(spans):
+            raw = raw[:start] + wording + raw[end:]
+        return raw
+
+    fallback = None
+    for text in dict.fromkeys((edited(sentence), edited(on_one_line(sentence)), on_one_line(edited(sentence)))):
+        result = (lines[:place.first] + _with_endings(text, lines[place.first:place.last + 1], ending)
+                  + lines[place.last + 1:])
+        found = claim_ids("".join(result))
+        if memory_id in found:
+            if found - {current_id} == others | {memory_id}:
+                return result
+            fallback = fallback or result
+    return fallback
+
+
+def _with_claim(lines: list[str], at: int, text: str, ending: str, memory_id: str) -> list[str] | None:
+    """``lines`` with the removed claim's lines put back at index ``at``, wrapped as they were or else on one line, with
+    a blank line on a side only where the file would otherwise read one of them as going on with its neighbor. None if no
+    form brings it back alone."""
+    wanted = claim_ids("".join(lines)) | {memory_id}
+    for wording in dict.fromkeys((text, on_one_line(text))):
+        added = [piece + ending for piece in wording.split("\n")]
+        for before, after in (([], []), ([ending], []), ([], [ending]), ([ending], [ending])):
+            result = lines[:at] + before + added + after + lines[at:]
+            if claim_ids("".join(result)) == wanted:
+                return result
+    return None
 
 
 def _anchor(old: Snapshot, changes: list[Change], gone: Claim, target: list[str]) -> int:
     """Index in ``target`` (lines of the current file) at which to re-insert the removed claim ``gone``:
-    after the nearest earlier claim of its section that still exists (possibly edited), else before the
-    nearest later one, else under its section heading, else at the end of the file."""
+    after the block of the nearest earlier claim of its section that still exists (possibly edited), else before the
+    block of the nearest later one, else under its section heading, else at the end of the file."""
     in_file = [c for c in old.claims if c.path == gone.path]
     index = next(i for i, c in enumerate(in_file) if c.id == gone.id)
     present: dict[str, int] = {}  # old claim ID -> its line in the current file
@@ -83,18 +134,22 @@ def _anchor(old: Snapshot, changes: list[Change], gone: Claim, target: list[str]
                 if path == gone.path:
                     present.setdefault(change.old.id, line)
     same = [c.section == gone.section for c in in_file]
+    bodies = [_body(line) for line in target]
     for i in range(index - 1, -1, -1):
         if same[i] and in_file[i].id in present:
-            return present[in_file[i].id]
+            line = present[in_file[i].id]
+            block = block_at(bodies, line)
+            return block.last + 1 if block else line
     for i in range(index + 1, len(in_file)):
         if same[i] and in_file[i].id in present:
-            return present[in_file[i].id] - 1
+            line = present[in_file[i].id]
+            block = block_at(bodies, line)
+            return block.first if block else line - 1
     if gone.section is not None:
-        for i, line in enumerate(target):
-            heading = HEADING.match(_body(line))
-            if heading and heading.group(1).strip() == gone.section:
-                i += 1
-                while i < len(target) and not _body(target[i]).strip():
+        for block in blocks(bodies, frontmatter(bodies)[0]):
+            if block.kind == "heading" and block.raw == gone.section:
+                i = block.last + 1
+                while i < len(target) and not bodies[i].strip():
                     i += 1
                 return i
     return len(target)
@@ -130,7 +185,7 @@ def rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool = 
     if change.kind == "added":
         raise HistoryError(f"{claim} did not exist at {printable(label)}, so there is no earlier text to restore; "
                            "to drop it, edit the memory by hand")
-    sentence, old_line = _old_sentence(old, change.old)
+    sentence, old_block = _old_sentence(old, change.old)
     originals: dict[str, list[str]] = {}
     edits: dict[str, list[str]] = {}
 
@@ -147,29 +202,41 @@ def rollback_patch(memory_file: Path, claim: str, to: str, follow_links: bool = 
         return edits[path]
 
     if change.kind == "changed":
-        # Every copy of the current wording gets the old wording back, with the old markup.
-        for location in dict.fromkeys([change.new.location, *change.new.also_at]):
-            path, number = _split_location(location)
+        # Every copy of the current wording gets the old wording back, with the old markup. Bottom up, since the old
+        # wording may take more or fewer lines, and each block once: it can hold several copies.
+        places = sorted({_split_location(location) for location in [change.new.location, *change.new.also_at]},
+                        key=lambda place: (place[0], -place[1]))
+        seen: set[tuple[str, int]] = set()
+        for path, number in places:
             lines = lines_of(path)
-            body = _body(lines[number - 1])
-            spans = _spans(body, change.new.id)
+            place = block_at([_body(line) for line in lines], number)
+            if place is not None and (path, place.first) in seen:
+                continue
+            spans = _spans(place, change.new.id) if place else []
             if not spans:
-                raise HistoryError(f"cannot locate {change.new.id} in {printable(location)}")
-            edited = body
-            for start, end in reversed(spans):
-                edited = edited[:start] + sentence + edited[end:]
-            lines[number - 1] = edited + lines[number - 1][len(body):]
+                raise HistoryError(f"cannot locate {change.new.id} in {printable(path)}:{number}")
+            seen.add((path, place.first))
+            restored = _restored(lines, place, spans, sentence, _ending(lines), change.old.id, change.new.id)
+            if restored is None:
+                raise HistoryError(f"cannot put {change.old.id} back in {printable(path)}:{number} as it was; "
+                                   "edit it by hand")
+            edits[path] = restored
         action = f"restore the wording of {change.new.id} to {change.old.id}"
     else:
         gone = change.old
         lines = lines_of(gone.path)
-        # A line holding only this claim comes back verbatim; otherwise the sentence alone, under the line's
+        # A block holding only this claim comes back verbatim; otherwise the sentence alone, under the block's
         # list or quote marker.
-        text = old_line if len(sentences(old_line)) == 1 else LIST_MARKER.match(old_line).group() + sentence
+        alone = len(block_sentences(old_block)) == 1
+        text = old_block.raw if alone else LIST_MARKER.match(old_block.raw).group() + sentence
         at = _anchor(old, changes, gone, lines)
         if at == len(lines) and lines and not lines[-1].endswith("\n"):
             lines[-1] += _ending(lines)
-        lines.insert(at, text + _ending(lines))
+        restored = _with_claim(lines, at, text, _ending(lines), gone.id)
+        if restored is None:
+            raise HistoryError(f"cannot re-add {gone.id} to {printable(gone.path)} so that it reads as it did; "
+                               "edit it by hand")
+        edits[gone.path] = restored
         action = f"re-add removed claim {gone.id}"
     body = "".join(_patch(repo.prefix + path, originals[path], lines) for path, lines in edits.items()
                    if originals[path] != lines)

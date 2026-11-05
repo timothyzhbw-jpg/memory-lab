@@ -45,7 +45,7 @@ memlab-ui --root examples
   陈述，未改动的不再重新检查。只有当根文件夹是 git 仓库的顶层时才提供；与 MCP 工具一样，仓库的工作区、git 目录、
   公共目录和对象库都必须位于根文件夹之内。
 - “把今天当作”：判断文件中旧日期的基准日期（`--as-of`）。
-- “审阅文件”：记录了人工确认的 `reviews.jsonl`。其中的路径必须指向对照范围内的文件。
+- “审阅文件”：记录了人工确认的 `reviews.jsonl`。其中的路径必须指向对照范围内的文件。被标记的卡片的“详情”里有排除这个标记的那一行（`"relation": "unrelated"`），粘贴到这个文件后，这段文字就不再算这条陈述的证据。
 - “对照方式”：只有加上 `--allow-model-verifiers` 时才出现。本网页暂不提供 `openai` 验证器（OpenAI 或任何兼容
   OpenAI 的端点）：它需要模型名称以及服务商或 base URL，而网页没有填写这些的地方。请用
   `memfalsify audit --verifier openai --openai-model ...`，或通过 memlab-mcp 的 `--openai-*` 选项运行；见

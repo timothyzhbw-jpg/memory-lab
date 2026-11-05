@@ -250,7 +250,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | API | 用途 |
 |---|---|
 | `memfalsify.ATTENTION` | 严格审计计数的冻结状态集合：challenged、conflicted、candidate_counterevidence、disputed。 |
-| `memfalsify.AuditReport` | 只读审计结果，包含发现、状态计数、各模型后端的 API 用量（verifier_stats）、跳过的证据及局限。 |
+| `memfalsify.AuditReport` | 只读审计结果，包含发现、状态计数、各模型后端的 API 用量（verifier_stats）、跳过的证据、局限，以及 dismissed：按审核人统计的人工排除候选数（没有时 JSON 里不出现这个字段）。 |
 | `memfalsify.AuditSet` | 审计一个目录的结果：选中的文件、汇总的状态计数、按顺序每个文件一份 AuditReport，以及查找文件时跳过的位置（not_searched）。不带 MEMORY 参数的 `memfalsify audit --format json` 输出的就是它。 |
 | `memfalsify.CascadeVerifier` | 构造参数为 first、second、accept_at=0.8；首个验证器置信度不足时升级。judge_many 先让 first 判断全部片段，再让 second 判断其中没把握的；usage() 合并两个后端的用量。 |
 | `memfalsify.Change` | 不可变比较结果：类型、新旧 Claim、相似度及移动标记。 |
@@ -261,8 +261,8 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.CommitInfo` | 用于溯源的提交标识、时间、作者及主题。 |
 | `memfalsify.DiffReport` | 修订比较及新增／修改记忆的审计；attention 统计严格状态。 |
 | `memfalsify.DualVerifier` | 用 first 与 second 构造；不一致时返回 disputed 并保留双方意见。judge_many 让每个后端各判断一遍；usage() 合并两个后端的用量。 |
-| `memfalsify.EvidenceFinding` | 候选或人工确认的关系、理由、各验证器意见及证据引用。 |
-| `memfalsify.Finding` | 单条记忆的状态、证据、问题、建议操作，以及所在文件的 frontmatter 元数据。 |
+| `memfalsify.EvidenceFinding` | 候选或人工确认的关系、理由、各验证器意见及证据引用。关系 unrelated 只出现在 Finding.dismissed 里。 |
+| `memfalsify.Finding` | 单条记忆的状态、证据、问题、建议操作、所在文件的 frontmatter 元数据，以及 dismissed：人工排除的文字（没有时 JSON 里不出现这个字段）。 |
 | `memfalsify.GitError` | HistoryError 子类，带经过清理的 summary 与底层诊断消息。 |
 | `memfalsify.HistoryError` | Git 历史操作无效或不可用时的 ValueError。 |
 | `memfalsify.HistoryReport` | 当前及已删除记忆的来源、已扫描提交和扫描局限。 |
@@ -276,7 +276,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.Proposal` | 建议操作及原因；replacement 始终为 None。 |
 | `memfalsify.Relation` | Literal 类型：supports、contradicts、unrelated、disputed。 |
 | `memfalsify.RemovedClaim` | 已删除记忆版本及删除该记忆的提交。 |
-| `memfalsify.Review` | 人工确认输入：记忆 ID、关系、路径、引用、审核人及可选备注。 |
+| `memfalsify.Review` | 人读过一段文字后的判断：记忆 ID、关系（supports、contradicts，或 unrelated：排除一条候选，不把记忆标成任何一边）、路径、引用、审核人及可选备注。 |
 | `memfalsify.Revision` | 修订标签、解析后的提交（工作区为 None）及读取的文件。 |
 | `memfalsify.Rollback` | 补丁结果：字节或 None，以及消息；不应用补丁。 |
 | `memfalsify.Skipped` | 被跳过的证据路径及原因。 |
@@ -295,7 +295,7 @@ walk_files(path: Path, onerror: Callable[[OSError], None] | None=None) -> Iterat
 | `memfalsify.diff_to_markdown` | 将 DiffReport 渲染为 Markdown。 |
 | `memfalsify.history_to_markdown` | 将 HistoryReport 渲染为 Markdown。 |
 | `memfalsify.judge_all` | 按顺序判断（记忆、片段）对：验证器有 judge_many 时交给它，否则每次最多并发 max_concurrency 个 judge 调用。 |
-| `memfalsify.load_reviews` | 根据记忆 ID 映射验证人工审核记录及其逐字引用；传入 skipped= 时，被输入路径策略排除的审核证据记录到该列表而不是抛出异常。 |
+| `memfalsify.load_reviews` | 根据记忆 ID 映射验证人工审核记录及其逐字引用；传入 skipped= 时，被输入路径策略排除的审核证据记录到该列表而不是抛出异常，记忆或引文已不在的排除记录也一样。 |
 | `memfalsify.memory_diff` | 比较 base 与 head、工作区，或 staged=True 时的 git 暂存区，只用当前证据审计新增或修改的记忆。 |
 | `memfalsify.memory_history` | 沿 HEAD 第一父提交链溯源记忆；max_commits 默认 100。 |
 | `memfalsify.parse_memory` | 返回（去重后的记忆、已读文件）；follow_links=True 跟随记忆目录内的本地 Markdown 链接。传入 skipped= 时，被输入路径策略排除的记忆文件或链接文件记录到该列表而不读取。 |

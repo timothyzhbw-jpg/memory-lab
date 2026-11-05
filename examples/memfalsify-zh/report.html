@@ -104,21 +104,6 @@ time { white-space: nowrap; }
 <section id="status-candidate_counterevidence">
 <h2><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> 3 memories</h2>
 <article class="item">
-<h3><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> <code>m-54b237eb</code></h3>
-<blockquote>&#21151;&#33021;A&#65288;&#25209;&#37327;&#23548;&#20986;&#65289;&#24050;&#25209;&#20934;&#65292;&#38543;11&#26376;&#29256;&#26412;&#21457;&#24067;&#12290;</blockquote>
-<p><code>MEMORY.md:5</code> &middot; &#20135;&#21697;</p>
-<p class="label">Evidence</p>
-<ul>
-<li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>&#35760;&#24405;/2026-10-07-&#20915;&#31574;&#35760;&#24405;.md:3</code> <span class="muted">(characters 21&ndash;48)</span> &middot; sha256 <code class="hash">faf3d9030f658faf6142b661e611052703338cba2e750310eaca7232e6dacfa6</code></p>
-<p>opposing terms: claim &#x27;&#25209;&#20934;&#8230;&#x27; vs source &#x27;&#25298;&#32477;&#8230;&#x27;</p>
-<blockquote>&#20135;&#21697;&#32463;&#29702;&#25298;&#32477;&#20102;&#21151;&#33021;A&#65288;&#25209;&#37327;&#23548;&#20986;&#65289;&#65292;&#19981;&#38543;11&#26376;&#29256;&#26412;&#21457;&#24067;&#12290;</blockquote></li>
-</ul>
-<p class="label">Proposed actions (not applied)</p>
-<ul>
-<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
-</ul>
-</article>
-<article class="item">
 <h3><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> <code>m-124e4d91</code></h3>
 <blockquote>&#20844;&#24320; API &#30340;&#38480;&#27969;&#26159;&#27599;&#20998;&#38047; 100 &#27425;&#35831;&#27714;&#12290;</blockquote>
 <p><code>MEMORY.md:11</code> &middot; &#22522;&#30784;&#35774;&#26045;</p>
@@ -126,11 +111,28 @@ time { white-space: nowrap; }
 <ul>
 <li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>&#25991;&#26723;/api.md:3</code> <span class="muted">(characters 10&ndash;32)</span> &middot; sha256 <code class="hash">ab042ee74c576647baa681569f2ee6d02281260e1f33e6cd230cf77f14bc9fea</code></p>
 <p>different values: claim [&#x27;100&#x27;] vs source [&#x27;60&#x27;]</p>
-<blockquote>&#20844;&#24320; API &#30340;&#38480;&#27969;&#26159;&#27599;&#20998;&#38047; 60 &#27425;&#35831;&#27714;&#12290;</blockquote></li>
+<blockquote>&#20844;&#24320; API &#30340;&#38480;&#27969;&#26159;&#27599;&#20998;&#38047; 60 &#27425;&#35831;&#27714;&#12290;</blockquote>
+<p>Does not bear on this claim? Add to reviews.jsonl: <code>{&quot;memory_id&quot;: &quot;m-124e4d91&quot;, &quot;relation&quot;: &quot;unrelated&quot;, &quot;path&quot;: &quot;&#25991;&#26723;/api.md&quot;, &quot;quote&quot;: &quot;&#20844;&#24320; API &#30340;&#38480;&#27969;&#26159;&#27599;&#20998;&#38047; 60 &#27425;&#35831;&#27714;&#12290;&quot;, &quot;reviewer&quot;: &quot;you&quot;}</code></p></li>
 </ul>
 <p class="label">Proposed actions (not applied)</p>
 <ul>
-<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.</li>
+</ul>
+</article>
+<article class="item">
+<h3><span class="badge amber">POSSIBLE COUNTEREVIDENCE</span> <code>m-54b237eb</code></h3>
+<blockquote>&#21151;&#33021;A&#65288;&#25209;&#37327;&#23548;&#20986;&#65289;&#24050;&#25209;&#20934;&#65292;&#38543;11&#26376;&#29256;&#26412;&#21457;&#24067;&#12290;</blockquote>
+<p><code>MEMORY.md:5</code> &middot; &#20135;&#21697;</p>
+<p class="label">Evidence</p>
+<ul>
+<li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>&#35760;&#24405;/2026-10-07-&#20915;&#31574;&#35760;&#24405;.md:3</code> <span class="muted">(characters 21&ndash;48)</span> &middot; sha256 <code class="hash">faf3d9030f658faf6142b661e611052703338cba2e750310eaca7232e6dacfa6</code></p>
+<p>opposing terms: claim &#x27;&#25209;&#20934;&#8230;&#x27; vs source &#x27;&#25298;&#32477;&#8230;&#x27;</p>
+<blockquote>&#20135;&#21697;&#32463;&#29702;&#25298;&#32477;&#20102;&#21151;&#33021;A&#65288;&#25209;&#37327;&#23548;&#20986;&#65289;&#65292;&#19981;&#38543;11&#26376;&#29256;&#26412;&#21457;&#24067;&#12290;</blockquote>
+<p>Does not bear on this claim? Add to reviews.jsonl: <code>{&quot;memory_id&quot;: &quot;m-54b237eb&quot;, &quot;relation&quot;: &quot;unrelated&quot;, &quot;path&quot;: &quot;&#35760;&#24405;/2026-10-07-&#20915;&#31574;&#35760;&#24405;.md&quot;, &quot;quote&quot;: &quot;&#20135;&#21697;&#32463;&#29702;&#25298;&#32477;&#20102;&#21151;&#33021;A&#65288;&#25209;&#37327;&#23548;&#20986;&#65289;&#65292;&#19981;&#38543;11&#26376;&#29256;&#26412;&#21457;&#24067;&#12290;&quot;, &quot;reviewer&quot;: &quot;you&quot;}</code></p></li>
+</ul>
+<p class="label">Proposed actions (not applied)</p>
+<ul>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.</li>
 </ul>
 </article>
 <article class="item">
@@ -141,7 +143,8 @@ time { white-space: nowrap; }
 <ul>
 <li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>&#35760;&#24405;/2026-09-12-&#20107;&#25925;&#22797;&#30424;.md:3</code> <span class="muted">(characters 19&ndash;55)</span> &middot; sha256 <code class="hash">b6c4a629ea08b69d0e77292b10dcbe4ed9dd7c1867a8bfc45e0825fddfc36863</code></p>
 <p>same subject, but only one side is negated</p>
-<blockquote>&#20026;&#20102;&#20462;&#22797;&#25903;&#20184;&#22238;&#35843;&#65292;&#20540;&#29677;&#21516;&#23398;&#30452;&#25509;&#25226;&#28909;&#20462;&#22797;&#37096;&#32626;&#21040;&#29983;&#20135;&#29615;&#22659;&#65292;&#27809;&#26377;&#32463;&#36807;&#39044;&#21457;&#29615;&#22659;&#12290;</blockquote></li>
+<blockquote>&#20026;&#20102;&#20462;&#22797;&#25903;&#20184;&#22238;&#35843;&#65292;&#20540;&#29677;&#21516;&#23398;&#30452;&#25509;&#25226;&#28909;&#20462;&#22797;&#37096;&#32626;&#21040;&#29983;&#20135;&#29615;&#22659;&#65292;&#27809;&#26377;&#32463;&#36807;&#39044;&#21457;&#29615;&#22659;&#12290;</blockquote>
+<p>Does not bear on this claim? Add to reviews.jsonl: <code>{&quot;memory_id&quot;: &quot;m-df062c08&quot;, &quot;relation&quot;: &quot;unrelated&quot;, &quot;path&quot;: &quot;&#35760;&#24405;/2026-09-12-&#20107;&#25925;&#22797;&#30424;.md&quot;, &quot;quote&quot;: &quot;&#20026;&#20102;&#20462;&#22797;&#25903;&#20184;&#22238;&#35843;&#65292;&#20540;&#29677;&#21516;&#23398;&#30452;&#25509;&#25226;&#28909;&#20462;&#22797;&#37096;&#32626;&#21040;&#29983;&#20135;&#29615;&#22659;&#65292;&#27809;&#26377;&#32463;&#36807;&#39044;&#21457;&#29615;&#22659;&#12290;&quot;, &quot;reviewer&quot;: &quot;you&quot;}</code></p></li>
 </ul>
 <p class="label">Issues</p>
 <ul>
@@ -149,7 +152,7 @@ time { white-space: nowrap; }
 </ul>
 <p class="label">Proposed actions (not applied)</p>
 <ul>
-<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.</li>
 <li><code>narrow_scope</code>: State the cases the evidence actually covers.</li>
 </ul>
 </article>
@@ -220,7 +223,7 @@ time { white-space: nowrap; }
 <section>
 <h2>Limitations</h2>
 <ul>
-<li>Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context.</li>
+<li>Unconfirmed matches are candidates found by comparing words: support by term overlap, a contradiction by the same setting with another value or two near-identical statements that differ. They can miss paraphrases and misread context, and a report without flags has not ruled anything out.</li>
 <li>Only human reviews (reviews.jsonl) can mark a memory supported or challenged.</li>
 <li>Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.</li>
 <li>Missing evidence means unverified, not false. No memory was modified.</li>

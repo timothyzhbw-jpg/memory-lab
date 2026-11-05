@@ -19,9 +19,10 @@
 **Evidence**
 - contradicts (candidate, unconfirmed) · `database.md:3` · sha256 `78e1f22d39c6` · different values: claim ['15'] vs source ['16']
   > The main database runs PostgreSQL 16.
+  - Does not bear on this claim? Add to reviews.jsonl: `{"memory_id": "m-f0a6035e", "relation": "unrelated", "path": "database.md", "quote": "The main database runs PostgreSQL 16.", "reviewer": "you"}`
 
 **Proposed actions** (not applied)
-- `verify_counterevidence`: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.
+- `verify_counterevidence`: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.
 
 ### NO EVIDENCE · `m-314c50bc`
 
@@ -60,7 +61,7 @@
 
 ## Limitations
 
-- Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context.
+- Unconfirmed matches are candidates found by comparing words: support by term overlap, a contradiction by the same setting with another value or two near-identical statements that differ. They can miss paraphrases and misread context, and a report without flags has not ruled anything out.
 - Only human reviews (reviews.jsonl) can mark a memory supported or challenged.
 - Hashes prove a quote exists in the scanned bytes, not that the source is authentic or current.
 - Missing evidence means unverified, not false. No memory was modified.

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from conftest import EXAMPLES, write_text_exact
+from memfalsify import audit
 from memfalsify.memory import parse_memory
 from memfalsify.text import (CJK, explicit_dates, features, fold_width, has_negation, modality_conflict, negation,
                              normalize, terms, zh_numeral)
@@ -126,6 +127,31 @@ def test_numeric_conflicts_across_notations(claim, passage, relation):
     assert judgment.relation == relation
     if relation == "contradicts":
         assert judgment.rationale.startswith("different values")
+
+
+def test_chinese_numbers_are_not_read_as_each_naming_a_case():
+    judgment = judge("检索索引的热数据有半个太比字节。", "检索索引的热数据占用五百一十二吉比字节。")
+    assert judgment.rationale.startswith("different values")
+
+
+@pytest.mark.parametrize("passage", ["- 生产环境的数据库连接池默认禁\n  用。", "生产环境的数据库连接池默认禁\n用。", "> 生产环境的数据库连接池默认禁\n> 用。",
+                                     "生产环境的数据库连接池默认禁\r\n用。"])
+def test_a_word_split_across_evidence_lines_is_read_whole(passage):
+    assert judge("生产环境的数据库连接池默认启用。", passage).rationale.startswith("opposing terms")
+
+
+def test_a_word_split_across_lines_reaches_a_full_audit(tmp_path):
+    write_text_exact(tmp_path / "MEMORY.md", "- 生产环境的数据库连接池默认启用。\n")
+    (tmp_path / "evidence").mkdir()
+    write_text_exact(tmp_path / "evidence" / "a.md", "- 生产环境的数据库连接池默认禁\n  用。\n")
+    assert audit(tmp_path / "MEMORY.md", tmp_path / "evidence").findings[0].status == "candidate_counterevidence"
+
+
+def test_only_a_break_between_two_ideographs_goes():
+    assert normalize("数据\n库") == "数据库"
+    assert normalize("数据\n\n库") == "数据\n\n库"  # another paragraph
+    assert normalize("数据\nAPI") == "数据\nAPI"
+    assert normalize("API\nkeys") == "API\nkeys"
 
 
 # --- terms and coverage -----------------------------------------------------------------------------------

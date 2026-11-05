@@ -157,6 +157,25 @@ def test_audit_matches_the_library_and_hides_the_root(root):
 
 
 @requires_confinement
+def test_audit_applies_a_dismissal_from_the_reviews_file(root):
+    server = create_server(root)
+    arguments = dict(memory_file=MEMORY, evidence_dir=EVIDENCE, as_of="2026-10-10")
+    report = json.loads(ok(call(server, "memfalsify_audit", format="json", **arguments)))
+    flag = next(f for f in report["findings"] if f["status"] == "candidate_counterevidence")
+    span = next(e["span"] for e in flag["evidence"] if e["relation"] == "contradicts")
+    write_text_exact(root / "dismissals.jsonl", json.dumps({
+        "memory_id": flag["memory_id"], "relation": "unrelated", "path": span["path"], "quote": span["quote"],
+        "reviewer": "ada"}) + "\n")
+    arguments["reviews_file"] = "dismissals.jsonl"
+    after = json.loads(ok(call(server, "memfalsify_audit", format="json", **arguments)))
+    assert after["dismissed"] == {"ada": 1}
+    found = next(f for f in after["findings"] if f["memory_id"] == flag["memory_id"])
+    assert span["quote"] not in [e["span"]["quote"] for e in found["evidence"]]
+    assert found["dismissed"][0]["reviewer"] == "ada" and found["dismissed"][0]["relation"] == "unrelated"
+    assert "Dismissed by a person: 1 candidate(s) (ada: 1)" in ok(call(server, "memfalsify_audit", **arguments))
+
+
+@requires_confinement
 def test_audit_without_evidence_and_absolute_path_inside_root(root):
     report = json.loads(ok(call(create_server(root), "memfalsify_audit",
                                 memory_file=str(root / MEMORY), format="json")))

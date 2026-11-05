@@ -93,17 +93,19 @@ Chinese memories work too, without a segmentation dictionary or any extra depend
 - Opposite modality is a candidate contradiction: all (所有, 任何, 一律) against only (仅, 只有), or must (必须) against need not (无需, 不必).
 - Antonym pairs such as 批准/拒绝 and wording such as 总是, 下周 and 可能 are recognized.
 
-On the benchmark this finds 5 of 19 Chinese contradictions, against 11 of 29 English ones. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
+On the benchmark this finds 13 of 29 Chinese contradictions, against 36 of 81 across the three languages. See [`examples/memfalsify-zh`](examples/memfalsify-zh/) and the [Chinese README](README.zh-CN.md).
 
 **How status is decided.** MemFalsify nominates evidence by itself, but only a human review can settle a memory:
 
 | Status | Meaning |
 |---|---|
 | `supported` / `challenged` / `conflicted` | Human-confirmed evidence in `reviews.jsonl` supports / contradicts / does both |
-| `candidate_counterevidence` | The verifier found a passage that may contradict the memory (lexically: opposing terms such as *approved* / *rejected*, different numbers, or negation) |
+| `candidate_counterevidence` | The verifier found a passage that may contradict the memory (lexically: the same setting with another value, different numbers or units in nearly the same sentence, opposing terms such as *approved* / *rejected* or a negation on the same subject, or a source saying it was removed; [the rules](docs/lexical-rules.md)) |
 | `disputed` | Two verifiers disagree (see *Verifier backends*) |
 | `candidate_support` | A passage that restates the memory |
 | `insufficient_evidence` | Nothing found. That means unverified, not false |
+
+A person can also clear a false flag. A review with `"relation": "unrelated"` says: I read this passage and it does not bear on the claim. The passage stops being a candidate for that claim, the status comes from what remains, and the report says how many candidates were dismissed and by whom. A dismissal never marks a claim supported or challenged. The Markdown and HTML reports print that line, ready to paste, under each flag.
 
 Independent of evidence, each memory is checked for `overgeneralization` (always, all, never…), `relative_time` without a date, `possibly_stale` dates, `inference_marker` (probably, seems…), `internal_conflict` with another memory, and `duplicate`. Internal conflicts use an index of normalized terms, so only claims that can lexically conflict are compared. The report is the same as comparing every pair.
 
@@ -471,13 +473,13 @@ file passed to `orgmemory github convert`, benchmark `labels.jsonl` and `case.js
 responses. The command exits 2 and reports `<file>:<line>: invalid JSON: duplicate key`. Parsing does not
 keep the last value.
 
-**`reviews.jsonl`** (MemFalsify, optional): human-confirmed assertions.
+**`reviews.jsonl`** (MemFalsify, optional): what a person found on reading a passage. `relation` is `supports`, `contradicts` or `unrelated` (dismisses a candidate).
 
 ```json
 {"memory_id": "m-27e874e0", "relation": "contradicts", "path": "notes/2026-10-07-decision-log.md", "quote": "Product manager rejects Feature A (bulk export) for the November release.", "reviewer": "demo-reviewer", "note": "optional"}
 ```
 
-`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes, and a review line that still names the old ID stops the audit with an `unknown memory_id` error (exit code 2) until the memory is re-reviewed and that line updated or removed. `quote` must appear verbatim in `path`, which is relative to the evidence directory. In a transcript or OCR sidecar, the quote must lie inside one cue or line, and an optional `"locator": "t=12.5,17"` says which one.
+`memory_id` is derived from the memory's normalized text. If the memory is edited, the ID changes, and a review line that still names the old ID stops the audit with an `unknown memory_id` error (exit code 2) until the memory is re-reviewed and that line updated or removed. The error names every such line. A dismissal whose claim or quote is gone does not stop the audit: it stops applying, and the report lists it under Skipped evidence. Re-wrapping a paragraph mostly keeps its IDs, since the lines of a paragraph or list item are read as one claim ([what can break the join](docs/lexical-rules.md)). `quote` must appear verbatim in `path`, which is relative to the evidence directory, and a quote from a wrapped sentence holds its line breaks (the line printed under a flag has them right). In a transcript or OCR sidecar, the quote must lie inside one cue or line, and an optional `"locator": "t=12.5,17"` says which one.
 
 **Organizational dataset**: a directory with three files, plus an optional fourth.
 
@@ -593,7 +595,7 @@ A verifier judges one memory against one evidence passage as `supports`, `contra
 
 | `--verifier` | Who judges | Needs | Trade-off |
 |---|---|---|---|
-| `lexical` (default) | Term overlap, opposing terms, numbers, negation | Nothing | Offline, deterministic, explainable; misses paraphrases |
+| `lexical` (default) | Term overlap for support; for a contradiction, the same setting with another value or two near-identical statements that differ ([the rules](docs/lexical-rules.md)) | Nothing | Offline, deterministic, explainable; misses paraphrases and most negation, so a report without flags has not ruled much out |
 | `llm` | Claude reads the passage and explains its verdict (`--llm-model`, default `claude-opus-5-5`) | `pip install -e 'packages/memfalsify[llm]'` and Anthropic credentials | Understands paraphrase and context; costs API calls and **sends memory and evidence text to the API** |
 | `jev` | [Jev](https://docs.typesafe.ai), TypeSafe AI's decision-only judgment model, picks one of the three relations and returns a probability for each (`--jev-model`, default `jev-latest`) | `pip install -e 'packages/memfalsify[jev]'` and `TYPESAFE_API_KEY` | A small fraction of an LLM judge's cost, with a calibrated confidence; no written explanation, and **sends memory and evidence text to the TypeSafe API** |
 | `dual` | `llm` and `jev`, independently | Both | Agreement passes through; disagreement becomes `disputed`, and the report shows both opinions |
@@ -656,8 +658,14 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
 
 The [MemFalsify benchmark](benchmarks/memfalsify/README.md) has 202 labeled English, Chinese and Spanish claims
 across eleven synthetic cases. The [measured lexical baseline](benchmarks/memfalsify/RESULTS.md) has contradiction
-precision 0.71, recall 0.33 and 3-way accuracy 0.42; these cases exercise failure modes rather than estimate
+precision 0.92, recall 0.44 and 3-way accuracy 0.48; these cases exercise failure modes rather than estimate
 accuracy on real memories. Run it offline with `python benchmarks/memfalsify/run.py`.
+
+The [real-repository benchmark](benchmarks/memfalsify/wild/README.md) measures the same verifier on the agent files of
+15 public repositories. The rules took the flagged pairs from 1,719 to 47 and the flagged claims from 794 to 29. Of 413
+sampled pairs labeled by two AI models, 16 are still flagged and 9 of those are real: precision 0.56, or 0.33 once
+scaled for how negation was sampled. These are the repositories the rules were tuned on, no person labeled anything,
+and recall is not measured.
 
 The [Organizational Memory benchmark](benchmarks/orgmemory/README.md) has ten labeled datasets with 233 labels
 (598 checks) on final states at chosen times, audit-trail outcomes, audit findings and validation errors. The cases
@@ -704,6 +712,8 @@ only SHA-pinned actions and installs its Python dependencies from hash-pinned lo
 - Actor IDs, `policy.json` and `policy-log.jsonl` are trusted input. There is no identity authentication or signed provenance yet. Role changes recorded in `policy-log.jsonl` are effective-dated, but editing `policy.json` (including `permissions`, which are not dated) or rewriting the policy log still changes every replay ([benchmark finding](benchmarks/orgmemory/RESULTS.md)).
 - A repeated key in a JSON object is rejected, including in a nested object. Keeping the last value would let one `events.jsonl` line show one `actor` to a person reading the file and another to replay, and would let a `policy.json` that names an actor twice grant the second list of roles.
 - Evidence is UTF-8 text. Images, audio, video and PDF count only through transcript and OCR sidecars you provide, which are someone's reading of the media: a matching `source_sha256` shows which bytes a sidecar describes, not that it is accurate. Media without a usable sidecar is reported as skipped.
+- A directory scan does not read vendored or generated paths (`vendor/`, `third_party/`, `thirdparty/`, `testdata/`, `fixtures/`, `__snapshots__/`, `*.min.js`, `*.min.css`, `*.snap`, `*.svg`, `*.patch`, `*.lock`, `package-lock.json`, `pnpm-lock.yaml`, `npm-shrinkwrap.json`, `go.sum`) or lines over 1,000 characters, which also leaves out a long paragraph kept on one line. The report lists what was left out, and pointing `--evidence` at such a directory reads it (a file name in that list has no such way in).
+- The lexical verifier flags little on purpose: a test contradicts nothing, a changelog or example only through a stated value (a changelog also by saying something was removed), and source code only through a declared value. A report without flags has not ruled much out.
 - Lexical judging of Chinese has no dictionary: it misses paraphrases (冻结招聘 for 不招) and reads negation and modality from fixed cue lists. Only Han characters are split into n-grams; Japanese kana and Korean Hangul are not.
 - Hard links are not detected. A hard link is another name for the same file, so a file on the same filesystem that is hard-linked into the evidence directory is read and can be quoted in a report, wherever its other name lives (symlinks are checked and rejected; a hard link cannot be told from the original, and skipping every file with more than one link would also skip legitimate ones). Git does not store hard links, so a checkout or a pull request cannot plant one; anyone who can write to the audited directory can. Audit only directories you control (see the [GitHub Action](docs/github-action.md) notes).
 - `diff`, `history` and `rollback` trust the local git repository: they read whatever its objects and refs say, and their attribution is only as good as its history (rebases, squashes and first-parent merges change who appears to have introduced a claim).

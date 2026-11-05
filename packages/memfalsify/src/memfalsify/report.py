@@ -6,7 +6,8 @@ from collections.abc import Callable
 from memcore import EvidenceSpan
 from memcore.display import report_text, table_code
 
-from .audit import ATTENTION, AuditReport, AuditSet, Finding, has_open_missing_reference
+from .audit import (ATTENTION, DISMISSED, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line,
+                    has_open_missing_reference)
 from .corpus import REPORT_HEADER
 from .formats import Value
 from .gitstore import code_span, show_text
@@ -48,9 +49,13 @@ def skipped_line(path: str, reason: str, show: Callable[[str], str] = _as_is) ->
     return f"- {code_span(path)}: {show(reason)}"
 
 
-def quote_lines(quote: str, show: Callable[[str], str] = _as_is, indent: str = "  ") -> list[str]:
-    """One literal blockquote line, including escaped cue line breaks."""
-    return [f"{indent}> {show(quote)}"]
+def quote_lines(quote: str, show: Callable[[str], str] = _as_is, indent: str = "  ", *, cue: bool = True) -> list[str]:
+    """One literal blockquote line, including escaped cue line breaks. A sentence wrapped in a text file (not a ``cue``)
+    gets a line per line, and a line that continues it shows without its indent: the exact bytes are in the JSON report
+    and in the line under a flag."""
+    if cue or "\n" not in quote:
+        return [f"{indent}> {show(quote)}"]
+    return [f"{indent}> {show(line.strip())}" for line in quote.split("\n")]
 
 
 def _code(text: str) -> str:
@@ -63,6 +68,19 @@ def metadata_line(metadata: dict[str, Value]) -> str:
     shown = [_code(f"{key}: {', '.join(value) if isinstance(value, list) else value}")
              for key, value in metadata.items()]
     return "Frontmatter: " + " · ".join(shown)
+
+
+def can_dismiss(e: EvidenceFinding) -> bool:
+    """A flag no person has settled: the report prints the line that dismisses it."""
+    return not e.confirmed and e.relation in ("contradicts", "disputed")
+
+
+def dismissal_lines(dismissed: dict[str, int]) -> list[str]:
+    """The report's count of candidates a person dismissed, and by whom; nothing when there are none."""
+    if not dismissed:
+        return []
+    who = ", ".join(f"{show_text(name)}: {count}" for name, count in dismissed.items())
+    return [f"- Dismissed by a person: {sum(dismissed.values())} candidate(s) ({who})"]
 
 
 def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
@@ -79,7 +97,17 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
             who = f"confirmed by {show(e.reviewer)}" if e.confirmed else "candidate, unconfirmed"
             out.append(f"- {show(e.relation)} ({who}) · {source(e.span, show)} · {show(e.rationale)}")
             out += [f"  - {show(o.verifier)}: {show(o.relation)} · {show(o.rationale)}" for o in e.opinions]
-            out += quote_lines(e.span.quote, show)
+            out += quote_lines(e.span.quote, show, cue=e.span.media is not None)
+            if can_dismiss(e):
+                out.append(f"  - Does not bear on this claim? Add to reviews.jsonl: "
+                           f"{code_span(dismissal_line(f.memory_id, e.span))}")
+        out.append("")
+    if f.dismissed:
+        out.append("**Dismissed** (read by a person; not counted as evidence)")
+        for e in f.dismissed:
+            note = "" if e.rationale == DISMISSED else f" · {show(e.rationale)}"
+            out.append(f"- dismissed by {show(e.reviewer)} · {source(e.span, show)}{note}")
+            out += quote_lines(e.span.quote, show, cue=e.span.media is not None)
         out.append("")
     if f.issues:
         out.append("**Issues**")
@@ -120,7 +148,7 @@ def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
             else "- Evidence root: none supplied"),
            *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in report.excluded)] if report.excluded else []),
            f"- Verifier: {code_span(report.verifier)} · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
-           *usage_lines(report),
+           *usage_lines(report), *dismissal_lines(report.dismissed),
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]
     out.append("")
@@ -153,6 +181,7 @@ def set_to_markdown(result: AuditSet) -> str:
              if result.excluded else []),
            f"- Verifier: {code_span(result.verifier)} · as of {result.as_of} · mode: **{result.mode}** "
            "(no memory was modified)",
+           *dismissal_lines(result.dismissed),
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in result.summary.items()]
     out += ["", "| File | Memories | Need attention |", "|---|---|---|"]

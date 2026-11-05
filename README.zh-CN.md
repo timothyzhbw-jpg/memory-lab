@@ -91,17 +91,19 @@ memfalsify audit MEMORY.md --evidence evidence --as-of 2026-10-10
 - 情态相反也算候选反证：全称（所有、任何、一律）对限定（仅、只有），必须（必须、非……不可）对无需（无需、不必）。
 - 同时识别中文反义词对（批准/拒绝、启用/禁用、允许/禁止……），以及绝对化（总是、所有、一定）、相对时间（下周、最近、目前）和推测性（可能、大概、好像）措辞。
 
-在评测集上，词法验证器能找出 19 条中文反证中的 5 条（英文为 29 条中的 11 条）。英文示例在 [`examples/memfalsify`](examples/memfalsify/)，其中还演示了人工确认（`reviews.jsonl`）和被跳过的图片证据；媒体文件只有配上转写稿或 OCR 旁车文件才算证据（见下文“转写稿与 OCR”）。
+在评测集上，词法验证器能找出 29 条中文反证中的 13 条（三种语言合计 81 条中的 36 条）。英文示例在 [`examples/memfalsify`](examples/memfalsify/)，其中还演示了人工确认（`reviews.jsonl`）和被跳过的图片证据；媒体文件只有配上转写稿或 OCR 旁车文件才算证据（见下文“转写稿与 OCR”）。
 
 **状态是怎么定的。** MemFalsify 会自己找候选证据，但只有人工确认才能给一条记忆下结论：
 
 | 状态 | 含义 |
 |---|---|
 | `supported` / `challenged` / `conflicted` | `reviews.jsonl` 中经人工确认的证据：支持 / 反驳 / 两者都有 |
-| `candidate_counterevidence` | 验证器找到了可能反驳这条记忆的片段（词法层面：反义词如“批准/拒绝”、数字不一致，或只有一方是否定句） |
+| `candidate_counterevidence` | 验证器找到了可能反驳这条记忆的片段（词法层面：同一个设置的值不同；几乎相同的句子里数字或单位不同；主题相同时出现反义词如“批准/拒绝”或否定；或来源说它已被移除。[规则说明](docs/lexical-rules.zh-CN.md)） |
 | `disputed` | 两个验证器意见不一致（见下文“验证后端”） |
 | `candidate_support` | 找到了复述这条记忆的片段 |
 | `insufficient_evidence` | 什么都没找到。这表示“未经验证”，不表示“是错的” |
+
+人也可以清除错误的标记。一条 `"relation": "unrelated"` 的审核表示：我读过这段文字，它和这条记忆无关。这段文字不再作为这条记忆的候选，状态由剩下的证据决定，报告会写明排除了多少条候选、由谁排除。排除永远不会把记忆标成 supported 或 challenged。Markdown 和 HTML 报告在每个标记下面都打印了这一行，可以直接粘贴。
 
 不论有没有证据，每条记忆都会检查：`overgeneralization`（绝对化措辞）、没有日期的 `relative_time`（相对时间）、`possibly_stale`（可能过期）、`inference_marker`（推测性措辞）、与其他记忆的 `internal_conflict`（内部矛盾），以及 `duplicate`（重复）。内部矛盾按规范化后的词项建索引，只比较有可能发生词法冲突的记忆。报告与两两全比的结果相同。
 
@@ -465,13 +467,13 @@ orgmemory audit <数据集> --as-of 2026-10-31T00:00:00Z --format html > audit-r
 
 JSON 对象里重复的键是无效输入，嵌套对象里的重复键也一样。这适用于 `reviews.jsonl`、`events.jsonl`、`evidence.jsonl`、`github-sync.jsonl`、`policy.json`、`github.json`、交给 `orgmemory github convert` 的抓取文件、评测用的 `labels.jsonl` 和 `case.json`，以及 GitHub API 的响应。命令以退出码 2 失败，并报告 `<文件>:<行号>: invalid JSON: duplicate key`。解析不会保留后出现的那个值。
 
-**`reviews.jsonl`**（MemFalsify，可选）：人工确认的判断。
+**`reviews.jsonl`**（MemFalsify，可选）：人读过一段文字后的判断。`relation` 是 `supports`、`contradicts` 或 `unrelated`（排除一条候选）。
 
 ```json
 {"memory_id": "m-54b237eb", "relation": "contradicts", "path": "记录/2026-10-07-决策记录.md", "quote": "产品经理拒绝了功能A（批量导出），不随11月版本发布。", "reviewer": "张三", "note": "可选"}
 ```
 
-`memory_id` 由记忆的规范化文本生成。记忆一旦被修改，ID 就会变；`reviews.jsonl` 里仍指向旧 ID 的确认会让审计直接报错（`unknown memory_id`，退出码 2），需要重新确认并更新或删除那一行。`quote` 必须逐字出现在 `path` 指向的文件中，`path` 相对于证据目录。对转写稿或 OCR 旁车文件，引用必须落在同一个字幕条目或同一行内，可选的 `"locator": "t=12.5,17"` 指定是哪一个。
+`memory_id` 由记忆的规范化文本生成。记忆一旦被修改，ID 就会变；`reviews.jsonl` 里仍指向旧 ID 的确认会让审计直接报错（`unknown memory_id`，退出码 2），需要重新确认并更新或删除那一行。报错会列出所有这样的行。记忆或引文已经不在的排除记录不会让审计停下：它不再生效，报告会把它列在 Skipped evidence 里。重新折行多半不会改变 ID，因为段落或列表项的多行读成一条记忆（[哪些情况会断开](docs/lexical-rules.zh-CN.md)）。`quote` 必须逐字出现在 `path` 指向的文件中，`path` 相对于证据目录；折行句子的引文包含换行（标记下面打印的那一行已经写对了）。对转写稿或 OCR 旁车文件，引用必须落在同一个字幕条目或同一行内，可选的 `"locator": "t=12.5,17"` 指定是哪一个。
 
 **组织数据集**：一个包含三个文件（外加一个可选文件）的目录。
 
@@ -584,7 +586,7 @@ POSIX `O_NOFOLLOW` 和 `dir_fd` 支持，因此在 Windows 上会拒绝启动并
 
 | `--verifier` | 谁来判断 | 需要什么 | 取舍 |
 |---|---|---|---|
-| `lexical`（默认） | 词语重合、反义词、数字、否定 | 无 | 离线、结果确定、可解释；识别不了换种说法的表述 |
+| `lexical`（默认） | 支持靠词语重合；矛盾要求同一个设置的值不同，或两段几乎相同的陈述有差异（[规则说明](docs/lexical-rules.zh-CN.md)） | 无 | 离线、结果确定、可解释；识别不了换种说法的表述和大部分否定，所以没有标记的报告排除不了太多 |
 | `llm` | Claude 阅读证据并写出判断理由（`--llm-model`，默认 `claude-opus-5-5`） | `pip install -e 'packages/memfalsify[llm]'` 和 Anthropic 凭据 | 能理解换说法和上下文；按调用计费，**会把记忆和证据原文发给 Anthropic API** |
 | `jev` | [Jev](https://docs.typesafe.ai)：TypeSafe AI 的判断模型，只做决策不生成文字，在三种关系中选一个并给出各自的概率（`--jev-model`，默认 `jev-latest`） | `pip install -e 'packages/memfalsify[jev]'` 和 `TYPESAFE_API_KEY` | 成本只有 LLM 评委的零头，带校准过的置信度；没有文字解释，**会把记忆和证据原文发给 TypeSafe API** |
 | `dual` | `llm` 和 `jev` 各自独立判断 | 两者都要 | 意见一致就照常输出；不一致就标为 `disputed`，报告里列出双方意见 |
@@ -646,8 +648,10 @@ report = audit(Path("MEMORY.md"), Path("evidence"), verifier=DualVerifier(LLMVer
 ## 评测集与 GitHub Action
 
 [MemFalsify 评测集](benchmarks/memfalsify/README.md)包含十一组虚构案例、202 条英文、中文和西班牙文标注记忆。
-[实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.71、召回率为 0.33，三分类准确率为 0.42。
+[实测词法基线](benchmarks/memfalsify/RESULTS.md)的反证精确率为 0.92、召回率为 0.44，三分类准确率为 0.48。
 这些案例用于检验已知失败模式，不能代表真实记忆的准确率。运行 `python benchmarks/memfalsify/run.py` 即可离线评测。
+
+[真实仓库基准](benchmarks/memfalsify/wild/README.zh-CN.md)在 15 个公开仓库的智能体文件上测量同一个验证器。这些规则把被标记的配对从 1,719 对降到 47 对，被标记的记忆从 794 条降到 29 条。两个 AI 模型标注的 413 对样本里，仍被标记的有 16 对，其中 9 对是真的：精确率 0.56，按否定的抽样比例换算后是 0.33。规则正是在这些仓库上调整的，没有人参与标注，也没有测量召回率。
 
 [组织记忆评测集](benchmarks/orgmemory/README.md)包含十组带标注的数据集、233 条标注（598 项检查），覆盖指定时间点的最终状态、
 审计轨迹结果、`orgmemory audit` 发现项和校验错误。这些案例专门攻击权限规则：未知和仿冒的参与者、角色变更、同一时刻的决策、
@@ -689,6 +693,8 @@ Action 只使用固定到提交 SHA 的 Action，并从带哈希校验的锁文�
 - 参与者（`actor`）ID、`policy.json` 和 `policy-log.jsonl` 被视为可信输入。目前还没有身份认证或签名溯源。记录在 `policy-log.jsonl` 里的角色变更带有生效时间，但修改 `policy.json`（包括不分时间的 `permissions`）或改写角色变更日志，仍然会改变每一次回放的结果。
 - JSON 对象里重复的键会被拒绝，包括嵌套对象里的重复键。如果保留后出现的值，`events.jsonl` 的同一行可以让读文件的人看到一个 `actor`，回放却使用另一个；`policy.json` 里把同一个人写两次时，也会按后一次的角色授权。
 - 证据是 UTF-8 文本。图片、音频、视频和 PDF 只能通过你提供的转写稿或 OCR 旁车文件成为证据，而旁车文件只是某人（或某个模型）对媒体内容的读取结果：`source_sha256` 一致只说明它描述的是哪份字节，不说明它准确。没有可用旁车文件的媒体会在报告的 `Skipped evidence` 部分列为跳过。
+- 扫描目录时不读取第三方或生成的路径（`vendor/`、`third_party/`、`thirdparty/`、`testdata/`、`fixtures/`、`__snapshots__/`、`*.min.js`、`*.min.css`、`*.snap`、`*.svg`、`*.patch`、`*.lock`、`package-lock.json`、`pnpm-lock.yaml`、`npm-shrinkwrap.json`、`go.sum`），也不读取超过 1,000 个字符的行，这也包括写在一行里的长段落。报告会列出没有读取的内容；把 `--evidence` 指向这样的目录就会读取它（清单里的文件名没有这样的入口）。
+- 词法验证器有意少做标记：测试不构成矛盾；变更日志和示例只有声明的值才构成矛盾（变更日志说明某物已被移除也算）；源代码只有声明的值才构成矛盾。没有标记的报告排除不了太多。
 - 中文词法判断没有词典：会漏掉同义改写（例如“冻结招聘”与“不招”），否定和情态只按固定的提示词表判断。只有汉字会被切成二元组和三元组，日文假名和韩文不会。
 - 不检测硬链接。硬链接是同一个文件的另一个名字，所以同一文件系统上、被硬链接进证据目录的文件会被读取，并可能被引用进报告，不管它的另一个名字在哪里（符号链接会被检查并拒绝；硬链接无法与原文件区分，而跳过所有链接数大于 1 的文件也会误跳合法的链接）。Git 不保存硬链接，所以检出或 PR 无法植入硬链接；能写入被审计目录的人可以。只审计你自己控制的目录（见 [GitHub Action](docs/github-action.md) 的说明）。
 - `diff`、`history` 和 `rollback` 信任本地 git 仓库：它们按仓库里的对象和引用读取内容，归属结果的可靠程度取决于提交历史本身（变基、压缩合并和第一父提交链都会改变“谁引入了这条记忆”的结论）。

@@ -190,6 +190,9 @@ def audit_directory(directory: Path = Path("."), evidence_root: Path | None = No
     totals = Counter()
     for report in reports:
         totals.update(report.summary)
+    dismissed = Counter()
+    for report in reports:
+        dismissed.update(report.dismissed)
     return AuditSet(files=names, evidence_root=str(evidence), excluded=exclude, verifier=verifier.name, as_of=as_of,
                     summary={status: totals[status] for status in SEVERITY if totals[status]},
-                    reports=reports, not_searched=passed_over)
+                    reports=reports, not_searched=passed_over, dismissed=dict(sorted(dismissed.items())))

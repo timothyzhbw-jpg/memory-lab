@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime
+from itertools import takewhile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 AUDITOR = "memfalsify"  # who raises a risk that no person has confirmed; policy.json gives it a role
@@ -37,9 +38,12 @@ COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 APPROVED_BY = re.compile(r"\(approved-by: ([\w.@-]+(?: [\w.@-]+)*)\)\Z")
 RISK_STATUSES = {"challenged", "conflicted", "candidate_counterevidence", "disputed"}
 # The markup MemFalsify removes from a line before it reads claims out of it (memfalsify/memory.py).
-LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
+LINK = re.compile(r"!?\[([^\]]{0,1000})\]\((data:[^)\s\[]*|[^)\s]{1,2000})(?:\s+\"[^\"]{0,1000}\")?\)")
+WIKILINK = re.compile(r"\[\[([^\]]{1,1000})\]\]")
 EMPHASIS = re.compile(r"\*\*|__|`")
+QUOTE_MARKER = re.compile(r"^[ \t]*(?:>[ \t]*)+", re.MULTILINE)
+# The space a line break becomes, which MemFalsify leaves out between two Chinese characters.
+BETWEEN_IDEOGRAPHS = re.compile("(?<=[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]) (?=[\u3400-\u9fff\u3000-\u303f\uff00-\uffef])")
 
 
 class ConversionError(Exception):
@@ -87,6 +91,19 @@ def audit_time(value: str) -> str:
 
 def without_markup(line: str) -> str:
     return EMPHASIS.sub("", WIKILINK.sub(r"\1", LINK.sub(r"\1", line)))
+
+
+def holds(lines: list[str], text: str) -> bool:
+    """Whether the block that starts at the first of `lines` holds a claim's text, once markup is removed. MemFalsify
+    reads the lines of a wrapped paragraph as one, with what continues it (indent, quote markers) read as one space."""
+    if text in without_markup(lines[0]):
+        return True
+
+    def read(raw: str) -> str:
+        return BETWEEN_IDEOGRAPHS.sub("", " ".join(QUOTE_MARKER.sub("", without_markup(raw)).split()))
+
+    start = read("\n".join(takewhile(str.strip, lines))).find(read(text))
+    return 0 <= start < len(read(lines[0]))  # it has to start on the line that `location` names
 
 
 def introduced_line(report: str, memory_id: str, commit: str) -> str:
@@ -175,7 +192,8 @@ class Converter:
             self.records.append({"kind": "event", "event": {**event, **({"note": note} if note else {})}})
 
     def _memory_line(self, memory_id: str, text: str, location: str) -> str:
-        """Evidence that the line is in the memory: the claim's text, or its whole line when markup splits it."""
+        """Evidence that the line is in the memory: the claim's text, or its whole line when markup or a line break
+        splits it. `location` is the line where the claim starts; a wrapped claim goes on over the next ones."""
         path, _, number = location.rpartition(":")
         relative = (self.memory_root / checked_path(path)).as_posix()
         data = self._read(relative)
@@ -184,7 +202,7 @@ class Converter:
         if not number.isdigit() or not 1 <= int(number) <= len(lines):
             raise ConversionError("a report names a memory line that is not in the file")
         line = lines[int(number) - 1]
-        if not text or text not in without_markup(line):
+        if not text or not holds(lines[int(number) - 1:], text):
             raise ConversionError("a memory line does not hold the claim a report names; run the audit again")
         return self._evidence(f"{memory_id}-{self.head}-line", data, relative, text if text in line else line.strip(),
                               f"git:{self.head}:{relative}", "memory_file")

@@ -235,6 +235,15 @@ def test_each_package_imports_only_what_its_lowest_dependencies_define():
                 assert not _missing(directory, module, pin, projects[pin.name][1]), (name, str(pin))
 
 
+def test_memlab_ui_asks_for_a_memfalsify_newer_than_the_one_it_outgrew():
+    """memlab-ui imports dismissal_line and can_dismiss, which memfalsify 0.5.0 lacks. While both say 0.5.0 here the pin
+    cannot tell them apart, so this waits for the bump: then memlab-ui's floor has to move with it."""
+    projects = _projects()
+    pins = [Requirement(r) for r in projects["memlab-ui"][0]["dependencies"]]
+    floor = _floor(next(pin for pin in pins if pin.name == "memfalsify"))
+    assert Version(projects["memfalsify"][1]) == Version("0.5.0") or floor > Version("0.5.0")
+
+
 def test_the_import_check_catches_a_pin_that_is_too_low():
     projects = _projects()
     missing = _missing("memfalsify", "memfalsify", Requirement("memlab-core>=0.3,<0.5"),

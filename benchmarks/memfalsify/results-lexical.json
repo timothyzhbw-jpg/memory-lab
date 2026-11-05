@@ -1,5 +1,5 @@
 {
-  "memfalsify_version": "0.4.0",
+  "memfalsify_version": "0.5.0",
   "verifier": "lexical",
   "settings": {
     "min_coverage": 0.5,
@@ -9,17 +9,17 @@
   "cost": {
     "judge_calls": 255,
     "escalations": null,
-    "seconds": 0.076
+    "seconds": 0.09
   },
   "metrics": {
     "claims": 202,
     "contradiction": {
-      "tp": 33,
-      "fp": 8,
-      "fn": 48,
-      "precision": 0.8048780487804879,
-      "recall": 0.4074074074074074,
-      "f1": 0.5409836065573771,
+      "tp": 36,
+      "fp": 3,
+      "fn": 45,
+      "precision": 0.9230769230769231,
+      "recall": 0.4444444444444444,
+      "f1": 0.6,
       "disputed": {
         "contradicted": 0,
         "supported": 0,
@@ -27,35 +27,35 @@
       }
     },
     "support": {
-      "tp": 15,
-      "fp": 14,
-      "fn": 57,
-      "precision": 0.5172413793103449,
-      "recall": 0.20833333333333334,
-      "f1": 0.297029702970297
+      "tp": 17,
+      "fp": 10,
+      "fn": 55,
+      "precision": 0.6296296296296297,
+      "recall": 0.2361111111111111,
+      "f1": 0.3434343434343434
     },
     "accuracy": {
-      "correct": 91,
+      "correct": 97,
       "total": 202,
-      "rate": 0.4504950495049505
+      "rate": 0.4801980198019802
     },
     "confusion": {
       "contradicted": {
-        "contradicted": 33,
-        "supported": 10,
-        "unsupported": 38,
+        "contradicted": 36,
+        "supported": 6,
+        "unsupported": 39,
         "disputed": 0
       },
       "supported": {
-        "contradicted": 6,
-        "supported": 15,
-        "unsupported": 51,
+        "contradicted": 2,
+        "supported": 17,
+        "unsupported": 53,
         "disputed": 0
       },
       "unsupported": {
-        "contradicted": 2,
+        "contradicted": 1,
         "supported": 4,
-        "unsupported": 43,
+        "unsupported": 44,
         "disputed": 0
       }
     },
@@ -93,12 +93,12 @@
         "f1": 0.9565217391304348
       },
       "internal_conflict": {
-        "tp": 27,
-        "fp": 13,
-        "fn": 20,
-        "precision": 0.675,
-        "recall": 0.574468085106383,
-        "f1": 0.6206896551724138
+        "tp": 22,
+        "fp": 4,
+        "fn": 25,
+        "precision": 0.8461538461538461,
+        "recall": 0.46808510638297873,
+        "f1": 0.6027397260273972
       },
       "duplicate": {
         "tp": 5,
@@ -118,22 +118,22 @@
           "rate": 0.16666666666666666
         },
         "support_recall": {
-          "hits": 13,
+          "hits": 14,
           "n": 66,
-          "rate": 0.19696969696969696
+          "rate": 0.21212121212121213
         },
         "false_flags": {
-          "hits": 4,
+          "hits": 1,
           "n": 66,
-          "rate": 0.06060606060606061
+          "rate": 0.015151515151515152
         }
       },
       "numeric": {
         "claims": 90,
         "contradiction_recall": {
-          "hits": 19,
+          "hits": 25,
           "n": 47,
-          "rate": 0.40425531914893614
+          "rate": 0.5319148936170213
         },
         "support_recall": {
           "hits": 7,
@@ -141,9 +141,9 @@
           "rate": 0.2
         },
         "false_flags": {
-          "hits": 2,
+          "hits": 1,
           "n": 43,
-          "rate": 0.046511627906976744
+          "rate": 0.023255813953488372
         }
       },
       "antonym": {
@@ -167,9 +167,9 @@
       "negation": {
         "claims": 17,
         "contradiction_recall": {
-          "hits": 9,
+          "hits": 7,
           "n": 17,
-          "rate": 0.5294117647058824
+          "rate": 0.4117647058823529
         },
         "support_recall": {
           "hits": 0,
@@ -190,22 +190,22 @@
           "rate": null
         },
         "support_recall": {
-          "hits": 4,
+          "hits": 5,
           "n": 24,
-          "rate": 0.16666666666666666
+          "rate": 0.20833333333333334
         },
         "false_flags": {
-          "hits": 4,
+          "hits": 2,
           "n": 40,
-          "rate": 0.1
+          "rate": 0.05
         }
       },
       "distractor": {
         "claims": 75,
         "contradiction_recall": {
-          "hits": 16,
+          "hits": 14,
           "n": 33,
-          "rate": 0.48484848484848486
+          "rate": 0.42424242424242425
         },
         "support_recall": {
           "hits": 1,
@@ -213,9 +213,9 @@
           "rate": 1.0
         },
         "false_flags": {
-          "hits": 2,
+          "hits": 1,
           "n": 42,
-          "rate": 0.047619047619047616
+          "rate": 0.023809523809523808
         }
       },
       "temporal": {
@@ -226,22 +226,22 @@
           "rate": 0.29411764705882354
         },
         "support_recall": {
-          "hits": 2,
+          "hits": 3,
           "n": 12,
-          "rate": 0.16666666666666666
+          "rate": 0.25
         },
         "false_flags": {
-          "hits": 2,
+          "hits": 1,
           "n": 12,
-          "rate": 0.16666666666666666
+          "rate": 0.08333333333333333
         }
       },
       "chinese": {
         "claims": 71,
         "contradiction_recall": {
-          "hits": 11,
+          "hits": 13,
           "n": 29,
-          "rate": 0.3793103448275862
+          "rate": 0.4482758620689655
         },
         "support_recall": {
           "hits": 5,
@@ -249,27 +249,27 @@
           "rate": 0.20833333333333334
         },
         "false_flags": {
-          "hits": 5,
+          "hits": 3,
           "n": 42,
-          "rate": 0.11904761904761904
+          "rate": 0.07142857142857142
         }
       },
       "repo": {
         "claims": 47,
         "contradiction_recall": {
-          "hits": 3,
+          "hits": 2,
           "n": 14,
-          "rate": 0.21428571428571427
+          "rate": 0.14285714285714285
         },
         "support_recall": {
-          "hits": 2,
+          "hits": 3,
           "n": 17,
-          "rate": 0.11764705882352941
+          "rate": 0.17647058823529413
         },
         "false_flags": {
-          "hits": 2,
+          "hits": 0,
           "n": 33,
-          "rate": 0.06060606060606061
+          "rate": 0.0
         }
       },
       "multi_sentence": {
@@ -293,14 +293,14 @@
     },
     "citations": {
       "contradicted": {
-        "hits": 29,
-        "n": 33,
-        "rate": 0.8787878787878788
+        "hits": 33,
+        "n": 36,
+        "rate": 0.9166666666666666
       },
       "supported": {
-        "hits": 15,
-        "n": 15,
-        "rate": 1.0
+        "hits": 16,
+        "n": 17,
+        "rate": 0.9411764705882353
       }
     }
   },
@@ -597,11 +597,11 @@
         "claims": 17,
         "contradiction": {
           "tp": 3,
-          "fp": 1,
+          "fp": 0,
           "fn": 3,
-          "precision": 0.75,
+          "precision": 1.0,
           "recall": 0.5,
-          "f1": 0.6,
+          "f1": 0.6666666666666666,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -609,17 +609,17 @@
           }
         },
         "support": {
-          "tp": 0,
+          "tp": 1,
           "fp": 1,
-          "fn": 6,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0
+          "fn": 5,
+          "precision": 0.5,
+          "recall": 0.16666666666666666,
+          "f1": 0.25
         },
         "accuracy": {
-          "correct": 7,
+          "correct": 8,
           "total": 17,
-          "rate": 0.4117647058823529
+          "rate": 0.47058823529411764
         },
         "confusion": {
           "contradicted": {
@@ -629,8 +629,8 @@
             "disputed": 0
           },
           "supported": {
-            "contradicted": 1,
-            "supported": 0,
+            "contradicted": 0,
+            "supported": 1,
             "unsupported": 5,
             "disputed": 0
           },
@@ -675,12 +675,12 @@
             "f1": 1.0
           },
           "internal_conflict": {
-            "tp": 2,
-            "fp": 3,
-            "fn": 0,
-            "precision": 0.4,
-            "recall": 1.0,
-            "f1": 0.5714285714285714
+            "tp": 0,
+            "fp": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
           },
           "duplicate": {
             "tp": 0,
@@ -808,14 +808,14 @@
               "rate": 0.5
             },
             "support_recall": {
-              "hits": 0,
-              "n": 1,
-              "rate": 0.0
-            },
-            "false_flags": {
               "hits": 1,
               "n": 1,
               "rate": 1.0
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 1,
+              "rate": 0.0
             }
           },
           "repo": {
@@ -844,9 +844,9 @@
             "rate": 1.0
           },
           "supported": {
-            "hits": 0,
-            "n": 0,
-            "rate": null
+            "hits": 1,
+            "n": 1,
+            "rate": 1.0
           }
         }
       }
@@ -860,12 +860,12 @@
       "metrics": {
         "claims": 16,
         "contradiction": {
-          "tp": 2,
+          "tp": 1,
           "fp": 0,
-          "fn": 2,
+          "fn": 3,
           "precision": 1.0,
-          "recall": 0.5,
-          "f1": 0.6666666666666666,
+          "recall": 0.25,
+          "f1": 0.4,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -881,15 +881,15 @@
           "f1": 0.6
         },
         "accuracy": {
-          "correct": 12,
+          "correct": 11,
           "total": 16,
-          "rate": 0.75
+          "rate": 0.6875
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 2,
+            "contradicted": 1,
             "supported": 2,
-            "unsupported": 0,
+            "unsupported": 1,
             "disputed": 0
           },
           "supported": {
@@ -1031,9 +1031,9 @@
           "distractor": {
             "claims": 7,
             "contradiction_recall": {
-              "hits": 2,
+              "hits": 1,
               "n": 3,
-              "rate": 0.6666666666666666
+              "rate": 0.3333333333333333
             },
             "support_recall": {
               "hits": 0,
@@ -1086,8 +1086,8 @@
         "citations": {
           "contradicted": {
             "hits": 1,
-            "n": 2,
-            "rate": 0.5
+            "n": 1,
+            "rate": 1.0
           },
           "supported": {
             "hits": 3,
@@ -1106,12 +1106,12 @@
       "metrics": {
         "claims": 23,
         "contradiction": {
-          "tp": 8,
-          "fp": 1,
-          "fn": 5,
-          "precision": 0.8888888888888888,
-          "recall": 0.6153846153846154,
-          "f1": 0.7272727272727273,
+          "tp": 9,
+          "fp": 0,
+          "fn": 4,
+          "precision": 1.0,
+          "recall": 0.6923076923076923,
+          "f1": 0.8181818181818182,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -1120,28 +1120,28 @@
         },
         "support": {
           "tp": 2,
-          "fp": 1,
+          "fp": 0,
           "fn": 8,
-          "precision": 0.6666666666666666,
+          "precision": 1.0,
           "recall": 0.2,
-          "f1": 0.3076923076923077
+          "f1": 0.3333333333333333
         },
         "accuracy": {
-          "correct": 10,
+          "correct": 11,
           "total": 23,
-          "rate": 0.43478260869565216
+          "rate": 0.4782608695652174
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 8,
-            "supported": 1,
+            "contradicted": 9,
+            "supported": 0,
             "unsupported": 4,
             "disputed": 0
           },
           "supported": {
-            "contradicted": 1,
+            "contradicted": 0,
             "supported": 2,
-            "unsupported": 7,
+            "unsupported": 8,
             "disputed": 0
           },
           "unsupported": {
@@ -1185,12 +1185,12 @@
             "f1": 1.0
           },
           "internal_conflict": {
-            "tp": 8,
-            "fp": 3,
-            "fn": 3,
-            "precision": 0.7272727272727273,
-            "recall": 0.7272727272727273,
-            "f1": 0.7272727272727273
+            "tp": 6,
+            "fp": 1,
+            "fn": 5,
+            "precision": 0.8571428571428571,
+            "recall": 0.5454545454545454,
+            "f1": 0.6666666666666666
           },
           "duplicate": {
             "tp": 0,
@@ -1215,17 +1215,17 @@
               "rate": 0.2222222222222222
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 9,
-              "rate": 0.1111111111111111
+              "rate": 0.0
             }
           },
           "numeric": {
             "claims": 19,
             "contradiction_recall": {
-              "hits": 7,
+              "hits": 8,
               "n": 12,
-              "rate": 0.5833333333333334
+              "rate": 0.6666666666666666
             },
             "support_recall": {
               "hits": 2,
@@ -1269,9 +1269,9 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 2,
-              "rate": 0.5
+              "rate": 0.0
             }
           },
           "distractor": {
@@ -1331,9 +1331,9 @@
         },
         "citations": {
           "contradicted": {
-            "hits": 7,
-            "n": 8,
-            "rate": 0.875
+            "hits": 8,
+            "n": 9,
+            "rate": 0.8888888888888888
           },
           "supported": {
             "hits": 2,
@@ -1352,12 +1352,12 @@
       "metrics": {
         "claims": 20,
         "contradiction": {
-          "tp": 3,
+          "tp": 5,
           "fp": 0,
-          "fn": 7,
+          "fn": 5,
           "precision": 1.0,
-          "recall": 0.3,
-          "f1": 0.46153846153846156,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -1366,21 +1366,21 @@
         },
         "support": {
           "tp": 4,
-          "fp": 4,
+          "fp": 2,
           "fn": 5,
-          "precision": 0.5,
+          "precision": 0.6666666666666666,
           "recall": 0.4444444444444444,
-          "f1": 0.47058823529411764
+          "f1": 0.5333333333333333
         },
         "accuracy": {
-          "correct": 7,
+          "correct": 9,
           "total": 20,
-          "rate": 0.35
+          "rate": 0.45
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 3,
-            "supported": 3,
+            "contradicted": 5,
+            "supported": 1,
             "unsupported": 4,
             "disputed": 0
           },
@@ -1432,11 +1432,11 @@
           },
           "internal_conflict": {
             "tp": 4,
-            "fp": 4,
+            "fp": 0,
             "fn": 5,
-            "precision": 0.5,
+            "precision": 1.0,
             "recall": 0.4444444444444444,
-            "f1": 0.47058823529411764
+            "f1": 0.6153846153846154
           },
           "duplicate": {
             "tp": 0,
@@ -1469,9 +1469,9 @@
           "numeric": {
             "claims": 13,
             "contradiction_recall": {
-              "hits": 2,
+              "hits": 5,
               "n": 8,
-              "rate": 0.25
+              "rate": 0.625
             },
             "support_recall": {
               "hits": 2,
@@ -1487,9 +1487,9 @@
           "negation": {
             "claims": 1,
             "contradiction_recall": {
-              "hits": 1,
+              "hits": 0,
               "n": 1,
-              "rate": 1.0
+              "rate": 0.0
             },
             "support_recall": {
               "hits": 0,
@@ -1523,9 +1523,9 @@
           "distractor": {
             "claims": 6,
             "contradiction_recall": {
-              "hits": 2,
+              "hits": 1,
               "n": 5,
-              "rate": 0.4
+              "rate": 0.2
             },
             "support_recall": {
               "hits": 0,
@@ -1577,8 +1577,8 @@
         },
         "citations": {
           "contradicted": {
-            "hits": 3,
-            "n": 3,
+            "hits": 5,
+            "n": 5,
             "rate": 1.0
           },
           "supported": {
@@ -1598,12 +1598,12 @@
       "metrics": {
         "claims": 21,
         "contradiction": {
-          "tp": 2,
-          "fp": 1,
-          "fn": 4,
-          "precision": 0.6666666666666666,
-          "recall": 0.3333333333333333,
-          "f1": 0.4444444444444444,
+          "tp": 1,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.16666666666666666,
+          "f1": 0.2857142857142857,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -1611,12 +1611,12 @@
           }
         },
         "support": {
-          "tp": 0,
+          "tp": 1,
           "fp": 0,
-          "fn": 7,
-          "precision": null,
-          "recall": 0.0,
-          "f1": 0.0
+          "fn": 6,
+          "precision": 1.0,
+          "recall": 0.14285714285714285,
+          "f1": 0.25
         },
         "accuracy": {
           "correct": 10,
@@ -1625,14 +1625,14 @@
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 2,
+            "contradicted": 1,
             "supported": 0,
-            "unsupported": 4,
+            "unsupported": 5,
             "disputed": 0
           },
           "supported": {
-            "contradicted": 1,
-            "supported": 0,
+            "contradicted": 0,
+            "supported": 1,
             "unsupported": 6,
             "disputed": 0
           },
@@ -1702,14 +1702,14 @@
               "rate": null
             },
             "support_recall": {
-              "hits": 0,
-              "n": 7,
-              "rate": 0.0
-            },
-            "false_flags": {
               "hits": 1,
               "n": 7,
               "rate": 0.14285714285714285
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 7,
+              "rate": 0.0
             }
           },
           "numeric": {
@@ -1751,9 +1751,9 @@
           "negation": {
             "claims": 2,
             "contradiction_recall": {
-              "hits": 1,
+              "hits": 0,
               "n": 2,
-              "rate": 0.5
+              "rate": 0.0
             },
             "support_recall": {
               "hits": 0,
@@ -1774,14 +1774,14 @@
               "rate": null
             },
             "support_recall": {
-              "hits": 0,
-              "n": 2,
-              "rate": 0.0
-            },
-            "false_flags": {
               "hits": 1,
               "n": 2,
               "rate": 0.5
+            },
+            "false_flags": {
+              "hits": 0,
+              "n": 2,
+              "rate": 0.0
             }
           },
           "distractor": {
@@ -1805,19 +1805,19 @@
           "repo": {
             "claims": 21,
             "contradiction_recall": {
-              "hits": 2,
+              "hits": 1,
               "n": 6,
-              "rate": 0.3333333333333333
+              "rate": 0.16666666666666666
             },
             "support_recall": {
-              "hits": 0,
+              "hits": 1,
               "n": 7,
-              "rate": 0.0
+              "rate": 0.14285714285714285
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 15,
-              "rate": 0.06666666666666667
+              "rate": 0.0
             }
           },
           "multi_sentence": {
@@ -1841,14 +1841,14 @@
         },
         "citations": {
           "contradicted": {
-            "hits": 2,
-            "n": 2,
+            "hits": 1,
+            "n": 1,
             "rate": 1.0
           },
           "supported": {
             "hits": 0,
-            "n": 0,
-            "rate": null
+            "n": 1,
+            "rate": 0.0
           }
         }
       }
@@ -1942,9 +1942,9 @@
           },
           "internal_conflict": {
             "tp": 0,
-            "fp": 2,
+            "fp": 0,
             "fn": 2,
-            "precision": 0.0,
+            "precision": null,
             "recall": 0.0,
             "f1": 0.0
           },
@@ -2127,11 +2127,11 @@
         "claims": 16,
         "contradiction": {
           "tp": 1,
-          "fp": 1,
+          "fp": 0,
           "fn": 5,
-          "precision": 0.5,
+          "precision": 1.0,
           "recall": 0.16666666666666666,
-          "f1": 0.25,
+          "f1": 0.2857142857142857,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -2147,9 +2147,9 @@
           "f1": 0.4
         },
         "accuracy": {
-          "correct": 7,
+          "correct": 8,
           "total": 16,
-          "rate": 0.4375
+          "rate": 0.5
         },
         "confusion": {
           "contradicted": {
@@ -2165,9 +2165,9 @@
             "disputed": 0
           },
           "unsupported": {
-            "contradicted": 1,
+            "contradicted": 0,
             "supported": 0,
-            "unsupported": 5,
+            "unsupported": 6,
             "disputed": 0
           }
         },
@@ -2325,9 +2325,9 @@
               "rate": null
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 6,
-              "rate": 0.16666666666666666
+              "rate": 0.0
             }
           },
           "temporal": {
@@ -2361,9 +2361,9 @@
               "rate": 0.25
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 10,
-              "rate": 0.1
+              "rate": 0.0
             }
           },
           "repo": {
@@ -2379,9 +2379,9 @@
               "rate": 0.5
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 4,
-              "rate": 0.25
+              "rate": 0.0
             }
           },
           "multi_sentence": {
@@ -2990,12 +2990,12 @@
       "metrics": {
         "claims": 20,
         "contradiction": {
-          "tp": 6,
-          "fp": 1,
-          "fn": 4,
-          "precision": 0.8571428571428571,
-          "recall": 0.6,
-          "f1": 0.7058823529411765,
+          "tp": 8,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.8,
+          "f1": 0.8888888888888888,
           "disputed": {
             "contradicted": 0,
             "supported": 0,
@@ -3004,28 +3004,28 @@
         },
         "support": {
           "tp": 2,
-          "fp": 3,
+          "fp": 2,
           "fn": 7,
-          "precision": 0.4,
+          "precision": 0.5,
           "recall": 0.2222222222222222,
-          "f1": 0.2857142857142857
+          "f1": 0.3076923076923077
         },
         "accuracy": {
-          "correct": 8,
+          "correct": 10,
           "total": 20,
-          "rate": 0.4
+          "rate": 0.5
         },
         "confusion": {
           "contradicted": {
-            "contradicted": 6,
-            "supported": 2,
-            "unsupported": 2,
+            "contradicted": 8,
+            "supported": 1,
+            "unsupported": 1,
             "disputed": 0
           },
           "supported": {
-            "contradicted": 1,
+            "contradicted": 0,
             "supported": 2,
-            "unsupported": 6,
+            "unsupported": 7,
             "disputed": 0
           },
           "unsupported": {
@@ -3069,12 +3069,12 @@
             "f1": null
           },
           "internal_conflict": {
-            "tp": 7,
+            "tp": 6,
             "fp": 1,
-            "fn": 2,
-            "precision": 0.875,
-            "recall": 0.7777777777777778,
-            "f1": 0.8235294117647058
+            "fn": 3,
+            "precision": 0.8571428571428571,
+            "recall": 0.6666666666666666,
+            "f1": 0.75
           },
           "duplicate": {
             "tp": 0,
@@ -3099,17 +3099,17 @@
               "rate": 0.2222222222222222
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 9,
-              "rate": 0.1111111111111111
+              "rate": 0.0
             }
           },
           "numeric": {
             "claims": 14,
             "contradiction_recall": {
-              "hits": 5,
+              "hits": 7,
               "n": 9,
-              "rate": 0.5555555555555556
+              "rate": 0.7777777777777778
             },
             "support_recall": {
               "hits": 0,
@@ -3117,9 +3117,9 @@
               "rate": 0.0
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 5,
-              "rate": 0.2
+              "rate": 0.0
             }
           },
           "negation": {
@@ -3197,9 +3197,9 @@
           "chinese": {
             "claims": 20,
             "contradiction_recall": {
-              "hits": 6,
+              "hits": 8,
               "n": 10,
-              "rate": 0.6
+              "rate": 0.8
             },
             "support_recall": {
               "hits": 2,
@@ -3207,9 +3207,9 @@
               "rate": 0.2222222222222222
             },
             "false_flags": {
-              "hits": 1,
+              "hits": 0,
               "n": 10,
-              "rate": 0.1
+              "rate": 0.0
             }
           },
           "multi_sentence": {
@@ -3233,9 +3233,9 @@
         },
         "citations": {
           "contradicted": {
-            "hits": 5,
-            "n": 6,
-            "rate": 0.8333333333333334
+            "hits": 7,
+            "n": 8,
+            "rate": 0.875
           },
           "supported": {
             "hits": 2,
@@ -3605,7 +3605,7 @@
           "relation": "contradicts",
           "location": "pricing/plans-2026.md:6",
           "quote": "Team: $39 per seat per month billed annually, or $45 per seat billed monthly.",
-          "rationale": "different values: claim ['49'] vs source ['39', '45']",
+          "rationale": "different values: claim ['49'] vs source ['39']",
           "opinions": []
         }
       ]
@@ -3840,8 +3840,8 @@
       "memory_id": "m-d692eef6",
       "text": "2026-02-10: we decided to sunset the legacy CSV importer.",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "supported",
+      "status": "candidate_support",
       "tags": [
         "temporal"
       ],
@@ -3849,18 +3849,10 @@
         "possibly_stale"
       ],
       "predicted_issues": [
-        "possibly_stale",
-        "internal_conflict"
+        "possibly_stale"
       ],
-      "cites_labeled_passage": null,
+      "cites_labeled_passage": true,
       "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "decisions/product-decision-log.md:8",
-          "quote": "2026-06-24 — CSV importer sunset postponed indefinitely: 14% of active accounts still import with it every week.",
-          "rationale": "different values: claim ['2026-02-10'] vs source ['14', '2026-06-24']",
-          "opinions": []
-        },
         {
           "relation": "supports",
           "location": "decisions/product-decision-log.md:5",
@@ -3884,9 +3876,7 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -3903,9 +3893,7 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -4109,23 +4097,15 @@
       "memory_id": "m-cae14c28",
       "text": "The 2026-07-30 tile outage was caused by an expired TLS certificate.",
       "truth": "contradicted",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "distractor"
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": false,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "incidents/2026-07-30-tile-outage.md:17",
-          "quote": "14:21 Investigated an expired TLS certificate on the staging tile server;",
-          "rationale": "different values: claim ['2026-07-30'] vs source ['14:21']",
-          "opinions": []
-        }
-      ]
+      "cites_labeled_passage": null,
+      "evidence": []
     },
     {
       "case": "en-decisions-security",
@@ -4469,27 +4449,13 @@
       "predicted_issues": [
         "internal_conflict"
       ],
-      "cites_labeled_passage": false,
+      "cites_labeled_passage": true,
       "evidence": [
         {
           "relation": "contradicts",
-          "location": "notes/2026-03-02-retention-plan.md:3",
-          "quote": "On 2026-03-02 the capacity group adopted a plan to retain hot-tier search indexes for 30 days.",
-          "rationale": "different values: claim ['512'] vs source ['2026-03-02', '30']",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "notes/2026-09-18-capacity.md:7",
-          "quote": "Hot-tier retention for search indexes is 14 days.",
-          "rationale": "different values: claim ['512'] vs source ['14']",
-          "opinions": []
-        },
-        {
-          "relation": "supports",
           "location": "notes/2026-09-18-capacity.md:3",
           "quote": "Search indexes occupy 512 GiB on the hot tier.",
-          "rationale": "source restates the claim (term coverage 0.83)",
+          "rationale": "different units: claim 512 GB vs source 512 GiB",
           "opinions": []
         }
       ]
@@ -4499,20 +4465,20 @@
       "memory_id": "m-7fc387ab",
       "text": "The billing archive holds 500 GiB.",
       "truth": "contradicted",
-      "predicted": "supported",
-      "status": "candidate_support",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric"
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
+      "cites_labeled_passage": true,
       "evidence": [
         {
-          "relation": "supports",
+          "relation": "contradicts",
           "location": "notes/2026-09-18-capacity.md:5",
           "quote": "The billing archive holds 500 GB of invoices, which is about 466 GiB.",
-          "rationale": "source restates the claim (term coverage 1.00)",
+          "rationale": "different units: claim 500 GiB vs source 500 GB",
           "opinions": []
         }
       ]
@@ -4547,14 +4513,7 @@
           "relation": "contradicts",
           "location": "notes/2026-03-02-retention-plan.md:3",
           "quote": "On 2026-03-02 the capacity group adopted a plan to retain hot-tier search indexes for 30 days.",
-          "rationale": "different values: claim ['90'] vs source ['2026-03-02', '30']",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "notes/2026-09-18-capacity.md:3",
-          "quote": "Search indexes occupy 512 GiB on the hot tier.",
-          "rationale": "different values: claim ['90'] vs source ['512']",
+          "rationale": "different values: claim ['90'] vs source ['30']",
           "opinions": []
         }
       ]
@@ -4588,16 +4547,16 @@
         },
         {
           "relation": "contradicts",
-          "location": "notes/2026-09-18-capacity.md:3",
-          "quote": "Search indexes occupy 512 GiB on the hot tier.",
-          "rationale": "different values: claim ['30'] vs source ['512']",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
           "location": "notes/2026-09-18-capacity.md:9",
           "quote": "Cold-tier search snapshots are kept for 90 days.",
           "rationale": "different values: claim ['30'] vs source ['90']",
+          "opinions": []
+        },
+        {
+          "relation": "supports",
+          "location": "notes/2026-03-02-retention-plan.md:3",
+          "quote": "On 2026-03-02 the capacity group adopted a plan to retain hot-tier search indexes for 30 days.",
+          "rationale": "source restates the claim (term coverage 0.83)",
           "opinions": []
         }
       ]
@@ -4644,9 +4603,7 @@
         "distractor"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -4674,20 +4631,13 @@
       "predicted_issues": [
         "overgeneralization"
       ],
-      "cites_labeled_passage": true,
+      "cites_labeled_passage": false,
       "evidence": [
         {
           "relation": "contradicts",
           "location": "decisions/ADR-018-timeouts.md:5",
           "quote": "The gateway timeout for search queries was 800 ms.",
           "rationale": "different values: claim ['1500'] vs source ['800']",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "decisions/ADR-030-timeouts.md:7",
-          "quote": "The gateway timeout for billing invoice renders is 8 seconds.",
-          "rationale": "different values: claim ['1500'] vs source ['8']",
           "opinions": []
         },
         {
@@ -4752,23 +4702,21 @@
         "numeric"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
           "relation": "contradicts",
           "location": "releases/search.md:3",
           "quote": "On 2026-05-20 the production release became release 2.3.1.",
-          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2026-05-20']",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1']",
           "opinions": []
         },
         {
           "relation": "contradicts",
           "location": "releases/search.md:5",
           "quote": "On 2026-09-02 the production release became release 2.4.0, which replaced release 2.3.1.",
-          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2.4.0', '2026-09-02']",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.4.0']",
           "opinions": []
         }
       ]
@@ -4778,8 +4726,8 @@
       "memory_id": "m-97e523f2",
       "text": "A search query that returned HTTP 200 must not be retried.",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "paraphrase",
         "negation_trap"
@@ -4787,15 +4735,7 @@
       "issues": [],
       "predicted_issues": [],
       "cites_labeled_passage": null,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "decisions/ADR-030-timeouts.md:11",
-          "quote": "A billing invoice render may be retried at most once, and only if the first attempt returned HTTP 503.",
-          "rationale": "different values: claim ['200'] vs source ['503']",
-          "opinions": []
-        }
-      ]
+      "evidence": []
     },
     {
       "case": "en-units-scope",
@@ -4829,22 +4769,13 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
           "relation": "contradicts",
           "location": "decisions/ADR-030-timeouts.md:11",
           "quote": "A billing invoice render may be retried at most once, and only if the first attempt returned HTTP 503.",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "decisions/ADR-030-timeouts.md:7",
-          "quote": "The gateway timeout for billing invoice renders is 8 seconds.",
           "rationale": "same subject, but only one side is negated",
           "opinions": []
         }
@@ -4863,9 +4794,7 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -4906,15 +4835,23 @@
       "memory_id": "m-84fa4b37",
       "text": "La confirmación de un pedido puede tardar hasta 2 minutos.",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric"
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "politicas/plazos.md:9",
+          "quote": "La confirmación de un pedido debe responder en 2 segundos.",
+          "rationale": "different units: claim 2 minutos vs source 2 segundos",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "es-operacion-alcance",
@@ -4994,7 +4931,9 @@
         "internal_conflict",
         "duplicate"
       ],
-      "predicted_issues": [],
+      "predicted_issues": [
+        "internal_conflict"
+      ],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -5011,22 +4950,24 @@
       "memory_id": "m-51476637",
       "text": "Los índices de búsqueda ocupan 512 GB en el nivel caliente.",
       "truth": "contradicted",
-      "predicted": "supported",
-      "status": "candidate_support",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric"
       ],
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [],
-      "cites_labeled_passage": null,
+      "predicted_issues": [
+        "internal_conflict"
+      ],
+      "cites_labeled_passage": true,
       "evidence": [
         {
-          "relation": "supports",
+          "relation": "contradicts",
           "location": "notas/2026-09-18-capacidad.md:3",
           "quote": "Los índices de búsqueda ocupan 512 GiB en el nivel caliente.",
-          "rationale": "source restates the claim (term coverage 0.91)",
+          "rationale": "different units: claim 512 GB vs source 512 GiB",
           "opinions": []
         }
       ]
@@ -5036,20 +4977,20 @@
       "memory_id": "m-348cd486",
       "text": "El archivo de facturas ocupa 500 GiB.",
       "truth": "contradicted",
-      "predicted": "supported",
-      "status": "candidate_support",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric"
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
+      "cites_labeled_passage": true,
       "evidence": [
         {
-          "relation": "supports",
+          "relation": "contradicts",
           "location": "notas/2026-09-18-capacidad.md:5",
           "quote": "El archivo de facturas guarda 500 GB, unos 466 GiB.",
-          "rationale": "source restates the claim (term coverage 0.83)",
+          "rationale": "different units: claim 500 GiB vs source 500 GB",
           "opinions": []
         }
       ]
@@ -5066,9 +5007,7 @@
         "distractor"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -5092,9 +5031,7 @@
         "negation_trap"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
@@ -5120,9 +5057,7 @@
         "multi_sentence"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -5131,8 +5066,8 @@
       "memory_id": "m-b9b61f33",
       "text": "El renderizado de facturas no se puede reintentar.",
       "truth": "contradicted",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "negation",
         "distractor"
@@ -5140,19 +5075,9 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
-      "cites_labeled_passage": true,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "decisiones/ADR-015-reintentos.md:11",
-          "quote": "Un renderizado de factura se puede reintentar como máximo una vez, y solo si el primer intento devolvió HTTP 503.",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        }
-      ]
+      "predicted_issues": [],
+      "cites_labeled_passage": null,
+      "evidence": []
     },
     {
       "case": "es-operacion-alcance",
@@ -5167,9 +5092,7 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": null,
       "evidence": []
     },
@@ -5299,30 +5222,21 @@
         "numeric"
       ],
       "issues": [],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
+      "predicted_issues": [],
       "cites_labeled_passage": true,
       "evidence": [
         {
           "relation": "contradicts",
           "location": "versiones/busqueda.md:3",
           "quote": "El 2026-05-20 la versión de producción pasó a ser la 2.3.1.",
-          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2026-05-20']",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1']",
           "opinions": []
         },
         {
           "relation": "contradicts",
           "location": "versiones/busqueda.md:5",
           "quote": "El 2026-09-02 la versión de producción pasó a ser la 2.4.0, que sustituyó a la 2.3.1.",
-          "rationale": "different values: claim ['2.3.2'] vs source ['2.3.1', '2.4.0', '2026-09-02']",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "notas/2026-09-18-capacidad.md:7",
-          "quote": "La retención del nivel caliente de búsqueda es de 14 días.",
-          "rationale": "different values: claim ['2.3.2'] vs source ['14']",
+          "rationale": "different values: claim ['2.3.2'] vs source ['2.4.0']",
           "opinions": []
         }
       ]
@@ -5553,8 +5467,8 @@
       "memory_id": "m-e848b75a",
       "text": "On a conflict, push always keeps the wiki page and never uploads the local note.",
       "truth": "contradicted",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "repo",
         "negation"
@@ -5565,16 +5479,8 @@
       "predicted_issues": [
         "overgeneralization"
       ],
-      "cites_labeled_passage": true,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "src/fernhook/cli.py:19",
-          "quote": "@click.option(\"--prefer-local\", is_flag=True, help=\"On a conflict, upload the local note instead of keeping the wiki page.\")",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        }
-      ]
+      "cites_labeled_passage": null,
+      "evidence": []
     },
     {
       "case": "repo-instructions-cli",
@@ -5624,8 +5530,8 @@
       "memory_id": "m-fbb2d337",
       "text": "FERNHOOK_TOKEN overrides the token in the config file.",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "supported",
+      "status": "candidate_support",
       "tags": [
         "repo",
         "paraphrase",
@@ -5633,15 +5539,8 @@
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
+      "cites_labeled_passage": false,
       "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "src/fernhook/config.py:31",
-          "quote": "FERNHOOK_TOKEN wins over the file so CI never needs a token on disk.",
-          "rationale": "same subject, but only one side is negated",
-          "opinions": []
-        },
         {
           "relation": "supports",
           "location": "src/fernhook/config.py:34",
@@ -5840,8 +5739,7 @@
         "inference_marker"
       ],
       "predicted_issues": [
-        "inference_marker",
-        "internal_conflict"
+        "inference_marker"
       ],
       "cites_labeled_passage": null,
       "evidence": []
@@ -5886,8 +5784,7 @@
         "inference_marker"
       ],
       "predicted_issues": [
-        "inference_marker",
-        "internal_conflict"
+        "inference_marker"
       ],
       "cites_labeled_passage": null,
       "evidence": []
@@ -6140,8 +6037,8 @@
       "memory_id": "m-d1cd0f91",
       "text": "订单服务的数据库连接池上限是 80。",
       "truth": "unsupported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "distractor",
         "repo",
@@ -6150,15 +6047,7 @@
       "issues": [],
       "predicted_issues": [],
       "cites_labeled_passage": null,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "复盘/2026-09-12-支付超时事故复盘.md:15",
-          "quote": "支付服务的数据库连接池上限只有20，大促流量下连接被全部占满，请求排队直至超时。",
-          "rationale": "different values: claim ['80'] vs source ['20']",
-          "opinions": []
-        }
-      ]
+      "evidence": []
     },
     {
       "case": "zh-decisions-platform",
@@ -6679,7 +6568,7 @@
           "relation": "contradicts",
           "location": "会议纪要/2026-09-15-季度规划会.md:13",
           "quote": "由于云资源费用超支，下半年研发预算追加150万元。",
-          "rationale": "different values: claim ['12000000', '2025-12-18', '2026'] vs source ['1500000']",
+          "rationale": "different values: claim ['12000000'] vs source ['1500000']",
           "opinions": []
         },
         {
@@ -6712,7 +6601,7 @@
           "relation": "contradicts",
           "location": "会议纪要/2026-09-15-季度规划会.md:13",
           "quote": "由于云资源费用超支，下半年研发预算追加150万元。",
-          "rationale": "different values: claim ['12000000', '2026'] vs source ['1500000']",
+          "rationale": "different values: claim ['12000000'] vs source ['1500000']",
           "opinions": []
         },
         {
@@ -6976,7 +6865,7 @@
           "relation": "contradicts",
           "location": "决策记录/ADR-012-专业版定价.md:13",
           "quote": "专业版月费由99元上调至129元，自2026年11月1日起对新客户生效。",
-          "rationale": "different values: claim ['399'] vs source ['129', '2026-11-01', '99']",
+          "rationale": "different values: claim ['399'] vs source ['99']",
           "opinions": []
         }
       ]
@@ -7204,16 +7093,24 @@
       "memory_id": "m-854ab582",
       "text": "下单接口的返回时限是 2 分钟。",
       "truth": "contradicted",
-      "predicted": "unsupported",
-      "status": "insufficient_evidence",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric",
         "chinese"
       ],
       "issues": [],
       "predicted_issues": [],
-      "cites_labeled_passage": null,
-      "evidence": []
+      "cites_labeled_passage": true,
+      "evidence": [
+        {
+          "relation": "contradicts",
+          "location": "制度/时延与容量.md:9",
+          "quote": "下单接口必须在 2 秒内返回。",
+          "rationale": "different units: claim 2 分钟 vs source 2 秒",
+          "opinions": []
+        }
+      ]
     },
     {
       "case": "zh-units-negation",
@@ -7258,8 +7155,8 @@
       "memory_id": "m-f97d6193",
       "text": "检索索引的热数据有半个太比字节。",
       "truth": "supported",
-      "predicted": "contradicted",
-      "status": "candidate_counterevidence",
+      "predicted": "unsupported",
+      "status": "insufficient_evidence",
       "tags": [
         "paraphrase",
         "numeric",
@@ -7273,15 +7170,7 @@
         "internal_conflict"
       ],
       "cites_labeled_passage": null,
-      "evidence": [
-        {
-          "relation": "contradicts",
-          "location": "制度/时延与容量.md:17",
-          "quote": "检索索引的热数据占用 512 GiB。",
-          "rationale": "different values: claim ['0.5'] vs source ['512']",
-          "opinions": []
-        }
-      ]
+      "evidence": []
     },
     {
       "case": "zh-units-negation",
@@ -7310,8 +7199,8 @@
       "memory_id": "m-88bfc869",
       "text": "检索索引的热数据占了 512 GB。",
       "truth": "contradicted",
-      "predicted": "supported",
-      "status": "candidate_support",
+      "predicted": "contradicted",
+      "status": "candidate_counterevidence",
       "tags": [
         "numeric",
         "chinese"
@@ -7319,16 +7208,14 @@
       "issues": [
         "internal_conflict"
       ],
-      "predicted_issues": [
-        "internal_conflict"
-      ],
-      "cites_labeled_passage": null,
+      "predicted_issues": [],
+      "cites_labeled_passage": true,
       "evidence": [
         {
-          "relation": "supports",
+          "relation": "contradicts",
           "location": "制度/时延与容量.md:17",
           "quote": "检索索引的热数据占用 512 GiB。",
-          "rationale": "source restates the claim (term coverage 0.80)",
+          "rationale": "different units: claim 512 GB vs source 512 GiB",
           "opinions": []
         }
       ]
@@ -7388,14 +7275,7 @@
           "relation": "contradicts",
           "location": "记录/2026-03-02-保留计划.md:3",
           "quote": "2026年3月2日，容量组的计划是把检索热数据保留 30 天。",
-          "rationale": "different values: claim ['90'] vs source ['2026-03-02', '30']",
-          "opinions": []
-        },
-        {
-          "relation": "contradicts",
-          "location": "制度/时延与容量.md:17",
-          "quote": "检索索引的热数据占用 512 GiB。",
-          "rationale": "different values: claim ['90'] vs source ['512']",
+          "rationale": "different values: claim ['90'] vs source ['30']",
           "opinions": []
         }
       ]

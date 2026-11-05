@@ -170,11 +170,15 @@ ZH: dict[str, str] = {
         "审阅者已确认来源是对的：请更新或删除 {file} 中的这一行。",
     "Reviewers found sources on both sides: decide which one is right, then update {file}.":
         "审阅者在两边都找到了来源：请判断哪一方正确，再更新 {file}。",
-    "If the source is right, update this line in {file}; if it is about something else, you can ignore this.":
-        "如果来源是对的，请更新 {file} 中的这一行；如果它说的是别的事，可以忽略。",
+    "If the source is right, update this line in {file}; if it is about something else, dismiss it: Details has the "
+    "line to add to your reviews file.":
+        "如果来源是对的，请更新 {file} 中的这一行；如果它说的是别的事，就排除它：“详情”里有要加到审阅文件的那一行。",
     "The two checkers disagree about this source: read both and decide.":
         "两个检查器对这个来源意见不一：请阅读两边后自行判断。",
     "They use opposite words.": "两边用了意思相反的词。",
+    "Both name the same setting, with different values.": "两边写的是同一个设置，值却不同。",
+    "The same number, with a different unit.": "数字相同，单位不同。",
+    "The source says this was removed.": "来源说这个已经被移除了。",
     "The numbers are different.": "两边的数字不同。",
     "One says it must (or always) happen, the other says it need not (or only sometimes).":
         "一边说必须（或总是）如此，另一边说不必（或只是有时）。",
@@ -264,6 +268,11 @@ ZH: dict[str, str] = {
     "null character in path": "路径中含有空字符",
     "The decision log folder has no {name}": "决策日志文件夹中没有 {name}",
     "A reviews file needs a folder to compare against.": "审阅文件需要一个对照文件夹。",
+    "To dismiss it, add to your reviews file": "要排除它，把这一行加到审阅文件里",
+    "{n} passage was dismissed by a reviewer": "{n} 段文字已被审阅者排除",
+    "{n} passages were dismissed by a reviewer": "{n} 段文字已被审阅者排除",
+    "a review that dismissed a passage no longer applies: its statement or quote is gone":
+        "一条排除记录已经失效：对应的陈述或引文不在了",
     "No readable files are left in the folder you compare against.": "对照文件夹中没有可读取的文件。",
     "A quote, hash or file named in the reviews or the decision log does not match the files. Reviews must "
     "point into the folder you compare against.":
@@ -443,6 +452,8 @@ ZH: dict[str, str] = {
         "图片、音频或视频文件，旁边没有转写稿或 OCR 文本",
     "in a hidden folder, or a hidden file": "位于隐藏文件夹中，或本身是隐藏文件",
     "in a folder that is never read": "位于从不读取的文件夹中",
+    "vendored or generated, so not read as evidence": "第三方或生成的内容，不作为证据读取",
+    "partly read: lines over 1,000 characters were left out": "只读了一部分：超过 1,000 个字符的行没有读取",
     "a linked folder, which is not followed": "链接的文件夹，不会跟随",
     "a link to outside the folder": "指向文件夹之外的链接",
     "a broken link": "失效的链接",

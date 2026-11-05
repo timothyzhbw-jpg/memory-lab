@@ -230,10 +230,10 @@ def test_dropping_any_candidate_from_the_index_is_noticed(built):
 
 
 def test_a_passage_found_only_through_an_opposing_term_is_kept(tmp_path):
-    """Half of "Gates are closed nightly" is shared, which is not enough; "open" against "closed" makes up the rest."""
-    passages = corpus(tmp_path, {"a.md": "Gates are open today.\nGates are shut today.\n"})
-    claim, = claims_of("Gates are closed nightly.")
-    assert [p.quote for p in shortlist(claim, passages, 2 / 3)] == ["Gates are open today."]
+    """A third of "Gates are approved nightly" is shared, which is not enough; "rejected" makes up the rest."""
+    passages = corpus(tmp_path, {"a.md": "Gates are rejected today.\nGates are shut today.\n"})
+    claim, = claims_of("Gates are approved nightly.")
+    assert [p.quote for p in shortlist(claim, passages, 2 / 3)] == ["Gates are rejected today."]
     assert identities(shortlist(claim, passages, 2 / 3)) == identities(walked(claim, passages, 2 / 3))
 
 

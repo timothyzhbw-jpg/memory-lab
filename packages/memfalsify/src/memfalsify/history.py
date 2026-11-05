@@ -25,7 +25,7 @@ from .formats import Value
 from .gitstore import (HEX, HistoryError, Objects, Repository, Snapshot, code_span, open_repository, printable,
                        resolve_commit, show_text)
 from .memory import Claim
-from .report import LABELS, _finding, _quote, metadata_line, skipped_line, usage_lines
+from .report import LABELS, _finding, _quote, dismissal_lines, metadata_line, skipped_line, usage_lines
 from .text import terms
 from .verify import Verifier
 
@@ -299,7 +299,7 @@ def diff_to_markdown(report: DiffReport) -> str:
            *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in audit.excluded)]
              if audit.excluded else []),
            f"- Verifier: {code_span(audit.verifier)} · as of {audit.as_of} · mode: **{report.mode}** (no memory was modified)",
-           *usage_lines(audit),
+           *usage_lines(audit), *dismissal_lines(audit.dismissed),
            "", "| Change | Claims |", "|---|---|"]
     out += [f"| {kind.capitalize()} | {n} |" for kind, n in report.summary.items()]
     out.append("")

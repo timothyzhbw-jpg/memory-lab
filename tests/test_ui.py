@@ -24,8 +24,10 @@ import pytest
 from typer.testing import CliRunner
 
 from conftest import EXAMPLES, requires_confinement, snapshot, write_text_exact
-from memcore import confinement_root, reading
+from memcore import confinement_root, make_span, reading
 from memfalsify import ATTENTION, LexicalVerifier, VerifierError, audit, parse_memory
+from memfalsify.audit import dismissal_line
+from memfalsify.audit import EvidenceFinding
 from memlab_ui import create_server, i18n
 from memlab_ui import check as ui_check
 from memlab_ui import decisions as ui_decisions
@@ -103,6 +105,38 @@ def without_logo(page: str) -> str:
 
 def link(path, **params) -> str:
     return path + "?" + "&".join(f"{key}={urlquote(value, safe='')}" for key, value in params.items())
+
+
+# --- dismissals ---------------------------------------------------------------------------------------------
+
+@requires_confinement
+def test_a_flag_shows_the_line_that_dismisses_it_and_a_dismissal_is_counted(app, root):
+    shown = body(get(app, link("/check", file=MEMORY, evidence=EVIDENCE, as_of="2026-10-10")))
+    assert "To dismiss it, add to your reviews file" in shown
+    flagged = next(f for f in audit(root / MEMORY, root / EVIDENCE, as_of=date(2026, 10, 10)).findings
+                   if f.status == "candidate_counterevidence")
+    span = flagged.evidence[0].span
+    line = {"memory_id": flagged.memory_id, "relation": "unrelated", "path": span.path, "quote": span.quote,
+            "reviewer": "ada"}
+    write_text_exact(root / "memfalsify" / "dismissals.jsonl", json.dumps(line) + "\n")
+    assert html.unescape(dismissal_line(flagged.memory_id, span, "ada")) == json.dumps(line, ensure_ascii=False)
+    page = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, as_of="2026-10-10",
+                         reviews="memfalsify/dismissals.jsonl"))
+    assert page.status == 200
+    assert "1 passage was dismissed by a reviewer (ada)." in text(page)
+
+
+@requires_confinement
+def test_a_dismissal_that_no_longer_applies_is_listed(app, root):
+    flagged = next(f for f in audit(root / MEMORY, root / EVIDENCE, as_of=date(2026, 10, 10)).findings
+                   if f.status == "candidate_counterevidence")
+    line = {"memory_id": flagged.memory_id, "relation": "unrelated", "path": flagged.evidence[0].span.path,
+            "quote": "no longer in this file", "reviewer": "ada"}
+    write_text_exact(root / "memfalsify" / "dismissals.jsonl", json.dumps(line) + "\n")
+    page = get(app, link("/check", file=MEMORY, evidence=EVIDENCE, as_of="2026-10-10",
+                         reviews="memfalsify/dismissals.jsonl"))
+    assert page.status == 200
+    assert "a review that dismissed a passage no longer applies" in text(page)
 
 
 # --- pages on the examples ---------------------------------------------------------------------------------
@@ -711,7 +745,8 @@ def test_message_constants_are_all_translated():
               ui_decisions.STATUS, ui_decisions.ACTION, ui_decisions.CAN, ui_decisions.DECIDED, ui_decisions.SEVERITY,
               ui_decisions.CHANGE, ui_decisions.FINDING, ui_home.STEPS, ui_home.CARDS, ui_pages.NAV]
     keys = {"attention", "fine", "grey", "approved", "rejected", "waiting", "home", "check", "decisions",
-            "opposing terms", "different values", "opposite modality", "same subject, but only one side is negated"}
+            "opposing terms", "different values", "opposite modality", "same subject, but only one side is negated",
+            "same setting", "set differently", "different units", "source says what the claim names was removed"}
     for table in tables:
         for entry in (table.values() if isinstance(table, dict) else table):
             for value in (entry if isinstance(entry, tuple) else (entry,)):
@@ -1011,7 +1046,7 @@ def test_paths_and_subjects_keep_their_spaces(app, root):
 def test_amplification_budgets_are_reported(app, root, monkeypatch):
     dense = root / "dense"
     dense.mkdir()
-    write_text_exact(dense / "notes.md", "".join(f"The API limit {i} is {i} requests. " for i in range(400)))
+    write_text_exact(dense / "notes.md", "".join(f"The API limit {i} is {i} requests.\n" for i in range(400)))
     monkeypatch.setattr(ui_server, "ITEMS", {"claims": 5_000, "passages": 50, "comparisons": 2_000_000})
     shown = text(get(app, link("/check", file="AGENTS.md", evidence="dense")))
     assert "This project is large" in shown
@@ -1241,3 +1276,32 @@ def test_served_caps_connections_and_the_time_for_headers(root, loopback, monkey
         server.shutdown()
         server.server_close()
         thread.join(5)
+
+
+# --- the stricter lexical reasons ------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("reason", ["same setting max_steps: claim 100 vs source 500",
+                                    "set differently max_steps: claim 100 vs source 500",
+                                    "different units: claim 2 minutes vs source 2 seconds",
+                                    "source says what the claim names was removed"])
+def test_each_lexical_reason_has_words_on_the_page(reason):
+    span = make_span("a.md", "0" * 64, "max_steps: 500", 0, 14, source_kind="file")
+    evidence = EvidenceFinding(relation="contradicts", confirmed=False, rationale=reason, span=span)
+    assert ui_check._why(evidence, "lexical")
+
+
+def test_a_named_value_is_marked_on_both_sides():
+    quote = "`max_steps` (default: `500`)"
+    span = make_span("a.md", "0" * 64, quote, 0, len(quote), source_kind="file")
+    evidence = EvidenceFinding(relation="contradicts", confirmed=False, span=span,
+                               rationale="same setting max_steps: claim 100 vs source 500")
+    claim_marks, quote_marks = ui_check.marks(evidence, "max_steps (default: 100)", "lexical")
+    assert ["max_steps (default: 100)"[a:b] for a, b in claim_marks] == ["max_steps", "100"]
+    assert [quote[a:b] for a, b in quote_marks] == ["max_steps", "500"]
+
+
+@pytest.mark.parametrize("reason, words", [("vendored or generated directory: not read as evidence", "vendored"),
+                                           ("vendored or generated file: not read as evidence", "vendored"),
+                                           ("long lines: 2 over 1,000 characters not read as passages", "partly read")])
+def test_what_the_scan_leaves_out_is_said_in_the_page_s_words(reason, words):
+    assert words in ui_check._reason(reason)

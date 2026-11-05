@@ -19,6 +19,32 @@ Release 0.5 contains:
 
 ### Added
 
+- memfalsify: review relation `unrelated` dismisses a false flag: a person read this passage and it does not bear on the
+  claim. Same fields and same exact-quote check as the other relations. The passage stops being a candidate for that
+  claim (a model is not asked about it, and the next passage takes its place), and the status comes from what remains.
+  A dismissal never marks a claim supported or challenged. Markdown and HTML reports print the line under each unsettled
+  flag, and `memfalsify init` says how. Reports state how many candidates were dismissed and by whom. In JSON,
+  `Finding.dismissed`, `AuditReport.dismissed` and `AuditSet.dismissed` appear only when there are some, so reports with
+  no dismissal keep their shape. If the claim or the quote is gone, the dismissal stops applying and the report lists it
+  under Skipped evidence as `review no longer applies`. A short hand-written quote dismisses the passage it sits in and
+  word-for-word copies of that passage in the file, nothing else.
+- memlab-ui: a flagged card's Details hold the dismissal line; a card says how many passages a reviewer dismissed; a
+  dismissal that no longer applies is listed. memlab-mcp: the audit tool and prompt describe dismissals.
+- memfalsify: the lexical verifier has a new, strongest rule: both texts state the same key with different values. The
+  key must look like an identifier (`snake_case`, `kebab-case`, `camelCase`, `dotted.name`, a `--flag` or a name in
+  backticks), in `key: 100`, `key (default: 100)`, `key: int = 180`, `key: float = Field(default=0.1, ...)`, `"key": 5`,
+  `| key | 100 |` and similar forms. The reason reads `same setting max_steps: claim 100 vs source 500`. `None` and
+  `null` mean no value. A value merely set (`key=100`, `key = 100`, `--flag 100`) is not compared with a stated default,
+  and against anything else it counts for less (`set differently ...`).
+- memfalsify: the passage that states a key a claim binds is compared however little else it shares, so a long
+  description of `max_steps` is checked against `max_steps: int = 500`. Lexical verifier only, and not with
+  `--max-judged`.
+- memfalsify: two more lexical reasons: `different units` (2 minutes against 2 seconds, 512 GB against 512 GiB, and in a
+  named value `512MB` against `512GB` or `30m` against `30s`) and `source says what the claim names was removed`.
+- `benchmarks/memfalsify/wild/`: a real-repository benchmark with 413 labeled pairs from public projects' agent files, as
+  hashes and metadata, and a script that needs your own clones. All labeling is by AI models, not people; its README says
+  how the numbers can mislead.
+- `docs/lexical-rules.md` and `docs/lexical-rules.zh-CN.md`: the lexical rules in full.
 - memfalsify: `memfalsify audit --format brief`, a short view for the terminal: only the claims that need a look, each
   with the claim, the strongest quote against it, its file and line, and why the two were paired. A long Markdown report
   on a terminal mentions it on stderr. Other formats and exit codes stay as they were.
@@ -78,7 +104,68 @@ Release 0.5 contains:
 
 ### Changed
 
-- memfalsify: `memfalsify audit` is much faster on large repositories, and reports stay byte-identical. One run each on
+- **Behavior change.** memfalsify: lexical contradictions are much stricter. Numbers count only on nearly identical
+  sentences or clauses, next to the same word, and not when each clause goes on to name a case of its own (`2 spaces in
+  YAML files`, `4 spaces in Python files`; Chinese text is left as it was). References such as `#7326`, digits in names,
+  paths and versions, times, ports and operands no longer count, a date is compared only with a date, `0723` equals
+  `723`, `1,000` reads as 1000, `18.x` and `3.x` take in `18.20` and `3.12`, and `100/min` is its number. In a named
+  value, `-1` and `1` differ. Opposing terms and negation need the same subject on both sides, and a negation cue must
+  reach a word the other side states plainly. Two short statements in the same terms, apart from an opposing word or a
+  `not`, are about one subject however few terms they share: `Telemetry is disabled.` against `Telemetry is enabled.`. A
+  line opening with `Do not`, `Never` or `Skip` is an instruction: only a line that says nearly the same without the
+  `not`, in words of its own, speaks against it. `Do not use npm in this repository.` against `Use npm in this
+  repository.` is flagged; `Do not run migrations in production.` against `Run migrations in production after every
+  deploy.` is not. On 15 public repositories' agent files, flagged pairs went from 1,719 to 47 and flagged claims from
+  794 to 29. `audit --strict` and the GitHub Action therefore pass where they used to fail, and a clean report says less
+  than a flag does. Some real contradictions are no longer flagged; `docs/lexical-rules.md` lists what the verifier
+  misses.
+- **Behavior change.** memfalsify: add/remove, start/stop and open/close are no longer opposing terms for English text,
+  which also lowers term coverage slightly for such pairs.
+- **Behavior change.** memfalsify: under the lexical verifier, tests contradict nothing, changelogs only through a stated
+  value or by saying something was removed, examples only through a stated value, and source code only through a declared
+  value (`key: int = 5`, `KEY = 5`, `key (default: 5)`; `retry({ maxRetries: 5 })` is one call's argument). All of them
+  can still support a claim. Everything under `test/`, `tests/` and `__tests__/` is a test except a document, while
+  `testing/`, `spec/`, `specs/` and `e2e/` make only code a test. `history`, `news`, `changes` and `releases` name a
+  changelog only as the whole file name, and a code file is never a changelog. Model verifiers are not affected. A
+  passage set aside this way does not appear in the report.
+- **Behavior change.** memfalsify: a directory scan, for every verifier, no longer reads `vendor/`, `third_party/`,
+  `thirdparty/`, `testdata/`, `fixtures/`, `__snapshots__/`, `*.min.js`, `*.min.css`, `*.snap`, `*.svg`, `*.patch`,
+  `*.lock`, `package-lock.json`, `pnpm-lock.yaml`, `npm-shrinkwrap.json` or `go.sum`, or lines over 1,000 characters,
+  which includes a long paragraph kept on one line. What was left out is listed under Skipped evidence. Paths are
+  relative to the evidence root, so pointing `--evidence` at such a directory reads it, and a review can still quote any
+  file in the root.
+- memfalsify, **breaking for existing reviews**: a memory file is read as Markdown blocks, not line by line. The lines of
+  a wrapped paragraph or list item are one claim, located at the line it starts on. A table row is one statement. `e.g.`,
+  `i.e.`, `vs.`, `cf.` and similar no longer end a sentence, and neither does `etc.` before more of the sentence. These
+  are no longer claims: table headers and rules, comments over several lines, indented code blocks, Setext headings (not
+  sentences above a `---` that end in a period or semicolon), lines of nothing but HTML tags, link definitions and labels
+  ending in a colon (`Run ty:`, `When writing comments:`; a line with `must`, `should`, `never`, `always` or `do not`
+  stays). Chinese text and anything that reads as a sentence stay. Claim IDs come from the text, so a claim whose split
+  changed gets a new ID, and old reviews for those lines stop applying. A confirming review naming an old ID stops the
+  audit with `unknown memory_id` (exit 2). The error now names every such line and points at `memfalsify claims`.
+  Re-wrapping a paragraph mostly no longer shows as a change in `diff` or `history`; the rules page says when it still
+  does.
+- memfalsify: only the sentence that holds a link to a local `.md` file is a pointer. A block that opens with such a link
+  is still an index entry, but the other sentences of any other block are now claims, where a line with a link used to be
+  skipped whole.
+- memfalsify: evidence in Markdown, MDX, reStructuredText and plain text is read with its wrapped lines joined, so a
+  wrapped claim can match a wrapped sentence. Code and data files stay line by line. A quote can now run over several
+  lines: a Markdown report shows it a line per line, and the JSON report and the line under a flag hold its exact bytes.
+- memfalsify: `rollback` works on blocks. It restores a wrapped sentence with its line breaks, re-adds a claim after the
+  whole block of its neighbour, falls back to one line when a first line would stand alone, prefers a form that leaves
+  other claims' IDs as they are, and refuses with a message when the patch would not bring the claim back.
+- memfalsify: the file passed with `--reviews` is never read as evidence, including when it sits inside `--evidence`.
+- memfalsify: within a status, findings are ordered by their strongest lexical reason, and within a finding contradictions
+  come first in the same order. The JSON shape is unchanged.
+- memfalsify: the lexical limitation line in every report has new wording, and the `verify_counterevidence` proposal now
+  says how to confirm or dismiss (`relation contradicts`, `relation unrelated`). Output for a named memory file is
+  therefore no longer byte-identical to 0.5.0, also where verdicts changed.
+- memlab-ui: words and highlights for the new reasons, and for what the scan leaves out.
+- examples/closed-loop: `to_events.py` finds a claim that runs over several lines; its evidence record quotes the first
+  line.
+- `benchmarks/memfalsify/RESULTS.md`: rerun, with contradiction precision 0.92, recall 0.44, F1 0.60 and 3-way accuracy
+  0.48, and a table of the verdicts that flipped, 3 of them correct flags lost.
+- memfalsify: `memfalsify audit` is much faster on large repositories, and that change alone leaves reports byte-identical. One run each on
   public clones (Apple M4 Pro, with other jobs running): next.js `AGENTS.md` 1,197 s to 42 s, grafana `CLAUDE.md` 947 s
   to 36 s, supabase `CLAUDE.md` 197 s to 18 s, mem0 `CLAUDE.md` 113 s to 4 s. n8n and bun `AGENTS.md`, which did not
   finish in 900 s, now take 54 s and 70 s. Peak RSS falls too: supabase 4,015 MB to 1,138 MB, next.js 5,752 MB to
@@ -94,6 +181,11 @@ Release 0.5 contains:
 
 ### Fixed
 
+- memfalsify: several inputs took time, and one took memory, in proportion to the square of their length, in a memory
+  file or in evidence: one key bound many times, `key:` followed by a long run of spaces, many negation words in one
+  passage, a line of spaces holding a pipe, many short sentences in emphasis in one block, and long runs of `__`, `**`,
+  `[`, `[a](` or `[[`. All now grow in proportion to their length. One key keeps at most eight different values from one
+  text.
 - orgmemory: `append`, `evidence add` and `policy grant`/`revoke` accept a dataset path that goes through a link above
   the dataset, such as `/tmp` or `/var` on macOS; they used to end in a traceback. A link at the dataset directory or
   below it is still refused, now as a clean exit 2.

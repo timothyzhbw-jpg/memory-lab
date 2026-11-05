@@ -594,7 +594,8 @@ def create_server(root: Path | str = ".", allow_model_verifiers: bool = False, o
          "candidate_counterevidence, insufficient_evidence, ...), evidence quotes with path:line and SHA-256, "
          "issues (overgeneralization, relative time, staleness, internal conflicts, duplicates) and proposed "
          "actions. Proposals are never applied and no report file is written. Only human reviews in "
-         "reviews_file can mark a claim supported or challenged; verifier matches are candidates."),
+         "reviews_file can mark a claim supported or challenged; verifier matches are candidates. A review with "
+         "relation unrelated dismisses a candidate and marks the claim neither way."),
         (memfalsify_diff, "MemFalsify: diff memory between revisions",
          "Compare a memory file kept in git at a base revision with a head revision (default: the working "
          "tree): which claims were added, changed, removed or left unchanged, with an audit of only the "
@@ -782,8 +783,8 @@ def _add_prompts(server: MCPServer, ws: Workspace) -> None:
             "read the cited file around the quote and look for other sources that could refute it. Absence of "
             "evidence means unverified, not false.",
             "4. Report the memories that need attention first, each with its quote and path:line, then the "
-            "proposed actions. Say which judgments are lexical candidates and which a person confirmed in the "
-            "reviews file.",
+            "proposed actions. Say which judgments are lexical candidates, which a person confirmed in the reviews "
+            "file, and how many candidates a person dismissed there.",
             "5. Stop there. Do not edit the memory file, add reviews, save the report or write any other file. "
             "Recording a review and changing memory are separate steps that need my explicit approval, and only "
             "I may confirm a review.",

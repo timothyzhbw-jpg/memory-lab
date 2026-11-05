@@ -267,7 +267,9 @@ def test_dual_verifier_agreement_passes_through():
 
 @pytest.mark.parametrize("claim, passage, relation", [
     ("Feature A is approved.", "Product manager rejects Feature A.", "contradicts"),
-    ("Feature A is approved.", "Customer requests Feature A again; no approval is given.", "contradicts"),
+    ("Feature A is approved.", "Feature A has no approval.", "contradicts"),
+    # A scan splits this at the semicolon, and a clause with one shared term is not about the same subject.
+    ("Feature A is approved.", "Customer requests Feature A again; no approval is given.", "unrelated"),
     ("The service uses Redis for caching.", "The service uses Redis for caching sessions.", "supports"),
     ("The service uses Redis for caching.", "Redis was mentioned in a meetup talk.", "unrelated"),
     ("功能A已批准", "产品经理拒绝了功能A", "contradicts"),

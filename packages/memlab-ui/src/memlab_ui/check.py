@@ -15,7 +15,8 @@ from memcore.reading import current_read_limits
 from memfalsify import (ATTENTION, AuditReport, DiffReport, EvidenceFinding, Finding, HistoryError, Issue,
                         VerifierError, audit_claims, memory_diff, parse_memory)
 from memfalsify import jev, llm
-from memfalsify.audit import SEVERITY
+from memfalsify.audit import SEVERITY, dismissal_line
+from memfalsify.report import can_dismiss
 # The verifier choices and passage limits are the CLI's (internal, as in the MCP server): same defaults.
 from memfalsify.cli import VerifierChoice, build_verifier, preselection
 from memfalsify.gitstore import check_revision
@@ -48,14 +49,18 @@ ADVICE = {
     "challenged": "A reviewer confirmed the source is right: update or remove this line in {file}.",
     "conflicted": "Reviewers found sources on both sides: decide which one is right, then update {file}.",
     "candidate_counterevidence": ("If the source is right, update this line in {file}; if it is about something "
-                                  "else, you can ignore this."),
+                                  "else, dismiss it: Details has the line to add to your reviews file."),
     "disputed": "The two checkers disagree about this source: read both and decide.",
 }
 WHY = (
+    ("same setting", "Both name the same setting, with different values."),
+    ("set differently", "Both name the same setting, with different values."),
     ("opposing terms", "They use opposite words."),
+    ("different units", "The same number, with a different unit."),
     ("different values", "The numbers are different."),
     ("opposite modality", "One says it must (or always) happen, the other says it need not (or only sometimes)."),
     ("same subject, but only one side is negated", "Only one of them says \"not\"."),
+    ("source says what the claim names was removed", "The source says this was removed."),
 )
 ISSUES = {
     "overgeneralization": "Uses a word like \"always\" or \"never\"; rules like that often have exceptions.",
@@ -84,7 +89,10 @@ SKIP_REASONS = (
     ("symlink escapes evidence root", "a link to outside the folder"),
     ("broken or cyclic symlink", "a broken link"),
     ("not a regular file", "not a regular file"),
+    ("vendored or generated", "vendored or generated, so not read as evidence"),
+    ("long lines", "partly read: lines over 1,000 characters were left out"),
     ("memory skipped", "an agent file that could not be read"),
+    ("review no longer applies", "a review that dismissed a passage no longer applies: its statement or quote is gone"),
 )
 TOO_MANY_FOR_DIFF = ("This file has more than {n} statements, too many to compare here. Check it without "
                      "\"Changed since\", or run memfalsify diff.")
@@ -310,7 +318,10 @@ def marks(e: EvidenceFinding, claim: str, verifier: str) -> tuple[list, list]:
         return _prefix_ranges(claim, found[1]), _prefix_ranges(source, found[2])
     if found := re.match(r"opposite modality: claim '(.+?)' vs source '(.+?)'", why):
         return _phrase_ranges(claim, found[1]), _phrase_ranges(source, found[2])
-    if why.startswith("different values"):
+    if found := re.match(r"(?:same setting|set differently) (.+?): claim (.+?) vs source (.+)$", why):
+        return (_phrase_ranges(claim, found[1]) + _phrase_ranges(claim, found[2]),
+                _phrase_ranges(source, found[1]) + _phrase_ranges(source, found[3]))
+    if why.startswith(("different values", "different units")):
         return _number_ranges(claim, source), _number_ranges(source, claim)
     return [], []
 
@@ -377,11 +388,23 @@ def _agent_says(f: Finding) -> str:
 
 
 def _details(f: Finding, report: AuditReport, sources: list[EvidenceFinding]) -> str:
-    """The technical facts of a card, folded: statement ID and full path, each source's file, link and hash."""
+    """The technical facts of a card, folded: statement ID and full path, each source's file, link and hash, and for a
+    flag, the line that dismisses it."""
     rows = [(_("Statement ID"), h.code(f.memory_id)), (_("Statement"), _claim_path(report.memory_file, f.location))]
     for e in sources:
         rows += span_details(e.span, report.evidence_root)
+        if can_dismiss(e):
+            rows.append((_("To dismiss it, add to your reviews file"), h.code(dismissal_line(f.memory_id, e.span))))
     return details(rows)
+
+
+def _dismissed(f: Finding) -> str:
+    """How many passages a person ruled out for this statement, and who."""
+    if not f.dismissed:
+        return ""
+    who = ", ".join(dict.fromkeys(e.reviewer for e in f.dismissed))
+    words = plural(len(f.dismissed), "{n} passage was dismissed by a reviewer", "{n} passages were dismissed by a reviewer")
+    return f'<p class="small">{h.text(words)} ({h.text(who)}).</p>'
 
 
 def _flagged(f: Finding, report: AuditReport, tag: str = "") -> str:
@@ -405,6 +428,7 @@ def _flagged(f: Finding, report: AuditReport, tag: str = "") -> str:
                         for e in rest)
         out.append(f"<details><summary>{h.text(plural(len(rest), '{n} more source', '{n} more sources'))}"
                    f"</summary>{items}</details>")
+    out.append(_dismissed(f))
     out.append(_issues(f))
     out.append(_details(f, report, against + other))
     out.append("</article>")
@@ -422,6 +446,7 @@ def _other(f: Finding, report: AuditReport, tag: str = "") -> str:
             out.append(f'<p class="small">{h.text(more)}</p>')
     elif f.status == "insufficient_evidence":
         out.append(f'<p class="small">{t(UNCHECKED)}</p>')
+    out.append(_dismissed(f))
     out.append(_issues(f))
     out.append(_details(f, report, support[:1]))
     out.append("</article>")

@@ -1,28 +1,30 @@
 """MemFalsify audit: challenge each memory claim against evidence. Read-only by construction."""
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
+from memcore.display import json_shield
 from memcore.paths import InputPathError, input_path
 from memcore.reading import confined_reads, confinement_root, confinement_supported, take
 
 from . import __version__
-from .corpus import Passage, Skipped, out_of_collection, scan
+from .corpus import Passage, Skipped, is_code, out_of_collection, scan, source_kind
 from .formats import Value
 from .memory import Claim, parse_memory
 from .references import KIND as MISSING_REFERENCE, detail as reference_detail, missing_references
 from .text import (ABSOLUTE, ANTONYM_STEMS, ANTONYMS_ZH, CJK, HEDGE, RELATIVE_TIME, coverage_units,
-                   explicit_dates, features, has_negation, normalize)
-from .verify import (Judgment, LexicalVerifier, Verifier, VerifierStats, coverage, judge_all, usage_since,
-                     verifier_usage)
+                   explicit_dates, features, has_negation, named_conflict, named_values, normalize)
+from .verify import (NAMED_VALUE, REASONS, REMOVED, Judgment, LexicalVerifier, Verifier, VerifierStats, coverage,
+                     judge_all, strength, usage_since, verifier_usage)
 
 Status = Literal["challenged", "conflicted", "candidate_counterevidence", "disputed",
                  "insufficient_evidence", "candidate_support", "supported"]
@@ -32,11 +34,12 @@ ATTENTION = frozenset({"challenged", "conflicted", "candidate_counterevidence", 
 
 
 class Review(BaseModel):
-    """A human-confirmed assertion. Only reviews can move a memory to supported/challenged."""
+    """What a person found on reading a passage. Only reviews can move a memory to supported/challenged. ``unrelated``
+    says the passage does not bear on the claim: it stops being a candidate, and marks the claim neither way."""
     model_config = ConfigDict(extra="forbid")
 
     memory_id: str
-    relation: Literal["supports", "contradicts"]
+    relation: Literal["supports", "contradicts", "unrelated"]
     path: str
     quote: str = Field(min_length=1)
     reviewer: str = Field(min_length=1)
@@ -46,8 +49,15 @@ class Review(BaseModel):
                                             "e.g. t=12.5,17 (default: the first one containing the quote)")
 
 
+def _without_empty(data: object, field: str) -> object:
+    """A field that is new, and empty in most reports, stays out of them: they keep the shape and bytes they had."""
+    if isinstance(data, dict) and not data.get(field):
+        data.pop(field, None)
+    return data
+
+
 class EvidenceFinding(BaseModel):
-    relation: Literal["supports", "contradicts", "disputed"]
+    relation: Literal["supports", "contradicts", "disputed", "unrelated"]  # unrelated: only in Finding.dismissed
     confirmed: bool
     rationale: str
     reviewer: str | None = None
@@ -77,6 +87,11 @@ class Finding(BaseModel):
     evidence: list[EvidenceFinding]
     issues: list[Issue]
     proposals: list[Proposal]
+    dismissed: list[EvidenceFinding] = []  # passages a person read and found unrelated; left out of the JSON when none
+
+    @model_serializer(mode="wrap")
+    def _omit_empty(self, handler):
+        return _without_empty(handler(self), "dismissed")
 
 
 class AuditReport(BaseModel):
@@ -94,6 +109,11 @@ class AuditReport(BaseModel):
     findings: list[Finding]
     skipped_evidence: list[Skipped]
     limitations: list[str]
+    dismissed: dict[str, int] = {}  # reviewer -> candidates dismissed; left out of the JSON when none
+
+    @model_serializer(mode="wrap")
+    def _omit_empty(self, handler):
+        return _without_empty(handler(self), "dismissed")
 
 
 class AuditSet(BaseModel):
@@ -112,9 +132,16 @@ class AuditSet(BaseModel):
     summary: dict[str, int]
     reports: list[AuditReport]
     not_searched: list[Skipped] = []  # places the search for memory files passed over, with the reason
+    dismissed: dict[str, int] = {}  # reviewer -> candidates dismissed, added up; left out of the JSON when none
+
+    @model_serializer(mode="wrap")
+    def _omit_empty(self, handler):
+        return _without_empty(handler(self), "dismissed")
 
 
-LEXICAL_NOTE = "Unconfirmed matches are candidates found by term overlap; they can miss paraphrases and misread context."
+LEXICAL_NOTE = ("Unconfirmed matches are candidates found by comparing words: support by term overlap, a contradiction by "
+                "the same setting with another value or two near-identical statements that differ. They can miss "
+                "paraphrases and misread context, and a report without flags has not ruled anything out.")
 MODEL_NOTE = ("Unconfirmed matches are model judgments on passages pre-selected by term overlap; "
               "passages that share too few terms with a memory are never judged, and models can be wrong.")
 MEDIA_NOTE = ("Transcript and OCR quotes show what a sidecar says about a media file, not what was said or shown; "
@@ -126,16 +153,43 @@ LIMITATIONS = [
 ]
 
 
+NO_LONGER_APPLIES = "review no longer applies"
+DISMISSED = "dismissed by reviewer"  # what a dismissal with no note says for itself
+STALE_ID_HINT = ("the memory text may have changed, or this version may read it as a different sentence; "
+                 "run `memfalsify claims` and re-review it")
+
+
+def _locate(evidence_root: Path, review: Review) -> EvidenceSpan:
+    # Read it (and, for a sidecar, hash its media file) under descriptor confinement where supported,
+    # so a swap after the policy check cannot redirect the read.
+    if confinement_root() is None and confinement_supported():
+        with confined_reads(evidence_root):
+            return locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+    return locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+
+
 def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *,
                  skipped: list[Skipped] | None = None) -> dict[str, list[EvidenceFinding]]:
+    """Each claim's reviews, with the quote located in the evidence as it is now.
+
+    A review that confirms something must hold: a line naming a claim the memory no longer has, or a quote no longer in
+    its file, stops the audit. A dismissal only takes a candidate away, so when its claim or quote is gone it just stops
+    applying, and ``skipped`` receives a line that says so (with no such list, it stops the audit too)."""
     if evidence_root is None:
         raise EvidenceError("--reviews requires --evidence: review quotes are located inside the evidence root")
     confirmed: dict[str, list[EvidenceFinding]] = {}
+    stale: list[str] = []
     for number, record in read_jsonl(path):
         review = Review.model_validate(record)
+        lenient = review.relation == "unrelated" and skipped is not None
         if review.memory_id not in claims:
-            raise EvidenceError(f"{path}:{number}: unknown memory_id {review.memory_id} "
-                                "(the memory text may have changed; re-review it)")
+            if lenient:
+                skipped.append(Skipped(path=review.path, reason=f"{NO_LONGER_APPLIES}: {review.reviewer} dismissed this "
+                                                                f"passage for {review.memory_id}, which the memory no "
+                                                                "longer has"))
+            else:
+                stale.append(f"{path}:{number}: unknown memory_id {review.memory_id}")
+            continue
         # Human-confirmed evidence must obey the same policy as scanned evidence.
         try:
             input_path(evidence_root, Path(evidence_root).resolve() / review.path)
@@ -144,17 +198,53 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
                 skipped.append(Skipped(path=review.path, reason=f"review evidence skipped: {exc}"))
                 continue
             raise EvidenceError(f"review evidence skipped: {exc}") from None
-        # Read it (and, for a sidecar, hash its media file) under descriptor confinement where supported,
-        # so a swap after the policy check cannot redirect the read.
-        if confinement_root() is None and confinement_supported():
-            with confined_reads(evidence_root):
-                span = locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
-        else:
-            span = locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+        try:
+            span = _locate(evidence_root, review)
+        except (EvidenceError, OSError):
+            if not lenient:
+                raise
+            skipped.append(Skipped(path=review.path, reason=f"{NO_LONGER_APPLIES}: {review.reviewer} dismissed a passage "
+                                                            f"for {review.memory_id}, and its quote is no longer in "
+                                                            "this file"))
+            continue
+        dismissal = review.relation == "unrelated"
         confirmed.setdefault(review.memory_id, []).append(EvidenceFinding(
             relation=review.relation, confirmed=True, reviewer=review.reviewer,
-            rationale=review.note or "confirmed by reviewer", span=span))
+            rationale=review.note or (DISMISSED if dismissal else "confirmed by reviewer"), span=span))
+    if stale:
+        raise EvidenceError("; ".join(stale) + f" ({STALE_ID_HINT})")
     return confirmed
+
+
+def dismissal_line(memory_id: str, span: EvidenceSpan, reviewer: str = "you") -> str:
+    """A ``reviews.jsonl`` record that dismisses this passage for this claim, ready to paste. What could not be shown
+    safely is in JSON escapes, which read back as the exact characters of the quote."""
+    record = {"memory_id": memory_id, "relation": "unrelated", "path": span.path, "quote": span.quote,
+              "reviewer": reviewer}
+    if span.media is not None:
+        record["locator"] = span.media.locator
+    return json_shield(json.dumps(record, ensure_ascii=False))
+
+
+def _not_dismissed(passages: list[Passage], dismissed: list[EvidenceFinding]) -> list[Passage]:
+    """``passages`` without what a person dismissed: the passage each dismissal's quote was located in, and, since
+    ``locate_quote`` only finds the first, that same passage word for word elsewhere in the file. A short quote does not
+    take every passage holding its words. In a transcript, a dismissal is of that one cue."""
+    if not dismissed:
+        return passages
+    by_path: dict[str, list[EvidenceSpan]] = defaultdict(list)
+    for dismissal in dismissed:
+        by_path[PurePosixPath(dismissal.span.path).as_posix()].append(dismissal.span)  # a review may say ./docs/a.md
+    located: set[int] = set()
+    copies: set[tuple[str, str]] = set()
+    for passage in passages:
+        for dismissal in by_path.get(passage.path, ()):
+            if dismissal.start < passage.start + len(passage.quote) and passage.start < dismissal.end:
+                located.add(id(passage))
+                if dismissal.media is None:
+                    copies.add((passage.path, passage.quote))
+    return [passage for passage in passages
+            if id(passage) not in located and (passage.path, passage.quote) not in copies]
 
 
 class _PassageIndex:
@@ -229,16 +319,75 @@ def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5, 
     return [passage for *_, passage in ranked[:max_judged]]
 
 
+def naming_passages(claims: list[Claim], passages: list[Passage]) -> dict[str, list[Passage]]:
+    """For each claim that binds a key, the passages that state another value for it, however little else they share:
+    ``max_steps: int = 500`` says nothing about the rest of a long description of ``max_steps``."""
+    keys = {claim.id: list(named_values(claim.text)) for claim in claims}
+    terms = {key: features(key)[0] for names in keys.values() for key in names}
+    wanted = frozenset().union(*terms.values()) if terms else frozenset()
+    if not wanted:
+        return {}
+    having: dict[str, list[int]] = defaultdict(list)
+    for at, passage in enumerate(passages):
+        for term in passage.words & wanted:
+            having[term].append(at)
+    found: dict[str, list[Passage]] = {}
+    for claim in claims:
+        chosen: set[int] = set()
+        for key in keys[claim.id]:
+            lists = [having.get(term, []) for term in terms[key]]
+            chosen.update(at for at in (min(lists, key=len) if lists else ())
+                          if key in passages[at].quote.lower())
+        picked = sorted(chosen)
+        # Within read_limits, these comparisons draw from the comparison budget, as in ``shortlist``.
+        naming = [passages[at] for at in picked[:take("comparisons", len(picked))]
+                  if named_conflict(claim.text, passages[at].quote, set_counts=False)]
+        if naming:
+            found[claim.id] = naming
+    return found
+
+
+def _rank(evidence: Judgment | EvidenceFinding, verifier: str) -> int:
+    """How strong a lexical contradiction is; every other judgment counts the same, since a model's words rank nothing."""
+    if verifier == _LEXICAL.name and evidence.relation == "contradicts":
+        return strength(evidence.rationale)
+    return len(REASONS)
+
+
 def candidates(claim: Claim, judged: list[tuple[Passage, Judgment]], limit: int) -> list[EvidenceFinding]:
-    """The ``limit`` most telling judged passages: contradictions first, then the most shared terms."""
+    """The ``limit`` most telling judged passages: contradictions first, the strongest reason first, then the most
+    shared terms."""
     words, _ = features(claim.text)
-    scored = [(judgment.relation != "contradicts", -len(words & passage.words), passage.location, judgment,
-               passage)
+    scored = [(judgment.relation != "contradicts", _rank(judgment, judgment.verifier),
+               -len(words & passage.words), passage.location, judgment, passage)
               for passage, judgment in judged if judgment.relation != "unrelated"]
-    scored.sort(key=lambda item: item[:3])
+    scored.sort(key=lambda item: item[:4])
     return [EvidenceFinding(relation=j.relation, confirmed=False, rationale=j.rationale, opinions=j.opinions,
                             span=p.span)
             for *_, j, p in scored[:limit]]
+
+
+def weighed(judgment: Judgment, path: str, claim: str, passage: str) -> Judgment:
+    """A lexical contradiction, once the file it comes from is known.
+
+    A test, changelog or example shows or records a case, so it does not contradict a claim by itself, unless a
+    changelog or example names the same setting or a changelog says the thing was removed. In source code, only a
+    declared value counts: words and other numbers are control flow and error messages, ``x = 5`` is one assignment
+    among others, and ``x: 5`` is one object's field or one call's argument."""
+    if judgment.relation != "contradicts":
+        return judgment
+    why = judgment.rationale
+    kind = source_kind(path)
+    declared = not is_code(path) or named_conflict(claim, passage, set_counts=False, declared=True) is not None
+    if kind is None:
+        if declared:
+            return judgment
+        kind = "source code"
+    elif (kind == "example" and why.startswith(NAMED_VALUE) and declared) or (kind == "changelog" and (
+            why.startswith(NAMED_VALUE) or why == REMOVED)):
+        return judgment
+    return Judgment(relation="unrelated", verifier=judgment.verifier,
+                    rationale=f"{kind}: not read as a contradiction by itself ({why})")
 
 
 @dataclass(frozen=True)
@@ -252,6 +401,7 @@ class _Lex:
     # term-count shortcut below does not model; pairs that involve it go to the verifier itself.
     cjk: bool = False
     chars: frozenset[str] = frozenset()
+    keys: frozenset[str] = frozenset()  # what the text binds to a value: a conflict there needs no other shared term
 
 
 _ZH_TERMS = tuple(dict.fromkeys(term for pair in ANTONYMS_ZH for term in pair))
@@ -275,10 +425,11 @@ def _zh_present(text: str) -> frozenset[str]:
 
 def _lex_of(text: str) -> _Lex:
     words, numbers = features(text)
+    keys = frozenset(named_values(text))
     if not CJK.search(text):
-        return _Lex(words, numbers, has_negation(text), _zh_present(text))
+        return _Lex(words, numbers, has_negation(text), _zh_present(text), keys=keys)
     chars = frozenset(CJK.findall(normalize(text)))
-    return _Lex(words, numbers, has_negation(text), _zh_present(text), True, chars)
+    return _Lex(words, numbers, has_negation(text), _zh_present(text), True, chars, keys)
 
 
 def _min_shared(size: int, related: float) -> int:
@@ -311,21 +462,16 @@ def _opposed(claim: _Lex, passage: _Lex) -> bool:
     return False
 
 
-def _directed_contradicts(claim: _Lex, passage: _Lex, shared: int, related: float) -> bool:
-    """``LexicalVerifier.judge(claim, passage).relation == 'contradicts'``, without building a judgment."""
+def _reaches_related(claim: _Lex, passage: _Lex, shared: int, related: float) -> bool:
+    """Whether ``claim`` can clear ``LexicalVerifier.judge``'s coverage cutoff against ``passage``, without building a
+    judgment: most pairs that share a key or a term stop here."""
     size = len(claim.words)
     if size == 0:
         return False
     # ``score < related`` is the verifier's cutoff. Shared terms cannot exceed ``size``.
     if shared / size >= related:
-        if _opposed(claim, passage):
-            return True
-        if claim.numbers and passage.numbers and claim.numbers.isdisjoint(passage.numbers):
-            return True
-        return claim.negated != passage.negated
-    if (shared + 1) / size < related:
-        return False
-    return _opposed(claim, passage)
+        return True
+    return (shared + 1) / size >= related and _opposed(claim, passage)
 
 
 class _ConflictIndex:
@@ -355,7 +501,10 @@ class _ConflictIndex:
         self.contains: dict[str, list[int]] = defaultdict(list)
         self.zh_at: dict[str, list[int]] = defaultdict(list)
         self.chars_at: dict[str, list[int]] = defaultdict(list)
+        self.keyed: dict[str, list[int]] = defaultdict(list)
         for index, lex in enumerate(self.lex):
+            for key in lex.keys:
+                self.keyed[key].append(index)
             counts.update(lex.words)
             for term in lex.words:
                 self.contains[term].append(index)
@@ -472,6 +621,8 @@ class _ConflictIndex:
 
     def _candidates(self, lex: _Lex, text: str, prefix: tuple[str, ...], skip: int | None) -> set[int]:
         chosen: set[int] = set()
+        for key in lex.keys:
+            chosen.update(self.keyed.get(key, ()))
         if prefix:
             for term in prefix:
                 chosen.update(self.contains.get(term, ()))
@@ -504,14 +655,12 @@ class _ConflictIndex:
             if other.id == claim.id:
                 continue
             other_lex = self.lex[index]
-            if lex.cjk or other_lex.cjk:
-                contradicts = any(_LEXICAL.judge(a, b).relation == "contradicts"
-                                  for a, b in ((claim.text, other.text), (other.text, claim.text)))
-            else:
-                shared = len(lex.words & other_lex.words)
-                contradicts = (_directed_contradicts(lex, other_lex, shared, self.related)
-                               or _directed_contradicts(other_lex, lex, shared, self.related))
-            if contradicts:
+            shared = len(lex.words & other_lex.words)
+            if (lex.cjk or other_lex.cjk or lex.keys & other_lex.keys
+                    or _reaches_related(lex, other_lex, shared, self.related)
+                    or _reaches_related(other_lex, lex, shared, self.related)) and any(
+                    _LEXICAL.judge(a, b).relation == "contradicts"
+                    for a, b in ((claim.text, other.text), (other.text, claim.text))):
                 found.append(Issue(kind="internal_conflict",
                                    detail=f"may contradict {other.id} at {other.location}: \"{other.text}\""))
         return found
@@ -544,6 +693,7 @@ def _overlaps(a: EvidenceSpan, b: EvidenceSpan) -> bool:
 
 
 def status_of(evidence: list[EvidenceFinding]) -> Status:
+    evidence = [e for e in evidence if e.relation != "unrelated"]  # a dismissal marks a claim neither way
     confirmed = {e.relation for e in evidence if e.confirmed}
     if confirmed:
         if confirmed == {"supports", "contradicts"}:
@@ -560,7 +710,8 @@ def status_of(evidence: list[EvidenceFinding]) -> Status:
 STATUS_PROPOSALS = {
     "challenged": ("review_or_retire", "A reviewer confirmed contrary evidence; correct or remove this memory by hand."),
     "conflicted": ("resolve_conflict", "Confirmed evidence points both ways; decide which source is authoritative."),
-    "candidate_counterevidence": ("verify_counterevidence", "Possible contrary evidence; confirm or dismiss it in reviews.jsonl."),
+    "candidate_counterevidence": ("verify_counterevidence", "Possible contrary evidence; in reviews.jsonl, confirm it with "
+                                                             "relation contradicts, or dismiss it with relation unrelated."),
     "disputed": ("resolve_dispute", "Verifiers disagree about the evidence; a human should read it."),
     "candidate_support": ("confirm_support", "Possible supporting evidence; confirm it to mark this memory supported."),
     "insufficient_evidence": ("attach_evidence", "No evidence found; add a source or label this memory unverified."),
@@ -663,9 +814,11 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
         raise EvidenceError("--exclude requires --evidence: patterns are relative to the evidence root")
     # When a selection is empty there is nothing to look up, so the evidence is not scanned.
     wanted = root is not None and (selected is None or bool(targets))
+    # The reviews file is about the memory too, and it quotes the very passages it dismisses.
+    left_out = [*memory_paths, *([Path(reviews)] if reviews else [])]
 
     def scanned() -> tuple[list[Passage], list[Skipped]]:
-        return scan(root, exclude=exclude, memory_files=memory_paths) if wanted else ([], [])
+        return scan(root, exclude=exclude, memory_files=left_out) if wanted else ([], [])
 
     with out_of_collection(scanned) as (passages, skipped):
         if targets and root is not None and exclude and not passages:
@@ -684,14 +837,28 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     """``audit_claims`` from the point where the evidence has been scanned. ``targets`` are the claims to report;
     ``skipped`` receives what the reviews leave out. ``conflict_index``, over ``claims``, can be shared."""
     by_id = {c.id: c for c in claims}
-    confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
+    reviewed_by_id = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
+    confirmed = {key: [e for e in found if e.relation != "unrelated"] for key, found in reviewed_by_id.items()}
+    # The same line pasted twice is one dismissal.
+    dismissed = {key: list({(e.reviewer, e.span.path, e.span.start): e for e in found
+                            if e.relation == "unrelated"}.values()) for key, found in reviewed_by_id.items()}
     index = _PassageIndex(passages, targets) if targets else None
-    # The lexical verifier calls a pair under ``related`` unrelated, and ``candidates`` drops that: no need to ask.
-    # Most shortlisted pairs are such pairs. Asking about them took longer than everything else after the scan.
-    # A negative ``max_judged`` slices from the end of the list, so there the floor would change what is kept.
-    skip_unrelated = type(verifier) is LexicalVerifier and (max_judged is None or max_judged >= 0)
-    floor = max(min_coverage, verifier.related) if skip_unrelated else min_coverage
-    picked = {claim.id: shortlist(claim, passages, floor, max_judged, index) for claim in targets}
+    # Under ``related`` the lexical verifier calls a pair unrelated, and ``candidates`` drops that: no need to ask. Most
+    # shortlisted pairs are such pairs, and asking about them took longer than everything else after the scan. The one
+    # exception is a pair naming the same setting, which ``naming_passages`` finds however little else it shares. It
+    # does not run with ``max_judged``, so there the floor would change what is kept.
+    nominate = verifier.name == _LEXICAL.name and max_judged is None
+    floor = max(min_coverage, verifier.related) if nominate and type(verifier) is LexicalVerifier else min_coverage
+    picked = {}
+    for claim in targets:
+        # A dismissed passage is out before anything is chosen, so it costs no model call and the next one takes its place.
+        left = _not_dismissed(passages, dismissed.get(claim.id, []))
+        picked[claim.id] = shortlist(claim, left, floor, max_judged, index if left is passages else None)
+    if nominate:  # a model's lower coverage bar lets these through
+        for claim_id, naming in naming_passages(targets, passages).items():
+            chosen = {id(passage) for passage in picked[claim_id]}
+            picked[claim_id] += [passage for passage in _not_dismissed(naming, dismissed.get(claim_id, []))
+                                 if id(passage) not in chosen]
     pairs = [(claim.text, passage.quote) for claim in targets for passage in picked[claim.id]]
     before = verifier_usage(verifier)
     judgments = iter(judge_all(verifier, pairs, max_concurrency))
@@ -702,6 +869,9 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     for claim in targets:
         reviewed = confirmed.get(claim.id, [])
         judged = [(passage, next(judgments)) for passage in picked[claim.id]]
+        if verifier.name == _LEXICAL.name:
+            judged = [(passage, weighed(judgment, passage.path, claim.text, passage.quote))
+                      for passage, judgment in judged]
         evidence = reviewed + [c for c in candidates(claim, judged, max_candidates)
                                if not any(_overlaps(c.span, r.span) for r in reviewed)]
         status = status_of(evidence)
@@ -711,8 +881,11 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
         proposals = [Proposal(action=a, reason=r) for a, r in dict.fromkeys(actions)]
         findings.append(Finding(memory_id=claim.id, text=claim.text, location=claim.location, section=claim.section,
                                 metadata=claim.metadata,
-                                status=status, evidence=evidence, issues=issues, proposals=proposals))
-    findings.sort(key=lambda f: SEVERITY.index(f.status))
+                                status=status, evidence=evidence, issues=issues, proposals=proposals,
+                                dismissed=dismissed.get(claim.id, [])))
+    # Within a status, the strongest reason first; a stable sort keeps file order after that.
+    findings.sort(key=lambda f: (SEVERITY.index(f.status), min((_rank(e, verifier.name) for e in f.evidence),
+                                                               default=len(REASONS))))
     summary = {s: n for s in SEVERITY if (n := sum(f.status == s for f in findings))}
     media = any(p.media for p in passages) or any(e.span.media for f in findings for e in f.evidence)
     return AuditReport(memory_file=memory_file, files_read=files_read,
@@ -720,4 +893,5 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
                        verifier=verifier.name, verifier_stats=stats, as_of=as_of, summary=summary,
                        findings=findings, skipped_evidence=skipped,
                        limitations=[LEXICAL_NOTE if isinstance(verifier, LexicalVerifier) else MODEL_NOTE,
-                                    *LIMITATIONS, *([MEDIA_NOTE] if media else [])])
+                                    *LIMITATIONS, *([MEDIA_NOTE] if media else [])],
+                       dismissed=dict(sorted(Counter(e.reviewer for f in findings for e in f.dismissed).items())))

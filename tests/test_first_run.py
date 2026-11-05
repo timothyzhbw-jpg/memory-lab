@@ -69,7 +69,8 @@ def _golden(name: str) -> bytes:
 
 
 @pytest.mark.parametrize("name", EXPLICIT)
-def test_runs_that_name_the_file_match_v050_byte_for_byte(name, memfalsify_demo, monkeypatch):
+def test_runs_that_name_the_file_match_their_goldens(name, memfalsify_demo, monkeypatch):
+    """Byte for byte as in 0.5.0, except where the stricter lexical rules changed a verdict or the limitation's wording."""
     monkeypatch.chdir(memfalsify_demo)
     shown = runner.invoke(app, ["audit", *EXPLICIT[name]])
     assert shown.exit_code == 0, shown.output

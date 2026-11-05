@@ -24,6 +24,7 @@ from memcore.paths import InputPathError, input_path
 from memcore.reading import ReadLimitError, available, read_input_bytes, take, walk_files
 from memcore.sidecar import LABELS, MEDIA_SUFFIXES
 
+from .blocks import unwrapped
 from .text import features, sentence_spans
 
 MEDIA = MEDIA_SUFFIXES
@@ -74,6 +75,67 @@ class Passage:
 class Skipped(BaseModel):
     path: str
     reason: str
+
+
+MAX_LINE = 1000  # characters: a longer line is minified, generated or embedded data, not a passage
+LONG_LINE = re.compile(rf"[^\n]{{{MAX_LINE + 1},}}")
+VENDORED_DIRS = frozenset({"vendor", "third_party", "thirdparty", "testdata", "fixtures", "__snapshots__"})
+VENDORED_DIR = "vendored or generated directory: not read as evidence"
+GENERATED_NAMES = ("*.min.js", "*.min.css", "*.snap", "*.svg", "*.patch", "*.lock", "package-lock.json",
+                   "pnpm-lock.yaml", "npm-shrinkwrap.json", "go.sum")
+GENERATED_FILE = "vendored or generated file: not read as evidence"
+
+
+def left_out_reason(relative: str) -> str | None:
+    """Why a directory scan does not read this root-relative path, if it is vendored or generated."""
+    *directories, name = PurePath(relative.lower()).parts
+    if VENDORED_DIRS.intersection(directories):
+        return VENDORED_DIR
+    return GENERATED_FILE if any(fnmatchcase(name, pattern) for pattern in GENERATED_NAMES) else None
+
+
+def long_lines_note(count: int) -> str:
+    return f"long lines: {count} over {MAX_LINE:,} characters not read as passages"
+
+
+_CODE_SUFFIXES = frozenset({".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".rs", ".go", ".java",
+                            ".kt", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".sh", ".bash"})
+_DOCUMENT_SUFFIXES = frozenset({".md", ".mdx", ".mdc", ".markdown", ".rst"})
+_PROSE_SUFFIXES = _DOCUMENT_SUFFIXES | {".txt"}
+_TEST_DIRS = frozenset({"test", "tests", "__tests__"})  # its code and data show a case; a document in it says how things are
+_TEST_CODE_DIRS = frozenset({"testing", "spec", "specs", "e2e"})  # only code: a spec can as well be what everything follows
+_TEST_NAME = re.compile(r"^test_|_test\.|\.test\.|_spec\.|\.spec\.|^conftest\.py$")
+_CHANGELOG_DIRS = frozenset({"changelog", "changelogs"})
+# ``CHANGELOG-v6.md``, ``release-notes-2.md``, and only just ``HISTORY.rst`` or ``NEWS``: docs/history-retention.md is a
+# document about retention.
+_CHANGELOG_NAME = re.compile(r"^(?:changelog|release[-_]notes|breaking[-_]changes)\b|^(?:changes|history|news|releases)(?:\.\w+)*$")
+_EXAMPLE_DIRS = frozenset({"example", "examples", "sample", "samples", "demo", "demos", "cookbook", "cookbooks"})
+_EXAMPLE_NAME = re.compile(r"^examples?\.")
+
+
+def is_code(relative: str) -> bool:
+    return PurePath(relative).suffix.lower() in _CODE_SUFFIXES
+
+
+def source_kind(relative: str) -> str | None:
+    """``test``, ``changelog`` or ``example`` when the path says the file is one of those: text that shows or records
+    a case rather than states how things are."""
+    *directories, name = PurePath(relative.lower()).parts
+    folders = set(directories)
+    if ((folders & _TEST_DIRS and PurePath(name).suffix not in _DOCUMENT_SUFFIXES)
+            or ((folders & _TEST_CODE_DIRS or _TEST_NAME.search(name)) and is_code(name))):
+        return "test"
+    if (folders & _CHANGELOG_DIRS or _CHANGELOG_NAME.search(name)) and not is_code(name):  # history.py is code
+        return "changelog"
+    if folders & _EXAMPLE_DIRS or _EXAMPLE_NAME.search(name):
+        return "example"
+    return None
+
+
+def as_read(name: str, text: str) -> str:
+    """A file's text as passages are cut from it, at the same length, so offsets still point into the file. In prose, a
+    sentence wrapped over several lines is one passage, as it is in a memory file. Code and data stay line by line."""
+    return unwrapped(text) if PurePath(name).suffix.lower() in _PROSE_SUFFIXES else text
 
 
 def _matches(relative: str, patterns: list[str], directory: bool = False) -> bool:
@@ -130,6 +192,9 @@ def scan(root: Path, exclude: Iterable[str] = (),
             if (Path(directory) / name).is_symlink():
                 skipped.append(Skipped(path=(base / name).as_posix(), reason="symlinked directory not followed"))
                 dirnames.remove(name)
+            elif name.lower() in VENDORED_DIRS:
+                skipped.append(Skipped(path=(base / name).as_posix(), reason=VENDORED_DIR))
+                dirnames.remove(name)
         # Media files are decided after their directory's sidecars, so entries stay in name order.
         local: list[Skipped] = []
         media: dict[str, str] = {}  # media file name -> relative path
@@ -146,6 +211,9 @@ def scan(root: Path, exclude: Iterable[str] = (),
                 local.append(Skipped(path=relative, reason=reason))
                 continue
             if resolved in excluded:
+                continue
+            if reason := left_out_reason(relative):
+                local.append(Skipped(path=relative, reason=reason))
                 continue
             if not resolved.is_file():
                 broken = path.is_symlink() and not resolved.exists()
@@ -194,7 +262,12 @@ def scan(root: Path, exclude: Iterable[str] = (),
                              if (p := _passage(relative, digest, text, newlines, unit.start, unit.end,
                                                sidecar.ref(unit)))]
                 continue
-            passages += [p for start, end in sentence_spans(text)
+            long_lines = LONG_LINE.findall(text)
+            if long_lines:
+                local.append(Skipped(path=relative, reason=long_lines_note(len(long_lines))))
+            # Blanked with the same length, so the spans still point into the file as it is.
+            readable = LONG_LINE.sub(lambda m: " " * len(m.group()), text) if long_lines else text
+            passages += [p for start, end in sentence_spans(as_read(name, readable))
                          if (p := _passage(relative, digest, text, newlines, start, end))]
         covered = {media[name] for name in bound if name in media}
         skipped += [s for s in local if not (s.reason == NO_SIDECAR and s.path in covered)]

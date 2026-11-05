@@ -667,6 +667,31 @@ def test_rollback_readds_one_sentence_of_a_longer_line(repo):
     assert repo.read("MEMORY.md") == b"# Notes\n\n* Feature B was postponed.\n* It ships in Q3.\n"
 
 
+def test_rollback_readds_a_sentence_on_one_line_when_its_first_line_would_stand_alone(repo):
+    """The sentence started at the end of a longer line, so its own first line is too short to read as wrapped."""
+    before = "The cache holds entries for each tenant today. Zeta\nreview eta goes on for a while here.\n"
+    base = repo.commit("base", {"MEMORY.md": before})
+    repo.write({"MEMORY.md": "The cache holds entries for each tenant today.\n"})
+    gone = claims_of("Zeta review eta goes on for a while here.\n")[0].id
+    apply(repo, rollback_patch(repo.root / "MEMORY.md", gone, base).patch)
+    assert repo.read("MEMORY.md") == (b"The cache holds entries for each tenant today.\n"
+                                      b"Zeta review eta goes on for a while here.\n")
+    assert {c.id for c in claims_of(repo.read("MEMORY.md").decode())} == {c.id for c in claims_of(before)}
+
+
+def test_rollback_leaves_a_neighbor_in_the_block_as_it_reads(repo):
+    """A shorter old wording leaves the neighbor's first line too short to read as wrapped."""
+    base = repo.commit("base", {"MEMORY.md": "The alpha beta gamma delta work ships in Q3.\n\n"
+                                             "Review Chi mu goes on for a while here.\n"})
+    repo.write({"MEMORY.md": "The alpha beta gamma delta work ships in the third quarter now. Review\n"
+                             "Chi mu goes on for a while here.\n"})
+    current = claims_of("The alpha beta gamma delta work ships in the third quarter now.\n")[0].id
+    apply(repo, rollback_patch(repo.root / "MEMORY.md", current, base).patch)
+    assert repo.read("MEMORY.md") == b"The alpha beta gamma delta work ships in Q3. Review Chi mu goes on for a while here.\n"
+    assert {c.text for c in claims_of(repo.read("MEMORY.md").decode())} == {
+        "The alpha beta gamma delta work ships in Q3.", "Review Chi mu goes on for a while here."}
+
+
 def test_rollback_without_anchors_goes_under_the_heading_or_at_the_end(repo):
     base = repo.commit("base", {"MEMORY.md": "# A\n\n- The cache uses Redis.\n\n# B\n\n- The queue runs on Kafka."})
     repo.write({"MEMORY.md": "# A\n\n# C\n\n- Deploys go through staging."})
