@@ -189,6 +189,7 @@ def test_a_sentence_that_starts_with_a_path_keeps_it(tmp_path):
     ("- Read `docs/crates.md` (if exists) before starting.\n", "docs/local.md"),
     ("- Create `src/brand_new.py` for each new parser.\n", "src/local.py"),
     ("- The tool writes `src/plan.json` during the build.\n", "src/local.py"),
+    ("- Never hand-edit generated files: `src/functions/database-types.ts`, `src/gen.ts` and more.\n", "src/local.py"),
     ("- The module is ready to move to `packages/skills/backend` next year.\n", "packages/local.txt"),
 ])
 def test_noise_stays_silent(tmp_path, memory, present):

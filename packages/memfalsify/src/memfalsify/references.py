@@ -102,7 +102,7 @@ _LINE_WORDS = {
     "gone": re.compile(r"\b(?:removed|deleted|renamed|deprecated|no longer|formerly|previously|used to be|was moved|"
                        r"moved from|moved to|migrated from|replaced by|does not exist|doesn't exist)\b"
                        r"|已?被?(?:删除|移除)|已?(?:改名|重命名)|不再|已?(?:废弃|弃用)|已?迁移|搬到|不存在", re.IGNORECASE),
-    "made": re.compile(r"\b(?:create|creates|creating|generates?|generating|new file|will be|will live|would be|"
+    "made": re.compile(r"\b(?:create|creates|creating|generates?|generated|generating|new file|will be|will live|would be|"
                        r"write to|writes|written to|save to|saves to|saved to|scaffolds?|outputs?|produces?|move to|"
                        r"ignored|gitignored|untracked|not committed|if (?:it )?exists?|if present|when present|if any|"
                        r"optional(?:ly)?|e\.g|for example|such as)\b"
