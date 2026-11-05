@@ -240,8 +240,8 @@ def test_a_short_piece_cut_from_a_sentence_goes_but_not_a_short_sentence():
     assert texts("Bump the version; 3 files change;\n") == ["Bump the version;", "3 files change;"]
     assert texts("The manifests are checked; tests/test_packaging.py checks them;\n") == [
         "The manifests are checked;", "tests/test_packaging.py checks them;"]
-    assert texts("Bump the version; pnpm checks them; it stops there.\n") == [
-        "Bump the version;", "pnpm checks them;", "it stops there."]
+    assert texts("Bump the version; pnpm checks them; it stops the build.\n") == [
+        "Bump the version;", "pnpm checks them;", "it stops the build."]
 
 
 def test_a_list_marker_read_as_a_sentence_does_not_make_the_next_part_a_piece():
