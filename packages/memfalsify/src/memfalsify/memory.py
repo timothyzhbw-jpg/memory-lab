@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from bisect import bisect_left
 from collections.abc import Iterator
+from itertools import chain
 from pathlib import Path
 from typing import Literal, NamedTuple
 
@@ -93,8 +95,10 @@ def _strip(pattern: re.Pattern, text: str, origin: list[int], keep_group: int | 
     return "".join(out), where
 
 
-def _expand_markup(raw: str, start: int, end: int, others: list[tuple[int, int]]) -> tuple[int, int]:
-    """Grow a content span to the link or emphasis that wraps it, and stop at a neighbor's content.
+def _expand_markup(markup: list[tuple[int, int]], start: int, end: int,
+                   others: list[tuple[int, int]]) -> tuple[int, int]:
+    """Grow a content span to the link or emphasis that wraps it, and stop at a neighbor's content. ``markup`` is the
+    span of every link and emphasis marker, in order: going both ways, a long run of markers takes few passes.
 
     A match that also overlaps or touches another sentence (``[A. B.](url)``, or ``****`` between two
     sentences) is left outside. Rollback substitutes this span, so taking the shared markup would keep
@@ -102,23 +106,21 @@ def _expand_markup(raw: str, start: int, end: int, others: list[tuple[int, int]]
     """
     while True:
         grew = False
-        for pattern in (LINK, WIKILINK, EMPHASIS):
-            for match in pattern.finditer(raw):
-                ms, me = match.span()
-                if me != start and ms != end and not (ms < end and me > start):
-                    continue
-                if any((ms < oe and me > os) or me == os or ms == oe for os, oe in others):
-                    continue
-                new_s, new_e = min(start, ms), max(end, me)
-                if new_s < start or new_e > end:
-                    start, end = new_s, new_e
-                    grew = True
+        for ms, me in chain(markup, reversed(markup)):
+            if me != start and ms != end and not (ms < end and me > start):
+                continue
+            if any((ms < oe and me > os) or me == os or ms == oe for os, oe in others):
+                continue
+            new_s, new_e = min(start, ms), max(end, me)
+            if new_s < start or new_e > end:
+                start, end = new_s, new_e
+                grew = True
         if not grew:
             return start, end
 
 
-_WRAP = re.compile(r"[ \t]*\n[ \t]*(?:>[ \t]*)*")
-_NO_SPACE = re.compile("[㐀-鿿　-〿＀-￯]")  # Chinese characters and punctuation
+_WRAP = re.compile(r"\n[ \t]*(?:>[ \t]*)*")
+_NO_SPACE = re.compile("[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]")  # Chinese characters and punctuation
 
 
 def _unwrap(text: str, origin: list[int]) -> tuple[str, list[int]]:
@@ -126,9 +128,10 @@ def _unwrap(text: str, origin: list[int]) -> tuple[str, list[int]]:
     space, or as nothing between two Chinese characters, which take no space."""
     out, where, last = [], [], 0
     for match in _WRAP.finditer(text):
-        out.append(text[last:match.start()])
-        where += origin[last:match.start()]
-        if not (_NO_SPACE.match(text[match.start() - 1:match.start()]) and _NO_SPACE.match(text[match.end():match.end() + 1])):
+        before = len(text[last:match.start()].rstrip(" \t")) + last  # any spaces that end the line go too
+        out.append(text[last:before])
+        where += origin[last:before]
+        if not (_NO_SPACE.match(text[before - 1:before]) and _NO_SPACE.match(text[match.end():match.end() + 1])):
             out.append(" ")
             where.append(origin[match.start()])
         last = match.end()
@@ -159,8 +162,9 @@ def is_fragment(text: str, position: int = 0) -> bool:
     Deliberately narrow, since a dropped claim is never checked: Chinese text always stays, and so does anything that
     reads as a sentence, such as ``Tests use pytest.``. What goes: markup with nothing else (a closing tag, a link
     definition), a label ending in a colon (``Run ty:``, ``When writing comments:``), and a short piece in lower case
-    with no number and no word that says anything, cut from a longer sentence at a semicolon or a period
-    (``time-based assertions;``). A whole list item stays even so: ``pnpm workspaces`` under ``Stack`` is a fact.
+    between two semicolons with no number and no word that says anything (``time-based assertions;``). A name can open a
+    sentence in lower case (``tests/test_x.py checks them.``), and a whole list item stays even with no verb:
+    ``pnpm workspaces`` under ``Stack`` is a fact.
     """
     if CJK.search(text):
         return False
@@ -171,7 +175,8 @@ def is_fragment(text: str, position: int = 0) -> bool:
     if text.endswith(":") and not digit:
         if len(words) <= 3 or (_LABEL_OPENS.match(text) and "," not in text and len(words) <= 12):
             return True
-    return (position > 0 and len(words) <= 4 and text[0].islower() and not digit
+    return (position > 0 and text.endswith(";") and len(words) <= 4 and text[0].islower() and not digit
+            and not re.search(r"[/._]", words[0]) and not any(word.endswith("s") for word in words[1:-1])
             and not any(word.strip(".,;:()'\"").lower() in _SAYS for word in words))
 
 
@@ -197,7 +202,8 @@ def sentences(raw: str, *, row: bool = False) -> list[tuple[str, int, int]]:
                 found.append((text, origin[start], origin[end - 1] + 1))
             position += 1
     content = [(start, end) for _, start, end in found]
-    return [(text, *_expand_markup(raw, start, end, content[:i] + content[i + 1:]))
+    markup = sorted(match.span() for pattern in (LINK, WIKILINK, EMPHASIS) for match in pattern.finditer(raw)) if found else []
+    return [(text, *_expand_markup(markup, start, end, content[:i] + content[i + 1:]))
             for i, (text, start, end) in enumerate(found)]
 
 
@@ -221,9 +227,8 @@ _UNDERLINE = re.compile(r"[ \t]*(?:=+|-{2,})[ \t]*")
 _TABLE_RULE = re.compile(r"[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*")
 _TAGS_ONLY = re.compile(r"[ \t]*(?:</?[A-Za-z][^<>]*>[ \t]*)+")
 _HEADING = re.compile(r"^\s*#{1,6}\s+(.*)")
-_HARD_BREAK = re.compile(r"(?:[ ]{2,}|\\|<br\s*/?>)$", re.I)
+_BREAK_TAG = re.compile(r"<br\s*/?>$", re.I)
 _FINISHED = re.compile(r"[.!?;。！？；][\"')\]*_`]*$")
-_LAST_WORD = re.compile(r"([A-Za-z']+)[*_`]*$")
 _ENDS_IN_URL = re.compile(r"(?<!\S)[a-z]+://\S+$")
 _KEYED = re.compile(r"[*_`]*[\w /-]{1,24}[*_`]*:[*_`]*\s")  # "Language: Python", each line a key of its own
 WRAP_WIDTH = 60  # columns: a line this long that stops mid-sentence was wrapped; a shorter one may be a line of its own
@@ -254,15 +259,14 @@ def _is_wrapped(previous: str, line: str) -> bool:
     """Whether ``line`` goes on with the sentence of ``previous``. Markdown says always, but people also write short
     lines with no marker and mean each on its own (``Project: foo`` over ``Language: Python``). A finished sentence is
     cut at its period either way."""
-    if _HARD_BREAK.search(previous):
+    if previous.endswith(("  ", "\\")) or _BREAK_TAG.search(previous[-16:]):  # a hard line break
         return False
     before = previous.strip()
     if _FINISHED.search(before):
         return True
-    if before.endswith(":") or _ENDS_IN_URL.search(before) or (_KEYED.match(before) and _KEYED.match(line.strip())):
+    if before.endswith(":") or _ENDS_IN_URL.search(before) or (_KEYED.match(before[:64]) and _KEYED.match(line.strip()[:64])):
         return False
-    word = _LAST_WORD.search(before)
-    if before.endswith((",", "(", "-", "–", "—", "/")) or (word and word.group(1).lower() in STOPWORDS):
+    if before.endswith((",", "(", "-", "–", "—", "/")) or before.rsplit(None, 1)[-1].strip("*_`").lower() in STOPWORDS:
         return True
     opening = next((char for char in line if char.isalnum()), "")
     width = _width(before)
@@ -277,6 +281,7 @@ def blocks(lines: list[str], start: int = 0) -> list[Block]:
     in_quote = in_item = False  # what the open block is
     offset = 0  # where an open list item's text starts
     fenced = in_table = in_list = False
+    comment_ends = [at for at, line in enumerate(lines) if "-->" in line]
 
     def close(last: int) -> None:
         nonlocal first
@@ -308,8 +313,8 @@ def blocks(lines: list[str], start: int = 0) -> list[Block]:
         if raw.lstrip().startswith("<!--"):
             close(index - 1)
             in_table = False
-            if "-->" not in raw:  # to the comment's end, if it has one: an unclosed comment hides nothing
-                index = next((at for at in range(index + 1, len(lines)) if "-->" in lines[at]), index)
+            end = bisect_left(comment_ends, index)  # to the comment's end, if it has one: an unclosed one hides nothing
+            index = comment_ends[end] if end < len(comment_ends) else index
             continue
         if heading := _HEADING.match(raw):
             close(index - 1)

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from memcore import EvidenceSpan
 from memcore.display import report_text, table_code
 
-from .audit import ATTENTION, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line
+from .audit import ATTENTION, DISMISSED, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line
 from .corpus import REPORT_HEADER
 from .formats import Value
 from .gitstore import code_span, show_text
@@ -100,7 +100,8 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
     if f.dismissed:
         out.append("**Dismissed** (read by a person; not counted as evidence)")
         for e in f.dismissed:
-            out.append(f"- dismissed by {show(e.reviewer)} · {source(e.span, show)} · {show(e.rationale)}")
+            note = "" if e.rationale == DISMISSED else f" · {show(e.rationale)}"
+            out.append(f"- dismissed by {show(e.reviewer)} · {source(e.span, show)}{note}")
             out += quote_lines(e.span.quote, show)
         out.append("")
     if f.issues:

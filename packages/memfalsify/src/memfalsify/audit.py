@@ -153,6 +153,7 @@ LIMITATIONS = [
 
 
 NO_LONGER_APPLIES = "review no longer applies"
+DISMISSED = "dismissed by reviewer"  # what a dismissal with no note says for itself
 STALE_ID_HINT = ("the memory text may have changed, or this version may read it as a different sentence; "
                  "run `memfalsify claims` and re-review it")
 
@@ -208,7 +209,7 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
         dismissal = review.relation == "unrelated"
         confirmed.setdefault(review.memory_id, []).append(EvidenceFinding(
             relation=review.relation, confirmed=True, reviewer=review.reviewer,
-            rationale=review.note or ("dismissed by reviewer" if dismissal else "confirmed by reviewer"), span=span))
+            rationale=review.note or (DISMISSED if dismissal else "confirmed by reviewer"), span=span))
     if stale:
         raise EvidenceError("; ".join(stale) + f" ({STALE_ID_HINT})")
     return confirmed

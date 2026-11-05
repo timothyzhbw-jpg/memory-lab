@@ -311,7 +311,10 @@ def test_the_report_says_how_many_and_by_whom(tmp_path):
         "The bulk export has a limit of 10 records per request.", "export.md", claim_id(other), "bo")))
     assert "- Dismissed by a person: 2 candidate(s) (ada: 1, bo: 1)\n" in markdown
     assert "**Dismissed** (read by a person; not counted as evidence)" in markdown
-    assert "- dismissed by bo · `export.md:1`" in markdown
+    assert "- dismissed by bo · `export.md:1` · sha256 " in markdown
+    assert "· dismissed by reviewer" not in markdown
+    noted = to_markdown(run(root, dismissal(note="that is the free tier")))
+    assert " · that is the free tier\n" in noted
     assert "POSSIBLE COUNTEREVIDENCE" not in markdown
 
 

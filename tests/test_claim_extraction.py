@@ -232,12 +232,16 @@ def test_a_chinese_table_header_goes_too():
 
 def test_a_short_piece_cut_from_a_sentence_goes_but_not_a_short_sentence():
     assert texts("Avoid sleeps in tests; time-based assertions; retries with no limit; flaky ones.\n") == [
-        "Avoid sleeps in tests;"]
+        "Avoid sleeps in tests;", "flaky ones."]
     assert texts("Avoid sleeps in tests; retries are capped at the client.\n") == [
         "Avoid sleeps in tests;", "retries are capped at the client."]
-    assert texts("Run the checks first. They use pytest. tests live here. pnpm-only.\n") == [
-        "Run the checks first.", "They use pytest.", "tests live here."]
-    assert texts("Bump the version; 3 files change.\n") == ["Bump the version;", "3 files change."]
+    assert texts("Run the checks first. They use pytest. tests live here. flaky ones.\n") == [
+        "Run the checks first.", "They use pytest.", "tests live here.", "flaky ones."]
+    assert texts("Bump the version; 3 files change;\n") == ["Bump the version;", "3 files change;"]
+    assert texts("The manifests are checked; tests/test_packaging.py checks them;\n") == [
+        "The manifests are checked;", "tests/test_packaging.py checks them;"]
+    assert texts("Bump the version; pnpm checks them; it stops there.\n") == [
+        "Bump the version;", "pnpm checks them;", "it stops there."]
 
 
 def test_a_list_marker_read_as_a_sentence_does_not_make_the_next_part_a_piece():
@@ -300,6 +304,9 @@ def test_blocks_of_a_file_cover_the_lines_of_each_claim():
 @pytest.mark.parametrize("hostile", [
     "|" * 5000, "- " * 5000, "> " * 5000, "<" * 5000, "<a " * 5000, "-" * 5000, "=\n" * 2000,
     "[" * 2000 + "\n" + "]" * 2000, "word " * 500 + "\n" + "word " * 500,
+    # Each of these takes minutes if a pattern backtracks over the run.
+    "a" + " " * 200_000 + "b\nc", "_" * 200_000 + ": x\n" + "_" * 200_000 + ": y", "x" * 200_000 + " ,\nnext",
+    "<!-- open\n" * 50_000, "line that goes on\n" * 50_000,
 ])
 def test_odd_input_only_costs_a_few_claims(hostile):
     parse_text(hostile, "MEMORY.md")

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from memcore import htmlpage as h
 
-from .audit import SEVERITY, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line
+from .audit import DISMISSED, SEVERITY, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line
 from .corpus import HTML_GENERATOR
 from .history import ClaimVersion, DiffReport
 from .report import LABELS, attention_count, can_dismiss
@@ -41,8 +41,9 @@ def _evidence(e: EvidenceFinding, memory_id: str) -> str:
 
 
 def _dismissed(e: EvidenceFinding) -> str:
+    note = [] if e.rationale == DISMISSED else [f"<p>{h.text(e.rationale)}</p>"]
     return "\n".join([f"<p>{h.badge('dismissed', RELATION_TONE['unrelated'])} by {h.text(e.reviewer)} "
-                      f"&middot; {h.span_ref(e.span)}</p>", f"<p>{h.text(e.rationale)}</p>", h.quote(e.span.quote)])
+                      f"&middot; {h.span_ref(e.span)}</p>", *note, h.quote(e.span.quote)])
 
 
 def _metadata(f: Finding) -> list[str]:
