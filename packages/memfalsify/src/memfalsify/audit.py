@@ -1,6 +1,7 @@
 """MemFalsify audit: challenge each memory claim against evidence. Read-only by construction."""
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -8,9 +9,10 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from memcore import EvidenceError, EvidenceSpan, locate_quote, read_jsonl
+from memcore.display import json_shield
 from memcore.paths import InputPathError, input_path
 from memcore.reading import confined_reads, confinement_root, confinement_supported, take
 
@@ -31,11 +33,12 @@ ATTENTION = frozenset({"challenged", "conflicted", "candidate_counterevidence", 
 
 
 class Review(BaseModel):
-    """A human-confirmed assertion. Only reviews can move a memory to supported/challenged."""
+    """What a person found on reading a passage. Only reviews can move a memory to supported/challenged. ``unrelated``
+    says the passage does not bear on the claim: it stops being a candidate, and marks the claim neither way."""
     model_config = ConfigDict(extra="forbid")
 
     memory_id: str
-    relation: Literal["supports", "contradicts"]
+    relation: Literal["supports", "contradicts", "unrelated"]
     path: str
     quote: str = Field(min_length=1)
     reviewer: str = Field(min_length=1)
@@ -45,8 +48,15 @@ class Review(BaseModel):
                                             "e.g. t=12.5,17 (default: the first one containing the quote)")
 
 
+def _without_empty(data: object, field: str) -> object:
+    """A field that is new, and empty in most reports, stays out of them: they keep the shape and bytes they had."""
+    if isinstance(data, dict) and not data.get(field):
+        data.pop(field, None)
+    return data
+
+
 class EvidenceFinding(BaseModel):
-    relation: Literal["supports", "contradicts", "disputed"]
+    relation: Literal["supports", "contradicts", "disputed", "unrelated"]  # unrelated: only in Finding.dismissed
     confirmed: bool
     rationale: str
     reviewer: str | None = None
@@ -76,6 +86,11 @@ class Finding(BaseModel):
     evidence: list[EvidenceFinding]
     issues: list[Issue]
     proposals: list[Proposal]
+    dismissed: list[EvidenceFinding] = []  # passages a person read and found unrelated; left out of the JSON when none
+
+    @model_serializer(mode="wrap")
+    def _omit_empty(self, handler):
+        return _without_empty(handler(self), "dismissed")
 
 
 class AuditReport(BaseModel):
@@ -93,6 +108,11 @@ class AuditReport(BaseModel):
     findings: list[Finding]
     skipped_evidence: list[Skipped]
     limitations: list[str]
+    dismissed: dict[str, int] = {}  # reviewer -> candidates dismissed; left out of the JSON when none
+
+    @model_serializer(mode="wrap")
+    def _omit_empty(self, handler):
+        return _without_empty(handler(self), "dismissed")
 
 
 class AuditSet(BaseModel):
@@ -111,6 +131,11 @@ class AuditSet(BaseModel):
     summary: dict[str, int]
     reports: list[AuditReport]
     not_searched: list[Skipped] = []  # places the search for memory files passed over, with the reason
+    dismissed: dict[str, int] = {}  # reviewer -> candidates dismissed, added up; left out of the JSON when none
+
+    @model_serializer(mode="wrap")
+    def _omit_empty(self, handler):
+        return _without_empty(handler(self), "dismissed")
 
 
 LEXICAL_NOTE = ("Unconfirmed matches are candidates found by comparing words: support by term overlap, a contradiction by "
@@ -127,16 +152,42 @@ LIMITATIONS = [
 ]
 
 
+NO_LONGER_APPLIES = "review no longer applies"
+STALE_ID_HINT = ("the memory text may have changed, or this version may read it as a different sentence; "
+                 "run `memfalsify claims` and re-review it")
+
+
+def _locate(evidence_root: Path, review: Review) -> EvidenceSpan:
+    # Read it (and, for a sidecar, hash its media file) under descriptor confinement where supported,
+    # so a swap after the policy check cannot redirect the read.
+    if confinement_root() is None and confinement_supported():
+        with confined_reads(evidence_root):
+            return locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+    return locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+
+
 def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim], *,
                  skipped: list[Skipped] | None = None) -> dict[str, list[EvidenceFinding]]:
+    """Each claim's reviews, with the quote located in the evidence as it is now.
+
+    A review that confirms something must hold: a line naming a claim the memory no longer has, or a quote no longer in
+    its file, stops the audit. A dismissal only takes a candidate away, so when its claim or quote is gone it just stops
+    applying, and ``skipped`` receives a line that says so (with no such list, it stops the audit too)."""
     if evidence_root is None:
         raise EvidenceError("--reviews requires --evidence: review quotes are located inside the evidence root")
     confirmed: dict[str, list[EvidenceFinding]] = {}
+    stale: list[str] = []
     for number, record in read_jsonl(path):
         review = Review.model_validate(record)
+        lenient = review.relation == "unrelated" and skipped is not None
         if review.memory_id not in claims:
-            raise EvidenceError(f"{path}:{number}: unknown memory_id {review.memory_id} "
-                                "(the memory text may have changed; re-review it)")
+            if lenient:
+                skipped.append(Skipped(path=review.path, reason=f"{NO_LONGER_APPLIES}: {review.reviewer} dismissed this "
+                                                                f"passage for {review.memory_id}, which the memory no "
+                                                                "longer has"))
+            else:
+                stale.append(f"{path}:{number}: unknown memory_id {review.memory_id}")
+            continue
         # Human-confirmed evidence must obey the same policy as scanned evidence.
         try:
             input_path(evidence_root, Path(evidence_root).resolve() / review.path)
@@ -145,17 +196,48 @@ def load_reviews(path: Path, evidence_root: Path | None, claims: dict[str, Claim
                 skipped.append(Skipped(path=review.path, reason=f"review evidence skipped: {exc}"))
                 continue
             raise EvidenceError(f"review evidence skipped: {exc}") from None
-        # Read it (and, for a sidecar, hash its media file) under descriptor confinement where supported,
-        # so a swap after the policy check cannot redirect the read.
-        if confinement_root() is None and confinement_supported():
-            with confined_reads(evidence_root):
-                span = locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
-        else:
-            span = locate_quote(evidence_root, review.path, review.quote, review.locator, source_kind="file")
+        try:
+            span = _locate(evidence_root, review)
+        except (EvidenceError, OSError):
+            if not lenient:
+                raise
+            skipped.append(Skipped(path=review.path, reason=f"{NO_LONGER_APPLIES}: {review.reviewer} dismissed a passage "
+                                                            f"for {review.memory_id}, and its quote is no longer in "
+                                                            "this file"))
+            continue
+        dismissal = review.relation == "unrelated"
         confirmed.setdefault(review.memory_id, []).append(EvidenceFinding(
             relation=review.relation, confirmed=True, reviewer=review.reviewer,
-            rationale=review.note or "confirmed by reviewer", span=span))
+            rationale=review.note or ("dismissed by reviewer" if dismissal else "confirmed by reviewer"), span=span))
+    if stale:
+        raise EvidenceError("; ".join(stale) + f" ({STALE_ID_HINT})")
     return confirmed
+
+
+def dismissal_line(memory_id: str, span: EvidenceSpan, reviewer: str = "you") -> str:
+    """A ``reviews.jsonl`` record that dismisses this passage for this claim, ready to paste. What could not be shown
+    safely is in JSON escapes, which read back as the exact characters of the quote."""
+    record = {"memory_id": memory_id, "relation": "unrelated", "path": span.path, "quote": span.quote,
+              "reviewer": reviewer}
+    if span.media is not None:
+        record["locator"] = span.media.locator
+    return json_shield(json.dumps(record, ensure_ascii=False))
+
+
+def _dismisses(dismissal: EvidenceFinding, span: EvidenceSpan) -> bool:
+    """Whether a dismissal covers this passage: the passage it was located in, or the same words elsewhere in the file,
+    which ``locate_quote`` never reaches. A cue named by its locator is only that cue."""
+    if dismissal.span.path != span.path:
+        return False
+    if _overlaps(dismissal.span, span):
+        return True
+    return dismissal.span.media is None and (dismissal.span.quote in span.quote or span.quote in dismissal.span.quote)
+
+
+def _not_dismissed(passages: list[Passage], dismissed: list[EvidenceFinding]) -> list[Passage]:
+    if not dismissed:
+        return passages
+    return [passage for passage in passages if not any(_dismisses(d, passage.span) for d in dismissed)]
 
 
 def shortlist(claim: Claim, passages: list[Passage], min_coverage: float = 0.5,
@@ -547,6 +629,7 @@ def _overlaps(a: EvidenceSpan, b: EvidenceSpan) -> bool:
 
 
 def status_of(evidence: list[EvidenceFinding]) -> Status:
+    evidence = [e for e in evidence if e.relation != "unrelated"]  # a dismissal marks a claim neither way
     confirmed = {e.relation for e in evidence if e.confirmed}
     if confirmed:
         if confirmed == {"supports", "contradicts"}:
@@ -563,7 +646,8 @@ def status_of(evidence: list[EvidenceFinding]) -> Status:
 STATUS_PROPOSALS = {
     "challenged": ("review_or_retire", "A reviewer confirmed contrary evidence; correct or remove this memory by hand."),
     "conflicted": ("resolve_conflict", "Confirmed evidence points both ways; decide which source is authoritative."),
-    "candidate_counterevidence": ("verify_counterevidence", "Possible contrary evidence; confirm or dismiss it in reviews.jsonl."),
+    "candidate_counterevidence": ("verify_counterevidence", "Possible contrary evidence; in reviews.jsonl, confirm it with "
+                                                             "relation contradicts, or dismiss it with relation unrelated."),
     "disputed": ("resolve_dispute", "Verifiers disagree about the evidence; a human should read it."),
     "candidate_support": ("confirm_support", "Possible supporting evidence; confirm it to mark this memory supported."),
     "insufficient_evidence": ("attach_evidence", "No evidence found; add a source or label this memory unverified."),
@@ -621,7 +705,9 @@ def audit_claims(claims: list[Claim], *, memory_file: str, files_read: list[str]
         raise EvidenceError("--exclude requires --evidence: patterns are relative to the evidence root")
     # When a selection is empty there is nothing to look up, so the evidence is not scanned.
     scanned = root is not None and (selected is None or bool(targets))
-    passages, skipped = scan(root, exclude=exclude, memory_files=memory_paths) if scanned else ([], [])
+    # The reviews file is about the memory too, and it quotes the very passages it dismisses.
+    left_out = [*memory_paths, *([Path(reviews)] if reviews else [])]
+    passages, skipped = scan(root, exclude=exclude, memory_files=left_out) if scanned else ([], [])
     if targets and root is not None and exclude and not passages:
         raise EvidenceError(NOTHING_LEFT)
     return judge_passages(claims, targets, passages, skipped, memory_file=memory_file, files_read=files_read,
@@ -638,12 +724,17 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
     """``audit_claims`` from the point where the evidence has been scanned. ``targets`` are the claims to report;
     ``skipped`` receives what the reviews leave out. ``conflict_index``, over ``claims``, can be shared."""
     by_id = {c.id: c for c in claims}
-    confirmed = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
-    picked = {claim.id: shortlist(claim, passages, min_coverage, max_judged) for claim in targets}
+    reviewed_by_id = load_reviews(reviews, root, by_id, skipped=skipped) if reviews else {}
+    confirmed = {key: [e for e in found if e.relation != "unrelated"] for key, found in reviewed_by_id.items()}
+    dismissed = {key: [e for e in found if e.relation == "unrelated"] for key, found in reviewed_by_id.items()}
+    # A dismissed passage is out before anything is chosen, so it costs no model call and the next one takes its place.
+    picked = {claim.id: shortlist(claim, _not_dismissed(passages, dismissed.get(claim.id, [])), min_coverage, max_judged)
+              for claim in targets}
     if verifier.name == _LEXICAL.name and max_judged is None:  # a model's lower coverage bar lets these through
         for claim_id, naming in naming_passages(targets, passages).items():
             chosen = {id(passage) for passage in picked[claim_id]}
-            picked[claim_id] += [passage for passage in naming if id(passage) not in chosen]
+            picked[claim_id] += [passage for passage in _not_dismissed(naming, dismissed.get(claim_id, []))
+                                 if id(passage) not in chosen]
     pairs = [(claim.text, passage.span.quote) for claim in targets for passage in picked[claim.id]]
     before = verifier_usage(verifier)
     judgments = iter(judge_all(verifier, pairs, max_concurrency))
@@ -666,7 +757,8 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
         proposals = [Proposal(action=a, reason=r) for a, r in dict.fromkeys(actions)]
         findings.append(Finding(memory_id=claim.id, text=claim.text, location=claim.location, section=claim.section,
                                 metadata=claim.metadata,
-                                status=status, evidence=evidence, issues=issues, proposals=proposals))
+                                status=status, evidence=evidence, issues=issues, proposals=proposals,
+                                dismissed=dismissed.get(claim.id, [])))
     # Within a status, the strongest reason first; a stable sort keeps file order after that.
     findings.sort(key=lambda f: (SEVERITY.index(f.status), min((_rank(e, verifier.name) for e in f.evidence),
                                                                default=len(REASONS))))
@@ -677,4 +769,5 @@ def judge_passages(claims: list[Claim], targets: list[Claim], passages: list[Pas
                        verifier=verifier.name, verifier_stats=stats, as_of=as_of, summary=summary,
                        findings=findings, skipped_evidence=skipped,
                        limitations=[LEXICAL_NOTE if isinstance(verifier, LexicalVerifier) else MODEL_NOTE,
-                                    *LIMITATIONS, *([MEDIA_NOTE] if media else [])])
+                                    *LIMITATIONS, *([MEDIA_NOTE] if media else [])],
+                       dismissed=dict(sorted(Counter(e.reviewer for f in findings for e in f.dismissed).items())))

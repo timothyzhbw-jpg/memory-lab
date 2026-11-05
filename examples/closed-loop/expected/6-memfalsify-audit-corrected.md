@@ -19,9 +19,10 @@
 **Evidence**
 - contradicts (candidate, unconfirmed) · `database.md:3` · sha256 `78e1f22d39c6` · different values: claim ['15'] vs source ['16']
   > The main database runs PostgreSQL 16.
+  - Does not bear on this claim? Add to reviews.jsonl: `{"memory_id": "m-f0a6035e", "relation": "unrelated", "path": "database.md", "quote": "The main database runs PostgreSQL 16.", "reviewer": "you"}`
 
 **Proposed actions** (not applied)
-- `verify_counterevidence`: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.
+- `verify_counterevidence`: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.
 
 ### NO EVIDENCE · `m-314c50bc`
 

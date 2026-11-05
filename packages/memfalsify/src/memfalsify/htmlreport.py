@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from memcore import htmlpage as h
 
-from .audit import SEVERITY, AuditReport, AuditSet, EvidenceFinding, Finding
+from .audit import SEVERITY, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line
 from .corpus import HTML_GENERATOR
 from .history import ClaimVersion, DiffReport
-from .report import LABELS, attention_count
+from .report import LABELS, attention_count, can_dismiss
 from .verify import VerifierStats
 
 TONE = {"challenged": "red", "conflicted": "red", "candidate_counterevidence": "amber", "disputed": "amber",
@@ -27,7 +27,7 @@ def _where(location: str, section: str | None) -> str:
     return h.code(location) + (f" &middot; {h.text(section)}" if section else "")
 
 
-def _evidence(e: EvidenceFinding) -> str:
+def _evidence(e: EvidenceFinding, memory_id: str) -> str:
     who = f"confirmed by {h.text(e.reviewer)}" if e.confirmed else "candidate, unconfirmed"
     out = [f"<p>{h.badge(e.relation, RELATION_TONE[e.relation])} {who} &middot; {h.span_ref(e.span)}</p>",
            f"<p>{h.text(e.rationale)}</p>"]
@@ -35,7 +35,14 @@ def _evidence(e: EvidenceFinding) -> str:
         out.append(h.items(f"{h.text(o.verifier)}: {h.badge(o.relation, RELATION_TONE[o.relation])} "
                            f"{h.text(o.rationale)}" for o in e.opinions))
     out.append(h.quote(e.span.quote))
+    if can_dismiss(e):
+        out.append(f"<p>Does not bear on this claim? Add to reviews.jsonl: {h.code(dismissal_line(memory_id, e.span))}</p>")
     return "\n".join(out)
+
+
+def _dismissed(e: EvidenceFinding) -> str:
+    return "\n".join([f"<p>{h.badge('dismissed', RELATION_TONE['unrelated'])} by {h.text(e.reviewer)} "
+                      f"&middot; {h.span_ref(e.span)}</p>", f"<p>{h.text(e.rationale)}</p>", h.quote(e.span.quote)])
 
 
 def _metadata(f: Finding) -> list[str]:
@@ -54,7 +61,10 @@ def _finding(f: Finding, level: int) -> str:
            f"<p>{_where(f.location, f.section)}</p>",
            *_metadata(f)]
     if f.evidence:
-        out += ['<p class="label">Evidence</p>', h.items(_evidence(e) for e in f.evidence)]
+        out += ['<p class="label">Evidence</p>', h.items(_evidence(e, f.memory_id) for e in f.evidence)]
+    if f.dismissed:
+        out += ['<p class="label">Dismissed (read by a person; not counted as evidence)</p>',
+                h.items(_dismissed(e) for e in f.dismissed)]
     if f.issues:
         out += ['<p class="label">Issues</p>', h.items(f"{h.code(i.kind)}: {h.text(i.detail)}" for i in f.issues)]
     if f.proposals:
@@ -104,7 +114,15 @@ def _common_meta(report: AuditReport, mode: str, evidence_note: str = "") -> lis
     rows += [("Verifier", h.code(report.verifier)), ("As of", h.when(report.as_of)),
              ("Mode", f"<strong>{h.text(mode)}</strong> (no memory was modified)")]
     rows += [("API usage", _usage(stats)) for stats in report.verifier_stats]
+    rows += _dismissed_row(report.dismissed)
     return rows
+
+
+def _dismissed_row(dismissed: dict[str, int]) -> list[tuple[str, str]]:
+    if not dismissed:
+        return []
+    who = ", ".join(f"{h.text(name)}: {count}" for name, count in dismissed.items())
+    return [("Dismissed by a person", f"{sum(dismissed.values())} candidate(s) ({who})")]
 
 
 def _usage(stats: VerifierStats) -> str:
@@ -149,7 +167,8 @@ def set_to_html(result: AuditSet) -> str:
             ("Evidence root", h.code(result.evidence_root)),
             *([("Excluded from evidence", ", ".join(h.code(p) for p in result.excluded))] if result.excluded else []),
             ("Verifier", h.code(result.verifier)), ("As of", h.when(result.as_of)),
-            ("Mode", f"<strong>{h.text(result.mode)}</strong> (no memory was modified)")]
+            ("Mode", f"<strong>{h.text(result.mode)}</strong> (no memory was modified)"),
+            *_dismissed_row(result.dismissed)]
     body = ["<h1>MemFalsify audit report</h1>", h.meta(meta), "<section>\n<h2>Summary</h2>"]
     if result.summary:
         body.append(h.table("Memories by status", ["Status", "Memories"],

@@ -136,11 +136,12 @@ time { white-space: nowrap; }
 <ul>
 <li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>docs/api.md:3</code> <span class="muted">(characters 14&ndash;74)</span> &middot; sha256 <code class="hash">057549a717f819689300d9f6a6100815a89af373b943f7ab3a50b6c3b689ec71</code></p>
 <p>different values: claim [&#x27;100&#x27;] vs source [&#x27;60&#x27;]</p>
-<blockquote>The public API rate limit is 60 requests per minute per key.</blockquote></li>
+<blockquote>The public API rate limit is 60 requests per minute per key.</blockquote>
+<p>Does not bear on this claim? Add to reviews.jsonl: <code>{&quot;memory_id&quot;: &quot;m-9efe3be5&quot;, &quot;relation&quot;: &quot;unrelated&quot;, &quot;path&quot;: &quot;docs/api.md&quot;, &quot;quote&quot;: &quot;The public API rate limit is 60 requests per minute per key.&quot;, &quot;reviewer&quot;: &quot;you&quot;}</code></p></li>
 </ul>
 <p class="label">Proposed actions (not applied)</p>
 <ul>
-<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.</li>
 </ul>
 </article>
 <article class="item">
@@ -151,11 +152,12 @@ time { white-space: nowrap; }
 <ul>
 <li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>docs/database.md:3</code> <span class="muted">(characters 12&ndash;77)</span> &middot; sha256 <code class="hash">871f23010759eb6d0d18af3334e3d46bea2fd334a3c4058dc1e3eac75fe9337d</code></p>
 <p>different values: claim [&#x27;15&#x27;] vs source [&#x27;16&#x27;]</p>
-<blockquote>The main database runs PostgreSQL 16 since the September upgrade.</blockquote></li>
+<blockquote>The main database runs PostgreSQL 16 since the September upgrade.</blockquote>
+<p>Does not bear on this claim? Add to reviews.jsonl: <code>{&quot;memory_id&quot;: &quot;m-f0a6035e&quot;, &quot;relation&quot;: &quot;unrelated&quot;, &quot;path&quot;: &quot;docs/database.md&quot;, &quot;quote&quot;: &quot;The main database runs PostgreSQL 16 since the September upgrade.&quot;, &quot;reviewer&quot;: &quot;you&quot;}</code></p></li>
 </ul>
 <p class="label">Proposed actions (not applied)</p>
 <ul>
-<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.</li>
 </ul>
 </article>
 <article class="item">
@@ -166,7 +168,8 @@ time { white-space: nowrap; }
 <ul>
 <li><p><span class="badge red">contradicts</span> candidate, unconfirmed &middot; <code>notes/2026-09-12-incident.md:3</code> <span class="muted">(characters 23&ndash;98)</span> &middot; sha256 <code class="hash">870054974f9496baa1d5afeb42215764fe03270b40475e189313fa4fcf1d859d</code></p>
 <p>same subject, but only one side is negated</p>
-<blockquote>A hotfix was deployed directly to production, skipping the staging cluster.</blockquote></li>
+<blockquote>A hotfix was deployed directly to production, skipping the staging cluster.</blockquote>
+<p>Does not bear on this claim? Add to reviews.jsonl: <code>{&quot;memory_id&quot;: &quot;m-6d879fbb&quot;, &quot;relation&quot;: &quot;unrelated&quot;, &quot;path&quot;: &quot;notes/2026-09-12-incident.md&quot;, &quot;quote&quot;: &quot;A hotfix was deployed directly to production, skipping the staging cluster.&quot;, &quot;reviewer&quot;: &quot;you&quot;}</code></p></li>
 </ul>
 <p class="label">Issues</p>
 <ul>
@@ -174,7 +177,7 @@ time { white-space: nowrap; }
 </ul>
 <p class="label">Proposed actions (not applied)</p>
 <ul>
-<li><code>verify_counterevidence</code>: Possible contrary evidence; confirm or dismiss it in reviews.jsonl.</li>
+<li><code>verify_counterevidence</code>: Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.</li>
 <li><code>narrow_scope</code>: State the cases the evidence actually covers.</li>
 </ul>
 </article>

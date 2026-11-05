@@ -343,6 +343,9 @@ def init_command(
         "Then run:",
         "  memfalsify audit --reviews reviews.jsonl",
         "",
+        "If a flag is wrong, dismiss it instead: the report prints a line for that under each flag, with",
+        "\"relation\": \"unrelated\". The flag goes away, and the claim is not marked supported or challenged.",
+        "",
     ]))
 
 

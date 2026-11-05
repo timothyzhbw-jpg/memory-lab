@@ -6,7 +6,7 @@ from collections.abc import Callable
 from memcore import EvidenceSpan
 from memcore.display import report_text, table_code
 
-from .audit import ATTENTION, AuditReport, AuditSet, Finding
+from .audit import ATTENTION, AuditReport, AuditSet, EvidenceFinding, Finding, dismissal_line
 from .corpus import REPORT_HEADER
 from .formats import Value
 from .gitstore import code_span, show_text
@@ -65,6 +65,19 @@ def metadata_line(metadata: dict[str, Value]) -> str:
     return "Frontmatter: " + " · ".join(shown)
 
 
+def can_dismiss(e: EvidenceFinding) -> bool:
+    """A flag no person has settled: the report prints the line that dismisses it."""
+    return not e.confirmed and e.relation in ("contradicts", "disputed")
+
+
+def dismissal_lines(dismissed: dict[str, int]) -> list[str]:
+    """The report's count of candidates a person dismissed, and by whom; nothing when there are none."""
+    if not dismissed:
+        return []
+    who = ", ".join(f"{show_text(name)}: {count}" for name, count in dismissed.items())
+    return [f"- Dismissed by a person: {sum(dismissed.values())} candidate(s) ({who})"]
+
+
 def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
     def show(text: str) -> str:
         return show_text(text)
@@ -79,6 +92,15 @@ def _finding(f: Finding, *, scrub: bool = False) -> list[str]:
             who = f"confirmed by {show(e.reviewer)}" if e.confirmed else "candidate, unconfirmed"
             out.append(f"- {show(e.relation)} ({who}) · {source(e.span, show)} · {show(e.rationale)}")
             out += [f"  - {show(o.verifier)}: {show(o.relation)} · {show(o.rationale)}" for o in e.opinions]
+            out += quote_lines(e.span.quote, show)
+            if can_dismiss(e):
+                out.append(f"  - Does not bear on this claim? Add to reviews.jsonl: "
+                           f"{code_span(dismissal_line(f.memory_id, e.span))}")
+        out.append("")
+    if f.dismissed:
+        out.append("**Dismissed** (read by a person; not counted as evidence)")
+        for e in f.dismissed:
+            out.append(f"- dismissed by {show(e.reviewer)} · {source(e.span, show)} · {show(e.rationale)}")
             out += quote_lines(e.span.quote, show)
         out.append("")
     if f.issues:
@@ -120,7 +142,7 @@ def to_markdown(report: AuditReport, *, scrub: bool = False) -> str:
             else "- Evidence root: none supplied"),
            *(["- Excluded from evidence: " + ", ".join(code_span(p) for p in report.excluded)] if report.excluded else []),
            f"- Verifier: {code_span(report.verifier)} · as of {report.as_of} · mode: **{report.mode}** (no memory was modified)",
-           *usage_lines(report),
+           *usage_lines(report), *dismissal_lines(report.dismissed),
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in report.summary.items()]
     out.append("")
@@ -151,6 +173,7 @@ def set_to_markdown(result: AuditSet) -> str:
              if result.excluded else []),
            f"- Verifier: {code_span(result.verifier)} · as of {result.as_of} · mode: **{result.mode}** "
            "(no memory was modified)",
+           *dismissal_lines(result.dismissed),
            "", "| Status | Memories |", "|---|---|"]
     out += [f"| {LABELS[s]} | {n} |" for s, n in result.summary.items()]
     out += ["", "| File | Memories | Need attention |", "|---|---|---|"]

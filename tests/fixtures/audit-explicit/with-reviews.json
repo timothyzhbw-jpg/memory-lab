@@ -101,7 +101,7 @@
       "proposals": [
         {
           "action": "verify_counterevidence",
-          "reason": "Possible contrary evidence; confirm or dismiss it in reviews.jsonl.",
+          "reason": "Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.",
           "replacement": null
         }
       ]
@@ -139,7 +139,7 @@
       "proposals": [
         {
           "action": "verify_counterevidence",
-          "reason": "Possible contrary evidence; confirm or dismiss it in reviews.jsonl.",
+          "reason": "Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.",
           "replacement": null
         }
       ]
@@ -182,7 +182,7 @@
       "proposals": [
         {
           "action": "verify_counterevidence",
-          "reason": "Possible contrary evidence; confirm or dismiss it in reviews.jsonl.",
+          "reason": "Possible contrary evidence; in reviews.jsonl, confirm it with relation contradicts, or dismiss it with relation unrelated.",
           "replacement": null
         },
         {

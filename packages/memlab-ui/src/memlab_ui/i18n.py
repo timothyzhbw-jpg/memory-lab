@@ -170,8 +170,9 @@ ZH: dict[str, str] = {
         "审阅者已确认来源是对的：请更新或删除 {file} 中的这一行。",
     "Reviewers found sources on both sides: decide which one is right, then update {file}.":
         "审阅者在两边都找到了来源：请判断哪一方正确，再更新 {file}。",
-    "If the source is right, update this line in {file}; if it is about something else, you can ignore this.":
-        "如果来源是对的，请更新 {file} 中的这一行；如果它说的是别的事，可以忽略。",
+    "If the source is right, update this line in {file}; if it is about something else, dismiss it: Details has the "
+    "line to add to your reviews file.":
+        "如果来源是对的，请更新 {file} 中的这一行；如果它说的是别的事，就排除它：“详情”里有要加到审阅文件的那一行。",
     "The two checkers disagree about this source: read both and decide.":
         "两个检查器对这个来源意见不一：请阅读两边后自行判断。",
     "They use opposite words.": "两边用了意思相反的词。",
@@ -267,6 +268,11 @@ ZH: dict[str, str] = {
     "null character in path": "路径中含有空字符",
     "The decision log folder has no {name}": "决策日志文件夹中没有 {name}",
     "A reviews file needs a folder to compare against.": "审阅文件需要一个对照文件夹。",
+    "To dismiss it, add to your reviews file": "要排除它，把这一行加到审阅文件里",
+    "{n} passage was dismissed by a reviewer": "{n} 段文字已被审阅者排除",
+    "{n} passages were dismissed by a reviewer": "{n} 段文字已被审阅者排除",
+    "a review that dismissed a passage no longer applies: its statement or quote is gone":
+        "一条排除记录已经失效：对应的陈述或引文不在了",
     "No readable files are left in the folder you compare against.": "对照文件夹中没有可读取的文件。",
     "A quote, hash or file named in the reviews or the decision log does not match the files. Reviews must "
     "point into the folder you compare against.":
