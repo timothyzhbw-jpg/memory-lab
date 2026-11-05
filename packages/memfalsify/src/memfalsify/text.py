@@ -437,13 +437,43 @@ def explicit_dates(text: str) -> list[date]:
 
 _LEAD = re.compile(r"^(?:\s*(?:#{1,6}|>|[-*+]|\d+[.)]|\[[ xX]\])\s+)+")
 _BOUNDARY = re.compile(r"[。！？；]|[.!?;](?=\s|$)")
+# The dot of an abbreviation that is always followed by more of the sentence, however the next word is written.
+_GOES_ON = re.compile(r"(?<![^\W_])(?:e\.g|i\.e|cf|vs|viz|a\.k\.a|w\.r\.t|approx|incl|excl|resp)\.$", re.I)
+# The same, only when a number follows ("no. 5") or a word in lower case ("etc. and more"): either can also end one.
+_BEFORE_NUMBER = re.compile(r"(?<![^\W_])(?:no|nos|fig|figs|sec|ver|vol|pp?|ch|eq)\.$", re.I)
+_ETC = re.compile(r"(?<![^\W_])etc\.$", re.I)
+_VERSION_PART = re.compile(r"(?<![\w.])v?\d+(?:\.\d+)*\.$")  # "3. 13": a version with a stray space
+
+
+def _ends_sentence(body: str, end: int) -> bool:
+    """Whether the boundary ending at ``end`` closes a sentence: a dot may belong to an abbreviation."""
+    if body[end - 1] != ".":
+        return True
+    head = body[max(0, end - 24):end]
+    if _GOES_ON.search(head):
+        return False
+    rest = body[end:end + 16].lstrip()
+    if head.endswith("...") and rest[:1].islower():  # an ellipsis in the middle of a sentence
+        return False
+    if _ETC.search(head):
+        return not (rest[:1].islower() or rest[:1] in (")", ",", ";"))
+    return not (rest[:1].isdigit() and (_BEFORE_NUMBER.search(head) or _VERSION_PART.search(head)))
+
+
+def whole_span(text: str) -> tuple[int, int] | None:
+    """[start, end) of ``text`` with its markdown markers trimmed, if anything is left: a table row is read whole."""
+    lead = _LEAD.match(text)
+    offset = lead.end() if lead else len(text) - len(text.lstrip())
+    stripped = text[offset:].rstrip()
+    return (offset, offset + len(stripped)) if re.search(r"\w", stripped) else None
 
 
 def sentence_spans(text: str) -> Iterator[tuple[int, int]]:
-    """Yield [start, end) character spans of sentences, with markdown list/heading markers trimmed."""
+    """Yield [start, end) character spans of sentences, with markdown list/heading markers trimmed. An abbreviation's
+    dot (e.g., i.e., vs., etc. before more of the sentence) does not end one."""
     for line in re.finditer(r"[^\n]+", text):
         base, body, pos = line.start(), line.group(), 0
-        cuts = [m.end() for m in _BOUNDARY.finditer(body)] + [len(body)]
+        cuts = [m.end() for m in _BOUNDARY.finditer(body) if _ends_sentence(body, m.end())] + [len(body)]
         for cut in cuts:
             segment = body[pos:cut]
             lead = _LEAD.match(segment)
