@@ -35,6 +35,7 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from itertools import dropwhile
 from pathlib import Path
+from typing import NamedTuple
 
 from memcore.display import one_line
 from memcore.paths import SKIP_DIRS
@@ -67,7 +68,7 @@ MIME_BARE = frozenset({"audio", "font", "image", "message", "model", "text", "vi
 
 _CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)([^`]+)\1(?!`)")
 _WORD_OF_CODE = re.compile(r"\S+")
-_BREAK_IN_CODE = re.compile(r"[ \t]*\n[ \t]*(?:>[ \t]*)*")
+_CONTINUES_BLOCK = re.compile(r"[ \t]*(?:>[ \t]*)*")
 _LINK_TARGET = re.compile(r"!?\[[^\]\[]*\]\(([^)\s]{1,400})(?:\s+\"[^\"]*\")?\)")  # bounded: a line can be hostile
 # Where in a file, added to its path by habit: src/a.py:12, src/a.py:12:3, src/a.py:12-20, src/a.py#L12, a.py::test_b
 _POSITION = re.compile(r"(?:::[\w.:\[\]-]+|:\d+(?:[:-]\d+)*|#[\w.-]*)$")
@@ -138,9 +139,8 @@ _OUTPUT_FLAGS = frozenset({"-o", "--output", "--out", "--outfile", "--out-file",
 _PROBE = "memfalsify-probe"  # a name git can always answer about
 
 
-def _said(raw: str) -> frozenset[str]:
-    """Which of ``_LINE_WORDS`` a piece of raw text uses."""
-    prose = _CODE_SPAN.sub(" ", raw)
+def _said(prose: str) -> frozenset[str]:
+    """Which of ``_LINE_WORDS`` a piece of text uses, with its code spans blanked."""
     return frozenset(name for name, words in _LINE_WORDS.items() if words.search(prose))
 
 
@@ -235,19 +235,33 @@ def _made_by_command(words: list[str]) -> set[str]:
     return made | _made_by_simple_command(simple)
 
 
-def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
+class _Block(NamedTuple):
+    offsets: list[int]
+    references: list[Reference]
+    prose: str  # the block with its code spans blanked, at the same length: a slice cannot show half a span as words
+    wrapped: bool
+
+
+def _one_line(code: str) -> str:
+    """A code span's lines as CommonMark reads them: a line break is a space, and what continues the block goes."""
+    first, *rest = code.split("\n")
+    return " ".join([first.rstrip(" \t"), *(_CONTINUES_BLOCK.sub("", line, count=1).rstrip(" \t") for line in rest)])
+
+
+def _line_references(raw: str) -> _Block:
     """Every path a raw block writes in inline code or as a link target, in order, and the offset each starts at.
     Inside a code span of several words (a command), only words that say they are paths count: an extension or a
     trailing slash, and not what the command makes. The whole block at once, since a sentence can end inside a
     command. A path takes the words of the lines it stands on; ``references_in`` adds those of its own sentence."""
     newlines = [match.start() for match in re.finditer("\n", raw)]
+    prose = _CODE_SPAN.sub(lambda match: " " * len(match.group()), raw)
     said_on: dict[tuple[int, int], frozenset[str]] = {}
 
     def said(at: int, past: int) -> frozenset[str]:
         first, last = bisect_left(newlines, at), bisect_left(newlines, past)
         lines = (newlines[first - 1] + 1 if first else 0, newlines[last] if last < len(newlines) else len(raw))
         if lines not in said_on:
-            said_on[lines] = _said(raw[lines[0]:lines[1]])
+            said_on[lines] = _said(prose[lines[0]:lines[1]])
         return said_on[lines]
 
     def foreign(match: re.Match) -> bool:
@@ -262,31 +276,27 @@ def _line_references(raw: str) -> tuple[list[int], list[Reference]]:
         if len(words) == 1:
             parsed = [(match.start(), parse_reference(words[0], says, whose))]
         else:
-            # A line break in a code span reads as a space, whatever continues the block after it.
-            whole = _whole_span(_BREAK_IN_CODE.sub(" ", code) if "\n" in code else code)
-            made = _made_by_command(words)
+            whole, made = _whole_span(_one_line(code) if "\n" in code else code), _made_by_command(words)
             parsed = [(at, parse_reference(word, says, whose, whole)) for at, word in placed if word.rstrip(";") not in made]
         found += [(at, ref) for at, ref in parsed if ref is not None and (len(words) == 1 or not ref.bare)]
     for match in _LINK_TARGET.finditer(raw):
         if ref := parse_reference(match.group(1).split("#")[0], said(*match.span()), foreign(match)):
             found.append((match.start(), ref))
     found.sort(key=lambda item: item[0])
-    return [at for at, _ in found], [ref for _, ref in found]
+    return _Block([at for at, _ in found], [ref for _, ref in found], prose, bool(newlines))
 
 
-def references_in(raw: str, start: int = 0, end: int | None = None,
-                  lines: dict[str, tuple[list[int], list[Reference]]] | None = None) -> list[Reference]:
+def references_in(raw: str, start: int = 0, end: int | None = None, lines: dict[str, _Block] | None = None) -> list[Reference]:
     """The paths that start in ``raw[start:end]``, each once, in order. ``lines`` holds the lines read so far: a hostile
     line can hold very many paths and be asked about for each of them, in as many copies as the file likes."""
-    parsed = None if lines is None else lines.get(raw)
-    if parsed is None:
-        parsed = _line_references(raw)
+    block = None if lines is None else lines.get(raw)
+    if block is None:
+        block = _line_references(raw)
         if lines is not None:
-            lines[raw] = parsed
-    offsets, references = parsed
-    high = len(offsets) if end is None else bisect_left(offsets, end)
-    chosen = references[bisect_left(offsets, start):high]
-    if chosen and "\n" in raw and (own := _said(raw[start:end])):  # a wrapped sentence says it on another line
+            lines[raw] = block
+    high = len(block.offsets) if end is None else bisect_left(block.offsets, end)
+    chosen = block.references[bisect_left(block.offsets, start):high]
+    if chosen and block.wrapped and (own := _said(block.prose[start:end])):  # a wrapped sentence says it on another line
         chosen = [replace(ref, said=ref.said | own) for ref in chosen]
     return list({(ref.written, ref.whole): ref for ref in chosen}.values())
 
@@ -566,7 +576,7 @@ def missing_references(claims: Iterable[Claim], root: Path, prefix: str = "") ->
         return {}  # a budgeted run has no walk to spare, and a cut-off walk would call existing files missing
     questions: list[_Question] = []
     wanted: set[str] = set()
-    lines: dict[str, tuple[list[int], list[Reference]]] = {}  # for this call only: lines can be hostile, servers live long
+    lines: dict[str, _Block] = {}  # for this call only: lines can be hostile, servers live long
     for claim in claims:
         if claim._raw is None:
             continue

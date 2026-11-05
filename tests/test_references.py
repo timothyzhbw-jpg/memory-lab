@@ -111,7 +111,7 @@ def test_each_sentence_answers_for_its_own_paths(tmp_path):
     assert by_text == {"The parser is quick and small.": [], "It lives in src/gone.py now.": ["missing_reference"]}
 
 
-def test_a_path_in_a_span_two_sentences_share_goes_to_the_sentence_it_starts_in(tmp_path):
+def test_a_path_in_a_span_two_sentences_share_goes_to_the_sentence_it_stands_in(tmp_path):
     tree(tmp_path, "src/here.py")
     write_text_exact(tmp_path / "AGENTS.md", "- First run `python src/gone.py; echo done` and then stop there.\n")
     report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
@@ -1343,3 +1343,29 @@ def test_a_word_of_a_command_goes_to_the_sentence_it_stands_in(tmp_path):
     report = audit(tmp_path / "AGENTS.md", tmp_path, as_of=AS_OF)
     assert {f.text: [i.kind for i in f.issues] for f in report.findings} == {
         "The command is echo ready;": [], "python src/parser.py for validation.": ["missing_reference"]}
+
+
+def test_half_a_code_span_in_a_sentence_is_still_code(tmp_path):
+    tree(tmp_path, "src/here.py")
+    assert flagged(tmp_path, "The command is `echo ready;\npython src/removed/parser.py` for validation.\n") == [
+        "src/removed/parser.py"]
+
+
+def test_a_word_in_code_on_a_path_s_line_is_not_prose(tmp_path):
+    tree(tmp_path, "src/here.py")
+    assert flagged(tmp_path, "The command is `echo ready\nremoved` for validation. Read `src/parser.py` for details.\n") == [
+        "src/parser.py"]
+
+
+@pytest.mark.parametrize("raw", [
+    "Read `src/one.py` before work. " * 100 + "Run `python" + " " * 1_990_000 + "src/parser.py\n--fast` for validation.",
+    "Read `src/parser.py` before validation. " * 50_000,
+    "Read `src/parser.py` before validation.\n" * 50_000,
+], ids=["spaces in a wrapped command", "one line", "many lines"])
+def test_a_hostile_block_takes_time_in_proportion_to_its_length(raw):
+    lines = {}
+    started = time.perf_counter()
+    every = list(range(0, len(raw), 40))[:50_000]
+    for start, end in zip(every, every[1:]):
+        references_in(raw, start, end, lines=lines)
+    assert time.perf_counter() - started < BUDGET_SECONDS
