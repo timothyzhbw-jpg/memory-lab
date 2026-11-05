@@ -182,7 +182,8 @@ def evidence_project(tmp_path, evidence: str, name: str = "guide.md"):
 
 def test_a_wrapped_claim_finds_the_same_sentence_wrapped_elsewhere_in_evidence(tmp_path):
     evidence = evidence_project(tmp_path, "# Guide\n\n" + STATED.replace("accepted\n", "accepted\n  ") + "\n")
-    write_text_exact(tmp_path / "MEMORY.md", f"- {STATED.replace('the closing', 'the\n  closing')}\n")
+    rewrapped = STATED.replace("the closing", "the\n  closing")
+    write_text_exact(tmp_path / "MEMORY.md", f"- {rewrapped}\n")
     [finding] = audit(tmp_path / "MEMORY.md", evidence).findings
     assert finding.status == "candidate_support"
     [item] = finding.evidence
