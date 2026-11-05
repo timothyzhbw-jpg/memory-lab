@@ -14,6 +14,8 @@ A memory file is read as Markdown, one block at a time, and each block is cut in
 
 The rules err towards keeping. Chinese text always stays, and so does anything that reads as a sentence, such as `Tests use pytest.` A bare fact in a list (`pnpm workspaces`) stays too. A claim needs two content words, as it always did, so `Python 3.12` alone is not one.
 
+Evidence in Markdown, MDX, reStructuredText or plain text has its wrapped lines read as one as well, so a wrapped sentence in a claim can match a wrapped sentence in a document, and a quote can run over several lines. A Markdown report shows such a quote a line per line; the JSON report and the line under a flag hold its exact bytes. Code and data files stay line by line.
+
 A claim's ID comes from its text, so a re-wrapped paragraph keeps its IDs, while a fix to how a line is read gives it a new one. A review naming an old ID then stops the audit with `unknown memory_id`, or, for a dismissal, is listed under `Skipped evidence`.
 
 A heading above a list does not change how the items are read: `Use npm in this package.` under `## Do NOT` is compared as it is written, and the heading only shows next to it in the report. On the repositories measured, about 3% of the claims sit under such a heading or lead-in, and in such a list the first sentence of an item is negated while the next one is often a plain statement (`Use an optional group.`), so reading the whole list as negated would misread those.

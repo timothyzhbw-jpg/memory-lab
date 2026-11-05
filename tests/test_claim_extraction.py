@@ -227,6 +227,12 @@ def test_code_fences_and_table_rows_in_prose_are_not_joined():
     assert unwrapped(table) == table
 
 
+def test_a_log_in_a_text_file_stays_line_by_line():
+    line = "2026-11-05 a log line that is long enough to count as wrapped if it stood in some prose\n"
+    assert unwrapped(line * 8) == (line * 8).replace("\n", " ", 7)
+    assert unwrapped(line * 40) == line * 40
+
+
 def test_a_crlf_file_keeps_its_offsets_and_the_quote_keeps_its_bytes(tmp_path):
     raw = STATED.replace("\n", "\r\n") + "\r\n"
     evidence = evidence_project(tmp_path, raw)

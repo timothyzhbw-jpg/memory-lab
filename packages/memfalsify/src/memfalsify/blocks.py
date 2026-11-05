@@ -183,12 +183,25 @@ def block_at(lines: list[str], number: int) -> Block | None:
     return None
 
 
+MOST_WRAPPED = 12  # lines one sentence can go on over: past that, it is a log or a listing, which stays line by line
+
+
+def _joints(lines: list[str], block: Block) -> list[int]:
+    """The lines of a block that go on with the next one."""
+    open_lines = 0
+    for at in range(block.first, block.last):
+        open_lines = 0 if _FINISHED.search(lines[at].rstrip()) else open_lines + 1
+        if open_lines > MOST_WRAPPED:
+            return []
+    return list(range(block.first, block.last))
+
+
 def unwrapped(text: str) -> str:
     """``text`` at the same length, with the line breaks inside each paragraph and list item as spaces: every offset
     still points into the file as it is, and what cuts sentences line by line now reads a wrapped one whole."""
     lines = text.split("\n")
-    joints = {at for block in blocks([line.removesuffix("\r") for line in lines]) if block.kind == "text"
-              for at in range(block.first, block.last)}
+    bare = [line.removesuffix("\r") for line in lines]
+    joints = {at for block in blocks(bare) if block.kind == "text" for at in _joints(bare, block)}
     if not joints:
         return text
     return "".join((line[:-1] + "  " if line.endswith("\r") else line + " ") if at in joints else line + "\n"
