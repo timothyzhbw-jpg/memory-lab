@@ -4,7 +4,7 @@
 
 发布只有一个手动运行的工作流：[`.github/workflows/publish.yml`](../.github/workflows/publish.yml)。它使用 PyPI 的
 [Trusted Publishing](https://docs.pypi.org/trusted-publishers/)：PyPI 直接信任本仓库的这个工作流，所以任何地方都不存密码或
-API token。第 1 到 3 步只需做一次，必须由仓库所有者本人来做，因为要用他的 PyPI 账号。之后每次发布只需点一次第 4 步的按钮。
+API token。第 1 到 3 步只需做一次，必须由仓库所有者本人来做，因为要用所有者的 PyPI 账号。之后每次发布只需点一次第 4 步的按钮。
 
 ## `memlab` 这个名字
 

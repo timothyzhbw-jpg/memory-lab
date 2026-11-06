@@ -5,7 +5,7 @@ English | [中文](publishing.zh-CN.md)
 Publishing is one manual workflow, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml). It uses PyPI
 [Trusted Publishing](https://docs.pypi.org/trusted-publishers/): PyPI trusts this repository's workflow directly, so
 no password or API token is stored anywhere. Steps 1 to 3 are done once, by the repository owner, because they need
-his PyPI account. After that, each release is one press of the button in step 4.
+the owner's PyPI account. After that, each release is one press of the button in step 4.
 
 ## The name `memlab`
 
